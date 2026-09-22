@@ -2,7 +2,7 @@
 
 Requirements for a small open-source collector. Not an implementation plan.
 
-The collector is a binary. A person runs it, or the system scheduler runs it. It is not a resident daemon. Each run reads local usage, asks the installed harnesses for quota, pushes this device's snapshot to a public JSON relay, pulls the other devices in the team, and exits.
+The collector is a binary. A person runs it, or the system scheduler runs it. It is not a resident daemon. Each run reads local usage, asks the installed harnesses for quota, publishes this device's encrypted snapshot to one public store, reads the other devices in the team, and exits.
 
 It covers Codex, Claude, Grok, and Hermes. It does not call a provider itself and it does not touch logins.
 
@@ -30,9 +30,12 @@ Source notes are from [PitStop](https://github.com/Livin21/pitstop). Account swi
 - Sample every 15 minutes. Keep samples for 90 days.
 - From stored samples, say when the current pace would fill a window before its reset.
 - Record usage already present locally: sessions, input and output tokens, and cache reads and writes. Attribute a session to the project or working directory stored in the log. Roll a sub-agent's tokens into its parent session.
-- A reading is identified by team, device, OS user, provider, and account label. The team id joins devices. It is not the only identity of a row.
-- Sync is an up-and-down relay, not a peer-to-peer network and not a database we run. Each device writes only its own JSON document and reads the documents of the other devices. The team id is the only secret. Two devices must not write the same document, or one run will erase the other.
-- The relay is a public HTTP JSON store with no account and no setup. The host is one URL in the binary and can be replaced without changing the document shape. Version 1 does not depend on a named vendor surviving, but it does require a host that accepts anonymous GET and PUT of client-named keys.
+- A reading is identified by team, device, OS user, provider, and account label. The team is the public key fingerprint. It is not the only identity of a row.
+- Each team has one keypair, in the style of a public and private key, not a GnuPG installation. Every collector in the team stores both halves. The first run generates the keypair. Joining a team means copying the private key. The public fingerprint is the folder name and is not secret. The private key is the only secret.
+- A snapshot is encrypted to the team's public key before it is stored. Anyone can download the file. Only a collector that holds the private key can read it. The program does not shell out to `gpg`.
+- One public store serves every install. Teams are separated by key, not by a server of their own. Each device replaces only its own document. Two devices must not write the same document.
+- The store overwrites. It is not a git history. A commit per 15-minute sample keeps every old copy forever and will outgrow a GitHub repository. A public GitHub repository is an acceptable place for the latest ciphertext only if publishing replaces the file without keeping that history.
+- Encryption does not grant permission to write. The store still needs a way to accept a device's document. A GitHub token must not be built into the source. Anonymous overwrite of a client-named key is the setup-free case. A pasted write token is allowed only when a host cannot do that.
 - A device keeps collecting when the relay is unreachable, and sends the backlog when it returns.
 - What is sent is aggregates only: counts, percents, timestamps, account labels, project or working directory, and collector health. Never prompts, tool arguments, file contents, or Hermes memory.
 - Offer two views of the same readings:
@@ -68,9 +71,12 @@ These PitStop behaviors are out, even though the project does them:
 - API-equivalent dollar cost. It is not what the subscription charges.
 - Turning self-update off.
 - A resident daemon, and a server or database operated for the relay.
+- GnuPG, keyrings, and trust prompts.
+- Publishing the 15-minute series as git commits.
 
 ## Later
 
+- A separate unencrypted feed of anonymous totals, with no team, device, or account label. The team file stays encrypted.
 - Opt-out telemetry back to the project.
 - A notifier when a window crosses a threshold. Version 1 only marks 75% and 90% in the console output.
 - Account switching, after monitoring works.
