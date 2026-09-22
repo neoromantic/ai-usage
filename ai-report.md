@@ -32,11 +32,11 @@ Source notes are from [PitStop](https://github.com/Livin21/pitstop). Account swi
 - Record usage already present locally: sessions, input and output tokens, and cache reads and writes. Attribute a session to the project or working directory stored in the log. Roll a sub-agent's tokens into its parent session.
 - A reading is identified by team, device, OS user, provider, and account label. The team is the public key fingerprint. It is not the only identity of a row.
 - Each team has one keypair, in the style of a public and private key, not a GnuPG installation. Every collector in the team stores both halves. The first run generates the keypair. Joining a team means copying the private key. The public fingerprint is the folder name and is not secret. The private key is the only secret.
-- A snapshot is encrypted to the team's public key before it is stored. Anyone can download the file. Only a collector that holds the private key can read it. The program does not shell out to `gpg`.
-- One small HTTP API stores every install. The body is ciphertext. The backing store is a key-value store that overwrites one document per device, such as Vercel KV. It is not a git history.
-- A write is accepted only when it is signed by the team private key for that public fingerprint. The server checks the signature and stores the bytes. It does not decrypt them. A holder of the private key can publish and can read the team back.
-- A second keypair hidden in the official binary is not used. The program is open source, so any key shipped inside it can be copied and is then not a secret. That cannot prove a caller is the unmodified official build.
-- Someone can still generate their own key and store their own team. They cannot overwrite another team. The API limits body size and request rate so that junk teams cannot run away with the store.
+- One small HTTP API stores every install. The backing store is a key-value store that overwrites one document per device, such as Vercel KV. It is not a git history.
+- The API accepts only a usage snapshot. The body is JSON with a fixed set of fields: counts, percents, timestamps, and short labels. Unknown fields, nested files, and free-form text are rejected. The whole document must stay small, on the order of 32 KB. A store that accepts an opaque encrypted blob cannot tell a usage report from something else, so version 1 does not accept one.
+- A write is accepted only when that JSON is signed by the team private key for that public fingerprint. The server checks the signature, checks the shape, and stores the document. A holder of the private key can publish and can read that team back. They cannot overwrite another team.
+- A second keypair hidden in the official binary is not used. The program is open source, so any key shipped inside it can be copied. After that, the server cannot tell the official build from any other client. The shape check is what remains: a copied client can submit only the same small usage record, which is not a useful place to keep other material.
+- Someone can still generate their own key and store their own usage-shaped team. The API limits request rate and how many devices one team may have, so junk teams cannot run away with the store.
 - A device keeps collecting when the relay is unreachable, and sends the backlog when it returns.
 - What is sent is aggregates only: counts, percents, timestamps, account labels, project or working directory, and collector health. Never prompts, tool arguments, file contents, or Hermes memory.
 - Offer two views of the same readings:
@@ -72,6 +72,7 @@ These PitStop behaviors are out, even though the project does them:
 - API-equivalent dollar cost. It is not what the subscription charges.
 - Turning self-update off.
 - A second, app-wide keypair whose only job is to pretend the caller is the official binary.
+- An opaque ciphertext blob as the stored document. The server must be able to see that the body is a usage snapshot.
 - GnuPG, keyrings, and trust prompts.
 - Publishing the 15-minute series as git commits.
 - A database or document store that we administer by hand. The API and the key-value store are the relay.
