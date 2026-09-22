@@ -33,9 +33,10 @@ Source notes are from [PitStop](https://github.com/Livin21/pitstop). Account swi
 - A reading is identified by team, device, OS user, provider, and account label. The team is the public key fingerprint. It is not the only identity of a row.
 - Each team has one keypair, in the style of a public and private key, not a GnuPG installation. Every collector in the team stores both halves. The first run generates the keypair. Joining a team means copying the private key. The public fingerprint is the folder name and is not secret. The private key is the only secret.
 - A snapshot is encrypted to the team's public key before it is stored. Anyone can download the file. Only a collector that holds the private key can read it. The program does not shell out to `gpg`.
-- One public store serves every install. Teams are separated by key, not by a server of their own. Each device replaces only its own document. Two devices must not write the same document.
-- The store overwrites. It is not a git history. A commit per 15-minute sample keeps every old copy forever and will outgrow a GitHub repository. A public GitHub repository is an acceptable place for the latest ciphertext only if publishing replaces the file without keeping that history.
-- Encryption does not grant permission to write. The store still needs a way to accept a device's document. A GitHub token must not be built into the source. Anonymous overwrite of a client-named key is the setup-free case. A pasted write token is allowed only when a host cannot do that.
+- One small HTTP API stores every install. The body is ciphertext. The backing store is a key-value store that overwrites one document per device, such as Vercel KV. It is not a git history.
+- A write is accepted only when it is signed by the team private key for that public fingerprint. The server checks the signature and stores the bytes. It does not decrypt them. A holder of the private key can publish and can read the team back.
+- A second keypair hidden in the official binary is not used. The program is open source, so any key shipped inside it can be copied and is then not a secret. That cannot prove a caller is the unmodified official build.
+- Someone can still generate their own key and store their own team. They cannot overwrite another team. The API limits body size and request rate so that junk teams cannot run away with the store.
 - A device keeps collecting when the relay is unreachable, and sends the backlog when it returns.
 - What is sent is aggregates only: counts, percents, timestamps, account labels, project or working directory, and collector health. Never prompts, tool arguments, file contents, or Hermes memory.
 - Offer two views of the same readings:
@@ -70,9 +71,10 @@ These PitStop behaviors are out, even though the project does them:
 - A web dashboard.
 - API-equivalent dollar cost. It is not what the subscription charges.
 - Turning self-update off.
-- A resident daemon, and a server or database operated for the relay.
+- A second, app-wide keypair whose only job is to pretend the caller is the official binary.
 - GnuPG, keyrings, and trust prompts.
 - Publishing the 15-minute series as git commits.
+- A database or document store that we administer by hand. The API and the key-value store are the relay.
 
 ## Later
 
