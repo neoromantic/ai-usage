@@ -531,6 +531,24 @@ func TestStatusFoldsManyHomes(t *testing.T) {
 	}
 }
 
+// TestStatusUpdateLine: a release installed by hand that is newer than the
+// last update check saw is the newest release, not an older one.
+func TestStatusUpdateLine(t *testing.T) {
+	for _, tc := range []struct{ latest, want string }{
+		{"v1.2.3", "v1.2.3 is the newest release"},
+		{"v1.2.0", "v1.2.3 is the newest release"},
+		{"v1.4.0", "newest release v1.4.0"},
+	} {
+		st := emptyState()
+		st.Update = state.Update{Latest: tc.latest}
+		f := newFixture(t, st)
+		status := StatusText(Build(f.in), "", Options{Width: 100, Loc: time.UTC})
+		if !strings.Contains(status, tc.want) {
+			t.Fatalf("latest %s: status lacks %q:\n%s", tc.latest, tc.want, status)
+		}
+	}
+}
+
 func TestCollectorSection(t *testing.T) {
 	st := emptyState()
 	st.LastError, st.LastErrorAt = "claude: 2 malformed lines", now.Add(-time.Hour)

@@ -126,7 +126,8 @@ func (u *ui) status(dir string) {
 		u.kv("update", seg{g.staged, cyan}, *up.Staged+" is installed and runs next time", plain)
 	case up.Error != nil:
 		u.kv("update", warn, *up.Error, yellow)
-	case up.Latest != nil && *up.Latest == c.Version:
+	case up.Latest != nil && (*up.Latest == c.Version || selfupdate.Newer(c.Version, *up.Latest)):
+		// A release installed by hand can be newer than the last check saw.
 		u.kv("update", ok, c.Version+" is the newest release", plain)
 	default:
 		latest := "unknown"
