@@ -320,6 +320,7 @@ func TestVersionHelpAndUsageErrors(t *testing.T) {
 		{"bogus"},
 		{"collect", "--bogus"},
 		{"collect", "extra"},
+		{"report", "extra"},
 		{"team", "bogus"},
 		{"team", "key", "extra"},
 		{"team", "join", "a", "b"},
@@ -541,7 +542,7 @@ func TestTeamKeyAndJoin(t *testing.T) {
 	// A new device joins from stdin, as a pasted line, before it has a key.
 	b := newDevice(t)
 	r := b.run(key+"\n", "team", "join")
-	if r.code != 0 || !strings.Contains(r.stdout, fp) {
+	if r.code != 0 || !strings.Contains(r.stdout, fp) || strings.Contains(r.stdout, "previous key") {
 		t.Fatalf("join: exit %d\n%s%s", r.code, r.stdout, r.stderr)
 	}
 	if _, err := os.Stat(filepath.Join(b.dir, "team.key.previous")); !os.IsNotExist(err) {
@@ -848,11 +849,13 @@ func TestHomeCommands(t *testing.T) {
 		{"home", "add", "codex", ".codex", "--quota-from", "codex:.codex"},
 		{"home", "add", "hermes", ".hermes-b", "--quota-from", "claude:.codex"},
 		{"home", "add", "hermes", ".hermes-b", "--quota-from"},
+		{"home", "remove", "hermes", ".hermes-b", "--quota-from", "codex:.codex"},
 		{"home", "frob"},
 		// An empty directory, as from an unset variable, is not the
 		// working directory.
 		{"home", "add", "hermes", ""},
 		{"home", "add", "hermes", ".hermes-b", "--quota-from", "codex:"},
+		{"home", "add", "hermes", ".hermes-b", "--quota-from="},
 		{"home", "add", "hermes", ".hermes-b", "--quota-from", "codex:.codex", "--quota-from", "codex:.grok"},
 	} {
 		if r := d.run("", bad...); r.code != 2 {
