@@ -191,16 +191,16 @@ func TestUnreadableLabels(t *testing.T) {
 
 func TestShortNames(t *testing.T) {
 	st := emptyState()
-	addAccount(st, "claude", "sergey@goodit.works", true, nil, 10)
-	addAccount(st, "claude", "slava@jupid.tax", false, nil, 10)
+	addAccount(st, "claude", "sam@mail.test", true, nil, 10)
+	addAccount(st, "claude", "lee@corp.test", false, nil, 10)
 	addAccount(st, "codex", "sam@a.io", true, nil, 10)
 	addAccount(st, "codex", "sam@b.io", false, nil, 10)
 	addAccount(st, "codex", "unknown", false, nil, 10)
 	addAccount(st, "grok", "a4c2e917-5e4f-4a3b-8c2d-1e0f9a8b7c6d", true, nil, 10)
 	r := Build(newFixture(t, st).in)
 	for _, c := range []struct{ provider, label, name string }{
-		{"claude", "sergey@goodit.works", "sergey"},
-		{"claude", "slava@jupid.tax", "slava"},
+		{"claude", "sam@mail.test", "sam"},
+		{"claude", "lee@corp.test", "lee"},
 		// The same name within a provider: both keep the full label.
 		{"codex", "sam@a.io", "sam@a.io"},
 		{"codex", "sam@b.io", "sam@b.io"},
@@ -223,44 +223,44 @@ func TestShortNames(t *testing.T) {
 
 func TestAliasesTravelAndTheNewestWins(t *testing.T) {
 	st := emptyState()
-	addAccount(st, "codex", "bots@jupid.tax", true, nil, 10)
-	addAccount(st, "codex", "sergey@goodit.works", false, nil, 10)
-	addAccount(st, "claude", "sergey@goodit.works", false, nil, 10)
+	addAccount(st, "codex", "bots@corp.test", true, nil, 10)
+	addAccount(st, "codex", "sam@mail.test", false, nil, 10)
+	addAccount(st, "claude", "sam@mail.test", false, nil, 10)
 	f := newFixture(t, st)
 	f.in.Config.Aliases = map[string]state.Alias{
-		state.Key("codex", "bots@jupid.tax"):      {Name: "bots-old", At: now.Add(-2 * time.Hour)},
-		state.Key("codex", "sergey@goodit.works"): {Name: "sp", At: now.Add(-3 * time.Hour)},
+		state.Key("codex", "bots@corp.test"): {Name: "bots-old", At: now.Add(-2 * time.Hour)},
+		state.Key("codex", "sam@mail.test"):  {Name: "sp", At: now.Add(-3 * time.Hour)},
 	}
 	f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", now)
 
 	other := emptyState()
-	addAccount(other, "codex", "bots@jupid.tax", true, nil, 10)
-	addAccount(other, "codex", "sergey@goodit.works", true, nil, 10)
+	addAccount(other, "codex", "bots@corp.test", true, nil, 10)
+	addAccount(other, "codex", "sam@mail.test", true, nil, 10)
 	cfg := state.Config{Device: "d-other-device", Aliases: map[string]state.Alias{
 		// Newer than this device's: it wins.
-		state.Key("codex", "bots@jupid.tax"): {Name: "baus", At: now.Add(-time.Hour)},
+		state.Key("codex", "bots@corp.test"): {Name: "build", At: now.Add(-time.Hour)},
 		// A newer clearing removes the name.
-		state.Key("codex", "sergey@goodit.works"): {At: now.Add(-time.Hour)},
+		state.Key("codex", "sam@mail.test"): {At: now.Add(-time.Hour)},
 	}}
 	r := withTeam(t, f, docWith(t, f.key, cfg, "otherbox", now, other))
-	if a := findTeamAccount(t, r, "codex", "bots@jupid.tax"); a.Name != "baus" || a.Alias == nil || *a.Alias != "baus" {
+	if a := findTeamAccount(t, r, "codex", "bots@corp.test"); a.Name != "build" || a.Alias == nil || *a.Alias != "build" {
 		t.Fatalf("bots = %q %v", a.Name, a.Alias)
 	}
-	if a := findTeamAccount(t, r, "codex", "sergey@goodit.works"); a.Name != "sergey" || a.Alias != nil {
+	if a := findTeamAccount(t, r, "codex", "sam@mail.test"); a.Name != "sam" || a.Alias != nil {
 		t.Fatalf("cleared = %q %v", a.Name, a.Alias)
 	}
 	// An alias names one provider's account.
-	if a := findTeamAccount(t, r, "claude", "sergey@goodit.works"); a.Name != "sergey" {
+	if a := findTeamAccount(t, r, "claude", "sam@mail.test"); a.Name != "sam" {
 		t.Fatalf("claude = %q", a.Name)
 	}
-	if a := findAccount(t, r, "codex", "bots@jupid.tax"); a.Name != "baus" {
+	if a := findAccount(t, r, "codex", "bots@corp.test"); a.Name != "build" {
 		t.Fatalf("local name = %q", a.Name)
 	}
 	var cols []string
 	for _, c := range r.Team.Matrix.Columns {
 		cols = append(cols, c.Name)
 	}
-	if !reflect.DeepEqual(cols, []string{"sergey", "baus", "sergey"}) {
+	if !reflect.DeepEqual(cols, []string{"sam", "build", "sam"}) {
 		t.Fatalf("columns = %v", cols)
 	}
 }
@@ -292,26 +292,26 @@ func TestUsersSinceTheWindowBegan(t *testing.T) {
 	spend(gone, "codex", "bots", "/w", 1000, start.Add(-2*time.Hour))
 
 	r := withTeam(t, f,
-		otherDoc(t, f.key, "d-busy-device", "baus", now, busy),
+		otherDoc(t, f.key, "d-busy-device", "build", now, busy),
 		otherDoc(t, f.key, "d-before-device", "early", now, before),
 		otherDoc(t, f.key, "d-gone-device", "gone", start.Add(-time.Hour), gone),
 	)
 	bots := findTeamAccount(t, r, "codex", "bots")
-	if bots.Users != 2 || bots.Busiest == nil || *bots.Busiest != "baus" {
+	if bots.Users != 2 || bots.Busiest == nil || *bots.Busiest != "build" {
 		t.Fatalf("users = %d busiest %v", bots.Users, bots.Busiest)
 	}
 
 	// With no reading, users are the devices of the last 7 days.
 	st2 := emptyState()
-	addAccount(st2, "claude", "slava", false, nil, 0)
-	spend(st2, "claude", "slava", "/w", 5, now.Add(-6*24*time.Hour))
+	addAccount(st2, "claude", "lee", false, nil, 0)
+	spend(st2, "claude", "lee", "/w", 5, now.Add(-6*24*time.Hour))
 	f2 := newFixture(t, st2)
 	old := emptyState()
-	addAccount(old, "claude", "slava", false, nil, 0)
-	spend(old, "claude", "slava", "/w", 50, now.Add(-8*24*time.Hour))
+	addAccount(old, "claude", "lee", false, nil, 0)
+	spend(old, "claude", "lee", "/w", 50, now.Add(-8*24*time.Hour))
 	r2 := withTeam(t, f2, otherDoc(t, f2.key, "d-old-device", "oldbox", now, old))
-	if s := findTeamAccount(t, r2, "claude", "slava"); s.Users != 1 || s.Busiest == nil || *s.Busiest != "thisbox" {
-		t.Fatalf("slava users = %d busiest %v", s.Users, s.Busiest)
+	if s := findTeamAccount(t, r2, "claude", "lee"); s.Users != 1 || s.Busiest == nil || *s.Busiest != "thisbox" {
+		t.Fatalf("lee users = %d busiest %v", s.Users, s.Busiest)
 	}
 }
 
@@ -327,16 +327,16 @@ func TestMatrix(t *testing.T) {
 	spend(st, "codex", "bots@a.io", "/w", 1_000_000, now.Add(-time.Hour), start.Add(-12*time.Hour))
 	f := newFixture(t, st)
 
-	baus := emptyState()
-	addAccount(baus, "codex", "bots@a.io", true, q(40), 0)
-	addHermes(baus, "openai-codex", "codex", "bots@a.io", 0)
-	spend(baus, "hermes", "openai-codex", "/h", 3_000_000, now.Add(-2*time.Hour))
-	baus.Sessions[state.Key("hermes", "openai-codex", "/h", now.Add(-2*time.Hour).String())].Via = map[string]snapshot.Tokens{state.Key("codex", "bots@a.io"): {Input: 3_000_000}}
+	build := emptyState()
+	addAccount(build, "codex", "bots@a.io", true, q(40), 0)
+	addHermes(build, "openai-codex", "codex", "bots@a.io", 0)
+	spend(build, "hermes", "openai-codex", "/h", 3_000_000, now.Add(-2*time.Hour))
+	build.Sessions[state.Key("hermes", "openai-codex", "/h", now.Add(-2*time.Hour).String())].Via = map[string]snapshot.Tokens{state.Key("codex", "bots@a.io"): {Input: 3_000_000}}
 	// A Hermes key with no subscription.
-	baus.Accounts[state.Key("hermes", "openrouter")] = &state.Account{Provider: "hermes", Label: "openrouter", LastSeenAt: now}
-	spend(baus, "hermes", "openrouter", "/h", 500_000, now.Add(-3*time.Hour))
+	build.Accounts[state.Key("hermes", "openrouter")] = &state.Account{Provider: "hermes", Label: "openrouter", LastSeenAt: now}
+	spend(build, "hermes", "openrouter", "/h", 500_000, now.Add(-3*time.Hour))
 
-	r := withTeam(t, f, otherDoc(t, f.key, "d-baus-device", "baus", now, baus))
+	r := withTeam(t, f, otherDoc(t, f.key, "d-build-device", "build", now, build))
 	mx := r.Team.Matrix
 	var cols []string
 	for _, c := range mx.Columns {
@@ -351,8 +351,8 @@ func TestMatrix(t *testing.T) {
 	if c := mx.Columns[1]; c.Percent == nil || *c.Percent != 40 || c.State != StateTight || c.Usage.Week != 5_000_000 || c.WindowTokens != 4_000_000 {
 		t.Fatalf("codex column = %+v", c)
 	}
-	// Rows by tokens in 7 days: baus spent 3.5M, this device 5M.
-	if len(mx.Rows) != 2 || mx.Rows[0].Device != "thisbox" || mx.Rows[1].Device != "baus" {
+	// Rows by tokens in 7 days: build spent 3.5M, this device 5M.
+	if len(mx.Rows) != 2 || mx.Rows[0].Device != "thisbox" || mx.Rows[1].Device != "build" {
 		t.Fatalf("rows = %+v", mx.Rows)
 	}
 	this, other := mx.Rows[0], mx.Rows[1]
@@ -361,7 +361,7 @@ func TestMatrix(t *testing.T) {
 	}
 	// Hermes through the bots login counts in the bots column.
 	if c := other.Cells[1]; c.Usage.Week != 3_000_000 || c.WindowTokens != 3_000_000 || c.Share == nil || *c.Share != 30 {
-		t.Fatalf("baus codex cell = %+v", c)
+		t.Fatalf("build codex cell = %+v", c)
 	}
 	// This device spent 1M since the window began, of the team's 4M: a
 	// quarter of the 40% used.
@@ -374,7 +374,7 @@ func TestMatrix(t *testing.T) {
 	if c := other.Cells[2]; c.Usage.Week != 500_000 || c.Share != nil {
 		t.Fatalf("no quota cell = %+v", c)
 	}
-	if bots := findTeamAccount(t, r, "codex", "bots@a.io"); bots.Users != 2 || *bots.Busiest != "baus" {
+	if bots := findTeamAccount(t, r, "codex", "bots@a.io"); bots.Users != 2 || *bots.Busiest != "build" {
 		t.Fatalf("bots users = %d %v", bots.Users, bots.Busiest)
 	}
 	if h := findTeamAccount(t, r, "hermes", "openrouter"); h.Subscription {
@@ -410,12 +410,12 @@ func TestAttention(t *testing.T) {
 	start := now.Add(-4 * 24 * time.Hour) // 4/7 of the week gone
 	weekly := func(pct float64) snapshot.Window { return week7(pct, start.Add(week)) }
 	st := emptyState()
-	addAccount(st, "codex", "sergey@goodit.works", true, &state.Quota{At: now, Windows: []snapshot.Window{weekly(100)}}, 10)
-	addAccount(st, "claude", "sergey@goodit.works", true, &state.Quota{At: now.Add(-30 * time.Hour), Windows: []snapshot.Window{
+	addAccount(st, "codex", "sam@mail.test", true, &state.Quota{At: now, Windows: []snapshot.Window{weekly(100)}}, 10)
+	addAccount(st, "claude", "sam@mail.test", true, &state.Quota{At: now.Add(-30 * time.Hour), Windows: []snapshot.Window{
 		weekly(20), {Name: "7d Fable", Percent: 100, Minutes: 10080, ResetsAt: tp(start.Add(week))},
 	}}, 10)
-	addAccount(st, "codex", "ksoiss@gmail.com", false, &state.Quota{At: now, Windows: []snapshot.Window{weekly(80)}}, 10)
-	addAccount(st, "codex", "bots@jupid.tax", false, &state.Quota{At: now, Windows: []snapshot.Window{weekly(20)}}, 10)
+	addAccount(st, "codex", "kim@mail.test", false, &state.Quota{At: now, Windows: []snapshot.Window{weekly(80)}}, 10)
+	addAccount(st, "codex", "bots@corp.test", false, &state.Quota{At: now, Windows: []snapshot.Window{weekly(20)}}, 10)
 	addAccount(st, "codex", "fine@a.io", false, &state.Quota{At: now, Windows: []snapshot.Window{weekly(50)}}, 10)
 	f := newFixture(t, st)
 	f.in.State.Update.Latest = "v1.2.3"
@@ -425,7 +425,7 @@ func TestAttention(t *testing.T) {
 	quiet := emptyState()
 	r := withTeam(t, f,
 		otherDoc(t, f.key, "d-broken-device", "Mac.localdomain", now.Add(-10*time.Minute), broken),
-		otherDoc(t, f.key, "d-quiet-device", "MacBook-Pro-Lucy", now.Add(-50*time.Hour), quiet),
+		otherDoc(t, f.key, "d-quiet-device", "leebook", now.Add(-50*time.Hour), quiet),
 	)
 	var got []string
 	for _, a := range r.Attention {
@@ -439,19 +439,20 @@ func TestAttention(t *testing.T) {
 		got = append(got, strings.TrimSpace(strings.Join(strings.Fields(s), " ")))
 	}
 	want := []string{
-		"out claude sergey 7d Fable",
-		"out codex sergey",
-		"over codex ksoiss",
+		"out claude sam 7d Fable",
+		"out codex sam",
+		"over codex kim",
 		"error Mac.localdomain",
-		"silent MacBook-Pro-Lucy",
-		"old Mac.localdomain,MacBook-Pro-Lucy",
+		"silent leebook",
+		"old Mac.localdomain,leebook",
 		"under codex bots",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("attention =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
+	// A full window stays full until it resets, so its age is no news.
 	fable := r.Attention[0]
-	if fable.At == nil || !fable.At.Equal(start.Add(week)) || fable.ReadingAge != 30*3600 || fable.Account != "sergey@goodit.works" {
+	if fable.At == nil || !fable.At.Equal(start.Add(week)) || fable.ReadingAge != 0 || fable.Account != "sam@mail.test" {
 		t.Fatalf("fable = %+v", fable)
 	}
 	over := r.Attention[2]
@@ -697,6 +698,43 @@ func TestWindowThatHasResetIsUnknown(t *testing.T) {
 	// Past half of its week, ann will leave most of it unused.
 	if len(r.Attention) != 1 || r.Attention[0].Kind != AttentionUnder || r.Attention[0].Account != "ann" || r.Attention[0].ReadingAge != 8*3600 {
 		t.Fatalf("attention = %+v", r.Attention)
+	}
+}
+
+// A request refused for a full window reads that window alone. The window
+// stays full until it resets, however old the reading, and the weekly
+// window the refusal says nothing of is not known.
+func TestRefusalReading(t *testing.T) {
+	st := emptyState()
+	addAccount(st, "claude", "ann", true, &state.Quota{At: now.Add(-10 * time.Hour), Source: collect.RejectionSource, Windows: []snapshot.Window{
+		{Name: "7d Opus", Percent: 100, Minutes: 10080, ResetsAt: tp(now.Add(72 * time.Hour))},
+	}}, 0)
+	addAccount(st, "codex", "bob", false, &state.Quota{At: now.Add(-time.Hour), Source: "harness", Windows: []snapshot.Window{
+		{Name: "5h", Percent: 30, Minutes: 300, ResetsAt: tp(now.Add(2 * time.Hour))},
+	}}, 0)
+	r := Build(newFixture(t, st).in)
+
+	for _, q := range []*Quota{findAccount(t, r, "claude", "ann").Quota, findTeamAccount(t, r, "claude", "ann").Quota} {
+		if q.Stale || len(q.Windows) != 2 {
+			t.Fatalf("ann's quota = %+v", q)
+		}
+		opus, week := q.Windows[0], q.Windows[1]
+		if opus.Stale || opus.State != StateOut || opus.Main {
+			t.Fatalf("refused window = %+v", opus)
+		}
+		if week.Name != "7d" || !week.Unread || !week.Main || week.State != StateUnknown || week.Forecast != nil {
+			t.Fatalf("weekly window = %+v", week)
+		}
+	}
+	if a := findTeamAccount(t, r, "claude", "ann"); a.State != StateOut {
+		t.Fatalf("ann = %s", a.State)
+	}
+	if len(r.Attention) != 1 || r.Attention[0].Kind != AttentionOut || r.Attention[0].Window != "7d Opus" || r.Attention[0].ReadingAge != 0 {
+		t.Fatalf("attention = %+v", r.Attention)
+	}
+	// Only Claude always has a weekly window.
+	if ws := findAccount(t, r, "codex", "bob").Quota.Windows; len(ws) != 1 || !ws[0].Main {
+		t.Fatalf("bob's windows = %+v", ws)
 	}
 }
 

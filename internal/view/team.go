@@ -200,8 +200,8 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 				x.ta.Link = x.qLink
 			}
 			if len(x.wins) > 0 {
-				x.ta.Quota = x.quota(now)
-				if mw := mainWindow(x.ta.Quota.Windows); mw != nil && !mw.Reset {
+				x.ta.Quota = x.quota(p, now)
+				if mw := mainWindow(x.ta.Quota.Windows); mw != nil && !mw.Reset && !mw.Unread {
 					if s, ok := x.wins[mw.Name].w.Start(); ok {
 						x.start, x.main = s, mw.Name
 					}
@@ -285,19 +285,20 @@ func latestVersion(checked string, devs []*device) string {
 
 // quota is the team account's reading: the newest reading of each window,
 // in the order the windows first came.
-func (x *teamAccount) quota(now time.Time) *Quota {
+func (x *teamAccount) quota(provider string, now time.Time) *Quota {
 	var rs []reading
 	newest := x.wins[x.order[0]]
 	for _, name := range x.order {
 		wr := x.wins[name]
-		rs = append(rs, reading{wr.w, wr.at})
+		rs = append(rs, reading{Window: wr.w, At: wr.at})
 		if wr.at.After(newest.at) {
 			newest = wr
 		}
 	}
 	q := quotaView(newest.at, "", newest.dev, now)
 	q.From = newest.from
-	q.Windows, x.ta.State = readQuota(rs, now)
+	q.Windows, x.ta.State = readQuota(weekly(provider, rs), now)
+	q.Stale = anyStale(q.Windows)
 	return q
 }
 
@@ -541,7 +542,7 @@ func left(q *Quota) float64 {
 		return 101
 	}
 	m := mainWindow(q.Windows)
-	if m == nil || m.Reset {
+	if m == nil || m.Reset || m.Unread {
 		return 101
 	}
 	return max(100-m.Percent, 0)

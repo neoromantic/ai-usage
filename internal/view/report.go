@@ -171,8 +171,9 @@ type Quota struct {
 	// ObservedAt is the newest window's reading time.
 	ObservedAt time.Time `json:"observed_at"`
 	AgeSeconds int64     `json:"age_seconds"`
-	Stale      bool      `json:"stale"`
-	Source     string    `json:"source,omitempty"`
+	// Stale says a window's reading is stale.
+	Stale  bool   `json:"stale"`
+	Source string `json:"source,omitempty"`
 	// From names the provider whose linked account took the reading.
 	From string `json:"from,omitempty"`
 	// Device is the device whose reading is newest.
@@ -201,11 +202,16 @@ type Window struct {
 	// Main is the account's main window, the weekly one where it has one.
 	Main       bool      `json:"main"`
 	ObservedAt time.Time `json:"observed_at"`
-	// Stale is a reading older than 6 hours.
+	// Stale is a reading older than 6 hours of a window that is not full.
+	// A full window stays full until it resets, however old the reading.
 	Stale bool `json:"stale"`
 	// Reset says the window reset since it was read, so how full it is now
 	// is not known.
-	Reset    bool      `json:"reset"`
+	Reset bool `json:"reset"`
+	// Unread is a weekly window the newest reading does not cover: a request
+	// refused for a full window reads that window alone, and says nothing of
+	// the weekly one since.
+	Unread   bool      `json:"unread,omitempty"`
 	State    string    `json:"state"`
 	Forecast *Forecast `json:"forecast"`
 }

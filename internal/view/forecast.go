@@ -20,7 +20,7 @@ func readWindow(w snapshot.Window, at, now time.Time) Window {
 		ResetsAt:   timeOf(w.ResetsAt),
 		Minutes:    w.Minutes,
 		ObservedAt: at.UTC(),
-		Stale:      now.Sub(at) > StaleAfter,
+		Stale:      now.Sub(at) > StaleAfter && w.Percent < 100,
 		State:      StateUnknown,
 	}
 	if w.ResetsAt != nil && !w.ResetsAt.After(now) {
@@ -164,13 +164,35 @@ func limitsMore(w, main Window) bool {
 type reading struct {
 	snapshot.Window
 	At time.Time
+	// Unread is a window the reading does not cover.
+	Unread bool
+}
+
+// weekly adds an unread weekly window to a Claude reading without one.
+// Claude always has a weekly window, so a reading without it came from a
+// request refused for a full window, which reads that window alone. The
+// weekly window then is not known, which is not the same as none.
+func weekly(provider string, rs []reading) []reading {
+	if provider != "claude" || len(rs) == 0 {
+		return rs
+	}
+	at := rs[0].At
+	for _, r := range rs {
+		if r.Name == "7d" {
+			return rs
+		}
+		if r.At.After(at) {
+			at = r.At
+		}
+	}
+	return append(rs, reading{Window: snapshot.Window{Name: "7d", Minutes: 7 * 24 * 60}, At: at, Unread: true})
 }
 
 // readings are the windows of one reading taken at at.
 func readings(ws []snapshot.Window, at time.Time) []reading {
 	out := make([]reading, len(ws))
 	for i, w := range ws {
-		out[i] = reading{w, at}
+		out[i] = reading{Window: w, At: at}
 	}
 	return out
 }
@@ -187,6 +209,9 @@ func readQuota(rs []reading, now time.Time) ([]Window, string) {
 	m := mainIndex(ws)
 	for i, r := range rs {
 		win := readWindow(r.Window, r.At, now)
+		if r.Unread {
+			win = Window{Name: r.Name, Minutes: r.Minutes, ObservedAt: r.At.UTC(), State: StateUnknown, Unread: true}
+		}
 		win.Main = i == m
 		out = append(out, win)
 	}
@@ -200,6 +225,16 @@ func readQuota(rs []reading, now time.Time) ([]Window, string) {
 		}
 	}
 	return out, state
+}
+
+// anyStale says a window's reading is stale.
+func anyStale(ws []Window) bool {
+	for _, w := range ws {
+		if w.Stale {
+			return true
+		}
+	}
+	return false
 }
 
 // mainWindow is the main window of a read quota, or nil.

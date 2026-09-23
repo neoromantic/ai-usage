@@ -77,7 +77,8 @@ func Build(in Input) Report {
 			}
 			if a.Quota != nil {
 				acct.Quota = quotaView(a.Quota.At, a.Quota.Source, "", now)
-				acct.Quota.Windows, acct.State = readQuota(readings(a.Quota.Windows, a.Quota.At), now)
+				acct.Quota.Windows, acct.State = readQuota(weekly(p, readings(a.Quota.Windows, a.Quota.At)), now)
+				acct.Quota.Stale = anyStale(acct.Quota.Windows)
 				acct.Quota.From = a.QuotaFrom
 			}
 			if a.LinkedSessions > 0 {
@@ -144,7 +145,6 @@ func quotaView(at time.Time, source, device string, now time.Time) *Quota {
 	return &Quota{
 		ObservedAt: at.UTC(),
 		AgeSeconds: int64(now.Sub(at).Seconds()),
-		Stale:      now.Sub(at) > StaleAfter,
 		Source:     source,
 		Device:     device,
 		Windows:    []Window{},

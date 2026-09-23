@@ -112,6 +112,10 @@ func TestForecastOfAStaleReading(t *testing.T) {
 	if w := readWindow(week7(62.8, reset), now.Add(-6*time.Hour), now); w.Stale {
 		t.Fatal("a reading 6 hours old is stale")
 	}
+	// A full window stays full until it resets.
+	if w := readWindow(week7(100, reset), at, now); w.Stale || w.State != StateOut {
+		t.Fatalf("a full window read a day ago: %+v", w)
+	}
 }
 
 func TestForecastOfAWindowThatReset(t *testing.T) {
