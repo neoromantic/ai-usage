@@ -722,13 +722,14 @@ func TestHomeCommands(t *testing.T) {
 	}
 	d.ok("home", "remove", "codex", gone)
 
-	// The default Hermes home can be named a quota home, and unnamed again.
+	// The default Hermes home can be named a quota home, and unnamed again,
+	// with no other Hermes home added.
 	defHermes := filepath.Join(d.home, ".hermes")
 	if err := os.MkdirAll(defHermes, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	d.ok("home", "add", "hermes", defHermes, "--quota-from", "codex:"+codex)
-	if d.config().QuotaFrom[defHermes]["codex"] != codex {
+	d.ok("home", "add", "hermes", defHermes, "--quota-from", "codex:"+codex, "--quota-from", "grok:"+grok)
+	if got := d.config().QuotaFrom[defHermes]; !reflect.DeepEqual(got, map[string]string{"codex": codex, "grok": grok}) {
 		t.Fatalf("quota from = %+v", d.config().QuotaFrom)
 	}
 	d.ok("home", "remove", "hermes", defHermes)
@@ -750,6 +751,7 @@ func TestHomeCommands(t *testing.T) {
 		{"home", "add", "hermes", ""},
 		{"home", "add", "hermes", ".hermes-b", "--quota-from", "codex:"},
 		{"home", "add", "hermes", ".hermes-b", "--quota-from="},
+		{"home", "add", "hermes", ".hermes-b", "--quota-from", "codex:.codex", "--quota-from", "codex:.grok"},
 	} {
 		if r := d.run("", bad...); r.code != 2 {
 			t.Fatalf("%v: exit %d, %s", bad, r.code, r.stderr)
@@ -771,6 +773,20 @@ func TestHomeCommands(t *testing.T) {
 	// the default login.
 	if r := d.run("", "home", "remove", "codex", codex); r.code != 1 || !strings.Contains(r.stderr, "take their quota from") {
 		t.Fatalf("removing a quota home: exit %d, %s", r.code, r.stderr)
+	}
+
+	// A config with no added homes at all: naming the default Hermes home
+	// after the default Codex home adds none, and unnaming it is fine.
+	e := newDevice(t)
+	for _, dir := range []string{".hermes", ".codex"} {
+		if err := os.MkdirAll(filepath.Join(e.home, dir), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.ok("home", "add", "hermes", filepath.Join(e.home, ".hermes"), "--quota-from", "codex:"+filepath.Join(e.home, ".codex"))
+	e.ok("home", "remove", "hermes", filepath.Join(e.home, ".hermes"))
+	if cfg := e.config(); len(cfg.Homes) != 0 || len(cfg.QuotaFrom) != 0 {
+		t.Fatalf("config = %+v %+v", cfg.Homes, cfg.QuotaFrom)
 	}
 	if !reflect.DeepEqual(d.config().Homes, cfg.Homes) {
 		t.Fatal("a rejected command changed the config")

@@ -322,3 +322,58 @@ func TestHermesQuotaFromNamedHome(t *testing.T) {
 		t.Fatalf("hermes with no sessions = %+v", h.Link)
 	}
 }
+
+// A profile that is a link to a folder elsewhere is still its home's
+// profile. A run that could not read every Hermes home keeps the link: the
+// homes it read are not the majority.
+func TestHermesQuotaFromLinkedProfileAndPartialRead(t *testing.T) {
+	w, o := newWorld(t)
+	codex := w.home(t, "codex")
+	hermes := w.home(t, "hermes")
+	root := filepath.Dir(w.userHome)
+	bots := filepath.Join(root, "bots", ".codex")
+	agent := filepath.Join(root, "bots", ".hermes-agent")
+	elsewhere := filepath.Join(root, "profiles-elsewhere", "helper")
+	for _, d := range []string{bots, filepath.Join(agent, "profiles"), elsewhere} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(elsewhere, "state.db"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	profile := filepath.Join(agent, "profiles", "helper")
+	if err := os.Symlink(elsewhere, profile); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := o.Dir.LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Homes = map[string][]string{"codex": {bots}, "hermes": {agent}}
+	cfg.QuotaFrom = map[string]map[string]string{agent: {"codex": bots}}
+	if err := o.Dir.SaveConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	w.login("codex", codex, "sam", quota(t0, 5))
+	w.login("codex", bots, "bots", quota(t0, 40))
+	w.sessions("hermes", profile, hermesSess("p1", "openai-codex", t0.Add(-time.Hour), map[string]snapshot.Tokens{"openai-codex": tok(1000)}))
+	w.sessions("hermes", hermes, hermesSess("d1", "openai-codex", t0.Add(-2*time.Hour), map[string]snapshot.Tokens{"openai-codex": tok(70)}))
+	res := run(t, o)
+	if h := totalsFor(t, res.State, "hermes", "openai-codex"); h.Link == nil || h.Link.Label != "bots" {
+		t.Fatalf("hermes with a linked profile = %+v", h.Link)
+	}
+	if b := totalsFor(t, res.State, "codex", "bots"); b.Linked != tok(1000) {
+		t.Fatalf("codex bots = %+v", b)
+	}
+
+	// The profile's read fails; the default home alone would say sam.
+	w.now = t0.Add(15 * time.Minute)
+	w.readErr[state.Key("hermes", profile)] = os.ErrPermission
+	w.sessions("hermes", profile)
+	w.sessions("hermes", hermes, hermesSess("d1", "openai-codex", w.now, map[string]snapshot.Tokens{"openai-codex": tok(90)}))
+	res = run(t, o)
+	if h := totalsFor(t, res.State, "hermes", "openai-codex"); h.Link == nil || h.Link.Label != "bots" {
+		t.Fatalf("hermes after a partial read = %+v", h.Link)
+	}
+}

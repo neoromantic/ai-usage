@@ -364,7 +364,7 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 	probed := homes
 	if p == "hermes" {
 		markHermesCurrent(st, read)
-		linkHermes(st, o, read)
+		linkHermes(st, o, read, partial)
 		probed = nil
 		if len(homes) > 0 {
 			probed = []string{""}
@@ -769,10 +769,17 @@ func (r paths) resolve(p string) string {
 
 // quotaLinks is Config.QuotaFrom keyed by resolved Hermes home.
 func quotaLinks(named map[string]map[string]string, r paths) map[string]map[string]string {
+	// Two spellings of one home merge in a fixed order, so the same entry
+	// wins every run.
+	homes := make([]string, 0, len(named))
+	for h := range named {
+		homes = append(homes, h)
+	}
+	sort.Strings(homes)
 	out := map[string]map[string]string{}
-	for h, refs := range named {
+	for _, h := range homes {
 		k := r.resolve(h)
-		for p, at := range refs {
+		for p, at := range named[h] {
 			if out[k] == nil {
 				out[k] = map[string]string{}
 			}
@@ -785,12 +792,13 @@ func quotaLinks(named map[string]map[string]string, r paths) map[string]map[stri
 // quotaHome is the home of harness p named for a Hermes home, or for the
 // home a profile is kept in, or "". named is keyed by resolved home.
 func quotaHome(named map[string]map[string]string, r paths, hermesHome, p string) string {
-	h := r.resolve(hermesHome)
-	if at := named[h][p]; at != "" {
+	if at := named[r.resolve(hermesHome)][p]; at != "" {
 		return at
 	}
-	if parent := filepath.Dir(h); filepath.Base(parent) == profiles["hermes"].dir {
-		return named[filepath.Dir(parent)][p]
+	// A profile is in its home's profiles folder even when it is a link to
+	// somewhere else, so the parent is taken from the path it was found by.
+	if parent := filepath.Dir(filepath.Clean(hermesHome)); filepath.Base(parent) == profiles["hermes"].dir {
+		return named[r.resolve(filepath.Dir(parent))][p]
 	}
 	return ""
 }
@@ -846,8 +854,9 @@ func linkedAccount(st *state.State, o Options, hermesHome, billing string) *stat
 // nobody is logged in there. Homes can bill one route through different
 // logins, as bots on a shared login beside the person's own Hermes; the
 // account shows the quota of the login it uses most, which holds from run to
-// run. An account with no session read this run keeps its link.
-func linkHermes(st *state.State, o Options, read []readSession) {
+// run. An account with no session read this run keeps its link, and so does
+// one whose homes were not all read: the rest would not be the majority.
+func linkHermes(st *state.State, o Options, read []readSession, partial bool) {
 	type use struct {
 		tokens int64
 		last   time.Time
@@ -883,7 +892,7 @@ func linkHermes(st *state.State, o Options, read []readSession) {
 			acct.Link = nil
 			continue
 		}
-		if !seen[acct.Label] {
+		if !seen[acct.Label] || (partial && acct.Link != nil) {
 			continue
 		}
 		var best *state.Link

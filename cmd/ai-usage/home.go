@@ -43,8 +43,7 @@ func cmdHome(args []string, stdout io.Writer) error {
 		return usageError("unknown home command " + sub)
 	}
 
-	var quotaFrom string
-	var hasQuotaFrom bool
+	var quotaFrom []string
 	var rest []string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -54,9 +53,9 @@ func cmdHome(args []string, stdout io.Writer) error {
 				return usageError("--quota-from takes PROVIDER:DIR")
 			}
 			i++
-			quotaFrom, hasQuotaFrom = args[i], true
+			quotaFrom = append(quotaFrom, args[i])
 		case strings.HasPrefix(a, "--quota-from=") || strings.HasPrefix(a, "-quota-from="):
-			quotaFrom, hasQuotaFrom = a[strings.Index(a, "=")+1:], true
+			quotaFrom = append(quotaFrom, a[strings.Index(a, "=")+1:])
 		case strings.HasPrefix(a, "-"):
 			return usageError("unknown flag " + a)
 		default:
@@ -78,25 +77,31 @@ func cmdHome(args []string, stdout io.Writer) error {
 		}
 		homes = append(homes, abs)
 	}
-	var ref *homeRef
-	if quotaFrom != "" || hasQuotaFrom {
+	// One --quota-from per harness: codex:DIR, grok:DIR, or both.
+	var refs []homeRef
+	for _, q := range quotaFrom {
 		if sub != "add" || p != "hermes" {
 			return usageError("--quota-from is for home add hermes")
 		}
-		qp, qdir, ok := strings.Cut(quotaFrom, ":")
+		qp, qdir, ok := strings.Cut(q, ":")
 		if !ok || !collect.BillsThrough(qp) || strings.TrimSpace(qdir) == "" {
 			return usageError("--quota-from takes codex:DIR or grok:DIR")
+		}
+		for _, r := range refs {
+			if r.provider == qp {
+				return usageError("--quota-from names " + qp + " twice")
+			}
 		}
 		abs, err := homePath(qdir, true)
 		if err != nil {
 			return err
 		}
-		ref = &homeRef{provider: qp, home: abs}
+		refs = append(refs, homeRef{provider: qp, home: abs})
 	}
 
 	cfg, err := changeHomes(d, func(cfg *state.Config) error {
 		if sub == "add" {
-			addHomes(cfg, userHome, p, homes, ref)
+			addHomes(cfg, userHome, p, homes, refs)
 			return nil
 		}
 		return removeHomes(cfg, userHome, p, homes)
@@ -166,7 +171,7 @@ func homePath(h string, mustExist bool) (string, error) {
 	return filepath.Clean(abs), nil
 }
 
-func addHomes(cfg *state.Config, userHome, p string, homes []string, ref *homeRef) {
+func addHomes(cfg *state.Config, userHome, p string, homes []string, refs []homeRef) {
 	add := func(p, h string) {
 		if h == filepath.Join(userHome, "."+p) || contains(cfg.Homes[p], h) {
 			return
@@ -179,7 +184,7 @@ func addHomes(cfg *state.Config, userHome, p string, homes []string, ref *homeRe
 	}
 	for _, h := range homes {
 		add(p, h)
-		if ref != nil {
+		for _, ref := range refs {
 			if cfg.QuotaFrom == nil {
 				cfg.QuotaFrom = map[string]map[string]string{}
 			}
@@ -190,7 +195,7 @@ func addHomes(cfg *state.Config, userHome, p string, homes []string, ref *homeRe
 		}
 	}
 	// The login is read where it lives, so that home is read too.
-	if ref != nil {
+	for _, ref := range refs {
 		add(ref.provider, ref.home)
 	}
 }
@@ -216,9 +221,10 @@ func removeHomes(cfg *state.Config, userHome, p string, homes []string) error {
 				keep = append(keep, v)
 			}
 		}
-		cfg.Homes[p] = keep
 		if len(keep) == 0 {
 			delete(cfg.Homes, p)
+		} else {
+			cfg.Homes[p] = keep
 		}
 		if p == "hermes" {
 			delete(cfg.QuotaFrom, h)
