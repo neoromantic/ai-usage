@@ -23,7 +23,7 @@ Source notes are from [PitStop](https://github.com/Livin21/pitstop). Account swi
 - Discover Codex, Claude, Grok, and Hermes, including non-default data directories. Skip a tool that is not installed. One missing tool does not fail the others.
 - Do not open credential files and do not read account emails out of them. Account identity is whatever stable id the installed harness reports when asked. If that report contains an email, store the string only as the harness's label.
 - Ask the installed harness, not the provider. A one-shot command that prints quota and account identity is allowed, including through tmux when the tool has no other interface. A command that starts a session, sends a prompt, or spends quota is not allowed. `codex exec` and `claude -p` are examples of commands that are not allowed.
-- Record each quota window the harness or the local files already contain: how full it is, and when it resets. The headline number is the fullest window. If this account has no reading, say unknown. Do not invent a percent or a reset time.
+- Record each quota window the harness or the local files already contain: how full it is, and when it resets. The headline number is the fullest of the main windows, the 5-hour and the weekly one. A window for one model is shown on its own. If this account has no reading, say unknown. Do not invent a percent or a reset time.
 - When the logged-in account changes, keep the previous account. New token growth is attributed to the account that was logged in for that sample. The previous account keeps the quota last reported for it and the tokens attributed while it was active. A switch in the middle of a 15-minute gap can attach that gap to the wrong account. That inaccuracy is accepted.
 - Do not add quota percentages across devices. Add token counts. One account has one quota reading, taken from the newest sample for that account.
 - Keep the last good reading and show how old it is.
@@ -84,9 +84,8 @@ These PitStop behaviors are out, even though the project does them:
 - A notifier when a window crosses a threshold. Version 1 only marks 75% and 90% in the console output.
 - Account switching, after monitoring works.
 - A web report on the relay's site. The page gets the team key from the URL fragment or from what the person pastes, never from the server. It verifies and unseals the snapshots in the browser. The relay keeps serving only sealed, signed snapshots.
-- A better console report, where it is quick to see which accounts are near their limits, who is spending them, and what changed since the last look.
-- A matrix view of who uses what: devices (hosts and bot containers) against accounts, with tokens in the cells, in the console and in JSON.
-- An interactive console view, in the manner of btop: pick an account, a host, or a bot and a period, and drill down.
+- What changed since the last look, next to each number the report shows.
+- Drill-down in the interactive view: pick an account, a host, or a bot, and see its detail.
 - Managing subscriptions on the relay: price, renewal date, and owner per account, so that cost per consumer and idle subscriptions show. It needs more thought: this is data people enter, not what collectors see, and the relay stores only sealed, signed snapshots today.
 
 ## Next: usage over time
@@ -107,6 +106,116 @@ Sketch:
 - The snapshot gains quota cycles per account: each window's reset time and the fullest percentage seen before it. Readings come from every device, so the team view takes the fullest per cycle.
 - New views: `--days` and `--weeks` tables, and a utilization view per account. JSON carries the same data.
 - An account switch is placed at the run that first saw the new login, which is within 15 minutes. Placing it more exactly, from the quota jump in Codex's rollout, is not worth it.
+
+## Next: report redesign
+
+Decided on 2026-09-23 with the owner. It takes the periods from "Next: usage over time" and two items that were later: the matrix of who uses what, and an interactive view. The day tables, the week tables, and the utilization history stay in that section.
+
+The report answers, top to bottom: what needs attention, how full each subscription is and when it was last used, which device spends which subscription, and where this device's tokens go. Nothing is said twice, and no row has note lines under it.
+
+Sketch, with the team's real accounts; the 7-day numbers are made up:
+
+```
+ai-usage v0.1.3 · annbook · team qmvrtzpa        ✓ collected 7m ago  ✓ relay 7m ago  ✓ up to date
+
+ATTENTION
+!!  codex ann@acme.dev   7d at 100%, resets in 1d23h
+!!  claude ann@acme.dev  Fable 7d at 100%, resets in 3d7h
+▲   codex lee@corp.test        7d full Sat 17:47 at this pace, 2d22h before it resets
+×   Mac.localdomain             codex: app-server exited without answering
+↓   2 devices on v0.1.1         Mac.localdomain, MacBook-Pro-Kim · latest v0.1.3
+
+SUBSCRIPTIONS  6 · 2 critical · 1 fills early
+
+  CLAUDE                  PLAN            QUOTA                 5H          7D         LAST
+● ann@acme.dev     max             ██████▋░░░   67        ? reset   67%  3d7h     7m
+    Fable 7d                              ██████████  100 !!              100%  3d7h
+  kim@corp.test         max             ··········    —        —           —           1h
+
+  CODEX
+● ann@acme.dev     pro             ██████████  100 !!     —        100% 1d23h     1h
+  sam@mail.test        prolite         ████▎░░░░░   42        —         42%  5d2h     3h
+● lee@corp.test          pro             █▎░░░░░░░░   12 ▲      —         12% 5d22h    34m
+  unknown                 —               ··········    —        —           —          16m
+
+  GROK
+● a4c2e917                SuperGrok Plus  ··········    ?        —           ? reset    11h
+
+DEVICES × SUBSCRIPTIONS  13 devices · 7d · M tokens in+out            [tokens] share
+                      CLAUDE ─────────  CODEX ────────────────────────────  GROK     NO QUOTA
+                       ann    kim   ann   sam     bots  unknown a4c2e917   hermes   TOTAL
+● annbook               19        ·      180        ·        ·        ·        3        ·     202
+  srv1                      2        ·       12        ·      240        ·        ·        8     262
+× Mac.localdomain           ·       10        ·        ·        ·       95        ·        ·     105
+↓ MacBook-Pro-Kim          ·        ·        ·       60        ·        ·        ·        ·      60
+  bot-a                     ·        ·        ·        ·       30        ·        ·        ·      30
+  bot-b                   ·        ·        ·        ·       25        ·        ·        1      26
+  bob                       ·        ·        ·        ·       20        ·        ·        1      21
+  …  6 more rows
+  TOTAL                    21       10      192       60      345       95        3       10     736
+
+PROJECTS  annbook · by 7d · M tokens in+out
+  PROJECT                             7D   90D  SESS  VIA            LAST
+  ~/src/acme/app          60   162    43  codex, claude    1h
+  ~/Vault                             22    52    56  codex            3h
+  ~/src/site                   9    30     6  codex            2d
+  ~/src/ai-usage           8     8     3  claude, grok     7m
+  ~/src/acme/os                 3    10     3  claude, grok    11h
+  + 237 more
+
+ ↑↓ scroll  ←→ matrix  p period ‹7d›  % share  r refresh  ? help  q quit
+```
+
+- **Header.** One line: version, device, team, and the collector's own health.
+- **ATTENTION.** A few lines, shown only when something is wrong. It lists:
+  - a subscription at 90% or more in any window, a model window included;
+  - a window that fills before it resets at this pace;
+  - a device with an error, or silent for over a day;
+  - devices on an old release, all in one line.
+- **SUBSCRIPTIONS.** Only accounts that have a subscription: Claude, Codex, and Grok.
+  - Hermes is a harness, not a subscription. What it spends through a Codex or Grok login is that login's use. Its accounts with no quota, such as API keys, appear only in the matrix.
+  - Each provider is a group, with a bold heading and a blank line before the next one. There are no rules between groups. The columns line up across groups.
+  - Columns: the account, the plan, the quota, 5h and 7d with their resets, and LAST. The quota is a bar and the fuller of the main windows. LAST is the newest activity on the account on any device. READ goes; an old reading keeps its mark next to its percent.
+  - A model window, such as Fable 7d, is a row of its own under the account. It is indented and uses the same columns. The account's headline counts only the main windows.
+  - An account with no reading is an ordinary row with gray dashes.
+  - USED BY goes, because the matrix shows it.
+- **DEVICES × SUBSCRIPTIONS.** A matrix. Each device is a row. Each subscription is a column, grouped under its provider. One more column holds the tokens that have no quota. Totals are on the right and at the bottom. Rows are sorted by total, largest first.
+  - A cell holds input plus output tokens in the chosen period, in whole millions: `603` or `1210`. Under a million it shows `<1`, and with no use it shows `·`. Cache is left out.
+  - A cell grows brighter and bolder as its value grows, so the largest consumers stand out. Without color, only the largest value in each column is bold.
+  - A switch changes the cells to each device's share of the subscription's current weekly window. The share is the device's tokens since the window began, divided by the whole team's, times how full the window is. It is an estimate, and the matrix title says so.
+  - A mark before the device name gives its state: this device, an error, silent, or outdated.
+- **PROJECTS.** One table for this device, with all its accounts together, sorted by 7-day tokens. Columns: the project, 7d, 90d, sessions, the providers it used, and the last activity. The static report shows the top 10.
+- **Footer.** The static report ends with one gray line of legend, covering only the marks on screen.
+
+Periods are today, 7d, 30d, and 90d. The matrix and the projects use the chosen period, 7d by default.
+
+Short names:
+
+- Matrix headers need short account names. By default a name is the part of an email before the @, or the first 8 characters of an id. When two names collide within a provider, both show the full label.
+- `ai-usage alias <account> <name>` names an account for the whole team, and `--clear` removes the name. The name travels sealed in the snapshot of the device that set it. If two devices set a name, the newer one wins.
+
+The interactive view:
+
+- `ai-usage` in a terminal opens the same page full screen. Piped output, `--json`, and `--plain` print the static report. The installer's first run prints the static one too.
+- ↑↓, PgUp/PgDn, g/G, and the mouse wheel scroll the page. ←→ scroll the matrix; the device column and the headers stay in place. The matrix title shows which columns are in view, such as "cols 3–6 of 9".
+- Keys:
+  - `p`, or `1`, `7`, `3`, `9`, pick the period;
+  - `%` switches between tokens and share;
+  - `r` collects now;
+  - `?` shows every key and the legend;
+  - `q`, Esc, and Ctrl-C quit.
+- The key bar follows common TUI practice:
+  - each key is bold in an accent color, and what it does is dim;
+  - the current period and mode are highlighted pills;
+  - on a narrow terminal, the bar drops the less-used keys instead of wrapping.
+- The view reloads when a scheduled run saves new state, and relative times tick.
+- It is built on Bubble Tea and Lip Gloss. Colors suit both light and dark terminals, and `NO_COLOR` turns them off.
+
+Data:
+
+- The collector splits tokens by day, per account and per project, using the timestamps in the harness logs. The 90 days are there from the first run of the new release, as far back as the logs go.
+- The snapshot carries each account's tokens per day and since the start of each of its quota windows. The relay's size caps grow to fit. JSON gets the same data under a new schema version.
+- `--tokens` and `--devices` go, because the matrix replaces both. `--projects` stays and lists every project.
 
 ## Backlog
 
