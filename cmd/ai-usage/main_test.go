@@ -646,6 +646,25 @@ func TestRelayServeClientIPHeader(t *testing.T) {
 	}
 }
 
+// buggyContext panics when asked for its end, as a bug in the goroutine that
+// shuts the relay down would.
+type buggyContext struct{ context.Context }
+
+func (buggyContext) Done() <-chan struct{} { panic("shutdown bug") }
+
+// A bug while the relay shuts down closes it and is the command's error.
+func TestRelayShutdownPanicIsItsError(t *testing.T) {
+	hermetic(t)
+	for _, k := range []string{"KV_REST_API_URL", "KV_REST_API_TOKEN"} {
+		t.Setenv(k, "")
+	}
+	var out bytes.Buffer
+	err := cmdRelay(buggyContext{context.Background()}, []string{"serve", "--addr", "127.0.0.1:0"}, &out, &out)
+	if err == nil || err.Error() != "relay shutdown stopped by a bug: shutdown bug" {
+		t.Fatalf("relay serve: %v", err)
+	}
+}
+
 func TestRelayCommands(t *testing.T) {
 	hermetic(t)
 	d := newDevice(t)

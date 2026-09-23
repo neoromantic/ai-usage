@@ -562,6 +562,31 @@ func TestCodexRPCCloseReleasesReader(t *testing.T) {
 	_ = sw.Close()
 }
 
+// buggyReader panics as a bug in the reading goroutine would.
+type buggyReader struct{}
+
+func (buggyReader) Read([]byte) (int, error) { panic("reader bug") }
+
+// A bug in the goroutine that reads app-server fails the call, in one line,
+// rather than ending the process.
+func TestCodexRPCReaderPanicIsTheCallError(t *testing.T) {
+	rpc := newCodexRPC(io.Discard, buggyReader{})
+	defer rpc.close()
+	_, err := rpc.call(context.Background(), 1, "initialize", nil)
+	if msg := errText(err); !strings.Contains(msg, "stopped by a bug: reader bug") || strings.Contains(msg, "\n") {
+		t.Errorf("error = %q", msg)
+	}
+	waitNoGoroutine(t, "probe.(*codexRPC).read")
+}
+
+// A bug in the goroutine that waits for app-server is the probe's error. A
+// nil command panics there as such a bug would.
+func TestWaitOrKillPanicIsItsError(t *testing.T) {
+	if msg := errText(waitOrKill(nil, time.Minute)); !strings.HasPrefix(msg, "stopped by a bug: ") || strings.Contains(msg, "\n") {
+		t.Errorf("error = %q", msg)
+	}
+}
+
 func TestLastLineSaysTheError(t *testing.T) {
 	for in, want := range map[string]string{
 		"node:internal/modules/cjs/loader:1228\n  throw err;\n  ^\n\nError: Cannot find module '/x'\n    at Module._resolveFilename (node:internal)\n\nNode.js v22.1.0\n": "Error: Cannot find module '/x'",

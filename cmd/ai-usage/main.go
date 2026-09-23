@@ -808,7 +808,18 @@ func cmdRelay(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 			IdleTimeout:       2 * time.Minute,
 			MaxHeaderBytes:    16 << 10,
 		}
+		// ListenAndServe returns as soon as the shutdown starts, so the command
+		// waits for it to finish. A bug in it closes the server and is the
+		// command's error rather than the end of the process.
+		stopped := make(chan error, 1)
 		go func() {
+			defer close(stopped)
+			defer func() {
+				if v := recover(); v != nil {
+					_ = srv.Close()
+					stopped <- fmt.Errorf("relay shutdown stopped by a bug: %v", v)
+				}
+			}()
 			<-ctx.Done()
 			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -822,7 +833,7 @@ func cmdRelay(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return err
 		}
-		return nil
+		return <-stopped
 	}
 	d, err := dir()
 	if err != nil {

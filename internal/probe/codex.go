@@ -80,7 +80,9 @@ func codexAt(ctx context.Context, env Env, bin, home string) (r Reading, served 
 		// app-server exits by itself at the end of its input, once its own
 		// work is done. Killing it at once could cut a write short.
 		_ = stdin.Close()
-		waitOrKill(cmd, codexExitGrace)
+		if werr := waitOrKill(cmd, codexExitGrace); werr != nil && err == nil {
+			err = fmt.Errorf("codex app-server: %w", werr)
+		}
 		// Once it has exited, all it wrote to stderr is in.
 		if errors.Is(err, errExited) {
 			if l := said.String(); l != "" {
@@ -185,20 +187,31 @@ func hint(line string) bool {
 var codexExitGrace = 3 * time.Second
 
 // waitOrKill waits for cmd to exit and kills it once grace has passed. Wait
-// closes stdout, which ends the reader if it is still reading.
-func waitOrKill(cmd *exec.Cmd, grace time.Duration) {
+// closes stdout, which ends the reader if it is still reading. How cmd exited
+// is not the probe's answer, so the only error is a bug while waiting.
+func waitOrKill(cmd *exec.Cmd, grace time.Duration) (err error) {
 	done := make(chan struct{})
 	go func() {
+		defer close(done)
+		defer rescue(&err)
 		_ = cmd.Wait()
-		close(done)
 	}()
 	select {
 	case <-done:
-		return
+		return err
 	case <-time.After(grace):
 	}
 	_ = killGroup(cmd)
 	<-done
+	return err
+}
+
+// rescue, deferred in a goroutine a probe starts, turns a panic there into
+// *err, so a bug fails that probe rather than ending the process.
+func rescue(err *error) {
+	if v := recover(); v != nil {
+		*err = fmt.Errorf("stopped by a bug: %v", v)
+	}
 }
 
 func codexConversation(ctx context.Context, rpc *codexRPC, now time.Time) (Reading, error) {
@@ -359,6 +372,7 @@ func newCodexRPC(in io.Writer, out io.Reader) *codexRPC {
 
 func (c *codexRPC) read(r *bufio.Reader) {
 	defer close(c.done)
+	defer rescue(&c.err)
 	for {
 		line, err := r.ReadBytes('\n')
 		// The last message may end at EOF without a newline.
