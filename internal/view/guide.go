@@ -32,7 +32,7 @@ func Guide(r Report, scheduler string, o Options) string {
 		// Sealing hides these from the relay, not from the team.
 		team = []string{
 			"the team sees this device as " + c.DeviceLabel + ", with accounts, emails, and projects",
-			"the relay sees only numbers: names and paths are sealed with the team key",
+			"the relay sees tools, plans, and counts; the team key seals names and paths",
 		}
 	}
 	for _, s := range team {
