@@ -19,8 +19,6 @@ type display struct {
 	ascii    bool
 	width    int
 	projects bool
-	tokens   bool
-	devices  bool
 }
 
 // displayFlags adds the console flags to fs, and the view choices with views.
@@ -31,8 +29,6 @@ func displayFlags(fs *flag.FlagSet, views bool) *display {
 	fs.IntVar(&d.width, "width", 0, "")
 	if views {
 		fs.BoolVar(&d.projects, "projects", false, "")
-		fs.BoolVar(&d.tokens, "tokens", false, "")
-		fs.BoolVar(&d.devices, "devices", false, "")
 	}
 	return d
 }
@@ -47,34 +43,18 @@ func (d *display) check() error {
 	if d.width < 0 {
 		return usageError("--width takes a number of columns")
 	}
-	views := 0
-	for _, on := range []bool{d.projects, d.tokens, d.devices} {
-		if on {
-			views++
-		}
-	}
-	if views > 1 {
-		return usageError("--projects, --tokens, and --devices each choose a view; give one")
-	}
 	return nil
 }
 
 // options is how the report is drawn on stdout.
 func (d *display) options(stdout io.Writer) view.Options {
-	o := view.Options{
-		Width: termWidth(d.width, stdout),
-		Color: useColor(d.color, stdout),
-		ASCII: d.ascii || !utf8Locale(),
+	return view.Options{
+		Width:       termWidth(d.width, stdout),
+		Color:       useColor(d.color, stdout),
+		Dark:        true,
+		ASCII:       d.ascii || !utf8Locale(),
+		AllProjects: d.projects,
 	}
-	switch {
-	case d.projects:
-		o.Mode = view.Projects
-	case d.tokens:
-		o.Mode = view.Tokens
-	case d.devices:
-		o.Mode = view.Devices
-	}
-	return o
 }
 
 // terminal is the descriptor of w when it is a terminal.

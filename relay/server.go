@@ -36,24 +36,24 @@ type Limits struct {
 	MinRecordTTL time.Duration
 }
 
-// DefaultLimits fit a team of 100 devices sampling every 15 minutes.
+// DefaultLimits fit a team of 50 devices sampling every 15 minutes.
 //
 // The team read returns every device's snapshot in one response, up to about
-// 44 KB each once base64 and JSON are added to 32 KB. A Vercel Function may
-// return at most 4.5 MB, so 100 devices is as many as fit without paging the
+// 88 KB each once base64 and JSON are added to 64 KB. A Vercel Function may
+// return at most 4.5 MB, so 50 devices is as many as fit without paging the
 // read. A device writes 4 times an hour on schedule, so 10 writes an hour per
 // device leaves room for runs started by hand. A scheduled run reads the team
-// once an hour, so a full team behind one NAT makes 500 requests an hour.
+// once an hour, so a full team behind one NAT makes 250 requests an hour.
 //
-// Every new device is a new document to keep, so one address may add one full
-// team's worth a day: about 4.4 MB (3.2 MB of snapshots, the rest base64 and
+// Every new device is a new document to keep, so one address may add two full
+// teams' worth a day: about 8.8 MB (6.4 MB of snapshots, the rest base64 and
 // JSON). What it writes once expires within a week, so a script that only
-// makes keys keeps about 31 MB. One that also writes its devices again keeps
-// them, and adds 4.4 MB a day for as long as it runs; the store's own size
+// makes keys keeps about 62 MB. One that also writes its devices again keeps
+// them, and adds 8.8 MB a day for as long as it runs; the store's own size
 // limit bounds that.
 func DefaultLimits() Limits {
 	return Limits{
-		DevicesPerTeam:  100,
+		DevicesPerTeam:  50,
 		WritesPerTeam:   1000,
 		RequestsPerIP:   2000,
 		NewTeamsPerIP:   5,
@@ -65,7 +65,7 @@ func DefaultLimits() Limits {
 	}
 }
 
-// bodyTimeout bounds how long a PUT may take to send its 32 KB. It is wall
+// bodyTimeout bounds how long a PUT may take to send its 64 KB. It is wall
 // time, not Server.Now. A variable so tests need not wait for it.
 var bodyTimeout = 30 * time.Second
 
@@ -243,7 +243,7 @@ func (s *Server) put(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(body) > snapshot.MaxBytes {
-		fail(w, http.StatusRequestEntityTooLarge, "snapshot is larger than 32 KB")
+		fail(w, http.StatusRequestEntityTooLarge, "snapshot is larger than 64 KB")
 		return
 	}
 	sig, err := decode(r.Header.Get(HeaderSig))

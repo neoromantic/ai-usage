@@ -395,7 +395,7 @@ func TestCollectWhileAnotherRunCollects(t *testing.T) {
 		t.Fatalf("scheduled run with the lock held: %+v", r)
 	}
 	r := d.run("", "collect", "--offline")
-	if r.code != 0 || !strings.Contains(r.stderr, "collecting now") || !strings.Contains(r.stdout, "ACCOUNTS") {
+	if r.code != 0 || !strings.Contains(r.stderr, "collecting now") || !strings.HasPrefix(r.stdout, "ai-usage") {
 		t.Fatalf("run the person started: %+v", r)
 	}
 	if !strings.Contains(r.stdout, "\nHOW IT WORKS") || d.state().GuideDue {
@@ -451,7 +451,7 @@ func TestCollectOfflineThenViews(t *testing.T) {
 		t.Fatalf("--quiet printed %q", out)
 	}
 	r := d.report()
-	if r.SchemaVersion != 2 || r.Collector.Version != "dev" || r.Collector.Device != d.config().Device {
+	if r.SchemaVersion != 3 || r.Collector.Version != "dev" || r.Collector.Device != d.config().Device {
 		t.Fatalf("collector = %+v", r.Collector)
 	}
 	if r.Collector.Relay.URL != nil || r.Collector.LastSuccessAt == nil {
@@ -469,8 +469,8 @@ func TestCollectOfflineThenViews(t *testing.T) {
 	if want := (snapshot.Tokens{Input: 100, Output: 50, CacheRead: 1000, CacheWrite: 10}); a.Tokens != want {
 		t.Fatalf("claude tokens = %+v, want %+v", a.Tokens, want)
 	}
-	if a.HeadlinePercent == nil || *a.HeadlinePercent != 91 || a.Level != "critical" || a.Quota == nil || a.Quota.Source != "cache" {
-		t.Fatalf("claude quota = %+v %v %s", a.Quota, a.HeadlinePercent, a.Level)
+	if a.Quota == nil || fullest(a.Quota) != 91 || a.Quota.Source != "cache" {
+		t.Fatalf("claude quota = %+v", a.Quota)
 	}
 	if len(a.Projects) != 1 || a.Projects[0].Path != "/work/app" {
 		t.Fatalf("claude projects = %+v", a.Projects)
@@ -484,24 +484,23 @@ func TestCollectOfflineThenViews(t *testing.T) {
 	if want := (snapshot.Tokens{Input: 300, Output: 70, CacheRead: 200}); c.Label != "dev@example.com" || c.Tokens != want {
 		t.Fatalf("codex account = %+v", c)
 	}
-	if c.HeadlinePercent == nil || *c.HeadlinePercent != 80 || c.Level != "warning" || c.Quota.Source != "harness" {
+	if c.Quota == nil || fullest(c.Quota) != 80 || c.Quota.Source != "harness" {
 		t.Fatalf("codex quota = %+v", c.Quota)
 	}
 	if len(r.Team.Devices) != 1 || !r.Team.Devices[0].This {
 		t.Fatalf("team devices = %+v", r.Team.Devices)
 	}
 
-	// The console layout is the golden files' business; here, the report
-	// shows what was collected.
-	if text := d.ok("report"); !strings.Contains(text, "dev@example.com") || !strings.Contains(text, "91%") {
+	text := d.ok("report")
+	if !strings.HasPrefix(text, "ai-usage") {
 		t.Fatalf("report text:\n%s", text)
 	}
 	// The bare command collects and prints the same console report.
-	if out := d.ok("--offline"); !strings.Contains(out, "91%") {
+	if out := d.ok("--offline"); !strings.HasPrefix(out, "ai-usage") {
 		t.Fatalf("bare run printed:\n%s", out)
 	}
 	var fresh view.Report
-	if err := json.Unmarshal([]byte(d.ok("collect", "--offline", "--json")), &fresh); err != nil || fresh.SchemaVersion != 2 {
+	if err := json.Unmarshal([]byte(d.ok("collect", "--offline", "--json")), &fresh); err != nil || fresh.SchemaVersion != 3 {
 		t.Fatalf("collect --json: %v %+v", err, fresh.SchemaVersion)
 	}
 
@@ -524,7 +523,7 @@ func TestCollectOfflineThenViews(t *testing.T) {
 			Status   string `json:"status"`
 		} `json:"sources"`
 	}
-	if err := json.Unmarshal([]byte(d.ok("status", "--json")), &sj); err != nil || sj.SchemaVersion != 2 || len(sj.Sources) != 4 || sj.Sources[0].Provider != "claude" || sj.Sources[0].Status != "ok" {
+	if err := json.Unmarshal([]byte(d.ok("status", "--json")), &sj); err != nil || sj.SchemaVersion != 3 || len(sj.Sources) != 4 || sj.Sources[0].Provider != "claude" || sj.Sources[0].Status != "ok" {
 		t.Fatalf("status --json = %+v, %v", sj, err)
 	}
 
@@ -747,8 +746,8 @@ func TestTwoDevicesShareATeam(t *testing.T) {
 	if want := (snapshot.Tokens{Input: 300, Output: 150, CacheRead: 3000, CacheWrite: 30}); claude == nil || claude.Tokens != want || len(claude.Devices) != 2 {
 		t.Fatalf("team claude = %+v", claude)
 	}
-	if claude.HeadlinePercent == nil || *claude.HeadlinePercent != 91 {
-		t.Fatalf("team claude headline = %v", claude.HeadlinePercent)
+	if claude.Quota == nil || fullest(claude.Quota) != 91 {
+		t.Fatalf("team claude quota = %+v", claude.Quota)
 	}
 	if out := a.ok("team"); !strings.Contains(out, b.config().Device) || !strings.Contains(out, "read from the relay") {
 		t.Fatalf("team printed:\n%s", out)
@@ -1621,4 +1620,13 @@ func TestPanicIsRecordedAndStillUpdates(t *testing.T) {
 	if out := d.ok("status"); !strings.Contains(out, "clock bug") {
 		t.Fatalf("status hides the panic:\n%s", out)
 	}
+}
+
+// fullest is the percent of a quota's fullest window.
+func fullest(q *view.Quota) float64 {
+	var p float64
+	for _, w := range q.Windows {
+		p = max(p, w.Percent)
+	}
+	return p
 }

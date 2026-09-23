@@ -553,7 +553,6 @@ func executable() (string, error) {
 
 func printReport(stdout io.Writer, d state.Dir, res *collect.Result, endpoint string, jsonOut, guide bool, disp *display) error {
 	now := clock().UTC()
-	samples, _ := d.LoadSamples(now.Add(-7 * 24 * time.Hour))
 	r := view.Build(view.Input{
 		Version:  version,
 		RelayURL: endpoint,
@@ -562,7 +561,6 @@ func printReport(stdout io.Writer, d state.Dir, res *collect.Result, endpoint st
 		Key:      res.Key,
 		Doc:      res.Doc,
 		Team:     res.Team,
-		Samples:  samples,
 		Hostname: deviceName(res.Config),
 		OSUser:   osUser(),
 		Now:      now,
@@ -596,7 +594,7 @@ func loadResult(d state.Dir) (*collect.Result, error) {
 		return nil, err
 	}
 	cache, _ := collect.LoadTeamCache(d)
-	doc := collect.BuildDoc(st, key, cfg.Device, deviceName(cfg), osUser(), version, st.LastRunAt)
+	doc := collect.BuildDoc(st, key, cfg, deviceName(cfg), osUser(), version, st.LastRunAt)
 	return &collect.Result{Config: cfg, State: st, Key: key, Doc: doc, Team: cache}, nil
 }
 

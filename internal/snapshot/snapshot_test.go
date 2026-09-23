@@ -471,3 +471,30 @@ func TestPrintable(t *testing.T) {
 		}
 	}
 }
+
+func TestWindowLengthAndStart(t *testing.T) {
+	reset := time.Date(2026, 9, 27, 1, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		w    Window
+		want time.Duration
+	}{
+		{Window{Name: "7d", Minutes: 10080}, 7 * 24 * time.Hour},
+		{Window{Name: "5h"}, 5 * time.Hour},
+		{Window{Name: "7d Opus"}, 7 * 24 * time.Hour},
+		{Window{Name: "90m"}, 90 * time.Minute},
+		{Window{Name: "month credits"}, 0},
+		{Window{Name: "7days"}, 0},
+		{Window{Name: "window"}, 0},
+	} {
+		if got := c.w.Length(); got != c.want {
+			t.Errorf("%+v: length %v, want %v", c.w, got, c.want)
+		}
+	}
+	start, ok := Window{Name: "7d", ResetsAt: &reset}.Start()
+	if !ok || !start.Equal(reset.Add(-7*24*time.Hour)) {
+		t.Errorf("start %v %v", start, ok)
+	}
+	if _, ok := (Window{Name: "7d"}).Start(); ok {
+		t.Error("a window with no reset time has a start")
+	}
+}

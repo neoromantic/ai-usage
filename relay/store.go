@@ -308,8 +308,8 @@ func decodeRecord(raw json.RawMessage) (*Record, error) {
 }
 
 // maxKVResponse bounds what one pipeline call reads back. The largest is the
-// team read's MGET: every record in one response, up to about 44 KB each for a
-// full 32 KB snapshot, so 4.4 MB at DefaultLimits' 100 devices. 6 MiB also
+// team read's MGET: every record in one response, up to about 88 KB each for a
+// full 64 KB snapshot, so 4.4 MB at DefaultLimits' 50 devices. 6 MiB also
 // fits the few devices that racing first writes can add past that cap.
 const maxKVResponse = 6 << 20
 

@@ -218,7 +218,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 		cache, _ := LoadTeamCache(o.Dir)
 		read := !cache.PulledAt.Before(st.LastRunAt) || (o.PullEvery > 0 && st.LastRunAt.Sub(cache.PulledAt) < o.PullEvery)
 		if o.Relay == nil || read {
-			doc := BuildDoc(st, key, cfg.Device, o.Hostname, o.OSUser, o.Version, st.LastRunAt)
+			doc := BuildDoc(st, key, cfg, o.Hostname, o.OSUser, o.Version, st.LastRunAt)
 			return &Result{Config: cfg, State: st, Key: key, Doc: doc, Team: cache, Waited: true}, nil
 		}
 	}
@@ -292,7 +292,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	// sees them now rather than one run late.
 	noteProblems()
 	res := &Result{Config: cfg, State: st, Key: key}
-	res.Doc = BuildDoc(st, key, cfg.Device, o.Hostname, o.OSUser, o.Version, now)
+	res.Doc = BuildDoc(st, key, cfg, o.Hostname, o.OSUser, o.Version, now)
 
 	cache, _ := LoadTeamCache(o.Dir)
 	res.Team = cache
@@ -880,11 +880,13 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 	if updated.After(e.Updated) {
 		e.Updated = updated.UTC()
 	}
+	var spent int64
 	for l, g := range grown {
 		if g.Zero() {
 			delete(grown, l)
 			continue
 		}
+		spent += logs.InOut(g)
 		e.By[l] = e.By[l].Add(g)
 		if e.Last == nil {
 			e.Last = map[string]time.Time{}
@@ -895,7 +897,25 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 		ak := state.Key(p, l)
 		growth[ak] = growth[ak].Add(g)
 	}
+	placeHours(e, s, spent, updated, partial)
 	return grown
+}
+
+// placeHours records when a session's tokens were spent. A log that records
+// times gives them; a partial read keeps the higher count of each hour, as
+// seenNow does. A log without times has this run's growth placed at the
+// session's last activity, which is within the last run's interval.
+func placeHours(e *state.Session, s logs.Session, spent int64, updated time.Time, partial bool) {
+	if s.Hours == nil {
+		logs.AddHour(&e.Hours, updated, spent)
+		return
+	}
+	if !partial || e.Hours == nil {
+		e.Hours = make(map[int64]int64, len(s.Hours))
+	}
+	for h, n := range s.Hours {
+		e.Hours[h] = max(e.Hours[h], n)
+	}
 }
 
 // fitGrowth scales grown down, field by field and in proportion, so that it
@@ -1281,6 +1301,11 @@ func prune(st *state.State, now time.Time) {
 		if s.Updated.Before(cutoff) {
 			delete(st.Sessions, k)
 			continue
+		}
+		for h := range s.Hours {
+			if logs.HourStart(h + 1).Before(cutoff) {
+				delete(s.Hours, h)
+			}
 		}
 		for l := range s.By {
 			// An account's share of a session another account continued

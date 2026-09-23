@@ -84,6 +84,16 @@ func AddRejected(have []*Limits, add ...*Limits) []*Limits {
 	return out
 }
 
+// addHours adds src's hours onto dst's.
+func addHours(dst *Session, src Session) {
+	for h, n := range src.Hours {
+		if dst.Hours == nil {
+			dst.Hours = map[int64]int64{}
+		}
+		dst.Hours[h] += n
+	}
+}
+
 // addParts adds src's parts onto dst's.
 func addParts(dst *Session, src Session) {
 	if src.Parts == nil {
@@ -140,6 +150,7 @@ func rollup(in []Session) []Session {
 			cp := in[r]
 			cp.Tokens = Tokens{}
 			cp.Parts = nil
+			cp.Hours = nil
 			cp.ParentID = ""
 			dst = &cp
 			acc[r] = dst
@@ -147,6 +158,7 @@ func rollup(in []Session) []Session {
 		}
 		dst.Tokens = dst.Tokens.Add(in[i].Tokens)
 		addParts(dst, in[i])
+		addHours(dst, in[i])
 		if i != r {
 			fillFrom(dst, in[i])
 			dst.ParentID = ""

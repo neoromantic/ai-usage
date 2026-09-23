@@ -45,6 +45,91 @@ type Session struct {
 	// window alone at 100% (Claude). A weekly window refused before a 5h
 	// one stays full after the 5h one resets.
 	Rejected []*Limits
+	// Hours is the session's input plus output tokens by the UTC hour they
+	// were spent in, keyed by HourOf. A reader fills it from the times its
+	// log records for each use. ReadHomes then makes it add up to Tokens:
+	// what the log does not place in time, such as Claude's side calls, goes
+	// to the hour of Updated. It stays nil when the log records no times at
+	// all, and the ledger then places growth at the run that saw it.
+	Hours map[int64]int64
+}
+
+// HourOf is the key of the UTC hour t falls in.
+func HourOf(t time.Time) int64 { return t.Unix() / 3600 }
+
+// HourStart is when the hour with key h begins.
+func HourStart(h int64) time.Time { return time.Unix(h*3600, 0).UTC() }
+
+// AddHour adds n tokens spent at t to hours, making the map when needed.
+func AddHour(hours *map[int64]int64, t time.Time, n int64) {
+	if n <= 0 || t.IsZero() {
+		return
+	}
+	if *hours == nil {
+		*hours = map[int64]int64{}
+	}
+	(*hours)[HourOf(t)] += n
+}
+
+// InOut is the input plus output of t, the count the report's periods show.
+func InOut(t Tokens) int64 { return t.Input + t.Output }
+
+// fitHours makes a session's hours add up to its input plus output. The
+// part no time was recorded for goes to the hour of its last activity; a
+// sum above the total, which only a reader's bug makes, is scaled down.
+func fitHours(s *Session) {
+	if s.Hours == nil {
+		return
+	}
+	want := InOut(s.Tokens)
+	var sum, last int64
+	for h, n := range s.Hours {
+		if n <= 0 {
+			delete(s.Hours, h)
+			continue
+		}
+		sum += n
+		last = max(last, h)
+	}
+	switch {
+	case sum < want:
+		at := last
+		if !s.Updated.IsZero() {
+			at = HourOf(s.Updated)
+		}
+		s.Hours[at] += want - sum
+	case sum > want:
+		ScaleHours(s.Hours, want)
+	}
+}
+
+// ScaleHours scales hours in place so that they add up to total, keeping
+// their shape. What rounding leaves goes to the largest hour.
+func ScaleHours(hours map[int64]int64, total int64) {
+	var sum int64
+	var largest int64
+	first := true
+	for h, n := range hours {
+		sum += n
+		if first || n > hours[largest] || (n == hours[largest] && h > largest) {
+			largest, first = h, false
+		}
+	}
+	if sum == total || sum <= 0 {
+		return
+	}
+	left := total
+	for h, n := range hours {
+		v := int64(float64(n) * float64(total) / float64(sum))
+		hours[h] = v
+		left -= v
+	}
+	hours[largest] += left
+	for h, n := range hours {
+		if n <= 0 {
+			delete(hours, h)
+		}
+	}
 }
 
 // Result is a read. Malformed and Unreadable make a source partial.
@@ -126,6 +211,9 @@ func ReadHomes(provider string, homes []string, since time.Time) Result {
 		}
 	}
 	res.Sessions = rollup(dedupeSessions(raw))
+	for i := range res.Sessions {
+		fitHours(&res.Sessions[i])
+	}
 	if provider == "hermes" {
 		// A gateway session, from Telegram and the like, has no working
 		// directory. Its Hermes home says which agent it was.

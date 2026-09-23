@@ -3,11 +3,9 @@
 package view
 
 import (
-	"sort"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
-	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
@@ -15,22 +13,30 @@ import (
 
 // SchemaVersion is the agent JSON contract. A field may change meaning only
 // with a new version.
-const SchemaVersion = 2
+const SchemaVersion = 3
 
-// Thresholds follow PitStop's menu.
 const (
-	WarnPercent     = 75
-	CriticalPercent = 90
 	// StaleAfter marks a quota reading as old in both views.
 	StaleAfter = 6 * time.Hour
+	// SilentAfter marks a device that has not reported for a day.
+	SilentAfter = 24 * time.Hour
 )
 
+// Report is everything both views show. The console draws it as one page:
+// what needs attention, the subscriptions, the devices against the
+// subscriptions, and this device's projects.
 type Report struct {
-	SchemaVersion int        `json:"schema_version"`
-	GeneratedAt   time.Time  `json:"generated_at"`
-	Collector     Collector  `json:"collector"`
-	Providers     []Provider `json:"providers"`
-	Team          Team       `json:"team"`
+	SchemaVersion int       `json:"schema_version"`
+	GeneratedAt   time.Time `json:"generated_at"`
+	Collector     Collector `json:"collector"`
+	// Attention is what needs attention now, most urgent first.
+	Attention []Attention `json:"attention"`
+	// Providers are this device's sources and accounts.
+	Providers []Provider `json:"providers"`
+	// Projects are this device's projects over every account, most tokens
+	// in the last 7 days first.
+	Projects []Project `json:"projects"`
+	Team     Team      `json:"team"`
 }
 
 type Collector struct {
@@ -69,6 +75,43 @@ type Update struct {
 	Error     *string    `json:"error"`
 }
 
+// Attention kinds, most urgent first.
+const (
+	AttentionOut    = "out"    // a window is at 100%
+	AttentionOver   = "over"   // a window will run out before it resets
+	AttentionError  = "error"  // a device's collector or one of its harnesses fails
+	AttentionSilent = "silent" // a device has not reported for a day
+	AttentionOld    = "old"    // devices run an older release
+	AttentionUnder  = "under"  // past half of a window, its forecast is under 50%
+)
+
+// Attention is one thing that needs attention. The fields that apply depend
+// on Kind.
+type Attention struct {
+	Kind string `json:"kind"`
+	// Provider, Account, and Name are the account of an out, over, or under
+	// window: its label and its short name.
+	Provider string `json:"provider,omitempty"`
+	Account  string `json:"account,omitempty"`
+	Name     string `json:"name,omitempty"`
+	// Window names the window when it is not the account's main one.
+	Window string `json:"window,omitempty"`
+	// Devices is the device of an error or silence, or every device on an
+	// old release.
+	Devices []string `json:"devices,omitempty"`
+	// At is when an out window resets, when an over window runs out, or
+	// when a silent device last reported.
+	At *time.Time `json:"at,omitempty"`
+	// ResetsAt is when an over or under window resets.
+	ResetsAt *time.Time `json:"resets_at,omitempty"`
+	// Percent is an over or under window's forecast at its reset.
+	Percent *float64 `json:"percent,omitempty"`
+	// ReadingAge is how old the reading is, in seconds, when it is stale.
+	ReadingAge int64 `json:"reading_age_seconds,omitempty"`
+	// Message is an error's text, or the newest release for old devices.
+	Message string `json:"message,omitempty"`
+}
+
 type Provider struct {
 	Provider string    `json:"provider"`
 	Status   string    `json:"status"`
@@ -77,21 +120,30 @@ type Provider struct {
 	Accounts []Account `json:"accounts"`
 }
 
+// Account is one account on this device.
 type Account struct {
-	Label   string `json:"label"`
+	Label string `json:"label"`
+	// Name is the account's short name: the one the team gave it with
+	// `ai-usage alias`, else the part of an email before the @, or the first
+	// 8 characters of an id. Two that would be the same within a provider are
+	// both the full label.
+	Name    string `json:"name"`
 	Current bool   `json:"current"`
 	// Home is the harness home the account is logged in to now.
-	Home            string          `json:"home,omitempty"`
-	Plan            *string         `json:"plan"`
-	HeadlinePercent *float64        `json:"headline_percent"`
-	Level           string          `json:"level"`
-	Quota           *Quota          `json:"quota"`
-	Link            *Link           `json:"link"`
-	Sessions        int             `json:"sessions"`
-	Tokens          snapshot.Tokens `json:"tokens"`
-	LinkedUsage     []LinkedUsage   `json:"linked_usage"`
-	LastActiveAt    *time.Time      `json:"last_active_at"`
-	Projects        []Project       `json:"projects"`
+	Home string  `json:"home,omitempty"`
+	Plan *string `json:"plan"`
+	// State is the worst state of the account's windows that limit it: out,
+	// over, tight, ok, or under, else unknown.
+	State        string          `json:"state"`
+	Quota        *Quota          `json:"quota"`
+	Link         *Link           `json:"link"`
+	Sessions     int             `json:"sessions"`
+	Tokens       snapshot.Tokens `json:"tokens"`
+	Usage        Usage           `json:"usage"`
+	Days         []int64         `json:"days"`
+	LinkedUsage  []LinkedUsage   `json:"linked_usage"`
+	LastActiveAt *time.Time      `json:"last_active_at"`
+	Projects     []Project       `json:"projects"`
 }
 
 // Link names the account of another provider an account is assumed to bill
@@ -113,36 +165,95 @@ type LinkedUsage struct {
 	Tokens   snapshot.Tokens `json:"tokens"`
 }
 
+// Quota is an account's reading. In the team view each window is the newest
+// reading of it from any device, so windows can differ in age.
 type Quota struct {
+	// ObservedAt is the newest window's reading time.
 	ObservedAt time.Time `json:"observed_at"`
 	AgeSeconds int64     `json:"age_seconds"`
 	Stale      bool      `json:"stale"`
 	Source     string    `json:"source,omitempty"`
 	// From names the provider whose linked account took the reading.
-	From    string   `json:"from,omitempty"`
+	From string `json:"from,omitempty"`
+	// Device is the device whose reading is newest.
 	Device  string   `json:"device,omitempty"`
 	Windows []Window `json:"windows"`
 }
 
+// Forecast states. A window at 100% is out; otherwise the state is the band
+// its forecast falls in. Unknown is a window with no forecast: it reset
+// since it was read, its length or reset time is unknown, or less than a
+// tenth of it has passed and it is not over.
+const (
+	StateOut     = "out"
+	StateOver    = "over"
+	StateTight   = "tight"
+	StateOK      = "ok"
+	StateUnder   = "under"
+	StateUnknown = "unknown"
+)
+
 type Window struct {
 	Name     string     `json:"name"`
 	Percent  float64    `json:"percent"`
-	Level    string     `json:"level"`
 	ResetsAt *time.Time `json:"resets_at"`
 	Minutes  int        `json:"minutes,omitempty"`
-	Pace     *Pace      `json:"pace"`
+	// Main is the account's main window, the weekly one where it has one.
+	Main       bool      `json:"main"`
+	ObservedAt time.Time `json:"observed_at"`
+	// Stale is a reading older than 6 hours.
+	Stale bool `json:"stale"`
+	// Reset says the window reset since it was read, so how full it is now
+	// is not known.
+	Reset    bool      `json:"reset"`
+	State    string    `json:"state"`
+	Forecast *Forecast `json:"forecast"`
 }
 
+// Forecast is how full a window will be at its reset if it is used from now
+// on at its average pace so far.
+type Forecast struct {
+	// Percent is the forecast, as a whole percent up to 999.
+	Percent float64 `json:"percent"`
+	// Elapsed is the share of the window that had passed at the reading,
+	// from 0 to 1.
+	Elapsed float64 `json:"elapsed"`
+	// RunsOutAt is when the window reaches 100% at that pace, when the
+	// forecast is over 100%.
+	RunsOutAt *time.Time `json:"runs_out_at"`
+}
+
+// Usage is input plus output tokens, cache left out, in the report's
+// periods. Days are UTC days and each period ends with the report's: today
+// is the report's UTC day, and 7d, 30d, and 90d are that many UTC days up to
+// and including it.
+type Usage struct {
+	Today   int64 `json:"today"`
+	Week    int64 `json:"7d"`
+	Month   int64 `json:"30d"`
+	Quarter int64 `json:"90d"`
+}
+
+// Project is usage in one working directory. On this device's list it is
+// every account's; under an account, that account's.
 type Project struct {
 	Path     string          `json:"path"`
 	Sessions int             `json:"sessions"`
 	Tokens   snapshot.Tokens `json:"tokens"`
+	Usage    Usage           `json:"usage"`
+	// Providers are the harnesses that used it, most tokens first.
+	Providers    []string   `json:"providers,omitempty"`
+	LastActiveAt *time.Time `json:"last_active_at"`
 }
 
 type Team struct {
-	PulledAt  *time.Time     `json:"pulled_at"`
+	PulledAt *time.Time `json:"pulled_at"`
+	// Latest is the newest collector release any device in the team runs,
+	// or the newest this device's update check saw, whichever is newer.
+	Latest    *string        `json:"latest_version"`
 	Devices   []TeamDevice   `json:"devices"`
 	Providers []TeamProvider `json:"providers"`
+	Matrix    Matrix         `json:"matrix"`
 }
 
 type TeamDevice struct {
@@ -156,6 +267,15 @@ type TeamDevice struct {
 	LastSuccessAt    *time.Time `json:"last_success_at"`
 	LastError        *string    `json:"last_error"`
 	Sources          []Source   `json:"sources"`
+	// Error is what fails on the device now: a source's error, named after
+	// its provider, else the last run's error when it is newer than the
+	// last success.
+	Error *string `json:"error"`
+	// Silent is a device that has not reported for a day.
+	Silent bool `json:"silent"`
+	// Old is a device on an older release than the team's newest.
+	Old   bool  `json:"old"`
+	Usage Usage `json:"usage"`
 }
 
 type Source struct {
@@ -165,24 +285,43 @@ type Source struct {
 }
 
 type TeamProvider struct {
-	Provider string        `json:"provider"`
+	Provider string `json:"provider"`
+	// Accounts are in the order the report lists them: the worst state
+	// first (out, over, tight, ok, under, then unknown), ties to the one
+	// with less left, then by label.
 	Accounts []TeamAccount `json:"accounts"`
 }
 
-// TeamAccount adds tokens across devices. The quota is the newest reading any
-// device has for the account; percentages are never added.
+// TeamAccount adds tokens across devices. Each window of the quota is the
+// newest reading any device has of it; percentages are never added.
 type TeamAccount struct {
-	Label           string          `json:"label"`
-	Devices         []string        `json:"devices"`
-	Plan            *string         `json:"plan"`
-	HeadlinePercent *float64        `json:"headline_percent"`
-	Level           string          `json:"level"`
-	Quota           *Quota          `json:"quota"`
-	Link            *Link           `json:"link"`
-	Sessions        int             `json:"sessions"`
-	Tokens          snapshot.Tokens `json:"tokens"`
-	PerDevice       []DeviceUsage   `json:"per_device"`
-	LinkedUsage     []LinkedUsage   `json:"linked_usage"`
+	Label string `json:"label"`
+	Name  string `json:"name"`
+	// Alias is the name the team gave the account, when it has one.
+	Alias *string `json:"alias"`
+	// Subscription is an account with a quota of its own: Claude, Codex, and
+	// Grok. Hermes is a harness: what it spends through a login is that
+	// login's, and its other accounts, such as API keys, have no quota.
+	Subscription bool `json:"subscription"`
+	// Current says the account is logged in on this device.
+	Current bool     `json:"current"`
+	Devices []string `json:"devices"`
+	Plan    *string  `json:"plan"`
+	State   string   `json:"state"`
+	Quota   *Quota   `json:"quota"`
+	Link    *Link    `json:"link"`
+	// Sessions and Tokens are over the 90 days the devices keep.
+	Sessions int             `json:"sessions"`
+	Tokens   snapshot.Tokens `json:"tokens"`
+	Usage    Usage           `json:"usage"`
+	// Users counts the devices with tokens on the account since its main
+	// window began, or in the last 7 days when it has none, what linked
+	// accounts spent through it included. Busiest is the one with the most.
+	Users        int           `json:"users"`
+	Busiest      *string       `json:"busiest"`
+	LastActiveAt *time.Time    `json:"last_active_at"`
+	PerDevice    []DeviceUsage `json:"per_device"`
+	LinkedUsage  []LinkedUsage `json:"linked_usage"`
 }
 
 // DeviceUsage is one device's share of a team account.
@@ -192,7 +331,53 @@ type DeviceUsage struct {
 	Current      bool            `json:"current"`
 	Sessions     int             `json:"sessions"`
 	Tokens       snapshot.Tokens `json:"tokens"`
+	Usage        Usage           `json:"usage"`
 	LastActiveAt *time.Time      `json:"last_active_at"`
+}
+
+// Matrix is who spends what: every team device against every subscription,
+// and the tokens that have no subscription.
+type Matrix struct {
+	// Columns are the subscriptions, grouped by provider in the order of
+	// the team's providers and accounts, then one column per provider for
+	// the tokens with no quota.
+	Columns []Column `json:"columns"`
+	// Rows are the devices, the most tokens in the last 7 days first.
+	Rows []Row `json:"rows"`
+}
+
+type Column struct {
+	Provider string `json:"provider"`
+	// Label is the subscription's account, empty in a no-quota column.
+	Label   string `json:"label,omitempty"`
+	Name    string `json:"name"`
+	NoQuota bool   `json:"no_quota"`
+	State   string `json:"state"`
+	// Percent is how full the subscription's main window is, when that is
+	// known; the share mode splits it between the devices.
+	Percent *float64 `json:"percent"`
+	Usage   Usage    `json:"usage"`
+	// WindowTokens is the team's tokens since the main window began.
+	WindowTokens int64 `json:"window_tokens"`
+}
+
+type Row struct {
+	Device   string `json:"device"`
+	DeviceID string `json:"device_id"`
+	// Cells has one entry per column.
+	Cells []Cell `json:"cells"`
+	Usage Usage  `json:"usage"`
+}
+
+type Cell struct {
+	Usage Usage `json:"usage"`
+	// WindowTokens is the device's tokens since the column's main window
+	// began.
+	WindowTokens int64 `json:"window_tokens"`
+	// Share estimates how much of the column's window the device used, in
+	// percent: its tokens since the window began over the team's, times how
+	// full the window is. A column's shares add up to its Percent.
+	Share *float64 `json:"share"`
 }
 
 // Input is everything a report is built from.
@@ -204,463 +389,7 @@ type Input struct {
 	Key      *team.Key
 	Doc      snapshot.Doc
 	Team     collect.TeamCache
-	Samples  []state.Sample
 	Hostname string
 	OSUser   string
 	Now      time.Time
-}
-
-// Build assembles the report.
-func Build(in Input) Report {
-	now := in.Now.UTC()
-	st := in.State
-	r := Report{
-		SchemaVersion: SchemaVersion,
-		GeneratedAt:   now,
-		Collector: Collector{
-			Version:       in.Version,
-			Device:        in.Config.Device,
-			DeviceLabel:   in.Hostname,
-			OSUser:        in.OSUser,
-			Team:          in.Key.Fingerprint(),
-			LastRunAt:     timePtr(st.LastRunAt),
-			LastSuccessAt: timePtr(st.LastSuccessAt),
-			LastError:     strPtr(st.LastError),
-			LastErrorAt:   timePtr(st.LastErrorAt),
-			Relay: Relay{
-				URL:        strPtr(in.RelayURL),
-				LastPushAt: timePtr(st.Relay.LastPushAt),
-				LastPullAt: timePtr(st.Relay.LastPullAt),
-				Pending:    st.Relay.Pending,
-				LastError:  strPtr(st.Relay.LastError),
-			},
-			Schedule: Schedule{Registered: st.Schedule.Registered, Foreground: st.Schedule.Registered && st.Schedule.Foreground, Error: strPtr(st.Schedule.Error)},
-			Update: Update{
-				CheckedAt: timePtr(st.Update.CheckedAt),
-				Latest:    strPtr(st.Update.Latest),
-				Staged:    strPtr(staged(st.Update.Installed, in.Version)),
-				Error:     strPtr(st.Update.Error),
-			},
-		},
-		Providers: []Provider{},
-		Team:      Team{Devices: []TeamDevice{}, Providers: []TeamProvider{}},
-	}
-
-	totals := collect.Totals(st)
-	for _, p := range collect.Providers {
-		src := st.Sources[p]
-		pv := Provider{Provider: p, Status: orDefault(src.Status, "skipped"), Error: strPtr(src.Error), Homes: src.Homes, Accounts: []Account{}}
-		if pv.Homes == nil {
-			pv.Homes = []string{}
-		}
-		for _, a := range totals {
-			if a.Provider != p {
-				continue
-			}
-			acct := Account{
-				Label:        a.Label,
-				Current:      a.Current,
-				Home:         currentHome(st, p, pv.Homes, a.Label),
-				Plan:         strPtr(a.Plan),
-				Level:        "unknown",
-				Link:         linkView(a.Link),
-				Sessions:     a.Sessions,
-				Tokens:       a.Tokens,
-				LinkedUsage:  []LinkedUsage{},
-				LastActiveAt: timePtr(a.LastActive),
-				Projects:     []Project{},
-			}
-			if a.Quota != nil {
-				// A borrowed reading paces like the account that took it.
-				from, label := p, a.Label
-				if a.QuotaFrom != "" && a.Link != nil {
-					from, label = a.Link.Provider, a.Link.Label
-				}
-				acct.Quota = quotaView(a.Quota.At, a.Quota.Source, "", a.Quota.Windows, now, in.Samples, from, label)
-				acct.Quota.From = a.QuotaFrom
-				acct.HeadlinePercent, acct.Level = headline(a.Quota.Windows, now)
-			}
-			if a.LinkedSessions > 0 {
-				// Only Hermes bills through another harness's login.
-				acct.LinkedUsage = append(acct.LinkedUsage, LinkedUsage{Provider: "hermes", Sessions: a.LinkedSessions, Tokens: a.Linked})
-			}
-			for _, pr := range a.Projects {
-				acct.Projects = append(acct.Projects, Project(pr))
-			}
-			pv.Accounts = append(pv.Accounts, acct)
-		}
-		r.Providers = append(r.Providers, pv)
-	}
-	r.Team = buildTeam(in, totals, now)
-	return r
-}
-
-// currentHome is the first of the provider's homes whose login is label.
-func currentHome(st *state.State, provider string, homes []string, label string) string {
-	for _, h := range homes {
-		if st.Current[state.Key(provider, h)] == label {
-			return h
-		}
-	}
-	return ""
-}
-
-func linkView(l *state.Link) *Link {
-	if l == nil {
-		return nil
-	}
-	return &Link{Provider: l.Provider, Label: l.Label}
-}
-
-func quotaView(at time.Time, source, device string, ws []snapshot.Window, now time.Time, samples []state.Sample, provider, label string) *Quota {
-	q := &Quota{
-		ObservedAt: at,
-		AgeSeconds: int64(now.Sub(at).Seconds()),
-		Stale:      stale(at, source, ws, now),
-		Source:     source,
-		Device:     device,
-		Windows:    []Window{},
-	}
-	for _, w := range ws {
-		win := Window{Name: w.Name, Percent: w.Percent, Level: level(w.Percent), ResetsAt: w.ResetsAt, Minutes: w.Minutes}
-		if hasReset(w, now) {
-			// The percent is from a period that has ended. How full the
-			// new one is, nobody has read.
-			win.Level = "unknown"
-		} else if samples != nil {
-			win.Pace = windowPace(samples, provider, label, w, at)
-		}
-		q.Windows = append(q.Windows, win)
-	}
-	return q
-}
-
-// stale reports whether a reading is old enough to doubt. A refused request
-// says its window stays full until it resets, however long ago it was.
-func stale(at time.Time, source string, ws []snapshot.Window, now time.Time) bool {
-	if p, _ := headline(ws, now); source == collect.RejectionSource && p != nil {
-		return false
-	}
-	return now.Sub(at) > StaleAfter
-}
-
-// hasReset reports whether a window's reset time has passed since it was read.
-func hasReset(w snapshot.Window, now time.Time) bool {
-	return w.ResetsAt != nil && !w.ResetsAt.After(now)
-}
-
-// headline is the fullest window that has not reset since the reading. With
-// none left there is no headline, rather than a percent that no longer holds.
-func headline(ws []snapshot.Window, now time.Time) (*float64, string) {
-	var max *float64
-	for _, w := range ws {
-		if hasReset(w, now) {
-			continue
-		}
-		if max == nil || w.Percent > *max {
-			p := w.Percent
-			max = &p
-		}
-	}
-	if max == nil {
-		return nil, "unknown"
-	}
-	return max, level(*max)
-}
-
-func level(p float64) string {
-	switch {
-	case p >= CriticalPercent:
-		return "critical"
-	case p >= WarnPercent:
-		return "warning"
-	default:
-		return "ok"
-	}
-}
-
-// teamAccount is one team account while the device docs are merged.
-type teamAccount struct {
-	ta     TeamAccount
-	qAt    time.Time
-	qWins  []snapshot.Window
-	qDev   string
-	qSrc   string // the source, when the reading is this device's own
-	qFrom  string
-	qLink  *Link // the link on the device that sent the chosen reading
-	local  *Link // this device's own link, which wins
-	planAt time.Time
-}
-
-func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
-	t := Team{Devices: []TeamDevice{}, Providers: []TeamProvider{}}
-	docs := []snapshot.Doc{in.Doc}
-	if in.Team.Team == in.Key.Fingerprint() {
-		t.PulledAt = timePtr(in.Team.PulledAt)
-		for _, d := range in.Team.Docs {
-			if d.Device != in.Doc.Device {
-				docs = append(docs, d)
-			}
-		}
-	}
-	open := func(s string) string {
-		v, err := in.Key.Open(s)
-		if err != nil {
-			return "(unreadable)"
-		}
-		return snapshot.Printable(v)
-	}
-	// This device knows its links even when the linked account has no
-	// reading to match on the wire.
-	localLinks := map[string]*Link{}
-	// Only this device knows where its own readings came from.
-	localSrc := map[string]string{}
-	for _, a := range totals {
-		localLinks[state.Key(a.Provider, a.Label)] = linkView(a.Link)
-		if a.Quota != nil {
-			localSrc[state.Key(a.Provider, a.Label)] = a.Quota.Source
-		}
-	}
-
-	byProv := map[string]map[string]*teamAccount{}
-	// linked holds, by the account billed, what linked accounts spent.
-	linked := map[string]map[string]*LinkedUsage{}
-	for _, d := range docs {
-		label := open(d.DeviceLabel)
-		dev := TeamDevice{
-			Device:           d.Device,
-			Label:            label,
-			OSUser:           open(d.OSUser),
-			This:             d.Device == in.Doc.Device,
-			CollectorVersion: d.CollectorVersion,
-			CollectedAt:      d.CollectedAt,
-			AgeSeconds:       int64(now.Sub(d.CollectedAt).Seconds()),
-			LastSuccessAt:    timePtr(d.LastSuccessAt),
-			LastError:        strPtr(open(d.LastError)),
-			Sources:          []Source{},
-		}
-		for _, s := range d.Sources {
-			dev.Sources = append(dev.Sources, Source{Provider: s.Provider, Status: s.Status, Error: strPtr(open(s.Error))})
-		}
-		t.Devices = append(t.Devices, dev)
-
-		devName := label + " (" + dev.OSUser + ")"
-		labels := make([]string, len(d.Accounts))
-		for i, a := range d.Accounts {
-			labels[i] = open(a.Label)
-		}
-		for i, a := range d.Accounts {
-			if byProv[a.Provider] == nil {
-				byProv[a.Provider] = map[string]*teamAccount{}
-			}
-			l := labels[i]
-			x := byProv[a.Provider][l]
-			if x == nil {
-				x = &teamAccount{ta: TeamAccount{Label: l, Devices: []string{}, Level: "unknown", PerDevice: []DeviceUsage{}, LinkedUsage: []LinkedUsage{}}}
-				byProv[a.Provider][l] = x
-			}
-			x.ta.Devices = append(x.ta.Devices, devName)
-			x.ta.Sessions += a.Sessions
-			x.ta.Tokens = x.ta.Tokens.Add(a.Tokens)
-			x.ta.PerDevice = append(x.ta.PerDevice, DeviceUsage{
-				Device: devName, DeviceID: d.Device, Current: a.Current,
-				Sessions: a.Sessions, Tokens: a.Tokens, LastActiveAt: timeOf(a.LastActiveAt),
-			})
-			if a.Plan != "" && (x.ta.Plan == nil || d.CollectedAt.After(x.planAt)) {
-				x.ta.Plan, x.planAt = strPtr(a.Plan), d.CollectedAt
-			}
-			link := wireLink(d.Accounts, labels, i)
-			if dev.This {
-				link = localLinks[state.Key(a.Provider, l)]
-				x.local = link
-			}
-			if a.QuotaAt != nil && len(a.Windows) > 0 && a.QuotaAt.After(x.qAt) {
-				x.qAt, x.qWins, x.qDev, x.qFrom, x.qLink = *a.QuotaAt, a.Windows, devName, a.QuotaFrom, link
-				x.qSrc = ""
-				if dev.This {
-					x.qSrc = localSrc[state.Key(a.Provider, l)]
-				}
-			}
-			for _, u := range a.Linked {
-				addLinked(linked, a.Provider, l, u.Provider, open(u.Label), devName, u)
-			}
-		}
-	}
-	sort.Slice(t.Devices, func(i, j int) bool {
-		a, b := t.Devices[i], t.Devices[j]
-		if a.This != b.This {
-			return a.This
-		}
-		if a.Label != b.Label {
-			return a.Label < b.Label
-		}
-		return a.Device < b.Device
-	})
-	for _, p := range collect.Providers {
-		m := byProv[p]
-		if len(m) == 0 {
-			continue
-		}
-		tp := TeamProvider{Provider: p}
-		for _, x := range m {
-			x.ta.Link = x.local
-			if x.ta.Link == nil {
-				x.ta.Link = x.qLink
-			}
-			if x.qWins != nil {
-				from, label := p, x.ta.Label
-				if x.qFrom != "" && x.ta.Link != nil && x.ta.Link.Label != "" {
-					from, label = x.ta.Link.Provider, x.ta.Link.Label
-				}
-				x.ta.Quota = quotaView(x.qAt, "", x.qDev, x.qWins, now, in.Samples, from, label)
-				x.ta.Quota.Stale = stale(x.qAt, x.qSrc, x.qWins, now)
-				x.ta.Quota.From = x.qFrom
-				x.ta.HeadlinePercent, x.ta.Level = headline(x.qWins, now)
-			}
-			sort.Strings(x.ta.Devices)
-			sortPerDevice(x.ta.PerDevice)
-			x.ta.LinkedUsage = linkedList(linked[state.Key(p, x.ta.Label)])
-			tp.Accounts = append(tp.Accounts, x.ta)
-		}
-		sort.Slice(tp.Accounts, func(i, j int) bool {
-			a, b := tp.Accounts[i], tp.Accounts[j]
-			if a.Tokens.Total() != b.Tokens.Total() {
-				return a.Tokens.Total() > b.Tokens.Total()
-			}
-			return a.Label < b.Label
-		})
-		t.Providers = append(t.Providers, tp)
-	}
-	return t
-}
-
-// wireLink is the link of the i-th account of a device doc, from the wire
-// alone: a borrowed reading belongs to the one account of the provider it
-// came from with the same reading. With none, or several, the label is empty.
-func wireLink(accts []snapshot.Account, labels []string, i int) *Link {
-	a := accts[i]
-	if a.QuotaFrom == "" {
-		return nil
-	}
-	link := &Link{Provider: a.QuotaFrom}
-	matches := 0
-	for j, b := range accts {
-		if b.Provider == a.QuotaFrom && sameReading(a, b) {
-			link.Label = labels[j]
-			matches++
-		}
-	}
-	if matches != 1 {
-		link.Label = ""
-	}
-	return link
-}
-
-func sameReading(a, b snapshot.Account) bool {
-	if a.QuotaAt == nil || b.QuotaAt == nil || !a.QuotaAt.Equal(*b.QuotaAt) || len(a.Windows) != len(b.Windows) {
-		return false
-	}
-	for i, w := range a.Windows {
-		v := b.Windows[i]
-		if w.Name != v.Name || w.Percent != v.Percent || w.Minutes != v.Minutes || !sameTime(w.ResetsAt, v.ResetsAt) {
-			return false
-		}
-	}
-	return true
-}
-
-func sameTime(a, b *time.Time) bool {
-	if a == nil || b == nil {
-		return a == nil && b == nil
-	}
-	return a.Equal(*b)
-}
-
-// addLinked counts what account (provider, label) on one device spent
-// through the account (to, toLabel).
-func addLinked(linked map[string]map[string]*LinkedUsage, to, toLabel, provider, label, device string, a snapshot.Linked) {
-	target := state.Key(to, toLabel)
-	if linked[target] == nil {
-		linked[target] = map[string]*LinkedUsage{}
-	}
-	k := state.Key(provider, label)
-	u := linked[target][k]
-	if u == nil {
-		u = &LinkedUsage{Provider: provider, Label: label, Devices: []string{}}
-		linked[target][k] = u
-	}
-	u.Devices = append(u.Devices, device)
-	u.Sessions += a.Sessions
-	u.Tokens = u.Tokens.Add(a.Tokens)
-}
-
-func linkedList(m map[string]*LinkedUsage) []LinkedUsage {
-	out := []LinkedUsage{}
-	for _, u := range m {
-		sort.Strings(u.Devices)
-		out = append(out, *u)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		a, b := out[i], out[j]
-		if a.Tokens.Total() != b.Tokens.Total() {
-			return a.Tokens.Total() > b.Tokens.Total()
-		}
-		if a.Provider != b.Provider {
-			return a.Provider < b.Provider
-		}
-		return a.Label < b.Label
-	})
-	return out
-}
-
-// sortPerDevice puts the device that used the account most first.
-func sortPerDevice(ds []DeviceUsage) {
-	sort.Slice(ds, func(i, j int) bool {
-		a, b := ds[i], ds[j]
-		if a.Tokens.Total() != b.Tokens.Total() {
-			return a.Tokens.Total() > b.Tokens.Total()
-		}
-		if a.Device != b.Device {
-			return a.Device < b.Device
-		}
-		return a.DeviceID < b.DeviceID
-	})
-}
-
-// staged is the installed release while it still waits for the next run.
-// The state keeps the tag after that run starts, and it is not news then.
-func staged(installed, running string) string {
-	if !selfupdate.Newer(installed, running) {
-		return ""
-	}
-	return installed
-}
-
-func timeOf(t *time.Time) *time.Time {
-	if t == nil {
-		return nil
-	}
-	return timePtr(*t)
-}
-
-func timePtr(t time.Time) *time.Time {
-	if t.IsZero() {
-		return nil
-	}
-	u := t.UTC()
-	return &u
-}
-
-func strPtr(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
-func orDefault(s, d string) string {
-	if s == "" {
-		return d
-	}
-	return s
 }

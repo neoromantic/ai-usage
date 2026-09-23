@@ -432,7 +432,7 @@ func TestPutRejects(t *testing.T) {
 			p, b, s := signedBy(withDoc(func(d *snapshot.Doc) { d.CollectedAt = t0.Add(11 * time.Minute) }))
 			return req{fp, dev, p, b, s}
 		}(), http.StatusUnprocessableEntity},
-		{"over 32 KB", func() req { p, b, s := signedBy(big); return req{fp, dev, p, b, s} }(), http.StatusRequestEntityTooLarge},
+		{"over 64 KB", func() req { p, b, s := signedBy(big); return req{fp, dev, p, b, s} }(), http.StatusRequestEntityTooLarge},
 		{"team path not a fingerprint", req{"not-a-team", dev, pub, body, sig(k, body)}, http.StatusNotFound},
 		{"device path bad", req{fp, "UPPER_CASE", pub, body, sig(k, body)}, http.StatusNotFound},
 		{"device path escaped slash", req{fp, "a%2Fbcdefgh", pub, body, sig(k, body)}, http.StatusNotFound},

@@ -40,7 +40,7 @@ func (r *testRelay) client(w *world) *relay.Client {
 // publishOther stores a snapshot for another device of the same team.
 func publishOther(t *testing.T, r *testRelay, w *world, key *team.Key, device string, st *state.State, at time.Time) {
 	t.Helper()
-	doc := BuildDoc(st, key, device, "otherbox", "kim", "v1.2.3", at)
+	doc := BuildDoc(st, key, state.Config{Device: device}, "otherbox", "kim", "v1.2.3", at)
 	body, err := json.Marshal(doc)
 	if err != nil {
 		t.Fatal(err)
@@ -219,7 +219,7 @@ func TestRelayDocsThatDoNotVerifyAreReported(t *testing.T) {
 	w, o := newWorld(t)
 	r := newRelay(t, w)
 	key, _, _ := LoadKey(o.Dir)
-	body, _ := json.Marshal(BuildDoc(ledger(), key, "d-forged-device", "x", "y", "v1", t0))
+	body, _ := json.Marshal(BuildDoc(ledger(), key, state.Config{Device: "d-forged-device"}, "x", "y", "v1", t0))
 	_ = r.store.Put(context.Background(), key.Fingerprint(), "d-forged-device", relay.Record{Body: body, Sig: []byte("not a signature")}, time.Hour)
 
 	o.Relay = r.client(w)
@@ -269,7 +269,7 @@ func TestLoadTeamCache(t *testing.T) {
 	}
 
 	key := mustKey(t)
-	good, _ := json.Marshal(BuildDoc(ledger(), key, "d-0123456789", "a", "b", "v1", t0))
+	good, _ := json.Marshal(BuildDoc(ledger(), key, state.Config{Device: "d-0123456789"}, "a", "b", "v1", t0))
 	want := TeamCache{PulledAt: t0, Team: key.Fingerprint(), Bodies: [][]byte{good, []byte(`{"v":99}`)}}
 	if err := saveTeamCache(d, want); err != nil {
 		t.Fatal(err)
@@ -287,8 +287,8 @@ func TestLoadTeamCache(t *testing.T) {
 
 	// A cache written before pulls kept one document per device may list a
 	// device twice. Its newest document is the one read.
-	older, _ := json.Marshal(BuildDoc(ledger(), key, "d-0123456789", "a", "b", "v1", t0.Add(-time.Hour)))
-	newer, _ := json.Marshal(BuildDoc(ledger(), key, "d-0123456789", "a", "b", "v1", t0.Add(time.Hour)))
+	older, _ := json.Marshal(BuildDoc(ledger(), key, state.Config{Device: "d-0123456789"}, "a", "b", "v1", t0.Add(-time.Hour)))
+	newer, _ := json.Marshal(BuildDoc(ledger(), key, state.Config{Device: "d-0123456789"}, "a", "b", "v1", t0.Add(time.Hour)))
 	dup := TeamCache{PulledAt: t0, Team: key.Fingerprint(), Bodies: [][]byte{older, good, newer, older}}
 	if err := saveTeamCache(d, dup); err != nil {
 		t.Fatal(err)

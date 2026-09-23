@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -23,12 +24,14 @@ const Version = 1
 
 // Limits. The relay enforces all of them. The collector trims to fit.
 const (
-	MaxBytes          = 32 << 10
+	MaxBytes          = 64 << 10
 	MaxAccounts       = 24
 	MaxWindows        = 8
 	MaxProjects       = 12
 	MaxLinked         = 4
 	MaxSources        = 12
+	MaxDays           = 90
+	MaxAliases        = 48
 	MaxSealed         = 512
 	MaxPlain          = 40
 	MaxTokenCount     = int64(1) << 50
@@ -53,6 +56,20 @@ type Doc struct {
 	LastError        string    `json:"last_error,omitempty"`
 	Accounts         []Account `json:"accounts"`
 	Sources          []Source  `json:"sources"`
+	// Aliases are the short names this device gave accounts with
+	// `ai-usage alias`. The newest one for an account, from any device in
+	// the team, names it everywhere.
+	Aliases []Alias `json:"aliases,omitempty"`
+}
+
+// Alias is a short name for an account, set on one device for the whole
+// team. Label and Name are sealed. A cleared name has no Name, so that the
+// clearing outranks an older name set on another device.
+type Alias struct {
+	Provider string    `json:"provider"`
+	Label    string    `json:"label"`
+	Name     string    `json:"name,omitempty"`
+	At       time.Time `json:"at"`
 }
 
 // Account is one login on one provider, as seen from this device and OS user.
@@ -75,6 +92,22 @@ type Account struct {
 	// through this one and are assumed to have billed to it (Hermes on this
 	// Codex login). It is counted in their tokens, not in Tokens.
 	Linked []Linked `json:"linked,omitempty"`
+	// Days is the account's input plus output tokens on this device per UTC
+	// day, newest first: index 0 is the UTC day of collected_at, index 1 the
+	// day before, and so on. Trailing zeros are left out. Cache is not in it.
+	Days []int64 `json:"days,omitempty"`
+	// Recent is the account's input plus output tokens on this device since
+	// each window of its reading began, for the windows whose start is known
+	// and which had not reset when the snapshot was taken.
+	Recent []Recent `json:"recent,omitempty"`
+}
+
+// Recent is an account's input plus output tokens on one device since a
+// quota window began.
+type Recent struct {
+	Window string    `json:"window"`
+	Start  time.Time `json:"start"`
+	Tokens int64     `json:"tokens"`
 }
 
 // Linked is what one account of another provider spent through an account.
@@ -93,6 +126,40 @@ type Window struct {
 	ResetsAt *time.Time `json:"resets_at,omitempty"`
 	Minutes  int        `json:"minutes,omitempty"`
 }
+
+// Length is how long the window runs: its minutes as the harness reported
+// them, else the length its name starts with, such as 5h in "5h" or 7d in
+// "7d Opus". Zero means unknown.
+func (w Window) Length() time.Duration {
+	if w.Minutes > 0 {
+		return time.Duration(w.Minutes) * time.Minute
+	}
+	m := windowLength.FindStringSubmatch(w.Name)
+	if m == nil {
+		return 0
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil || n <= 0 {
+		return 0
+	}
+	unit := map[string]time.Duration{"m": time.Minute, "h": time.Hour, "d": 24 * time.Hour}[m[2]]
+	if d := time.Duration(n) * unit; d <= MaxWindowMinutes*time.Minute {
+		return d
+	}
+	return 0
+}
+
+// Start is when the window's current period began: its reset time minus its
+// length. It is unknown without both.
+func (w Window) Start() (time.Time, bool) {
+	l := w.Length()
+	if w.ResetsAt == nil || l <= 0 {
+		return time.Time{}, false
+	}
+	return w.ResetsAt.Add(-l), true
+}
+
+var windowLength = regexp.MustCompile(`^(\d+)([mhd])(?:$| )`)
 
 // Project is usage attributed to a working directory. Path is sealed.
 type Project struct {
@@ -217,6 +284,23 @@ func (d Doc) Validate(now time.Time) error {
 			return fmt.Errorf("accounts[%d]: %w", i, err)
 		}
 	}
+	if len(d.Aliases) > MaxAliases {
+		return fmt.Errorf("%d aliases, limit %d", len(d.Aliases), MaxAliases)
+	}
+	for i, a := range d.Aliases {
+		if !knownProvider(a.Provider) {
+			return fmt.Errorf("aliases[%d]: unknown provider", i)
+		}
+		if err := checkSealed("label", a.Label, true); err != nil {
+			return fmt.Errorf("aliases[%d]: %w", i, err)
+		}
+		if err := checkSealed("name", a.Name, false); err != nil {
+			return fmt.Errorf("aliases[%d]: %w", i, err)
+		}
+		if a.At.IsZero() {
+			return fmt.Errorf("aliases[%d]: at is missing", i)
+		}
+	}
 	if len(d.Sources) > MaxSources {
 		return fmt.Errorf("%d sources, limit %d", len(d.Sources), MaxSources)
 	}
@@ -279,6 +363,28 @@ func (a Account) validate() error {
 		}
 		if err := checkCounts(p.Sessions, p.Tokens); err != nil {
 			return fmt.Errorf("projects[%d]: %w", i, err)
+		}
+	}
+	if len(a.Days) > MaxDays {
+		return fmt.Errorf("%d days, limit %d", len(a.Days), MaxDays)
+	}
+	for _, n := range a.Days {
+		if n < 0 || n > MaxTokenCount {
+			return errors.New("day count out of range")
+		}
+	}
+	if len(a.Recent) > MaxWindows {
+		return fmt.Errorf("%d recent, limit %d", len(a.Recent), MaxWindows)
+	}
+	for i, r := range a.Recent {
+		if err := checkPlain("window name", r.Window, true); err != nil {
+			return fmt.Errorf("recent[%d]: %w", i, err)
+		}
+		if r.Start.IsZero() {
+			return fmt.Errorf("recent[%d]: start is missing", i)
+		}
+		if r.Tokens < 0 || r.Tokens > MaxTokenCount {
+			return fmt.Errorf("recent[%d]: token count out of range", i)
 		}
 	}
 	if len(a.Linked) > MaxLinked {

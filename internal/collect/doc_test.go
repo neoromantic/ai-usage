@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/neoromantic/ai-usage/internal/logs"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
@@ -73,9 +74,12 @@ func TestTotals(t *testing.T) {
 	if !ann.LastActive.Equal(t0.Add(-time.Hour)) {
 		t.Fatalf("last active = %v", ann.LastActive)
 	}
-	wantProjects := []ProjectTotals{{Path: "/work/web", Sessions: 1, Tokens: tok(300)}, {Path: "/work/api", Sessions: 2, Tokens: tok(105)}}
-	if !reflect.DeepEqual(ann.Projects, wantProjects) {
-		t.Fatalf("projects = %+v", ann.Projects)
+	var projects []string
+	for _, p := range ann.Projects {
+		projects = append(projects, fmt.Sprintf("%s %d %d", p.Path, p.Sessions, p.Tokens.Total()))
+	}
+	if want := []string{"/work/web 1 330", "/work/api 2 115"}; !reflect.DeepEqual(projects, want) {
+		t.Fatalf("projects = %v, want %v", projects, want)
 	}
 	if old := got[1]; old.Current || old.Sessions != 1 || old.Tokens != tok(40) {
 		t.Fatalf("old = %+v", old)
@@ -117,7 +121,7 @@ func encodeDecode(t *testing.T, doc snapshot.Doc) (snapshot.Doc, []byte) {
 
 func TestBuildDocDecodesAndOpens(t *testing.T) {
 	key := mustKey(t)
-	doc, body := encodeDecode(t, BuildDoc(ledger(), key, "d-0123456789", "workbox", "sam", "v1.2.3", t0))
+	doc, body := encodeDecode(t, BuildDoc(ledger(), key, state.Config{Device: "d-0123456789"}, "workbox", "sam", "v1.2.3", t0))
 	open := func(s string) string {
 		t.Helper()
 		v, err := key.Open(s)
@@ -170,7 +174,7 @@ func TestBuildDocDecodesAndOpens(t *testing.T) {
 
 func TestBuildDocWithEmptyState(t *testing.T) {
 	st := &state.State{Sources: map[string]state.Source{}, Current: map[string]string{}, Accounts: map[string]*state.Account{}, Sessions: map[string]*state.Session{}}
-	doc, _ := encodeDecode(t, BuildDoc(st, mustKey(t), "d-0123456789", "", "", "", t0))
+	doc, _ := encodeDecode(t, BuildDoc(st, mustKey(t), state.Config{Device: "d-0123456789"}, "", "", "", t0))
 	if doc.CollectorVersion != "unknown" || doc.LastError != "" {
 		t.Fatalf("doc = %+v", doc)
 	}
@@ -196,7 +200,7 @@ func TestBuildDocFitsTheSizeLimit(t *testing.T) {
 			}
 		}
 	}
-	doc, body := encodeDecode(t, BuildDoc(st, key, "d-0123456789", "workbox", "sam", "v1", t0))
+	doc, body := encodeDecode(t, BuildDoc(st, key, state.Config{Device: "d-0123456789"}, "workbox", "sam", "v1", t0))
 	if len(body) > snapshot.MaxBytes {
 		t.Fatalf("doc is %d bytes", len(body))
 	}
@@ -253,5 +257,119 @@ func TestClip(t *testing.T) {
 		if !utf8.ValidString(got) || len(got) > 300 || !ok || !strings.HasSuffix(in, rest) || len(rest) < 300-len("…")-3 {
 			t.Fatalf("clip(%d bytes) = %q", len(in), got)
 		}
+	}
+}
+
+// TestHoursFollowTheSession: each account's part of a session is spread
+// over the session's hours by its share, a session without hours puts it at
+// the hour the share last grew, and the days and window counts come from them.
+func TestHoursFollowTheSession(t *testing.T) {
+	h := func(at time.Time) int64 { return at.Unix() / 3600 }
+	day := 24 * time.Hour
+	st := &state.State{
+		Accounts: map[string]*state.Account{},
+		Sessions: map[string]*state.Session{
+			// 400 tokens in, 0 out: 3 parts to ann, 1 to bo, over two hours.
+			state.Key("codex", "s1"): {Provider: "codex", Project: "/p", Updated: t0,
+				By:    map[string]snapshot.Tokens{"ann": {Input: 300}, "bo": {Input: 100}},
+				Hours: map[int64]int64{h(t0.Add(-2 * day)): 200, h(t0): 200}},
+			// No hours: at the hour ann's share last grew.
+			state.Key("claude", "s2"): {Provider: "claude", Project: "/p", Updated: t0,
+				By:   map[string]snapshot.Tokens{"ann": {Input: 50, Output: 10, CacheRead: 1000}},
+				Last: map[string]time.Time{"ann": t0.Add(-day)}},
+		},
+	}
+	byLabel := map[string]AccountTotals{}
+	for _, a := range Totals(st) {
+		byLabel[a.Provider+"/"+a.Label] = a
+	}
+	ann, bo := byLabel["codex/ann"], byLabel["codex/bo"]
+	if want := map[int64]int64{h(t0.Add(-2 * day)): 150, h(t0): 150}; !reflect.DeepEqual(ann.Hours, want) {
+		t.Errorf("ann's hours = %v, want %v", ann.Hours, want)
+	}
+	if want := map[int64]int64{h(t0.Add(-2 * day)): 50, h(t0): 50}; !reflect.DeepEqual(bo.Hours, want) {
+		t.Errorf("bo's hours = %v, want %v", bo.Hours, want)
+	}
+	if got, want := DaysOf(ann.Hours, t0), []int64{150, 0, 150}; !reflect.DeepEqual(got, want) {
+		t.Errorf("days = %v, want %v", got, want)
+	}
+	if got := DaysOf(byLabel["claude/ann"].Hours, t0); !reflect.DeepEqual(got, []int64{0, 60}) {
+		t.Errorf("claude days = %v, want [0 60]: cache is not counted", got)
+	}
+	if got := SinceStart(ann.Hours, t0.Add(-day)); got != 150 {
+		t.Errorf("since a day ago = %d, want 150", got)
+	}
+	ps := Projects(st)
+	if len(ps) != 1 || ps[0].Sessions != 2 || !reflect.DeepEqual(ps[0].Providers, []string{"claude", "codex"}) || DaysOf(ps[0].Hours, t0)[2] != 200 {
+		t.Errorf("projects = %+v", ps)
+	}
+}
+
+// TestDocCarriesDaysRecentAndAliases: the snapshot has each account's days,
+// its tokens since each window began, and the names this device set.
+func TestDocCarriesDaysRecentAndAliases(t *testing.T) {
+	key := mustKey(t)
+	reset := t0.Add(24 * time.Hour)
+	st := &state.State{
+		Current: map[string]string{state.Key("codex", "/h/.codex"): "ann@example.com"},
+		Accounts: map[string]*state.Account{state.Key("codex", "ann@example.com"): {Provider: "codex", Label: "ann@example.com",
+			Quota: &state.Quota{At: t0, Windows: []snapshot.Window{
+				{Name: "7d", Percent: 40, ResetsAt: &reset, Minutes: 10080},
+				{Name: "5h", Percent: 10, ResetsAt: &t0, Minutes: 300},
+			}}}},
+		Sessions: map[string]*state.Session{state.Key("codex", "s1"): {Provider: "codex", Project: "/p", Updated: t0,
+			By:    map[string]snapshot.Tokens{"ann@example.com": {Input: 70, Output: 30}},
+			Hours: map[int64]int64{t0.Add(-7*24*time.Hour).Unix() / 3600: 40, t0.Unix()/3600 - 1: 60}}},
+	}
+	cfg := state.Config{Device: "d-0123456789", Aliases: map[string]state.Alias{
+		state.Key("codex", "ann@example.com"): {Name: "ann", At: t0},
+		state.Key("claude", "bo@example.com"): {At: t0.Add(-time.Hour)},
+	}}
+	doc, _ := encodeDecode(t, BuildDoc(st, key, cfg, "box", "ann", "v1", t0))
+	a := doc.Accounts[0]
+	if want := []int64{60, 0, 0, 0, 0, 0, 0, 40}; !reflect.DeepEqual(a.Days, want) {
+		t.Errorf("days = %v, want %v", a.Days, want)
+	}
+	// The 5h window reset at t0, so only the weekly one is counted.
+	if len(a.Recent) != 1 || a.Recent[0].Window != "7d" || a.Recent[0].Tokens != 60 || !a.Recent[0].Start.Equal(reset.Add(-7*24*time.Hour)) {
+		t.Errorf("recent = %+v", a.Recent)
+	}
+	if len(doc.Aliases) != 2 {
+		t.Fatalf("aliases = %+v", doc.Aliases)
+	}
+	name, err := key.Open(doc.Aliases[0].Name)
+	label, lerr := key.Open(doc.Aliases[0].Label)
+	if err != nil || lerr != nil || name != "ann" || label != "ann@example.com" || doc.Aliases[0].Provider != "codex" {
+		t.Errorf("first alias = %q %q %v %v", label, name, err, lerr)
+	}
+	if doc.Aliases[1].Name != "" {
+		t.Errorf("a cleared name travels without one: %+v", doc.Aliases[1])
+	}
+}
+
+// TestLedgerPlacesHours: a log with times gives the session's hours, a
+// partial read keeps the higher count of each hour, and a log without times
+// has each run's growth at the session's last activity.
+func TestLedgerPlacesHours(t *testing.T) {
+	h := t0.Unix() / 3600
+	st := &state.State{Accounts: map[string]*state.Account{}, Sessions: map[string]*state.Session{}}
+	growth := map[string]snapshot.Tokens{}
+	timed := logs.Session{ID: "s1", Tokens: snapshot.Tokens{Input: 90, Output: 10}, Updated: t0, Hours: map[int64]int64{h - 1: 40, h: 60}}
+	attribute(st, "codex", timed, "ann", false, t0, growth)
+	if got := st.Sessions[state.Key("codex", "s1")].Hours; !reflect.DeepEqual(got, map[int64]int64{h - 1: 40, h: 60}) {
+		t.Errorf("hours = %v", got)
+	}
+	timed.Tokens.Input, timed.Hours = 100, map[int64]int64{h: 110}
+	attribute(st, "codex", timed, "ann", true, t0, growth)
+	if got := st.Sessions[state.Key("codex", "s1")].Hours; !reflect.DeepEqual(got, map[int64]int64{h - 1: 40, h: 110}) {
+		t.Errorf("hours after a partial read = %v", got)
+	}
+
+	untimed := logs.Session{ID: "s2", Tokens: snapshot.Tokens{Input: 30}, Updated: t0.Add(-2 * time.Hour)}
+	attribute(st, "hermes", untimed, "openrouter", false, t0, growth)
+	untimed.Tokens.Input, untimed.Updated = 50, t0
+	attribute(st, "hermes", untimed, "openrouter", false, t0, growth)
+	if got := st.Sessions[state.Key("hermes", "s2")].Hours; !reflect.DeepEqual(got, map[int64]int64{h - 2: 30, h: 20}) {
+		t.Errorf("untimed hours = %v", got)
 	}
 }

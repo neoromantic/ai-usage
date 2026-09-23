@@ -8,26 +8,6 @@ import (
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 )
 
-// Mode is which console view to draw.
-type Mode int
-
-const (
-	Default Mode = iota
-	Projects
-	Tokens
-	Devices
-)
-
-// Options say how the console looks: the terminal width, color, the glyph
-// set, the view, and the time zone clocks are shown in.
-type Options struct {
-	Width int
-	Color bool
-	ASCII bool
-	Mode  Mode
-	Loc   *time.Location
-}
-
 const (
 	minWidth     = 80
 	maxWidth     = 160
@@ -69,46 +49,7 @@ func newUI(r *Report, o Options) *ui {
 	}
 	u.home = homeOf(r)
 	u.page = u.w
-	if !u.multi {
-		// One device has no USED BY or NOTE column to fill a wide
-		// terminal, so the page ends where its widest table does.
-		u.page = min(u.w, maxLocalLabel+u.localNums())
-	}
 	return u
-}
-
-// Text renders the report for a person.
-func Text(r Report, o Options) string {
-	u := newUI(&r, o)
-	switch o.Mode {
-	case Tokens:
-		u.header()
-		u.blank()
-		u.teamTokens()
-	case Projects:
-		u.header()
-		u.blank()
-		u.thisDevice(true)
-		u.footer(false)
-	case Devices:
-		u.allDevices = true
-		u.header()
-		u.blank()
-		u.devices()
-		u.footer(false)
-	default:
-		u.header()
-		u.blank()
-		u.accounts()
-		if u.multi {
-			u.blank()
-			u.devices()
-		}
-		u.blank()
-		u.thisDevice(false)
-		u.footer(true)
-	}
-	return u.String()
 }
 
 // defaultHomes are the harness homes that sit directly in the user's home.
@@ -387,74 +328,6 @@ func (u *ui) scheduleHealth() health {
 	default:
 		return health{g.fail, "not scheduled", red, "schedule: not registered" + g.sep + "ai-usage schedule install", "not scheduled"}
 	}
-}
-
-func (u *ui) footer(more bool) {
-	g := u.g
-	entries := []struct{ key, text string }{
-		{"here", g.here + " logged in here"},
-		{"seen", g.seen + " used here before"},
-		{"crit", g.crit + " " + g.ge + "90%"},
-		{"warn", g.warnMark + " " + g.ge + "75%"},
-		{"pace", g.pace + " fills before reset"},
-		{"old", g.stale + " old: " + u.oldLegend()},
-		{"unknown", g.question + " " + u.unknownLegend()},
-		{"dash", g.dash + " no window"},
-		{"outdated", g.old + " outdated"},
-	}
-	u.legend["old"] = u.legend["oldReading"] || u.legend["oldDevice"]
-	u.legend["unknown"] = u.legend["reset"] || u.legend["unread"]
-	var items []line
-	for _, e := range entries {
-		if u.legend[e.key] {
-			items = append(items, line{{e.text, gray}})
-		}
-	}
-	grid := u.legend["grid"]
-	if len(items) == 0 && !grid && !more {
-		return
-	}
-	u.blank()
-	if len(items) > 0 {
-		u.flowEven(items, "  ")
-	}
-	// The grid key has glyphs of its own, so it keeps a line to itself.
-	if grid {
-		u.emit(line{{"cl cx gk hm = claude codex grok hermes: " + g.ok + " ok " + g.partial + " partial " + g.fail + " error " + g.skip + " not installed", gray}}.cut(u.page, g.ell))
-	}
-	if more {
-		flags := "--projects  "
-		if u.multi {
-			flags += "--tokens  --devices  "
-		}
-		u.emit(line{{"more: ai-usage " + flags + "--json" + g.sep + "ai-usage status", gray}})
-	}
-}
-
-// oldLegend explains ~ for what it marks on screen: an old reading, a
-// silent device, or both.
-func (u *ui) oldLegend() string {
-	var parts []string
-	if u.legend["oldReading"] {
-		parts = append(parts, "reading 6h+")
-	}
-	if u.legend["oldDevice"] {
-		parts = append(parts, "device 1d+")
-	}
-	return strings.Join(parts, ", ")
-}
-
-// unknownLegend explains ? for what it marks on screen: a window that has
-// reset since its reading, one a refusal's reading does not cover, or both.
-func (u *ui) unknownLegend() string {
-	var parts []string
-	if u.legend["reset"] {
-		parts = append(parts, "reset since reading")
-	}
-	if u.legend["unread"] {
-		parts = append(parts, "not read since refusal")
-	}
-	return strings.Join(parts, ", ")
 }
 
 // provider is this device's source for p.

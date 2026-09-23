@@ -73,6 +73,17 @@ type Config struct {
 	// ScheduleOff is set by `ai-usage schedule remove` so a later run does not
 	// register again.
 	ScheduleOff bool `json:"schedule_off,omitempty"`
+	// Aliases are the short names given to accounts with `ai-usage alias`,
+	// keyed by Key(provider, label). They travel in this device's snapshot
+	// and name the account for the whole team. A cleared name stays, with no
+	// name, so that the clearing reaches the team too.
+	Aliases map[string]Alias `json:"aliases,omitempty"`
+}
+
+// Alias is a short name for an account, and when it was set or cleared.
+type Alias struct {
+	Name string    `json:"name,omitempty"`
+	At   time.Time `json:"at"`
 }
 
 // LoadConfig reads config.json, creating a device id on first use.
@@ -214,6 +225,12 @@ type Session struct {
 	// Via is the growth spent through each linked account of another
 	// provider, keyed by Key(provider, label). It is also in By.
 	Via map[string]snapshot.Tokens `json:"via,omitempty"`
+	// Hours is the session's input plus output tokens by the UTC hour they
+	// were spent in, keyed by Unix time / 3600: what its log last showed,
+	// or, for a log that records no times, the growth each run saw, at the
+	// hour of the session's last activity. It outlives the log, which a
+	// harness may delete before the ledger forgets the session.
+	Hours map[int64]int64 `json:"h,omitempty"`
 }
 
 // Relay is the last exchange with the team store.

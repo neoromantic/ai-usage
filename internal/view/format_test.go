@@ -1,40 +1,26 @@
 package view
 
 import (
-	"fmt"
 	"reflect"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 )
 
-// A 5h or 7d window takes its column from another name, and the extras keep
-// the report's order.
-func TestSlots(t *testing.T) {
-	s, l, x := slots([]Window{{Name: "7d Opus", Minutes: 10080}, {Name: "3h", Minutes: 180}, {Name: "7d", Minutes: 10080}, {Name: "5h", Minutes: 300}}, false)
-	if s == nil || s.Name != "5h" || l == nil || l.Name != "7d" || len(x) != 2 || x[0].Name != "7d Opus" || x[1].Name != "3h" {
-		t.Errorf("slots = %v %v %v", s, l, x)
-	}
-}
-
-func TestBar(t *testing.T) {
-	u, a := newUI(&Report{}, Options{}), newUI(&Report{}, Options{ASCII: true})
+func TestNumbers(t *testing.T) {
 	for _, c := range []struct {
-		p           float64
-		utf8, ascii string
-	}{
-		{0, "░░░░░░", "......"},
-		{0.1, "▏░░░░░", "#....."},
-		{50, "███░░░", "###..."},
-		{99.9, "█████▉", "#####."},
-		{100, "██████", "######"},
-		{150, "██████", "######"},
-	} {
-		f, tr := u.bar(c.p, 6)
-		af, atr := a.bar(c.p, 6)
-		if f+tr != c.utf8 || af+atr != c.ascii {
-			t.Errorf("bar(%v) = %q %q, want %q %q", c.p, f+tr, af+atr, c.utf8, c.ascii)
+		n    int64
+		want string
+	}{{0, "0"}, {601, "601"}, {2900, "2.9K"}, {51_300_000, "51.3M"}, {640_000_000, "640M"}, {16_842_296_448, "16.8G"}, {3e12, "3.0T"}} {
+		if got := human(c.n); got != c.want {
+			t.Errorf("human(%d) = %q, want %q", c.n, got, c.want)
+		}
+	}
+	for _, c := range []struct {
+		p    float64
+		want string
+	}{{0, "0%"}, {12.5, "12%"}, {99.9, "99%"}, {100, "100%"}, {1500, "999%"}} {
+		if got := pctText(c.p); got != c.want {
+			t.Errorf("pct(%v) = %q, want %q", c.p, got, c.want)
 		}
 	}
 }
@@ -168,36 +154,5 @@ func TestTitleWrap(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("title = %q", got)
-	}
-}
-
-// fleet is a team of n healthy devices, this one first.
-func fleet(n int) Report {
-	r := Report{GeneratedAt: now, Collector: Collector{Version: "v1.0.0", DeviceLabel: "host00", OSUser: "u"}}
-	pulled := now
-	r.Team.PulledAt = &pulled
-	for i := 0; i < n; i++ {
-		r.Team.Devices = append(r.Team.Devices, TeamDevice{
-			Device: "d-" + strconv.Itoa(i), Label: fmt.Sprintf("host%02d", i), OSUser: "u",
-			This: i == 0, CollectorVersion: "v1.0.0", CollectedAt: now.Add(-time.Duration(i) * time.Minute),
-		})
-	}
-	return r
-}
-
-func TestDevicesFoldPastTwelve(t *testing.T) {
-	out := text(fleet(12))
-	if strings.Contains(out, "more ok") || !strings.Contains(out, "host11") {
-		t.Fatalf("12 devices folded:\n%s", out)
-	}
-	// Past twelve, this device keeps its row and the healthy others fold into
-	// one line that names them.
-	out = text(fleet(13))
-	if !strings.Contains(out, "host00 (u)") || !strings.Contains(out, "12 more ok") ||
-		strings.Count(out, "host01") != 1 || !strings.Contains(out, "host02") {
-		t.Fatalf("13 devices not folded:\n%s", out)
-	}
-	if all := Text(fleet(13), Options{Mode: Devices, Loc: time.UTC}); strings.Contains(all, "more ok") {
-		t.Fatalf("--devices folded:\n%s", all)
 	}
 }
