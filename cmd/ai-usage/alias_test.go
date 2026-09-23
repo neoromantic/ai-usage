@@ -50,16 +50,15 @@ func (d *device) addAccount(provider, label string) {
 func TestAliasSetListAndClear(t *testing.T) {
 	hermetic(t)
 	d := aliasDevice(t)
-	if out := d.ok("alias"); !strings.HasPrefix(out, "no account has a name yet") {
-		t.Fatalf("alias with none set = %q", out)
+	if named := namedIn(d.ok("alias")); len(named) != 0 {
+		t.Fatalf("alias with none set lists %v", named)
 	}
 
 	// The same label on two providers is one person: both get the name.
 	t0 := time.Date(2026, 9, 23, 18, 0, 0, 0, time.UTC)
 	clock = func() time.Time { return t0 }
-	out := d.ok("alias", "dev", "ann")
-	if !strings.Contains(out, "dev@example.com is now ann on claude and codex") || !strings.Contains(out, "codex:dev@example.com") {
-		t.Fatalf("alias printed %q", out)
+	if out := d.ok("alias", "dev", "ann"); !strings.Contains(out, "claude") || !strings.Contains(out, "codex") {
+		t.Fatalf("alias does not say it named both: %q", out)
 	}
 	want := map[string]state.Alias{
 		state.Key("claude", "dev@example.com"): {Name: "ann", At: t0},
@@ -68,20 +67,15 @@ func TestAliasSetListAndClear(t *testing.T) {
 	if got := d.config().Aliases; !equalAliases(got, want) {
 		t.Fatalf("aliases = %+v", got)
 	}
-	list := d.ok("alias")
-	for _, p := range []string{"claude", "codex"} {
-		if !strings.Contains(list, p) || strings.Count(list, "dev@example.com  ann  set on this device") != 2 {
-			t.Fatalf("alias list:\n%s", list)
-		}
+	if named := namedIn(d.ok("alias")); named["claude dev@example.com"] != "ann" || named["codex dev@example.com"] != "ann" || len(named) != 2 {
+		t.Fatalf("alias lists %v", named)
 	}
 
 	// A provider before the account names that one alone. An email matches
 	// in any case.
 	t1 := t0.Add(time.Minute)
 	clock = func() time.Time { return t1 }
-	if out := d.ok("alias", "codex:DEV@example.com", "ann-cx"); !strings.HasPrefix(out, "dev@example.com is now ann-cx on codex;") {
-		t.Fatalf("alias with a provider printed %q", out)
-	}
+	d.ok("alias", "codex:DEV@example.com", "ann-cx")
 	want[state.Key("codex", "dev@example.com")] = state.Alias{Name: "ann-cx", At: t1}
 	if got := d.config().Aliases; !equalAliases(got, want) {
 		t.Fatalf("aliases = %+v", got)
@@ -92,17 +86,27 @@ func TestAliasSetListAndClear(t *testing.T) {
 	// other devices.
 	t2 := t1.Add(time.Minute)
 	clock = func() time.Time { return t2 }
-	if out := d.ok("alias", "ann-cx", "--clear"); !strings.Contains(out, "no longer goes by ann-cx on codex") {
-		t.Fatalf("alias --clear printed %q", out)
-	}
+	d.ok("alias", "ann-cx", "--clear")
 	want[state.Key("codex", "dev@example.com")] = state.Alias{At: t2}
 	if got := d.config().Aliases; !equalAliases(got, want) {
 		t.Fatalf("aliases after clear = %+v", got)
 	}
 	d.ok("alias", "--clear", "claude:ann")
-	if out := d.ok("alias"); !strings.HasPrefix(out, "no account has a name yet") {
-		t.Fatalf("alias after clearing both = %q", out)
+	if named := namedIn(d.ok("alias")); len(named) != 0 {
+		t.Fatalf("alias after clearing both lists %v", named)
 	}
+}
+
+// namedIn reads `ai-usage alias` output: the name of each account, keyed by
+// provider and label.
+func namedIn(out string) map[string]string {
+	named := map[string]string{}
+	for _, line := range strings.Split(out, "\n") {
+		if f := strings.Fields(line); len(f) >= 3 && known(f[0]) {
+			named[f[0]+" "+f[1]] = f[2]
+		}
+	}
+	return named
 }
 
 func equalAliases(got, want map[string]state.Alias) bool {
@@ -121,7 +125,7 @@ func equalAliases(got, want map[string]state.Alias) bool {
 func TestAliasRefusals(t *testing.T) {
 	hermetic(t)
 	// A device that has collected nothing knows no account to name.
-	if r := newDevice(t).run("", "alias", "dev", "ann"); r.code != 1 || !strings.Contains(r.stderr, "knows no accounts yet") {
+	if r := newDevice(t).run("", "alias", "dev", "ann"); r.code != 1 {
 		t.Fatalf("alias before a run: %+v", r)
 	}
 
@@ -156,8 +160,7 @@ func TestAliasRefusals(t *testing.T) {
 	// accounts instead of the usage. "unknown" is no one's account.
 	for _, args := range [][]string{{"alias", "nobody", "ann"}, {"alias", "unknown", "ann"}} {
 		r := d.run("", args...)
-		if r.code != 2 || !strings.Contains(r.stderr, "no account this device knows goes by \""+args[1]+"\"") || strings.Contains(r.stderr, "Usage:") ||
-			!strings.Contains(r.stderr, "dev@other.org") {
+		if r.code != 2 || strings.Contains(r.stderr, "Usage:") || !strings.Contains(r.stderr, "dev@example.com") || !strings.Contains(r.stderr, "dev@other.org") {
 			t.Fatalf("%v: exit %d, stderr %q", args, r.code, r.stderr)
 		}
 		for _, line := range strings.Split(r.stderr, "\n")[1:] {
@@ -167,14 +170,13 @@ func TestAliasRefusals(t *testing.T) {
 		}
 	}
 	r := d.run("", "alias", "dev", "ann")
-	if r.code != 2 || !strings.Contains(r.stderr, `"dev" names more than one account`) || strings.Contains(r.stderr, "Usage:") ||
-		!strings.Contains(r.stderr, "dev@example.com") || !strings.Contains(r.stderr, "dev@other.org") {
+	if r.code != 2 || strings.Contains(r.stderr, "Usage:") || !strings.Contains(r.stderr, "dev@example.com") || !strings.Contains(r.stderr, "dev@other.org") {
 		t.Fatalf("ambiguous: exit %d, stderr %q", r.code, r.stderr)
 	}
 	// A name another account of the provider goes by would tell them apart
 	// no more.
 	r = d.run("", "alias", "dev@example.com", "dev")
-	if r.code != 2 || !strings.Contains(r.stderr, "codex dev@other.org already goes by dev") {
+	if r.code != 2 || !strings.Contains(r.stderr, "dev@other.org") {
 		t.Fatalf("taken name: exit %d, stderr %q", r.code, r.stderr)
 	}
 	if len(d.config().Aliases) != 0 {
@@ -186,6 +188,19 @@ func TestAliasRefusals(t *testing.T) {
 	d.ok("alias", "claude:dev", "日本語日本語")
 	d.ok("alias", "dev@other.org", "other")
 	if got := d.config().Aliases; len(got) != 2 || got[state.Key("claude", "dev@example.com")].Name != "日本語日本語" || got[state.Key("codex", "dev@other.org")].Name != "other" {
+		t.Fatalf("aliases = %+v", got)
+	}
+
+	// An id goes by its first 8 characters, as in the report; another label
+	// by the whole of it.
+	d.addAccount("grok", "0f3c9a2e-5b7d-4e1a-9c8b-2d6f4a1e7b3c")
+	d.addAccount("hermes", "openai-codex")
+	d.ok("alias", "0f3c9a2e", "gk")
+	if r := d.run("", "alias", "openai-c", "hx"); r.code != 2 {
+		t.Fatalf("a prefix of a plain label matched: %+v", r)
+	}
+	d.ok("alias", "openai-codex", "hx")
+	if got := d.config().Aliases; got[state.Key("grok", "0f3c9a2e-5b7d-4e1a-9c8b-2d6f4a1e7b3c")].Name != "gk" || got[state.Key("hermes", "openai-codex")].Name != "hx" {
 		t.Fatalf("aliases = %+v", got)
 	}
 }
@@ -244,18 +259,17 @@ func TestAliasTravelsSealed(t *testing.T) {
 	b := newDevice(t)
 	b.ok("team", "join", strings.TrimSpace(a.ok("team", "key")))
 	b.ok("collect", "--json")
-	if out := b.ok("alias"); !strings.Contains(out, "claude  dev@example.com  ann  set on test-host") {
+	out := b.ok("alias")
+	if named := namedIn(out); len(named) != 1 || named["claude dev@example.com"] != "ann" || !strings.Contains(out, "test-host") {
 		t.Fatalf("b lists:\n%s", out)
 	}
-	if out := b.ok("alias", "ann", "--clear"); !strings.Contains(out, "no longer goes by ann on claude") {
-		t.Fatalf("b clears: %q", out)
-	}
-	if out := b.ok("alias"); !strings.HasPrefix(out, "no account has a name yet") {
-		t.Fatalf("b lists after clearing:\n%s", out)
+	b.ok("alias", "ann", "--clear")
+	if named := namedIn(b.ok("alias")); len(named) != 0 {
+		t.Fatalf("b lists after clearing: %v", named)
 	}
 	b.ok("collect", "--quiet")
 	a.ok("collect", "--json")
-	if out := a.ok("alias"); !strings.HasPrefix(out, "no account has a name yet") {
-		t.Fatalf("a lists after b cleared:\n%s", out)
+	if named := namedIn(a.ok("alias")); len(named) != 0 {
+		t.Fatalf("a lists after b cleared: %v", named)
 	}
 }

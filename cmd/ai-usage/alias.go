@@ -154,16 +154,36 @@ func aliasWidth(n string) int {
 	return w
 }
 
-// shortName is an account's name when the team gave it none: the part of an
-// email before the @, or the first 8 characters of an id.
+// shortName is an account's name when the team gave it none, as the report
+// gives it: the part of an email before the @, the first 8 characters of an
+// id, else the whole label.
 func shortName(label string) string {
 	if i := strings.Index(label, "@"); i > 0 {
 		return label[:i]
 	}
-	if r := []rune(label); len(r) > 8 {
-		return string(r[:8])
+	if idLike(label) {
+		return label[:8]
 	}
 	return label
+}
+
+// idLike is a label that is an opaque id, such as a UUID: 16 or more letters,
+// digits, dashes, and underscores with a digit among them.
+func idLike(s string) bool {
+	if len(s) < 16 {
+		return false
+	}
+	digits := false
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			digits = true
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r == '-', r == '_':
+		default:
+			return false
+		}
+	}
+	return digits
 }
 
 // sameLabel matches labels as the harnesses spell them, emails in any case.
