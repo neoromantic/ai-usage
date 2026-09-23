@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 	"golang.org/x/term"
 
 	"github.com/neoromantic/ai-usage/internal/view"
@@ -50,15 +52,68 @@ func (d *display) check() error {
 	return nil
 }
 
-// options is how the report is drawn on stdout.
+// options is how the report is drawn on stdout: in color when the
+// terminal takes color, for its background when it can be asked.
 func (d *display) options(stdout io.Writer) view.Options {
-	return view.Options{
+	o := view.Options{
 		Width:       termWidth(d.width, stdout),
-		Color:       useColor(d.color, stdout),
+		Color:       d.profile(stdout) >= colorprofile.ANSI,
 		Dark:        true,
 		ASCII:       d.ascii || !utf8Locale(),
 		AllProjects: d.projects,
 	}
+	if o.Color {
+		o.Dark = darkBackground(stdout)
+	}
+	return o
+}
+
+// writer is stdout through a writer that keeps only the escapes the
+// terminal takes.
+func (d *display) writer(stdout io.Writer) io.Writer {
+	return &colorprofile.Writer{Forward: stdout, Profile: d.profile(stdout)}
+}
+
+// profile is what stdout takes. A pipe, TERM=dumb, and --color=never take
+// no escapes; NO_COLOR takes bold and reverse video but no color; and
+// --color=always takes color anywhere, NO_COLOR or not.
+func (d *display) profile(stdout io.Writer) colorprofile.Profile {
+	env := os.Environ()
+	var p colorprofile.Profile
+	switch d.color {
+	case "never":
+		p = colorprofile.NoTTY
+	case "always":
+		asked := env[:0:0]
+		for _, kv := range env {
+			if !strings.HasPrefix(kv, "NO_COLOR=") {
+				asked = append(asked, kv)
+			}
+		}
+		p = max(colorprofile.Env(asked), colorprofile.ANSI)
+	default:
+		p = colorprofile.Detect(stdout, env)
+	}
+	if p > colorprofile.NoTTY && !enableVT(stdout) {
+		p = colorprofile.NoTTY
+	}
+	return p
+}
+
+// darkBackground asks the terminal for its background when both ends are
+// a terminal; otherwise it is taken to be dark.
+func darkBackground(stdout io.Writer) bool {
+	out, ok := stdout.(*os.File)
+	if !ok {
+		return true
+	}
+	if _, tty := terminal(out); !tty {
+		return true
+	}
+	if _, tty := terminal(os.Stdin); !tty {
+		return true
+	}
+	return lipgloss.HasDarkBackground(os.Stdin, out)
 }
 
 // terminal is the descriptor of w when it is a terminal.
@@ -86,17 +141,6 @@ func termWidth(flagWidth int, stdout io.Writer) int {
 		return n
 	}
 	return 80
-}
-
-func useColor(mode string, stdout io.Writer) bool {
-	switch mode {
-	case "always":
-		return enableVT(stdout)
-	case "never":
-		return false
-	}
-	_, tty := terminal(stdout)
-	return tty && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb" && enableVT(stdout)
 }
 
 // utf8Locale is whether the terminal can be trusted with UTF-8 glyphs. On

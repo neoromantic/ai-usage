@@ -66,7 +66,8 @@ func hermetic(t *testing.T) {
 	t.Setenv("APPDATA", "")
 	t.Setenv("XDG_CONFIG_HOME", "")
 	// The console reads these; a test sees the same output everywhere.
-	for _, k := range []string{"COLUMNS", "NO_COLOR", "TERM", "LC_CTYPE", "LANG", "WT_SESSION", "TERM_PROGRAM"} {
+	for _, k := range []string{"COLUMNS", "NO_COLOR", "TERM", "LC_CTYPE", "LANG", "WT_SESSION", "TERM_PROGRAM",
+		"COLORTERM", "CLICOLOR", "CLICOLOR_FORCE", "TTY_FORCE"} {
 		t.Setenv(k, "")
 	}
 	t.Setenv("LC_ALL", "en_US.UTF-8")
@@ -395,7 +396,7 @@ func TestCollectWhileAnotherRunCollects(t *testing.T) {
 		t.Fatalf("scheduled run with the lock held: %+v", r)
 	}
 	r := d.run("", "collect", "--offline")
-	if r.code != 0 || !strings.Contains(r.stderr, "collecting now") || !strings.HasPrefix(r.stdout, "ai-usage") {
+	if r.code != 0 || !strings.Contains(r.stderr, "collecting now") || !strings.Contains(r.stdout, "\nSUBSCRIPTIONS  ") {
 		t.Fatalf("run the person started: %+v", r)
 	}
 	if !strings.Contains(r.stdout, "\nHOW IT WORKS") || d.state().GuideDue {
@@ -492,11 +493,26 @@ func TestCollectOfflineThenViews(t *testing.T) {
 	}
 
 	text := d.ok("report")
-	if !strings.HasPrefix(text, "ai-usage") {
-		t.Fatalf("report text:\n%s", text)
+	for _, want := range []string{
+		"ai-usage · test-host · team " + r.Collector.Team[:8] + "  ",
+		"  ● no relay  ● dev build\n",
+		"\nSUBSCRIPTIONS  2 · 2 over\n",
+		"\n  CLAUDE           THIS WEEK ",
+		"\n● dev@example.com  ━━━",
+		"    9%  ",
+		"\n    5h             ━━━",
+		"\n  CODEX\n● dev@example.com  ━━━",
+		"\nUSAGE  test-host · M tokens in+out\n",
+		"\nPROJECTS  test-host · by 7d · M tokens in+out\n",
+		"\n  /work/app  <1 ",
+		"\n━ used  ─ left  ",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("report text lacks %q:\n%s", want, text)
+		}
 	}
 	// The bare command collects and prints the same console report.
-	if out := d.ok("--offline"); !strings.HasPrefix(out, "ai-usage") {
+	if out := d.ok("--offline"); !strings.Contains(out, "\nSUBSCRIPTIONS  2 ") {
 		t.Fatalf("bare run printed:\n%s", out)
 	}
 	var fresh view.Report
