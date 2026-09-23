@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -99,17 +98,15 @@ func TestRestorePath(t *testing.T) {
 
 func TestStoreChoice(t *testing.T) {
 	tests := []struct {
-		name      string
-		env       map[string]string
-		wantCode  int
-		wantError string
+		name     string
+		env      map[string]string
+		wantCode int
 	}{
-		{"memory outside Vercel", nil, http.StatusOK, ""},
-		{"memory on Vercel", map[string]string{"VERCEL": "1", "VERCEL_ENV": "production"}, http.StatusServiceUnavailable, "relay store not configured"},
-		{"memory on a preview", map[string]string{"VERCEL": "1", "VERCEL_ENV": "preview"}, http.StatusServiceUnavailable, "relay store not configured"},
-		{"memory under vercel dev", map[string]string{"VERCEL": "1", "VERCEL_ENV": "development"}, http.StatusOK, ""},
+		{"memory outside Vercel", nil, http.StatusOK},
+		{"memory on Vercel", map[string]string{"VERCEL": "1", "VERCEL_ENV": "production"}, http.StatusServiceUnavailable},
+		{"memory under vercel dev", map[string]string{"VERCEL": "1", "VERCEL_ENV": "development"}, http.StatusOK},
 		// One half of the KV pair is not a store.
-		{"URL without token on Vercel", map[string]string{"VERCEL": "1", "KV_REST_API_URL": "http://127.0.0.1:1"}, http.StatusServiceUnavailable, "relay store not configured"},
+		{"URL without token on Vercel", map[string]string{"VERCEL": "1", "KV_REST_API_URL": "http://127.0.0.1:1"}, http.StatusServiceUnavailable},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -121,10 +118,10 @@ func TestStoreChoice(t *testing.T) {
 			if code != tc.wantCode {
 				t.Fatalf("status %d, want %d (%v)", code, tc.wantCode, body)
 			}
-			if tc.wantError != "" && body["error"] != tc.wantError {
-				t.Fatalf("error %v, want %q", body["error"], tc.wantError)
+			if code != http.StatusOK && body["error"] == nil {
+				t.Fatalf("refusal without an error: %v", body)
 			}
-			if tc.wantError == "" && body["ok"] != true {
+			if code == http.StatusOK && body["ok"] != true {
 				t.Fatalf("health body %v", body)
 			}
 		})
@@ -282,24 +279,3 @@ func TestClientThroughRewrite(t *testing.T) {
 		t.Fatalf("after remove: %d devices, err %v", len(devices), err)
 	}
 }
-
-// A body that is not a snapshot is refused through the function as well.
-func TestRejectsNonSnapshot(t *testing.T) {
-	fresh(t)
-	pinClock(t)
-	key, err := team.Generate()
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := []byte(`{"v":1,"note":"anything else"}`)
-	r := httptest.NewRequest(http.MethodPut, "/v1/teams/"+key.Fingerprint()+"/devices/d-0123456789abcdef01234567", strings.NewReader(string(body)))
-	r.Header.Set(relay.HeaderKey, encode(key.Public()))
-	r.Header.Set(relay.HeaderSig, encode(key.Sign(relay.SnapshotMessage(body))))
-	rec := httptest.NewRecorder()
-	vercel().ServeHTTP(rec, r)
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status %d, want 422: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func encode(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }

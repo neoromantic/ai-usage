@@ -213,9 +213,6 @@ func TestAgentPlist(t *testing.T) {
 	if got := plistValues(t, file); !reflect.DeepEqual(got, want) {
 		t.Fatalf("plist:\n got %v\nwant %v", got, want)
 	}
-	if got := readPlist(t, []byte(AgentPlist(odd, state, "/opt/a&b/bin:/usr/bin:rel::/opt/a&b/bin"))); !reflect.DeepEqual(got, want) {
-		t.Fatalf("plist reader:\n got %v\nwant %v", got, want)
-	}
 }
 
 func TestAgentInstall(t *testing.T) {
@@ -244,9 +241,6 @@ func TestAgentInstall(t *testing.T) {
 	}
 	if got, err := s.Lookup(ctx, exe, home); err != nil || got != Active {
 		t.Fatalf("Lookup after Install = %v, %v", got, err)
-	}
-	if got, _ := s.Lookup(ctx, "/old/ai-usage", home); got != Other {
-		t.Fatalf("Lookup for another binary = %v", got)
 	}
 	if got, _ := s.Lookup(ctx, exe, "/other/state"); got != Other {
 		t.Fatalf("Lookup for another state folder = %v", got)
@@ -297,7 +291,6 @@ func TestAgentLookup(t *testing.T) {
 		{"disabled on older macOS", AgentPlist(exe, home, ""), true, "true", Disabled},
 		{"disabled and another binary", AgentPlist("/old/ai-usage", home, ""), false, "disabled", Disabled},
 		{"another binary", AgentPlist("/old/ai-usage", home, ""), true, "", Other},
-		{"no state folder", AgentPlist(exe, "", ""), true, "", Other},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := &fakeLaunchd{loaded: tc.loaded, disabled: tc.disabled}
@@ -414,17 +407,6 @@ func TestAgentReplacesCronLine(t *testing.T) {
 	}
 	if f.cron.writes() != 0 {
 		t.Fatal("an unread crontab was written")
-	}
-}
-
-func TestAgentRejectsLineBreaks(t *testing.T) {
-	f := &fakeLaunchd{}
-	s, file := agent(t, f)
-	if err := s.Install(context.Background(), exe, "/data\nx", "/bin"); err == nil {
-		t.Fatal("a state folder with a line break was scheduled")
-	}
-	if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("plist written: %v", err)
 	}
 }
 

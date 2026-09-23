@@ -30,6 +30,22 @@ func tp(t time.Time) *time.Time { return &t }
 // text is the default view at 80 columns, clocks in UTC.
 func text(r Report) string { return Text(r, Options{Width: 80, Loc: time.UTC}) }
 
+// hasLine fails unless one line of out holds every part. These tests check
+// what a row says; the golden files pin how it is laid out.
+func hasLine(t *testing.T, out string, parts ...string) {
+	t.Helper()
+	for _, l := range strings.Split(out, "\n") {
+		all := true
+		for _, p := range parts {
+			all = all && strings.Contains(l, p)
+		}
+		if all {
+			return
+		}
+	}
+	t.Fatalf("no line holds all of %q:\n%s", parts, out)
+}
+
 func win(name string, pct float64, reset time.Time) snapshot.Window {
 	return snapshot.Window{Name: name, Percent: pct, ResetsAt: &reset}
 }
@@ -120,17 +136,11 @@ func TestHeadlineIsTheFullestWindow(t *testing.T) {
 	}
 
 	out := text(r)
-	for _, want := range []string{
-		"ACCOUNTS  1 · 1 warning\n",
-		"● ann      ████▊░  80% !    40%     2h  80%     3d    5m\n",
-		"  └ also 7d Opus 12%, resets in 3d\n",
-		"claude ● ann                                1    1.0K     500        0        0\n",
-		"    /work/ann                               1    1.0K     500        0        0\n",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("text lacks %q:\n%s", want, out)
-		}
-	}
+	hasLine(t, out, "ACCOUNTS", "1 warning")
+	hasLine(t, out, "● ann", "80% !", "40%", "2h", "3d", "5m")
+	hasLine(t, out, "└", "7d Opus", "12%", "3d")
+	hasLine(t, out, "claude ● ann", "1.0K", "500")
+	hasLine(t, out, "/work/ann", "1.0K", "500")
 }
 
 func TestLevels(t *testing.T) {
@@ -148,9 +158,7 @@ func TestLevels(t *testing.T) {
 	r := Report{GeneratedAt: now, Team: Team{Providers: []TeamProvider{{Provider: "codex", Accounts: []TeamAccount{{
 		Label: "x", Level: "critical", HeadlinePercent: ptrF(95), Quota: &Quota{ObservedAt: now, Windows: []Window{{Name: "5h", Percent: 95, Level: "critical"}}},
 	}}}}}}
-	if out := text(r); !strings.Contains(out, "  x        █████▋  95% !!   95%      —    —          now\n") {
-		t.Fatalf("critical mark missing:\n%s", out)
-	}
+	hasLine(t, text(r), "95% !!")
 }
 
 func ptrF(f float64) *float64 { return &f }
@@ -171,13 +179,10 @@ func TestUnknownQuota(t *testing.T) {
 		t.Fatal("quota invented for bob")
 	}
 	out := text(r)
-	for _, want := range []string{
-		"● bob      ······ unknown     —           —            —\n  └ no reading yet\n",
-		"○ eve      ······ unknown     —           —            —\n  └ no reading yet\n",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("text lacks %q:\n%s", want, out)
-		}
+	hasLine(t, out, "● bob", "unknown")
+	hasLine(t, out, "○ eve", "unknown")
+	if n := strings.Count(out, "no reading yet"); n != 2 {
+		t.Fatalf("%d notes of no reading, want 2:\n%s", n, out)
 	}
 }
 
@@ -218,15 +223,9 @@ func TestPaceFillsBeforeReset(t *testing.T) {
 		t.Fatalf("pace = %+v", w.Pace)
 	}
 	out := text(r)
-	for _, want := range []string{
-		"ACCOUNTS  1 · 1 fills before reset\n",
-		"● ann      █▊░░░░  30%      30%▲   10h    —          now\n",
-		"  └ ▲ 5h full in 7h (Tue 19:00) at this pace, 3h before it resets\n",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("text lacks %q:\n%s", want, out)
-		}
-	}
+	hasLine(t, out, "ACCOUNTS", "1 fills before reset")
+	hasLine(t, out, "● ann", "30%▲", "10h")
+	hasLine(t, out, "└ ▲", "5h", "7h", "Tue 19:00", "3h before")
 }
 
 func TestPaceThatDoesNotFillBeforeReset(t *testing.T) {
@@ -291,8 +290,11 @@ func TestNoPaceForAWindowThatHasReset(t *testing.T) {
 	if w.Pace != nil {
 		t.Fatalf("pace = %+v", w.Pace)
 	}
-	if out := text(r); !strings.Contains(out, "● ann      ······ unknown     ?  reset    —           2h\n  └ every window reset since the reading 2h ago\n") || strings.Contains(out, "▲") {
-		t.Fatalf("text:\n%s", out)
+	out := text(r)
+	hasLine(t, out, "● ann", "unknown", "reset", "2h")
+	hasLine(t, out, "└", "every window reset", "2h")
+	if strings.Contains(out, "▲") {
+		t.Fatalf("pace shown for a window that has reset:\n%s", out)
 	}
 }
 
@@ -324,17 +326,11 @@ func TestWindowThatHasResetIsNotTheHeadline(t *testing.T) {
 	}
 
 	out := text(r)
-	for _, want := range []string{
-		"ACCOUNTS  2 · 1 stale · 1 unknown\n",
-		"● ann      █▏░░░░  20%        ?  reset  20%     3d   8h~\n",
-		"  └ ~ Claude Code updates its usage cache only while it runs\n",
-		"○ bob      ······ unknown     ?  reset    ?  reset    3h\n",
-		"  └ every window reset since the reading 3h ago\n",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("text lacks %q:\n%s", want, out)
-		}
-	}
+	hasLine(t, out, "ACCOUNTS", "1 stale", "1 unknown")
+	hasLine(t, out, "● ann", "20%", "reset", "3d", "8h~")
+	hasLine(t, out, "└ ~", "Claude Code", "cache")
+	hasLine(t, out, "○ bob", "unknown", "reset", "3h")
+	hasLine(t, out, "└", "every window reset", "3h")
 	if strings.Contains(out, "!") {
 		t.Fatalf("a reset window is still marked:\n%s", out)
 	}
@@ -369,16 +365,10 @@ func TestTeamSkipsWindowsThatHaveResetAndMarksStale(t *testing.T) {
 		}
 	}
 	out := text(r)
-	for _, want := range []string{
-		"  ann      ██▍░░░  40%        ?  reset  40%     2d   7h~  otherbox\n",
-		"  └ ~ last read on otherbox 7h ago\n",
-		"  bob      ······ unknown     ?  reset    —          3d~  otherbox\n",
-		"  └ every window reset since the reading 3d ago\n",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("text lacks %q:\n%s", want, out)
-		}
-	}
+	hasLine(t, out, "ann ", "40%", "reset", "2d", "7h~", "otherbox")
+	hasLine(t, out, "└ ~", "otherbox", "7h ago")
+	hasLine(t, out, "bob ", "unknown", "reset", "3d~", "otherbox")
+	hasLine(t, out, "└", "every window reset", "3d")
 }
 
 // otherDoc is another device's published snapshot, decoded as a pull would.
@@ -462,18 +452,12 @@ func TestTeamAddsTokensAndTakesNewestQuota(t *testing.T) {
 	}
 
 	out := text(r)
-	for _, want := range []string{
-		"● ann      ████▏░  70%      70%     1h    —          10m  thisbox, otherbox +1\n",
-		"  bob      ······ unknown     —           —            —  otherbox\n",
-		"DEVICES  3 · read 1m ago · 1 with errors · 2 outdated\n",
-		"● thisbox (sam)   v1.2.3     <1m  ✓  ✓  ✓  ✓   ann\n",
-		"✕ otherbox (kim)  v1.2.0      5m  ·  ✕  ·  ·   codex error; outdated; latest v…\n",
-		"↓ aaabox (kim)    v1.2.0      1h  ·  ·  ·  ·   outdated; latest v1.2.3\n",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("text lacks %q:\n%s", want, out)
-		}
-	}
+	hasLine(t, out, "● ann", "70%", "10m", "thisbox, otherbox +1")
+	hasLine(t, out, "bob ", "unknown", "otherbox")
+	hasLine(t, out, "DEVICES", "3", "1m ago", "1 with errors", "2 outdated")
+	hasLine(t, out, "● thisbox (sam)", "v1.2.3", "<1m")
+	hasLine(t, out, "✕ otherbox (kim)", "v1.2.0", "5m", "codex error", "outdated")
+	hasLine(t, out, "↓ aaabox (kim)", "v1.2.0", "1h", "outdated", "v1.2.3")
 }
 
 func TestTeamCacheOfAnotherTeamIsIgnored(t *testing.T) {
@@ -521,13 +505,10 @@ func TestStatusFoldsManyHomes(t *testing.T) {
 	st.Sources["codex"] = state.Source{Status: "ok", Homes: []string{"/srv/a/.codex", "/srv/b/.codex", "/srv/c/.codex"}}
 	f := newFixture(t, st)
 	status := StatusText(Build(f.in), "", Options{Width: 100, Loc: time.UTC})
-	for _, want := range []string{
-		"hermes  /srv/a/.hermes, /srv/b/.hermes, +3 more (ai-usage home) · no accounts yet\n",
-		"codex   /srv/a/.codex, /srv/b/.codex, /srv/c/.codex · no accounts yet\n",
-	} {
-		if !strings.Contains(status, want) {
-			t.Fatalf("status lacks %q:\n%s", want, status)
-		}
+	hasLine(t, status, "hermes", "/srv/a/.hermes, /srv/b/.hermes", "+3 more")
+	hasLine(t, status, "codex", "/srv/a/.codex, /srv/b/.codex, /srv/c/.codex")
+	if strings.Contains(status, "/srv/c/.hermes") {
+		t.Fatalf("status names a folded home:\n%s", status)
 	}
 }
 
@@ -538,25 +519,23 @@ func TestClaudeAppHomeIsNotTheUsersHome(t *testing.T) {
 	st.Sources["claude"] = state.Source{Status: "ok", Homes: []string{"/Users/ann/Library/Application Support/Claude/local-agent-mode-sessions/a/b/local_c1/.claude"}}
 	st.Sources["codex"] = state.Source{Status: "ok", Homes: []string{"/Users/ann/.codex"}}
 	status := StatusText(Build(newFixture(t, st).in), "", Options{Width: 100, Loc: time.UTC})
-	if want := "codex   ~/.codex · no accounts yet\n"; !strings.Contains(status, want) {
-		t.Fatalf("status lacks %q:\n%s", want, status)
-	}
+	hasLine(t, status, "codex", "~/.codex")
 }
 
 // TestStatusUpdateLine: a release installed by hand that is newer than the
 // last update check saw is the newest release, not an older one.
 func TestStatusUpdateLine(t *testing.T) {
-	for _, tc := range []struct{ latest, want string }{
-		{"v1.2.3", "v1.2.3 is the newest release"},
-		{"v1.2.0", "v1.2.3 is the newest release"},
-		{"v1.4.0", "newest release v1.4.0"},
+	for _, tc := range []struct{ latest, newest string }{
+		{"v1.2.0", "v1.2.3"},
+		{"v1.4.0", "v1.4.0"},
 	} {
 		st := emptyState()
 		st.Update = state.Update{Latest: tc.latest}
 		f := newFixture(t, st)
 		status := StatusText(Build(f.in), "", Options{Width: 100, Loc: time.UTC})
-		if !strings.Contains(status, tc.want) {
-			t.Fatalf("latest %s: status lacks %q:\n%s", tc.latest, tc.want, status)
+		hasLine(t, status, "newest", tc.newest)
+		if tc.latest != tc.newest && strings.Contains(status, tc.latest) {
+			t.Fatalf("latest %s: status names the older release:\n%s", tc.latest, status)
 		}
 	}
 }
@@ -579,34 +558,29 @@ func TestCollectorSection(t *testing.T) {
 		t.Fatalf("staged = %v", c.Update.Staged)
 	}
 	out := text(r)
-	for _, want := range []string{
-		"ai-usage v1.2.3 · thisbox (sam) · team " + f.key.Fingerprint()[:8] + "…",
-		"\n✓ collected just now  ✕ relay failing · last push 20m ago  ✕ not scheduled\n↑ v1.3.0 runs next time\n",
-		"\n  ✕ relay: relay unreachable: refused\n  ✕ schedule: crontab: permission denied\n",
-		"\n  claude ───────────────────────────────────────── no accounts · ✕ partial here\n",
-		"\n  grok ─────────────────────────────────────── no accounts · not installed here\n",
-		"\nclaude partial: 2 malformed lines · codex no usage yet · grok not installed · …\n",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("text lacks %q:\n%s", want, out)
-		}
-	}
+	hasLine(t, out, "ai-usage v1.2.3", "thisbox (sam)", "team "+f.key.Fingerprint()[:8])
+	hasLine(t, out, "collected just now", "relay failing", "20m ago", "not scheduled")
+	hasLine(t, out, "v1.3.0", "runs next time")
+	hasLine(t, out, "✕ relay", "relay unreachable: refused")
+	hasLine(t, out, "✕ schedule", "crontab: permission denied")
+	hasLine(t, out, "claude ─", "no accounts", "partial here")
+	hasLine(t, out, "grok ─", "no accounts", "not installed here")
+	hasLine(t, out, "claude partial: 2 malformed lines", "grok not installed")
+
 	status := StatusText(r, "/home/.config/ai-usage", Options{Width: 80, Loc: time.UTC})
-	for _, want := range []string{
-		"\n✕ 3 problems: relay failing, not scheduled, claude partial\n",
-		"\ndirectory       ~/.config/ai-usage\n",
-		"\nlast error      11:00 (1h ago): claude: 2 malformed lines\n",
-		"\nrelay         ✕ https://relay.example\n                pushed 11:40 (20m ago) · pulled 11:40 (20m ago)\n" +
-			"                the newest snapshot is not sent yet\n                relay unreachable: refused\n",
-		"\nschedule      ✕ not registered: crontab: permission denied\n                register: ai-usage schedule install\n",
-		"\nupdate        ↑ v1.3.0 is installed and runs next time\n                checked never\n",
-		"\nsources       ◐ claude  no accounts yet\n                        2 malformed lines\n",
-		"\n              · grok    not installed\n",
-	} {
-		if !strings.Contains(status, want) {
-			t.Fatalf("status lacks %q:\n%s", want, status)
-		}
-	}
+	hasLine(t, status, "3 problems", "relay failing", "not scheduled", "claude partial")
+	hasLine(t, status, "directory", "~/.config/ai-usage")
+	hasLine(t, status, "last error", "11:00", "1h ago", "claude: 2 malformed lines")
+	hasLine(t, status, "relay", "✕", "https://relay.example")
+	hasLine(t, status, "pushed 11:40", "pulled 11:40")
+	hasLine(t, status, "not sent yet")
+	hasLine(t, status, "relay unreachable: refused")
+	hasLine(t, status, "schedule", "✕ not registered", "crontab: permission denied")
+	hasLine(t, status, "register: ai-usage schedule install")
+	hasLine(t, status, "update", "v1.3.0", "installed", "runs next time")
+	hasLine(t, status, "checked never")
+	hasLine(t, status, "sources", "◐ claude")
+	hasLine(t, status, "· grok", "not installed")
 
 	// After `schedule remove`, status still says how to register again.
 	saved := f.in.State.Schedule.Error
@@ -624,12 +598,10 @@ func TestCollectorSection(t *testing.T) {
 
 	f.in.RelayURL = ""
 	r = Build(f.in)
-	if !strings.Contains(text(r), "  · no relay  ") {
-		t.Fatalf("unconfigured relay not shown:\n%s", text(r))
-	}
-	if status := StatusText(r, "", Options{Loc: time.UTC}); !strings.Contains(status, "\nrelay         · not configured; the team view shows this device only\n                set one: ai-usage relay set URL\n") {
-		t.Fatalf("unconfigured relay not shown:\n%s", status)
-	}
+	hasLine(t, text(r), "no relay")
+	status = StatusText(r, "", Options{Loc: time.UTC})
+	hasLine(t, status, "relay", "not configured")
+	hasLine(t, status, "ai-usage relay set URL")
 }
 
 func TestProjectsListIsCut(t *testing.T) {
@@ -643,11 +615,16 @@ func TestProjectsListIsCut(t *testing.T) {
 	}
 	r := Build(newFixture(t, st).in)
 	out := text(r)
-	if !strings.Contains(out, "    /p/d  ") || !strings.Contains(out, "\n    + 3 more projects · ai-usage --projects\n") || strings.Contains(out, "/p/c ") {
-		t.Fatalf("text:\n%s", out)
+	hasLine(t, out, "/p/d")
+	hasLine(t, out, "3 more projects", "ai-usage --projects")
+	if strings.Contains(out, "/p/c") {
+		t.Fatalf("a cut project is shown:\n%s", out)
 	}
-	if all := Text(r, Options{Mode: Projects, Loc: time.UTC}); !strings.Contains(all, "\nPROJECTS  thisbox (sam)") || !strings.Contains(all, "    /p/a  ") || strings.Contains(all, "more project") {
-		t.Fatalf("projects view:\n%s", all)
+	all := Text(r, Options{Mode: Projects, Loc: time.UTC})
+	hasLine(t, all, "PROJECTS", "thisbox (sam)")
+	hasLine(t, all, "/p/a")
+	if strings.Contains(all, "more project") {
+		t.Fatalf("projects view is cut:\n%s", all)
 	}
 }
 

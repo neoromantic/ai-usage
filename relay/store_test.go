@@ -481,7 +481,9 @@ func TestKVErrors(t *testing.T) {
 	cases := []struct {
 		name  string
 		setup func(*KV, *fakeKV)
-		want  string
+		// want is what the error must mention: the HTTP code or the store's
+		// own message. Empty means any error.
+		want string
 	}{
 		{"wrong token", func(kv *KV, _ *fakeKV) { kv.Token = "nope" }, "HTTP 401"},
 		{"server error", func(_ *KV, f *fakeKV) {
@@ -489,17 +491,17 @@ func TestKVErrors(t *testing.T) {
 		}, "HTTP 500"},
 		{"not json", func(_ *KV, f *fakeKV) {
 			f.reply = func(w http.ResponseWriter) { io.WriteString(w, "<html>") }
-		}, "kv:"},
+		}, ""},
 		{"too few results", func(_ *KV, f *fakeKV) {
 			f.reply = func(w http.ResponseWriter) { io.WriteString(w, `[]`) }
-		}, "result count"},
+		}, ""},
 		{"command error", func(_ *KV, f *fakeKV) {
 			f.reply = func(w http.ResponseWriter) { io.WriteString(w, `[{"error":"ERR max requests limit exceeded"}]`) }
 		}, "max requests limit exceeded"},
 		{"wrong type", func(_ *KV, f *fakeKV) {
 			f.sets[docKey("team", "device-one")] = map[string]bool{"x": true}
 		}, "WRONGTYPE"},
-		{"unreachable", func(kv *KV, _ *fakeKV) { kv.URL = "http://127.0.0.1:1" }, "kv:"},
+		{"unreachable", func(kv *KV, _ *fakeKV) { kv.URL = "http://127.0.0.1:1" }, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

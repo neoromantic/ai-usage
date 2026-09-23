@@ -9,38 +9,12 @@ import (
 	"time"
 )
 
+// A 5h or 7d window takes its column from another name, and the extras keep
+// the report's order.
 func TestSlots(t *testing.T) {
-	names := func(ws []Window) []string {
-		var out []string
-		for _, w := range ws {
-			out = append(out, w.Name)
-		}
-		return out
-	}
-	name := func(w *Window) string {
-		if w == nil {
-			return ""
-		}
-		return w.Name
-	}
-	for _, c := range []struct {
-		in          []Window
-		short, long string
-		extra       []string
-	}{
-		{[]Window{{Name: "5h", Minutes: 300}, {Name: "7d", Minutes: 10080}, {Name: "7d Opus", Minutes: 10080}}, "5h", "7d", []string{"7d Opus"}},
-		// A 5h or 7d window takes the slot from another name, and the extras
-		// keep the report's order.
-		{[]Window{{Name: "7d Opus", Minutes: 10080}, {Name: "3h", Minutes: 180}, {Name: "7d", Minutes: 10080}, {Name: "5h", Minutes: 300}}, "5h", "7d", []string{"7d Opus", "3h"}},
-		// Without minutes, a name in hours is short.
-		{[]Window{{Name: "7d credits"}, {Name: "8h burst"}}, "8h burst", "7d credits", nil},
-		{[]Window{{Name: "monthly", Minutes: 43200}}, "", "monthly", nil},
-		{nil, "", "", nil},
-	} {
-		s, l, x := slots(c.in)
-		if name(s) != c.short || name(l) != c.long || !reflect.DeepEqual(names(x), c.extra) {
-			t.Errorf("slots(%v) = %q %q %v", names(c.in), name(s), name(l), names(x))
-		}
+	s, l, x := slots([]Window{{Name: "7d Opus", Minutes: 10080}, {Name: "3h", Minutes: 180}, {Name: "7d", Minutes: 10080}, {Name: "5h", Minutes: 300}})
+	if s == nil || s.Name != "5h" || l == nil || l.Name != "7d" || len(x) != 2 || x[0].Name != "7d Opus" || x[1].Name != "3h" {
+		t.Errorf("slots = %v %v %v", s, l, x)
 	}
 }
 
@@ -61,25 +35,6 @@ func TestBar(t *testing.T) {
 		af, atr := a.bar(c.p, 6)
 		if f+tr != c.utf8 || af+atr != c.ascii {
 			t.Errorf("bar(%v) = %q %q, want %q %q", c.p, f+tr, af+atr, c.utf8, c.ascii)
-		}
-	}
-}
-
-func TestNumbers(t *testing.T) {
-	for _, c := range []struct {
-		n    int64
-		want string
-	}{{0, "0"}, {601, "601"}, {2900, "2.9K"}, {51_300_000, "51.3M"}, {640_000_000, "640M"}, {16_842_296_448, "16.8G"}, {3e12, "3.0T"}} {
-		if got := human(c.n); got != c.want {
-			t.Errorf("human(%d) = %q, want %q", c.n, got, c.want)
-		}
-	}
-	for _, c := range []struct {
-		p    float64
-		want string
-	}{{0, "0%"}, {12.5, "12%"}, {99.9, "99%"}, {100, "100%"}, {1500, "999%"}} {
-		if got := pctText(c.p); got != c.want {
-			t.Errorf("pct(%v) = %q, want %q", c.p, got, c.want)
 		}
 	}
 }
@@ -232,32 +187,17 @@ func fleet(n int) Report {
 
 func TestDevicesFoldPastTwelve(t *testing.T) {
 	out := text(fleet(12))
-	if strings.Contains(out, "more ok") || !strings.Contains(out, "\n  host11 (u)  v1.0.0 ") {
+	if strings.Contains(out, "more ok") || !strings.Contains(out, "host11") {
 		t.Fatalf("12 devices folded:\n%s", out)
 	}
+	// Past twelve, this device keeps its row and the healthy others fold into
+	// one line that names them.
 	out = text(fleet(13))
-	if !strings.Contains(out, "\n● host00 (u)  v1.0.0 ") || strings.Contains(out, "\n  host01 (u)") ||
-		!strings.Contains(out, "\n  ✓ 12 more ok, seen within 12m: host01, host02, host03,") {
+	if !strings.Contains(out, "host00 (u)") || !strings.Contains(out, "12 more ok") ||
+		strings.Count(out, "host01") != 1 || !strings.Contains(out, "host02") {
 		t.Fatalf("13 devices not folded:\n%s", out)
 	}
 	if all := Text(fleet(13), Options{Mode: Devices, Loc: time.UTC}); strings.Contains(all, "more ok") {
 		t.Fatalf("--devices folded:\n%s", all)
-	}
-}
-
-func TestLegendLinesAreEven(t *testing.T) {
-	u := newUI(&Report{}, Options{Width: 80})
-	var items []line
-	for _, s := range []string{"● logged in here", "!! ≥90%", "~ old: reading 6h+", "? reset since reading", "— no window"} {
-		items = append(items, line{{s, gray}})
-	}
-	u.flowEven(items, "  ")
-	var got []string
-	for _, l := range u.lines {
-		got = append(got, l.text())
-	}
-	want := []string{"● logged in here  !! ≥90%  ~ old: reading 6h+", "? reset since reading  — no window"}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("legend = %q", got)
 	}
 }

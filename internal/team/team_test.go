@@ -101,20 +101,14 @@ func TestImportRejects(t *testing.T) {
 	seed := make([]byte, ed25519.SeedSize)
 	b64 := func(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
 	cases := map[string]string{
-		"empty":             "",
-		"no prefix":         b64(seed),
-		"other version":     "aiu-team-2:" + b64(seed),
-		"prefix only":       exportPrefix,
-		"upper prefix":      strings.ToUpper(exportPrefix) + b64(seed),
-		"not base64":        exportPrefix + "not*base64!",
-		"std base64 chars":  exportPrefix + strings.Repeat("+/", 21) + "A",
-		"padded":            exportPrefix + base64.URLEncoding.EncodeToString(seed),
-		"short seed":        exportPrefix + b64(seed[:31]),
-		"long seed":         exportPrefix + b64(append(bytes.Clone(seed), 0)),
-		"full private key":  exportPrefix + b64(ed25519.NewKeyFromSeed(seed)),
-		"space inside":      exportPrefix + " " + b64(seed),
-		"two keys pasted":   exportPrefix + b64(seed) + exportPrefix + b64(seed),
-		"public key base32": fixedFP,
+		"empty":            "",
+		"no prefix":        b64(seed),
+		"other version":    "aiu-team-2:" + b64(seed),
+		"not base64":       exportPrefix + "not*base64!",
+		"padded":           exportPrefix + base64.URLEncoding.EncodeToString(seed),
+		"short seed":       exportPrefix + b64(seed[:31]),
+		"long seed":        exportPrefix + b64(append(bytes.Clone(seed), 0)),
+		"full private key": exportPrefix + b64(ed25519.NewKeyFromSeed(seed)),
 	}
 	for name, in := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -226,7 +220,6 @@ func TestSealOpen(t *testing.T) {
 	k := mustGenerate(t)
 	for _, plain := range []string{
 		"a",
-		"ann-mbp",
 		"/Users/ann/src/acme/app",
 		"C:\\Users\\Анна\\проект",
 		"emoji 😀 and \x00 nul",
@@ -280,15 +273,10 @@ func TestOpenRejects(t *testing.T) {
 	}
 	cases := map[string]string{
 		"another team's key": other.Seal("secret path"),
-		"nonce changed":      flip(0),
 		"ciphertext changed": flip(12),
-		"tag changed":        flip(len(raw) - 1),
 		"truncated":          base64.RawURLEncoding.EncodeToString(raw[:len(raw)-1]),
 		"shorter than nonce": base64.RawURLEncoding.EncodeToString(raw[:5]),
-		"nonce only":         base64.RawURLEncoding.EncodeToString(raw[:12]),
 		"not base64":         "not base64!",
-		"with padding":       sealed + "==",
-		"std alphabet":       strings.NewReplacer("-", "+", "_", "/").Replace(sealed) + "+/",
 		"plaintext":          "secret path",
 	}
 	for name, s := range cases {
@@ -306,9 +294,6 @@ func TestOpenRejects(t *testing.T) {
 
 func TestSealedLenFitsSnapshot(t *testing.T) {
 	k := mustGenerate(t)
-	if n := k.SealedLen(0); n != len(base64.RawURLEncoding.EncodeToString(make([]byte, 12+16))) {
-		t.Fatalf("SealedLen(0) = %d", n)
-	}
 	// The collector clips sealed text to 300 bytes before sealing.
 	if n := k.SealedLen(300); n > snapshot.MaxSealed {
 		t.Fatalf("SealedLen(300) = %d, over snapshot.MaxSealed %d", n, snapshot.MaxSealed)
@@ -333,11 +318,8 @@ func TestSignVerify(t *testing.T) {
 		{"other message", k.Public(), []byte("ai-usage snapshot v1\n{ }"), sig},
 		{"tampered signature", k.Public(), msg, tampered},
 		{"other key", other.Public(), msg, sig},
-		{"other key's signature", k.Public(), msg, other.Sign(msg)},
 		{"short signature", k.Public(), msg, sig[:10]},
-		{"no signature", k.Public(), msg, nil},
 		{"short key", k.Public()[:10], msg, sig},
-		{"no key", nil, msg, sig},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

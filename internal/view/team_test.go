@@ -76,14 +76,8 @@ func TestTeamLinkFromTheWire(t *testing.T) {
 	}
 
 	out := text(r)
-	for _, want := range []string{
-		"  └ also used by hermes openai-codex on otherbox, assumed the same account\n",
-		"  └ quota of codex bob, assumed the same account\n",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("text lacks %q:\n%s", want, out)
-		}
-	}
+	hasLine(t, out, "└", "hermes openai-codex", "otherbox", "assumed")
+	hasLine(t, out, "└", "quota of codex bob", "assumed")
 }
 
 // A borrowed reading that matches two accounts names neither. What Hermes
@@ -107,8 +101,10 @@ func TestTeamLinkThatMatchesTwoAccountsHasNoLabel(t *testing.T) {
 	if carl := findTeamAccount(t, r, "codex", "carl"); len(carl.LinkedUsage) != 0 {
 		t.Fatalf("carl linked usage = %+v", carl.LinkedUsage)
 	}
-	if out := text(r); !strings.Contains(out, "  └ quota of codex, assumed the same account\n") {
-		t.Fatalf("text:\n%s", out)
+	out := text(r)
+	hasLine(t, out, "└", "quota of codex", "assumed")
+	if strings.Contains(out, "quota of codex bob") || strings.Contains(out, "quota of codex carl") {
+		t.Fatalf("the borrowed reading names an account:\n%s", out)
 	}
 }
 
@@ -136,14 +132,8 @@ func TestTeamLinkOfThisDevice(t *testing.T) {
 		t.Fatalf("team linked usage = %+v", got)
 	}
 	out := text(r)
-	for _, want := range []string{
-		"  └ quota of codex ann, which has no reading yet\n",
-		"\nhermes ○ openai-codex  via codex ",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("text lacks %q:\n%s", want, out)
-		}
-	}
+	hasLine(t, out, "└", "quota of codex ann", "no reading yet")
+	hasLine(t, out, "hermes ○ openai-codex", "via codex")
 }
 
 func TestTeamLinkedUsageAddsUpAcrossDevices(t *testing.T) {

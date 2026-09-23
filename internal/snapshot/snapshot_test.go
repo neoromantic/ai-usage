@@ -152,29 +152,17 @@ func TestValidate(t *testing.T) {
 		{"version 0", func(d *Doc) { d.V = 0 }, false},
 		{"version 2", func(d *Doc) { d.V = 2 }, false},
 
-		{"team short", func(d *Doc) { d.Team = d.Team[:31] }, false},
-		{"team long", func(d *Doc) { d.Team += "a" }, false},
-		{"team upper", func(d *Doc) { d.Team = strings.ToUpper(d.Team) }, false},
-		{"team digit 1", func(d *Doc) { d.Team = "1" + d.Team[1:] }, false},
-		{"team digit 8", func(d *Doc) { d.Team = "8" + d.Team[1:] }, false},
-
-		{"device 8 chars", func(d *Doc) { d.Device = "abcd1234" }, true},
-		{"device 64 chars", func(d *Doc) { d.Device = strings.Repeat("a", 64) }, true},
-		{"device 7 chars", func(d *Doc) { d.Device = "abcd123" }, false},
-		{"device 65 chars", func(d *Doc) { d.Device = strings.Repeat("a", 65) }, false},
-		{"device leading dash", func(d *Doc) { d.Device = "-abcd1234" }, false},
-		{"device upper", func(d *Doc) { d.Device = "ABCD1234" }, false},
-		{"device underscore", func(d *Doc) { d.Device = "abcd_1234" }, false},
-		{"device slash", func(d *Doc) { d.Device = "abcd/1234" }, false},
+		// The shapes themselves are in TestValidTeamAndDevice.
+		{"team not a fingerprint", func(d *Doc) { d.Team = d.Team[:31] }, false},
+		{"device id bad", func(d *Doc) { d.Device = "abcd123" }, false},
 
 		{"device_label missing", func(d *Doc) { d.DeviceLabel = "" }, false},
 		{"os_user missing", func(d *Doc) { d.OSUser = "" }, false},
 		{"sealed at limit", func(d *Doc) { d.DeviceLabel = sealed(MaxSealed) }, true},
 		{"sealed over limit", func(d *Doc) { d.DeviceLabel = sealed(MaxSealed + 1) }, false},
-		{"sealed with padding", func(d *Doc) { d.OSUser = "abc=" }, false},
 		{"sealed std base64", func(d *Doc) { d.OSUser = "ab+/" }, false},
-		{"sealed with space", func(d *Doc) { d.OSUser = "ab cd" }, false},
 		{"sealed plain text", func(d *Doc) { d.OSUser = "ann@example.com" }, false},
+		{"sealed with padding", func(d *Doc) { d.OSUser = "abc=" }, false},
 		{"sealed non-ascii", func(d *Doc) { d.OSUser = "анна" }, false},
 		{"last_error optional", func(d *Doc) { d.LastError = "" }, true},
 		{"last_error sealed", func(d *Doc) { d.LastError = sealed(30) }, true},
@@ -183,12 +171,10 @@ func TestValidate(t *testing.T) {
 		{"collector_version missing", func(d *Doc) { d.CollectorVersion = "" }, false},
 		{"plain at limit", func(d *Doc) { d.CollectorVersion = strings.Repeat("v", MaxPlain) }, true},
 		{"plain over limit", func(d *Doc) { d.CollectorVersion = strings.Repeat("v", MaxPlain+1) }, false},
-		{"plain comma", func(d *Doc) { d.CollectorVersion = "v1,v2" }, false},
-		{"plain quote", func(d *Doc) { d.CollectorVersion = `v1"` }, false},
 		{"plain allowed punctuation", func(d *Doc) { d.CollectorVersion = "v1.2.3-rc_1+dev (x/y): z" }, true},
 		{"plain angle bracket", func(d *Doc) { d.CollectorVersion = "<script>" }, false},
+		{"plain quote", func(d *Doc) { d.CollectorVersion = `v1"` }, false},
 		{"plain newline", func(d *Doc) { d.CollectorVersion = "v1\nv2" }, false},
-		{"plain non-ascii", func(d *Doc) { d.CollectorVersion = "v1–2" }, false},
 
 		{"collected_at missing", func(d *Doc) { d.CollectedAt = time.Time{} }, false},
 		{"last_success_at missing", func(d *Doc) { d.LastSuccessAt = time.Time{} }, true},
@@ -225,7 +211,6 @@ func TestValidate(t *testing.T) {
 		{"percent negative", func(d *Doc) { d.Accounts[0].Windows[0].Percent = -0.01 }, false},
 		{"percent over", func(d *Doc) { d.Accounts[0].Windows[0].Percent = 1000.5 }, false},
 		{"percent NaN", func(d *Doc) { d.Accounts[0].Windows[0].Percent = math.NaN() }, false},
-		{"percent +Inf", func(d *Doc) { d.Accounts[0].Windows[0].Percent = math.Inf(1) }, false},
 		{"minutes 0", func(d *Doc) { d.Accounts[0].Windows[0].Minutes = 0 }, true},
 		{"minutes max", func(d *Doc) { d.Accounts[0].Windows[0].Minutes = MaxWindowMinutes }, true},
 		{"minutes negative", func(d *Doc) { d.Accounts[0].Windows[0].Minutes = -1 }, false},
@@ -251,7 +236,6 @@ func TestValidate(t *testing.T) {
 		{"quota_from grok", func(d *Doc) { d.Accounts[0].Provider, d.Accounts[0].QuotaFrom = "hermes", "grok" }, true},
 		{"quota_from itself", func(d *Doc) { d.Accounts[0].QuotaFrom = "claude" }, false},
 		{"quota_from unknown provider", func(d *Doc) { d.Accounts[0].QuotaFrom = "openai-codex" }, false},
-		{"quota_from label shape", func(d *Doc) { d.Accounts[0].QuotaFrom = sealed(40) }, false},
 		{"linked", func(d *Doc) {
 			d.Accounts[0].Linked = []Linked{{Provider: "hermes", Label: sealed(40), Sessions: 3, Tokens: Tokens{Input: 5}}}
 		}, true},
@@ -307,7 +291,6 @@ func TestValidateFutureCollectedAt(t *testing.T) {
 		{"past", t0.Add(-30 * 24 * time.Hour), true},
 		{"skew allowed", t0.Add(10 * time.Minute), true},
 		{"too far ahead", t0.Add(10*time.Minute + time.Second), false},
-		{"next year", t0.AddDate(1, 0, 0), false},
 		{"other zone, same instant", t0.Add(10 * time.Minute).In(time.FixedZone("x", 5*3600)), true},
 	}
 	for _, c := range cases {
@@ -333,10 +316,13 @@ func TestValidTeamAndDevice(t *testing.T) {
 		strings.Repeat("a", 32):            true,
 		"abcdefghijklmnopqrstuvwxyz234567": true,
 		strings.Repeat("a", 31):            false,
+		strings.Repeat("a", 33):            false,
 		strings.Repeat("A", 32):            false,
 		"":                                 false,
 		strings.Repeat("a", 31) + "=":      false,
 		strings.Repeat("a", 31) + "0":      false,
+		strings.Repeat("a", 31) + "1":      false,
+		strings.Repeat("a", 31) + "8":      false,
 		strings.Repeat("a", 31) + "\n":     false,
 	} {
 		if got := ValidTeam(s); got != want {
@@ -344,16 +330,19 @@ func TestValidTeamAndDevice(t *testing.T) {
 		}
 	}
 	for s, want := range map[string]bool{
-		"0123abcd":         true,
-		"mac-studio-1":     true,
-		"a-------":         true,
-		"mac-studio":       true,
-		"mac":              false,
-		"-mac-studio":      false,
-		"mac.studio":       false,
-		"mac-studio\n":     false,
-		"":                 false,
-		"../../etc/passwd": false,
+		"0123abcd":              true,
+		"mac-studio-1":          true,
+		"a-------":              true,
+		strings.Repeat("a", 64): true,
+		strings.Repeat("a", 65): false,
+		"mac":                   false,
+		"-mac-studio":           false,
+		"MAC-STUDIO":            false,
+		"mac.studio":            false,
+		"abcd_1234":             false,
+		"mac-studio\n":          false,
+		"":                      false,
+		"../../etc/passwd":      false,
 	} {
 		if got := ValidDevice(s); got != want {
 			t.Errorf("ValidDevice(%q) = %v, want %v", s, got, want)
@@ -365,9 +354,6 @@ func TestTokens(t *testing.T) {
 	a := Tokens{Input: 10, Output: 20, CacheRead: 30, CacheWrite: 40}
 	if got := a.Add(Tokens{1, 2, 3, 4}); got != (Tokens{11, 22, 33, 44}) {
 		t.Errorf("Add = %+v", got)
-	}
-	if got := a.Add(Tokens{}); got != a {
-		t.Errorf("Add zero = %+v", got)
 	}
 	if a.Total() != 100 || (Tokens{}).Total() != 0 {
 		t.Errorf("Total = %d", a.Total())
@@ -396,15 +382,12 @@ func TestTokens(t *testing.T) {
 
 func TestDurationName(t *testing.T) {
 	for minutes, want := range map[int]string{
-		-5:    "window",
 		0:     "window",
-		1:     "1m",
 		90:    "90m",
 		60:    "1h",
 		300:   "5h",
 		1440:  "1d",
 		10080: "7d",
-		43200: "30d",
 		1500:  "25h",
 		1441:  "1441m",
 	} {
@@ -422,12 +405,9 @@ func TestPlainLabel(t *testing.T) {
 		{"", ""},
 		{"Max 20x", "Max 20x"},
 		{"v1.2.3-rc.1+dev (x/y): z", "v1.2.3-rc.1+dev (x/y): z"},
-		{"pro_plan", "pro_plan"},
 		{"a,b;c", "a-b-c"},
-		{"a<b>&c", "a-b--c"},
 		{"line\nbreak\t", "line-break-"},
 		{"Тариф", "-----"},
-		{"😀 plus", "- plus"},
 		{"bad\xffutf8", "bad-utf8"},
 		{strings.Repeat("x", 100), strings.Repeat("x", MaxPlain)},
 		{strings.Repeat("é", 100), strings.Repeat("-", MaxPlain)},

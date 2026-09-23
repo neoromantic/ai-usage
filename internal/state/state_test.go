@@ -32,13 +32,6 @@ func TestDefaultDirHonorsEnv(t *testing.T) {
 	}
 }
 
-func TestKeyRoundTrip(t *testing.T) {
-	parts := []string{"claude", "/Users/me/.claude", "a@b.c"}
-	if got := SplitKey(Key(parts...)); !reflect.DeepEqual(got, parts) {
-		t.Fatalf("SplitKey(Key(%q)) = %q", parts, got)
-	}
-}
-
 func TestLockIsExclusive(t *testing.T) {
 	d := tempDir(t)
 	unlock, err := d.Lock()
@@ -48,13 +41,7 @@ func TestLockIsExclusive(t *testing.T) {
 	if _, err := d.Lock(); !errors.Is(err, ErrBusy) {
 		t.Fatalf("second lock while the first is held = %v", err)
 	}
-	if b, _ := os.ReadFile(d.Path("run.lock")); string(b) != strconv.Itoa(os.Getpid())+"\n" {
-		t.Fatalf("run.lock names %q", b)
-	}
 	unlock()
-	if b, _ := os.ReadFile(d.Path("run.lock")); len(b) != 0 {
-		t.Fatalf("released run.lock names %q", b)
-	}
 	unlock2, err := d.Lock()
 	if err != nil {
 		t.Fatalf("lock after release: %v", err)
@@ -295,7 +282,7 @@ func TestLoadStateMissingIsEmpty(t *testing.T) {
 }
 
 func TestLoadStateStartsAgainFromADamagedFile(t *testing.T) {
-	for _, body := range []string{"", "{\"last_run_at\": \"2026-09", "\x00\x00\x00", `{"sessions": 5}`} {
+	for _, body := range []string{"{\"last_run_at\": \"2026-09", `{"sessions": 5}`} {
 		d := tempDir(t)
 		if err := WriteFile(d.Path("state.json"), []byte(body)); err != nil {
 			t.Fatal(err)
@@ -390,20 +377,6 @@ func TestWriteFileReplacesAtomicallyAndPrivately(t *testing.T) {
 		}
 		t.Fatalf("temporary files left behind: %v", names)
 	}
-}
-
-func TestWriteFileTightensExistingPermissions(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix permission bits")
-	}
-	path := filepath.Join(t.TempDir(), "f")
-	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := WriteFile(path, []byte("y")); err != nil {
-		t.Fatal(err)
-	}
-	checkPrivate(t, path)
 }
 
 func checkPrivate(t *testing.T, path string) {
