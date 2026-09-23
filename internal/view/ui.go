@@ -9,12 +9,9 @@ import (
 )
 
 const (
-	minWidth     = 80
-	maxWidth     = 160
-	wideFrom     = 100
-	silentDevice = 24 * time.Hour
-	topProjects  = 3
-	foldDevices  = 12
+	minWidth = 80
+	maxWidth = 160
+	wideFrom = 100
 )
 
 type ui struct {

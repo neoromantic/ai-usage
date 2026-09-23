@@ -1,64 +1,61 @@
-ai-usage v1.4.2 · ann-mbp (ann) · team 472ghuwc…               Wed 23 Sep 11:40
-✓ collected 1m ago  ✓ relay synced 1m ago  ✓ scheduled  ✓ up to date
+ai-usage · annbook · team qmvrtzpa     ● collected 7m  ● relay 7m  ● up to date
 
-ACCOUNTS  10 · 2 critical · 2 warning · 1 fills early · 1 stale · 1 unknown
-  ACCOUNT           QUOTA             5h  reset   7d  reset  READ  USED BY
-  claude ─────────────────────────────────────────────────────────── 4 accounts
-  bo@acme.io        █████▊  96% !!   96%  1h12m  71%   3d4h    4m  bo-laptop +3
-  design@acme.io    ████▊░  81% !      ?  reset  81%   2d9h   1d~  lab-mac +3
-  └ ~ last read on greg-win 1d 6h ago
-● ann@acme.io       ███▊░░  64%      31%  2h10m  64%▲  3d4h    6m  ann-mbp +2
-  └ also 7d Opus 58%, resets in 3d4h
-  └ ▲ 7d full in 17h (Thu 04:48) at this pace, 2d10h before it resets
-  ci-runner-claud…  ······ unknown     ?  reset    ?  reset   2d~  build-01 +1
-  └ every window reset since the reading 2d 2h ago
-  codex ──────────────────────────────────────────────────────────── 3 accounts
-● ann@acme.io       █████▌  92% !!   18%  3h22m  92%  2d14h    2m  ann-mbp +1
-  └ also used by hermes openai-codex on ann-mbp, assumed the same account
-○ ops@acme.io       ████▊░  81% !    81%   3h5m  38%     5d   12m  ops-01 +4
-● ann+orca@acme.io  █▍░░░░  23%      10%     4h  23%  4d21h    2m  ann-mbp
-  grok ───────────────────────────────────────── 1 account · not installed here
-  7c1e5a90…         ██░░░░  35%        —         35%   1d7h   25m  fatima-m… +3
-  hermes ─────────────────────────────────────────────────────────── 2 accounts
-● openai-codex      █████▌  92% !!   18%  3h22m  92%  2d14h    2m  ann-mbp
-  └ quota of codex ann@acme.io, assumed the same account
-  openrouter · no quota source, tokens only
+ATTENTION
+ OUT    codex ann@acme.dev   back Fri 17:09, in 1d 23h
+ OUT    claude ann · Fable   back Sun 01:00, in 3d 7h
+ OVER   claude ann@acme.dev  runs out ~Thu 01:17 · reading 1d old
+ OVER   codex sam@mail.test  runs out ~Sat 06:54 at this week's pace
+ ERROR  Mac.localdomain      codex: app-server exited without answering
+ OLD    2 devices on v1.4.0  Mac.localdomain, MacBook-Pro-Kim · latest v1.4.2
 
-DEVICES  20 · read 1m ago · 1 with errors · 3 silent over 1d · 1 outdated
-  DEVICE              VERSION   SEEN  cl cx gk hm  NOTE
-● ann-mbp (ann)       v1.4.2      1m  ✓  ✓  ·  ✓   ann@acme.io +3
-✕ build-02 (ci)       v1.4.2     14m  ✓  ◐  ·  ·   codex partial
-  └ codex: app-server did not answer within 20s; quota not read
-~ jo-air (jo)         v1.4.2      5d  ✓  ·  ·  ·   silent since Sep 18 11:40
-~ build-01 (ci)       v1.4.2    2d2h  ✓  ·  ·  ·   silent since Sep 21 09:40
-~ greg-win (greg)     v1.4.2    1d6h  ✓  ·  ·  ·   silent since Sep 22 05:40
-↓ eli-thinkpad (eli)  v1.3.0     11m  ·  ·  ✓  ·   outdated; latest v1.4.2
-  ✓ 14 more ok, seen within 21m: ann-mini, bo-desktop, bo-laptop, carla-mbp,
-    dev-vm/ann, dev-vm/bo, fatima-mbp, gpu-box, hana-mbp, ivan-linux, +4 more
+SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
 
-THIS DEVICE  ann-mbp (ann) · tokens in the last 90 days
-                                         SESS   INPUT  OUTPUT  CACHE R  CACHE W
-claude ● ann@acme.io                       24    5.1M   11.2M     640M    51.3M
-    ~/src/acme/api                         11    2.6M    5.9M     330M    26.0M
-    ~/src/acme/web                          7    1.4M    3.1M     180M    15.0M
-    ~/.codex/worktrees/c7a9/api             3    600K    1.3M    70.0M     5.4M
-    + 2 more projects · ai-usage --projects
-codex  ● ann@acme.io  ~/.codex            212    301M   28.4M     9.6G        0
-    ~/src/acme/monorepo                    90    150M   14.0M     4.8G        0
-    ~/Notes                                41   52.0M    4.6M     1.5G        0
-    ~/.codex/worktrees/5e0b/monorepo       30   40.0M    3.9M     1.4G        0
-    + 4 more projects · ai-usage --projects
-codex  ● ann+orca@acme.io  orca 5b21       37   44.0M    3.9M     1.2G        0
-    ~/orca/…/faster-dashboard-queries      25   30.0M    2.7M     820M        0
-    ~/orca/…/billing/billing-export        12   14.0M    1.2M     380M        0
-codex  ○ ops@acme.io                        4    5.5M    400K     140M        0
-    ~/src/acme/deploy-scripts               4    5.5M    400K     140M        0
-hermes ● openai-codex  via codex           18    6.2M    900K     120M        0
-    ~/Notes                                14    5.0M    700K    96.0M        0
-    ~                                       4    1.2M    200K    24.0M        0
-grok not installed
+  CLAUDE         THIS WEEK                 LEFT  RESETS    AT RESET  USERS
+● ann@acme.dev   ━━━━━━━━━╋━━━━━━────────  ~33%  3d 7h   ~174% over      2
+    Fable        ━━━━━━━━━━━━╋━━━━━━━━━━━    0%  3d 7h          out
+  kim@corp.test  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                   —      1
 
-● logged in here  ○ used here before  !! ≥90%  ! ≥75%  ▲ fills before reset
-~ old: reading 6h+, device 1d+  ? reset since reading  — no window  ↓ outdated
-cl cx gk hm = claude codex grok hermes: ✓ ok ◐ partial ✕ error · not installed
-more: ai-usage --projects  --tokens  --devices  --json · ai-usage status
+  CODEX
+● ann@acme.dev   ━━━━━━━━━━━━━━━━━╋━━━━━━    0%  1d 23h         out      2
+  sam@mail.test  ━━━━━━╋━━━──────────────   58%  5d 2h    157% over      1
+● lee@corp.test  ━━━┃────────────────────   88%  5d 22h      81% ok     10
+  unknown        ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                   —      1
+
+  GROK
+● a4c2e917       ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                   —      1
+
+DEVICES × SUBSCRIPTIONS  13 · 7d · M tokens in+out        ‹tokens›  share
+                   CLAUDE ──────────  CODEX ────────────────────   +3 more
+                        ann      kim       ann      sam      lee     TOTAL
+  srv1                    2        ·        12        ·      240       262
+● annbook                19        ·       180        ·        ·       202
+× Mac.localdomain         ·       10         ·        ·        ·       105
+↓ MacBook-Pro-Kim         ·        ·         ·       60        ·        60
+  bot-a                   ·        ·         ·        ·       30        30
+  bot-b                   ·        ·         ·        ·       25        26
+  bot-c                   ·        ·         ·        ·       16        17
+  bot-d                   ·        ·         ·        ·       12        12
+  bot-e                   ·        ·         ·        ·        9         9
+  bot-f                   ·        ·         ·        ·        7         7
+  bot-g                   ·        ·         ·        ·        4         4
+  bot-h                   ·        ·         ·        ·        2         2
+  bot-i                   ·        ·         ·        ·       <1        <1
+  TOTAL                  21       10       192       60      345       736
+
+PROJECTS  annbook · by 7d · M tokens in+out
+  PROJECT                                    7D  90D  SESS  VIA            LAST
+  ~/src/acme/app                            118  420    43  codex, claude    1h
+  ~/Vault                                    43  130    56  codex            3h
+  ~/src/site                                 18   62     6  codex            2d
+  ~/src/ai-usage                             11   11     3  claude, grok     7m
+  ~/src/acme/os                               4   12     3  claude, grok    11h
+  ~/src/acme/relay                            3    9     2  codex            1d
+  ~/dotfiles                                  2    5     4  codex, claude    4d
+  ~/scratch                                   1    3     5  claude           5d
+  ~/src/acme/landing                         <1    7     2  codex            6d
+  ~/Library/…/Notes/Projects/2026            <1    2     1  claude           6d
+  + 4 more
+
+━ used  ─ left  ┃╋ even use by now  ┈ no reading  ~ old reading
+? not known  — no forecast  ● this device, or logged in here
+× error  ↓ old release  · none  ‹› chosen

@@ -1,0 +1,60 @@
+ai-usage · annbook · team qmvrtzpa                                  ● collected 7m ago  ● relay 7m ago  ● up to date
+
+ATTENTION
+ OUT    codex ann@acme.dev   back Fri 17:09, in 1d 23h
+ OUT    claude ann · Fable   back Sun 01:00, in 3d 7h
+ OVER   claude ann@acme.dev  runs out ~Thu 01:17 at this week's pace, 2d 23h before reset · reading 1d old
+ OVER   codex sam@mail.test  runs out ~Sat 06:54 at this week's pace, 2d 13h before reset
+ ERROR  Mac.localdomain      codex: app-server exited without answering
+ OLD    2 devices on v1.4.0  Mac.localdomain, MacBook-Pro-Kim · latest v1.4.2
+
+SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
+
+  CLAUDE         PLAN        THIS WEEK                 LEFT  RESETS              AT RESET  USERS                LAST
+● ann@acme.dev   max         ━━━━━━━━━╋━━━━━━────────  ~33%  3d 7h  Sun 01:00  ~174% over   2  annbook            7m
+    Fable                    ━━━━━━━━━━━━╋━━━━━━━━━━━    0%  3d 7h  Sun 01:00         out
+  kim@corp.test  max         ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  Mac.localdomain    1h
+
+  CODEX
+● ann@acme.dev   pro         ━━━━━━━━━━━━━━━━━╋━━━━━━    0%  1d 23h Fri 17:09         out   2  annbook            1h
+  sam@mail.test  prolite     ━━━━━━╋━━━──────────────   58%  5d 2h  Mon 20:12   157% over   1  MacBook-Pro-Kim    3h
+● lee@corp.test  pro         ━━━┃────────────────────   88%  5d 22h Tue 16:30      81% ok  10  srv1              34m
+  unknown                    ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  Mac.localdomain   16m
+
+  GROK
+● a4c2e917       SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  annbook           11h
+
+DEVICES × SUBSCRIPTIONS  13 · 30d · M tokens in+out                                    ‹tokens›  share
+                   CLAUDE ──────────  CODEX ─────────────────────────────  GROK ───  NO QUOTA
+                        ann      kim       ann      sam      lee  unknown  a4c2e917    hermes     TOTAL
+● annbook                81        ·       756        ·        ·        ·        13         ·       849
+  srv1                    6        ·        35        ·      720        ·         ·        24       786
+× Mac.localdomain         ·       40         ·        ·        ·      360         ·         ·       400
+↓ MacBook-Pro-Kim         ·        ·         ·      149        ·        ·         ·         ·       149
+  bot-a                   ·        ·         ·        ·      105        ·         ·         ·       105
+  bot-b                   ·        ·         ·        ·       88        ·         ·         4        91
+  bot-c                   ·        ·         ·        ·       56        ·         ·         2        58
+  bot-d                   ·        ·         ·        ·       42        ·         ·         ·        42
+  bot-e                   ·        ·         ·        ·       32        ·         ·         ·        32
+  bot-f                   ·        ·         ·        ·       25        ·         ·         ·        25
+  bot-g                   ·        ·         ·        ·       14        ·         ·         ·        14
+  bot-h                   ·        ·         ·        ·        7        ·         ·         ·         7
+  bot-i                   ·        ·         ·        ·        1        ·         ·         ·         1
+  TOTAL                  87       40       791      149     1089      360        13        30      2559
+
+PROJECTS  annbook · by 30d · M tokens in+out
+  PROJECT                30D  90D  SESS  VIA            LAST
+  ~/src/acme/app         366  420    43  codex, claude    1h
+  ~/Vault                130  130    56  codex            3h
+  ~/src/site              57   62     6  codex            2d
+  ~/src/acme/os           12   12     3  claude, grok    11h
+  ~/src/ai-usage          11   11     3  claude, grok     7m
+  ~/src/acme/relay         9    9     2  codex            1d
+  ~/src/acme/os-archive    6   21    11  codex           12d
+  ~/dotfiles               5    5     4  codex, claude    4d
+  ~/scratch                3    3     5  claude           5d
+  ~/src/acme/landing       3    7     2  codex            6d
+  + 4 more
+
+━ used  ─ left  ┃╋ even use by now  ┈ no reading  ~ old reading  ? not known
+— no forecast  ● this device, or logged in here  × error  ↓ old release  · none  ‹› chosen

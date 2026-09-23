@@ -24,23 +24,23 @@ SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
   GROK
 ● a4c2e917       SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  annbook           11h
 
-DEVICES × SUBSCRIPTIONS  13 · 7d · M tokens in+out                                     ‹tokens›  share
-                   CLAUDE ──────────  CODEX ─────────────────────────────  GROK ───  NO QUOTA
-                        ann      kim       ann      sam      lee  unknown  a4c2e917    hermes     TOTAL
-  srv1                    2        ·        12        ·      240        ·         ·         8       262
-● annbook                19        ·       180        ·        ·        ·         3         ·       202
-× Mac.localdomain         ·       10         ·        ·        ·       95         ·         ·       105
-↓ MacBook-Pro-Kim         ·        ·         ·       60        ·        ·         ·         ·        60
-  bot-a                   ·        ·         ·        ·       30        ·         ·         ·        30
-  bot-b                   ·        ·         ·        ·       25        ·         ·         1        26
-  bot-c                   ·        ·         ·        ·       16        ·         ·        <1        17
-  bot-d                   ·        ·         ·        ·       12        ·         ·         ·        12
-  bot-e                   ·        ·         ·        ·        9        ·         ·         ·         9
-  bot-f                   ·        ·         ·        ·        7        ·         ·         ·         7
-  bot-g                   ·        ·         ·        ·        4        ·         ·         ·         4
-  bot-h                   ·        ·         ·        ·        2        ·         ·         ·         2
-  bot-i                   ·        ·         ·        ·       <1        ·         ·         ·        <1
-  TOTAL                  21       10       192       60      345       95         3        10       736
+DEVICES × SUBSCRIPTIONS  13 · % of each window, estimated           tokens  ‹share›
+                   CLAUDE ──────────  CODEX ─────────────────────────────  GROK ───
+                        ann      kim       ann      sam      lee  unknown  a4c2e917
+  srv1                    7        ·         6        ·        8        ·         ·
+● annbook                60        ·        94        ·        ·        ·         ·
+× Mac.localdomain         ·        ·         ·        ·        ·        ·         ·
+↓ MacBook-Pro-Kim         ·        ·         ·       42        ·        ·         ·
+  bot-a                   ·        ·         ·        ·        1        ·         ·
+  bot-b                   ·        ·         ·        ·       <1        ·         ·
+  bot-c                   ·        ·         ·        ·       <1        ·         ·
+  bot-d                   ·        ·         ·        ·       <1        ·         ·
+  bot-e                   ·        ·         ·        ·       <1        ·         ·
+  bot-f                   ·        ·         ·        ·       <1        ·         ·
+  bot-g                   ·        ·         ·        ·       <1        ·         ·
+  bot-h                   ·        ·         ·        ·       <1        ·         ·
+  bot-i                   ·        ·         ·        ·       <1        ·         ·
+  TOTAL                  67        ?       100       42       12        ?         ?
 
 PROJECTS  annbook · by 7d · M tokens in+out
   PROJECT                                            7D  90D  SESS  VIA            LAST

@@ -1,34 +1,86 @@
 {
-  "schema_version": 2,
-  "generated_at": "2026-09-23T11:40:00Z",
+  "schema_version": 3,
+  "generated_at": "2026-09-23T14:38:00Z",
   "collector": {
     "version": "v1.4.2",
-    "device": "d-4b1e0c7a9f3d2e615a08c4b2",
-    "device_label": "ann-mbp",
+    "device": "d-7c3e1a9b5f2d4e8a6c0b1d3f",
+    "device_label": "annbook",
     "os_user": "ann",
-    "team": "472ghuwcctyu4b6n2lh76ryt3oxzpgkq",
-    "last_run_at": "2026-09-23T11:39:00Z",
-    "last_success_at": "2026-09-23T11:39:00Z",
+    "team": "qmvrtzpak7n2c5bxd3f6ghj4lwyerse2",
+    "last_run_at": "2026-09-23T14:31:00Z",
+    "last_success_at": "2026-09-23T14:31:00Z",
     "last_error": null,
     "last_error_at": null,
     "relay": {
-      "url": "https://ai-usage-relay.vercel.app",
-      "last_push_at": "2026-09-23T11:39:00Z",
-      "last_pull_at": "2026-09-23T11:39:00Z",
+      "url": "https://relay.example.com",
+      "last_push_at": "2026-09-23T14:31:00Z",
+      "last_pull_at": "2026-09-23T14:31:00Z",
       "pending": false,
       "last_error": null
     },
     "schedule": {
       "registered": true,
+      "foreground": false,
       "error": null
     },
     "update": {
-      "checked_at": "2026-09-23T09:26:00Z",
+      "checked_at": "2026-09-23T12:26:00Z",
       "latest": "v1.4.2",
       "staged": null,
       "error": null
     }
   },
+  "attention": [
+    {
+      "kind": "out",
+      "provider": "codex",
+      "account": "ann@acme.dev",
+      "name": "ann",
+      "at": "2026-09-25T14:09:00Z"
+    },
+    {
+      "kind": "out",
+      "provider": "claude",
+      "account": "ann@acme.dev",
+      "name": "ann",
+      "window": "7d Fable",
+      "at": "2026-09-26T22:00:00Z"
+    },
+    {
+      "kind": "over",
+      "provider": "claude",
+      "account": "ann@acme.dev",
+      "name": "ann",
+      "reading_age_seconds": 86820,
+      "at": "2026-09-23T22:17:36Z",
+      "resets_at": "2026-09-26T22:00:00Z",
+      "percent": 174
+    },
+    {
+      "kind": "over",
+      "provider": "codex",
+      "account": "sam@mail.test",
+      "name": "sam",
+      "at": "2026-09-26T03:54:22Z",
+      "resets_at": "2026-09-28T17:12:00Z",
+      "percent": 157
+    },
+    {
+      "kind": "error",
+      "devices": [
+        "Mac.localdomain"
+      ],
+      "message": "codex: app-server exited without answering"
+    },
+    {
+      "kind": "old",
+      "devices": [
+        "Mac.localdomain",
+        "MacBook-Pro-Kim"
+      ],
+      "message": "v1.4.2"
+    }
+  ],
   "providers": [
     {
       "provider": "claude",
@@ -41,113 +93,86 @@
       ],
       "accounts": [
         {
-          "label": "ann@acme.io",
+          "label": "ann@acme.dev",
+          "name": "ann",
           "current": true,
-          "plan": "max 5x",
-          "headline_percent": 64,
-          "level": "ok",
+          "home": "/Users/ann/.claude",
+          "plan": "max",
+          "state": "out",
           "quota": {
-            "observed_at": "2026-09-23T11:34:00Z",
-            "age_seconds": 360,
+            "observed_at": "2026-09-23T14:20:00Z",
+            "age_seconds": 1080,
             "stale": false,
-            "source": "cache",
+            "device": "annbook (ann)",
             "windows": [
               {
                 "name": "5h",
-                "percent": 31,
-                "level": "ok",
-                "resets_at": "2026-09-23T13:50:00Z",
+                "percent": 40,
+                "resets_at": "2026-09-23T16:50:00Z",
                 "minutes": 300,
-                "pace": {
-                  "percent_per_hour": 2,
-                  "fills_at": null
+                "main": false,
+                "observed_at": "2026-09-23T14:20:00Z",
+                "stale": false,
+                "reset": false,
+                "state": "ok",
+                "forecast": {
+                  "percent": 80,
+                  "elapsed": 0.5,
+                  "runs_out_at": null
                 }
               },
               {
                 "name": "7d",
-                "percent": 64,
-                "level": "ok",
-                "resets_at": "2026-09-26T15:40:00Z",
+                "percent": 67,
+                "resets_at": "2026-09-26T22:00:00Z",
                 "minutes": 10080,
-                "pace": {
-                  "percent_per_hour": 2.1,
-                  "fills_at": "2026-09-24T04:48:00Z"
+                "main": true,
+                "observed_at": "2026-09-22T14:31:00Z",
+                "stale": true,
+                "reset": false,
+                "state": "over",
+                "forecast": {
+                  "percent": 174,
+                  "elapsed": 0.384,
+                  "runs_out_at": "2026-09-23T22:17:36Z"
                 }
               },
               {
-                "name": "7d Opus",
-                "percent": 58,
-                "level": "ok",
-                "resets_at": "2026-09-26T15:40:00Z",
+                "name": "7d Fable",
+                "percent": 100,
+                "resets_at": "2026-09-26T22:00:00Z",
                 "minutes": 10080,
-                "pace": {
-                  "percent_per_hour": 1.2,
-                  "fills_at": null
+                "main": false,
+                "observed_at": "2026-09-23T14:20:00Z",
+                "stale": false,
+                "reset": false,
+                "state": "out",
+                "forecast": {
+                  "percent": 190,
+                  "elapsed": 0.5258,
+                  "runs_out_at": null
                 }
               }
             ]
           },
-          "sessions": 24,
+          "link": null,
+          "sessions": 30,
           "tokens": {
-            "input": 5100000,
-            "output": 11200000,
-            "cache_read": 640000000,
-            "cache_write": 51300000
+            "input": 120959999,
+            "output": 51840000,
+            "cache_read": 2073599988,
+            "cache_write": 57599999
           },
-          "last_active_at": "2026-09-23T11:34:00Z",
-          "projects": [
-            {
-              "path": "/Users/ann/src/acme/api",
-              "sessions": 11,
-              "tokens": {
-                "input": 2600000,
-                "output": 5900000,
-                "cache_read": 330000000,
-                "cache_write": 26000000
-              }
-            },
-            {
-              "path": "/Users/ann/src/acme/web",
-              "sessions": 7,
-              "tokens": {
-                "input": 1400000,
-                "output": 3100000,
-                "cache_read": 180000000,
-                "cache_write": 15000000
-              }
-            },
-            {
-              "path": "/Users/ann/.codex/worktrees/c7a9/api",
-              "sessions": 3,
-              "tokens": {
-                "input": 600000,
-                "output": 1300000,
-                "cache_read": 70000000,
-                "cache_write": 5400000
-              }
-            },
-            {
-              "path": "/Users/ann/src/acme/infra",
-              "sessions": 2,
-              "tokens": {
-                "input": 400000,
-                "output": 700000,
-                "cache_read": 45000000,
-                "cache_write": 3600000
-              }
-            },
-            {
-              "path": "/Users/ann",
-              "sessions": 1,
-              "tokens": {
-                "input": 100000,
-                "output": 200000,
-                "cache_read": 15000000,
-                "cache_write": 1300000
-              }
-            }
-          ],
-          "home": "/Users/ann/.claude"
+          "usage": {
+            "today": 4032000,
+            "7d": 19200000,
+            "30d": 80640000,
+            "90d": 211200000
+          },
+          "days": [],
+          "linked_usage": [],
+          "last_active_at": "2026-09-23T14:31:00Z",
+          "projects": []
         }
       ]
     },
@@ -161,1009 +186,824 @@
       ],
       "accounts": [
         {
-          "label": "ann@acme.io",
+          "label": "ann@acme.dev",
+          "name": "ann",
           "current": true,
-          "plan": "pro",
-          "headline_percent": 92,
-          "level": "critical",
-          "quota": {
-            "observed_at": "2026-09-23T11:38:00Z",
-            "age_seconds": 120,
-            "stale": false,
-            "source": "harness",
-            "windows": [
-              {
-                "name": "5h",
-                "percent": 18,
-                "level": "ok",
-                "resets_at": "2026-09-23T15:02:00Z",
-                "minutes": 300,
-                "pace": {
-                  "percent_per_hour": 1.5,
-                  "fills_at": null
-                }
-              },
-              {
-                "name": "7d",
-                "percent": 92,
-                "level": "critical",
-                "resets_at": "2026-09-26T01:40:00Z",
-                "minutes": 10080,
-                "pace": {
-                  "percent_per_hour": 0.4,
-                  "fills_at": null
-                }
-              }
-            ]
-          },
-          "sessions": 212,
-          "tokens": {
-            "input": 301000000,
-            "output": 28400000,
-            "cache_read": 9600000000,
-            "cache_write": 0
-          },
-          "last_active_at": "2026-09-23T11:38:00Z",
-          "projects": [
-            {
-              "path": "/Users/ann/src/acme/monorepo",
-              "sessions": 90,
-              "tokens": {
-                "input": 150000000,
-                "output": 14000000,
-                "cache_read": 4800000000,
-                "cache_write": 0
-              }
-            },
-            {
-              "path": "/Users/ann/Notes",
-              "sessions": 41,
-              "tokens": {
-                "input": 52000000,
-                "output": 4600000,
-                "cache_read": 1500000000,
-                "cache_write": 0
-              }
-            },
-            {
-              "path": "/Users/ann/.codex/worktrees/5e0b/monorepo",
-              "sessions": 30,
-              "tokens": {
-                "input": 40000000,
-                "output": 3900000,
-                "cache_read": 1400000000,
-                "cache_write": 0
-              }
-            },
-            {
-              "path": "/Users/ann/src/acme/infra",
-              "sessions": 22,
-              "tokens": {
-                "input": 30000000,
-                "output": 3000000,
-                "cache_read": 900000000,
-                "cache_write": 0
-              }
-            },
-            {
-              "path": "/Users/ann/src/acme/api",
-              "sessions": 15,
-              "tokens": {
-                "input": 18000000,
-                "output": 1800000,
-                "cache_read": 600000000,
-                "cache_write": 0
-              }
-            },
-            {
-              "path": "/Users/ann/src/helpdesk:chats",
-              "sessions": 9,
-              "tokens": {
-                "input": 8000000,
-                "output": 800000,
-                "cache_read": 300000000,
-                "cache_write": 0
-              }
-            },
-            {
-              "path": "/Users/ann/src/portal",
-              "sessions": 5,
-              "tokens": {
-                "input": 3000000,
-                "output": 300000,
-                "cache_read": 100000000,
-                "cache_write": 0
-              }
-            }
-          ],
           "home": "/Users/ann/.codex",
-          "linked_usage": [
-            {
-              "provider": "hermes",
-              "sessions": 18,
-              "tokens": {
-                "input": 6200000,
-                "output": 900000,
-                "cache_read": 120000000,
-                "cache_write": 0
+          "plan": "pro",
+          "state": "out",
+          "quota": {
+            "observed_at": "2026-09-23T14:31:00Z",
+            "age_seconds": 420,
+            "stale": false,
+            "device": "annbook (ann)",
+            "windows": [
+              {
+                "name": "5h",
+                "percent": 0,
+                "resets_at": "2026-09-23T18:31:00Z",
+                "minutes": 300,
+                "main": false,
+                "observed_at": "2026-09-23T14:31:00Z",
+                "stale": false,
+                "reset": false,
+                "state": "under",
+                "forecast": {
+                  "percent": 0,
+                  "elapsed": 0.2,
+                  "runs_out_at": null
+                }
+              },
+              {
+                "name": "7d",
+                "percent": 100,
+                "resets_at": "2026-09-25T14:09:00Z",
+                "minutes": 10080,
+                "main": true,
+                "observed_at": "2026-09-23T14:31:00Z",
+                "stale": false,
+                "reset": false,
+                "state": "out",
+                "forecast": {
+                  "percent": 140,
+                  "elapsed": 0.7165,
+                  "runs_out_at": null
+                }
               }
-            }
-          ]
+            ]
+          },
+          "link": null,
+          "sessions": 30,
+          "tokens": {
+            "input": 1133370000,
+            "output": 485730000,
+            "cache_read": 19429200000,
+            "cache_write": 539700000
+          },
+          "usage": {
+            "today": 37779000,
+            "7d": 179900000,
+            "30d": 755580000,
+            "90d": 1978900000
+          },
+          "days": [],
+          "linked_usage": [],
+          "last_active_at": "2026-09-23T13:38:00Z",
+          "projects": []
         },
         {
-          "label": "ann+orca@acme.io",
+          "label": "lee@corp.test",
+          "name": "lee",
           "current": true,
-          "plan": "plus",
-          "headline_percent": 23,
-          "level": "ok",
+          "home": "/Users/ann/.codex",
+          "plan": "pro",
+          "state": "ok",
           "quota": {
-            "observed_at": "2026-09-23T11:38:00Z",
-            "age_seconds": 120,
+            "observed_at": "2026-09-23T14:18:00Z",
+            "age_seconds": 1200,
             "stale": false,
-            "source": "harness",
+            "device": "srv1 (root)",
             "windows": [
               {
                 "name": "5h",
-                "percent": 10,
-                "level": "ok",
-                "resets_at": "2026-09-23T15:40:00Z",
+                "percent": 4,
+                "resets_at": "2026-09-23T18:18:00Z",
                 "minutes": 300,
-                "pace": {
-                  "percent_per_hour": 1,
-                  "fills_at": null
+                "main": false,
+                "observed_at": "2026-09-23T14:18:00Z",
+                "stale": false,
+                "reset": false,
+                "state": "under",
+                "forecast": {
+                  "percent": 20,
+                  "elapsed": 0.2,
+                  "runs_out_at": null
                 }
               },
               {
                 "name": "7d",
-                "percent": 23,
-                "level": "ok",
-                "resets_at": "2026-09-28T08:40:00Z",
+                "percent": 12,
+                "resets_at": "2026-09-29T13:30:00Z",
                 "minutes": 10080,
-                "pace": {
-                  "percent_per_hour": 0.2,
-                  "fills_at": null
+                "main": true,
+                "observed_at": "2026-09-23T14:18:00Z",
+                "stale": false,
+                "reset": false,
+                "state": "ok",
+                "forecast": {
+                  "percent": 81,
+                  "elapsed": 0.1476,
+                  "runs_out_at": null
                 }
               }
             ]
           },
-          "sessions": 37,
+          "link": null,
+          "sessions": 30,
           "tokens": {
-            "input": 44000000,
-            "output": 3900000,
-            "cache_read": 1200000000,
+            "input": 0,
+            "output": 0,
+            "cache_read": 0,
             "cache_write": 0
           },
-          "last_active_at": "2026-09-23T10:35:00Z",
-          "projects": [
-            {
-              "path": "/Users/ann/orca/workspaces/monorepo/faster-dashboard-queries",
-              "sessions": 25,
-              "tokens": {
-                "input": 30000000,
-                "output": 2700000,
-                "cache_read": 820000000,
-                "cache_write": 0
-              }
-            },
-            {
-              "path": "/Users/ann/orca/workspaces/billing/billing-export",
-              "sessions": 12,
-              "tokens": {
-                "input": 14000000,
-                "output": 1200000,
-                "cache_read": 380000000,
-                "cache_write": 0
-              }
-            }
-          ],
-          "home": "/Users/ann/Library/Application Support/orca/codex-accounts/5b21/home"
-        },
-        {
-          "label": "ops@acme.io",
-          "current": false,
-          "plan": "plus",
-          "headline_percent": 81,
-          "level": "warning",
-          "quota": {
-            "observed_at": "2026-09-23T11:28:00Z",
-            "age_seconds": 720,
-            "stale": false,
-            "source": "harness",
-            "windows": [
-              {
-                "name": "5h",
-                "percent": 81,
-                "level": "warning",
-                "resets_at": "2026-09-23T14:45:00Z",
-                "minutes": 300,
-                "pace": null
-              },
-              {
-                "name": "7d",
-                "percent": 38,
-                "level": "ok",
-                "resets_at": "2026-09-28T11:40:00Z",
-                "minutes": 10080,
-                "pace": null
-              }
-            ]
+          "usage": {
+            "today": 0,
+            "7d": 0,
+            "30d": 0,
+            "90d": 0
           },
-          "sessions": 4,
-          "tokens": {
-            "input": 5500000,
-            "output": 400000,
-            "cache_read": 140000000,
-            "cache_write": 0
-          },
-          "last_active_at": "2026-09-14T11:40:00Z",
-          "projects": [
-            {
-              "path": "/Users/ann/src/acme/deploy-scripts",
-              "sessions": 4,
-              "tokens": {
-                "input": 5500000,
-                "output": 400000,
-                "cache_read": 140000000,
-                "cache_write": 0
-              }
-            }
-          ]
+          "days": [],
+          "linked_usage": [],
+          "last_active_at": "2026-09-23T14:04:00Z",
+          "projects": []
         }
       ]
     },
     {
       "provider": "grok",
+      "status": "ok",
+      "error": null,
+      "homes": [
+        "/Users/ann/.grok"
+      ],
+      "accounts": [
+        {
+          "label": "a4c2e917-6b3d-4f81-9c2a-5e7d1b8f0a36",
+          "name": "a4c2e917",
+          "current": true,
+          "home": "/Users/ann/.grok",
+          "plan": "SuperGrok Heavy",
+          "state": "unknown",
+          "quota": null,
+          "link": null,
+          "sessions": 30,
+          "tokens": {
+            "input": 19530000,
+            "output": 8370000,
+            "cache_read": 334800000,
+            "cache_write": 9300000
+          },
+          "usage": {
+            "today": 651000,
+            "7d": 3100000,
+            "30d": 13020000,
+            "90d": 34100000
+          },
+          "days": [],
+          "linked_usage": [],
+          "last_active_at": "2026-09-23T03:38:00Z",
+          "projects": []
+        }
+      ]
+    },
+    {
+      "provider": "hermes",
       "status": "skipped",
       "error": null,
       "homes": [],
       "accounts": []
+    }
+  ],
+  "projects": [
+    {
+      "path": "/Users/ann/src/acme/app",
+      "sessions": 43,
+      "tokens": {
+        "input": 294000000,
+        "output": 126000000,
+        "cache_read": 5040000000,
+        "cache_write": 140000000
+      },
+      "usage": {
+        "today": 29550000,
+        "7d": 118200000,
+        "30d": 366420000,
+        "90d": 420000000
+      },
+      "providers": [
+        "codex",
+        "claude"
+      ],
+      "last_active_at": "2026-09-23T13:38:00Z"
     },
     {
-      "provider": "hermes",
-      "status": "ok",
-      "error": null,
-      "homes": [
-        "/Users/ann/.hermes"
+      "path": "/Users/ann/Vault",
+      "sessions": 56,
+      "tokens": {
+        "input": 91000000,
+        "output": 39000000,
+        "cache_read": 1560000000,
+        "cache_write": 43333333
+      },
+      "usage": {
+        "today": 4310000,
+        "7d": 43100000,
+        "30d": 130000000,
+        "90d": 130000000
+      },
+      "providers": [
+        "codex"
       ],
-      "accounts": [
-        {
-          "label": "openai-codex",
-          "current": true,
-          "plan": null,
-          "headline_percent": 92,
-          "level": "critical",
-          "quota": {
-            "observed_at": "2026-09-23T11:38:00Z",
-            "age_seconds": 120,
-            "stale": false,
-            "source": "harness",
-            "windows": [
-              {
-                "name": "5h",
-                "percent": 18,
-                "level": "ok",
-                "resets_at": "2026-09-23T15:02:00Z",
-                "minutes": 300,
-                "pace": {
-                  "percent_per_hour": 1.5,
-                  "fills_at": null
-                }
-              },
-              {
-                "name": "7d",
-                "percent": 92,
-                "level": "critical",
-                "resets_at": "2026-09-26T01:40:00Z",
-                "minutes": 10080,
-                "pace": {
-                  "percent_per_hour": 0.4,
-                  "fills_at": null
-                }
-              }
-            ],
-            "from": "codex"
-          },
-          "sessions": 18,
-          "tokens": {
-            "input": 6200000,
-            "output": 900000,
-            "cache_read": 120000000,
-            "cache_write": 0
-          },
-          "last_active_at": "2026-09-23T08:40:00Z",
-          "projects": [
-            {
-              "path": "/Users/ann/Notes",
-              "sessions": 14,
-              "tokens": {
-                "input": 5000000,
-                "output": 700000,
-                "cache_read": 96000000,
-                "cache_write": 0
-              }
-            },
-            {
-              "path": "/Users/ann",
-              "sessions": 4,
-              "tokens": {
-                "input": 1200000,
-                "output": 200000,
-                "cache_read": 24000000,
-                "cache_write": 0
-              }
-            }
-          ],
-          "home": "/Users/ann/.hermes",
-          "link": {
-            "provider": "codex",
-            "label": "ann@acme.io"
-          }
-        }
-      ]
+      "last_active_at": "2026-09-23T11:38:00Z"
+    },
+    {
+      "path": "/Users/ann/src/site",
+      "sessions": 6,
+      "tokens": {
+        "input": 43400000,
+        "output": 18600000,
+        "cache_read": 744000000,
+        "cache_write": 20666666
+      },
+      "usage": {
+        "today": 1830000,
+        "7d": 18300000,
+        "30d": 56730000,
+        "90d": 62000000
+      },
+      "providers": [
+        "codex"
+      ],
+      "last_active_at": "2026-09-21T14:38:00Z"
+    },
+    {
+      "path": "/Users/ann/src/ai-usage",
+      "sessions": 3,
+      "tokens": {
+        "input": 7839999,
+        "output": 3360001,
+        "cache_read": 134400000,
+        "cache_write": 3733333
+      },
+      "usage": {
+        "today": 2800000,
+        "7d": 11200000,
+        "30d": 11200000,
+        "90d": 11200000
+      },
+      "providers": [
+        "claude",
+        "grok"
+      ],
+      "last_active_at": "2026-09-23T14:31:00Z"
+    },
+    {
+      "path": "/Users/ann/src/acme/os",
+      "sessions": 3,
+      "tokens": {
+        "input": 8400000,
+        "output": 3600000,
+        "cache_read": 144000000,
+        "cache_write": 4000000
+      },
+      "usage": {
+        "today": 410000,
+        "7d": 4099999,
+        "30d": 12000000,
+        "90d": 12000000
+      },
+      "providers": [
+        "claude",
+        "grok"
+      ],
+      "last_active_at": "2026-09-23T03:38:00Z"
+    },
+    {
+      "path": "/Users/ann/src/acme/relay",
+      "sessions": 2,
+      "tokens": {
+        "input": 6300000,
+        "output": 2700000,
+        "cache_read": 108000000,
+        "cache_write": 3000000
+      },
+      "usage": {
+        "today": 0,
+        "7d": 3200000,
+        "30d": 9000000,
+        "90d": 9000000
+      },
+      "providers": [
+        "codex"
+      ],
+      "last_active_at": "2026-09-22T09:38:00Z"
+    },
+    {
+      "path": "/Users/ann/dotfiles",
+      "sessions": 4,
+      "tokens": {
+        "input": 3500000,
+        "output": 1500000,
+        "cache_read": 60000000,
+        "cache_write": 1666666
+      },
+      "usage": {
+        "today": 0,
+        "7d": 2100000,
+        "30d": 5000000,
+        "90d": 5000000
+      },
+      "providers": [
+        "codex",
+        "claude"
+      ],
+      "last_active_at": "2026-09-19T14:38:00Z"
+    },
+    {
+      "path": "/Users/ann/scratch",
+      "sessions": 5,
+      "tokens": {
+        "input": 2100000,
+        "output": 900000,
+        "cache_read": 36000000,
+        "cache_write": 1000000
+      },
+      "usage": {
+        "today": 0,
+        "7d": 1400000,
+        "30d": 3000000,
+        "90d": 3000000
+      },
+      "providers": [
+        "claude"
+      ],
+      "last_active_at": "2026-09-18T14:38:00Z"
+    },
+    {
+      "path": "/Users/ann/src/acme/landing",
+      "sessions": 2,
+      "tokens": {
+        "input": 4900000,
+        "output": 2100000,
+        "cache_read": 84000000,
+        "cache_write": 2333333
+      },
+      "usage": {
+        "today": 0,
+        "7d": 800000,
+        "30d": 2800000,
+        "90d": 7000000
+      },
+      "providers": [
+        "codex"
+      ],
+      "last_active_at": "2026-09-17T14:38:00Z"
+    },
+    {
+      "path": "/Users/ann/Library/Mobile Documents/iCloud~md~obsidian/Documents/Notes/Projects/2026",
+      "sessions": 1,
+      "tokens": {
+        "input": 1400000,
+        "output": 600000,
+        "cache_read": 24000000,
+        "cache_write": 666666
+      },
+      "usage": {
+        "today": 0,
+        "7d": 600000,
+        "30d": 1860000,
+        "90d": 2000000
+      },
+      "providers": [
+        "claude"
+      ],
+      "last_active_at": "2026-09-17T11:18:00Z"
+    },
+    {
+      "path": "/Users/ann/src/acme/os-archive",
+      "sessions": 11,
+      "tokens": {
+        "input": 14699999,
+        "output": 6300001,
+        "cache_read": 252000000,
+        "cache_write": 7000000
+      },
+      "usage": {
+        "today": 0,
+        "7d": 0,
+        "30d": 6300000,
+        "90d": 21000000
+      },
+      "providers": [
+        "codex"
+      ],
+      "last_active_at": "2026-09-11T14:38:00Z"
+    },
+    {
+      "path": "/Users/ann/src/site/old",
+      "sessions": 3,
+      "tokens": {
+        "input": 5600000,
+        "output": 2400000,
+        "cache_read": 96000000,
+        "cache_write": 2666666
+      },
+      "usage": {
+        "today": 0,
+        "7d": 0,
+        "30d": 0,
+        "90d": 8000000
+      },
+      "providers": [
+        "claude"
+      ],
+      "last_active_at": "2026-09-03T14:38:00Z"
+    },
+    {
+      "path": "/Users/ann/tmp",
+      "sessions": 1,
+      "tokens": {
+        "input": 210000,
+        "output": 90000,
+        "cache_read": 3600000,
+        "cache_write": 100000
+      },
+      "usage": {
+        "today": 0,
+        "7d": 0,
+        "30d": 0,
+        "90d": 300000
+      },
+      "providers": [
+        "codex"
+      ],
+      "last_active_at": "2026-08-14T14:38:00Z"
+    },
+    {
+      "path": "/private/tmp/scratch",
+      "sessions": 1,
+      "tokens": {
+        "input": 70000,
+        "output": 30000,
+        "cache_read": 1200000,
+        "cache_write": 33333
+      },
+      "usage": {
+        "today": 0,
+        "7d": 0,
+        "30d": 0,
+        "90d": 100000
+      },
+      "providers": [
+        "claude"
+      ],
+      "last_active_at": "2026-07-05T14:38:00Z"
     }
   ],
   "team": {
-    "pulled_at": "2026-09-23T11:39:00Z",
+    "pulled_at": "2026-09-23T14:31:00Z",
+    "latest_version": "v1.4.2",
     "devices": [
       {
-        "device": "d-4b1e0c7a9f3d2e615a08c4b2",
-        "label": "ann-mbp",
+        "device": "d-7c3e1a9b5f2d4e8a6c0b1d3f",
+        "label": "annbook",
         "os_user": "ann",
         "this_device": true,
         "collector_version": "v1.4.2",
-        "collected_at": "2026-09-23T11:39:00Z",
-        "age_seconds": 60,
-        "last_success_at": "2026-09-23T11:39:00Z",
-        "last_error": null,
-        "sources": [
-          {
-            "provider": "claude",
-            "status": "ok",
-            "error": null
-          },
-          {
-            "provider": "codex",
-            "status": "ok",
-            "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "ok",
-            "error": null
-          }
-        ]
-      },
-      {
-        "device": "d-4b1e0c7a9f3d4d8f9755201c",
-        "label": "ann-mini",
-        "os_user": "ann",
-        "this_device": false,
-        "collector_version": "v1.4.2",
-        "collected_at": "2026-09-23T11:31:00Z",
-        "age_seconds": 540,
-        "last_success_at": "2026-09-23T11:31:00Z",
-        "last_error": null,
-        "sources": [
-          {
-            "provider": "claude",
-            "status": "ok",
-            "error": null
-          },
-          {
-            "provider": "codex",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
-          }
-        ]
-      },
-      {
-        "device": "d-4b1e0c7a9f3d8bec11edd6f0",
-        "label": "bo-laptop",
-        "os_user": "bo",
-        "this_device": false,
-        "collector_version": "v1.4.2",
-        "collected_at": "2026-09-23T11:36:00Z",
-        "age_seconds": 240,
-        "last_success_at": "2026-09-23T11:36:00Z",
-        "last_error": null,
-        "sources": [
-          {
-            "provider": "claude",
-            "status": "ok",
-            "error": null
-          },
-          {
-            "provider": "codex",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
-          }
-        ]
-      },
-      {
-        "device": "d-4b1e0c7a9f3d6cbdd4a17b86",
-        "label": "bo-desktop",
-        "os_user": "bo",
-        "this_device": false,
-        "collector_version": "v1.4.2",
-        "collected_at": "2026-09-23T11:28:00Z",
-        "age_seconds": 720,
-        "last_success_at": "2026-09-23T11:28:00Z",
-        "last_error": null,
-        "sources": [
-          {
-            "provider": "claude",
-            "status": "ok",
-            "error": null
-          },
-          {
-            "provider": "codex",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "ok",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
-          }
-        ]
-      },
-      {
-        "device": "d-4b1e0c7a9f3dab1a4f3a325a",
-        "label": "build-01",
-        "os_user": "ci",
-        "this_device": false,
-        "collector_version": "v1.4.2",
-        "collected_at": "2026-09-21T09:40:00Z",
-        "age_seconds": 180000,
-        "last_success_at": "2026-09-21T09:40:00Z",
-        "last_error": null,
-        "sources": [
-          {
-            "provider": "claude",
-            "status": "ok",
-            "error": null
-          },
-          {
-            "provider": "codex",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
-          }
-        ]
-      },
-      {
-        "device": "d-4b1e0c7a9f3dca488c868dc4",
-        "label": "build-02",
-        "os_user": "ci",
-        "this_device": false,
-        "collector_version": "v1.4.2",
-        "collected_at": "2026-09-23T11:26:00Z",
-        "age_seconds": 840,
-        "last_success_at": "2026-09-23T11:26:00Z",
-        "last_error": null,
-        "sources": [
-          {
-            "provider": "claude",
-            "status": "ok",
-            "error": null
-          },
-          {
-            "provider": "codex",
-            "status": "partial",
-            "error": "app-server did not answer within 20s; quota not read"
-          },
-          {
-            "provider": "grok",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
-          }
-        ]
-      },
-      {
-        "device": "d-4b1e0c7a9f3de976c9d2e92e",
-        "label": "carla-mbp",
-        "os_user": "carla",
-        "this_device": false,
-        "collector_version": "v1.4.2",
-        "collected_at": "2026-09-23T11:33:00Z",
+        "collected_at": "2026-09-23T14:31:00Z",
         "age_seconds": 420,
-        "last_success_at": "2026-09-23T11:33:00Z",
+        "last_success_at": "2026-09-23T14:31:00Z",
         "last_error": null,
         "sources": [
-          {
-            "provider": "claude",
-            "status": "ok",
-            "error": null
-          },
-          {
-            "provider": "codex",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
-          }
-        ]
-      },
-      {
-        "device": "d-4b1e0c7a9f3e08a5071f4498",
-        "label": "dev-vm",
-        "os_user": "ann",
-        "this_device": false,
-        "collector_version": "v1.4.2",
-        "collected_at": "2026-09-23T11:35:00Z",
-        "age_seconds": 300,
-        "last_success_at": "2026-09-23T11:35:00Z",
-        "last_error": null,
-        "sources": [
-          {
-            "provider": "claude",
-            "status": "ok",
-            "error": null
-          },
           {
             "provider": "codex",
             "status": "ok",
             "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
           }
-        ]
+        ],
+        "error": null,
+        "silent": false,
+        "old": false,
+        "usage": {
+          "today": 42462000,
+          "7d": 202200000,
+          "30d": 849240000,
+          "90d": 2224200000
+        }
       },
       {
-        "device": "d-4b1e0c7a9f3e27d3446ba002",
-        "label": "dev-vm",
-        "os_user": "bo",
+        "device": "d-9b1d3f5a7c9e1b3d5f7a9c1e",
+        "label": "Mac.localdomain",
+        "os_user": "kim",
         "this_device": false,
-        "collector_version": "v1.4.2",
-        "collected_at": "2026-09-23T11:35:00Z",
-        "age_seconds": 300,
-        "last_success_at": "2026-09-23T11:35:00Z",
-        "last_error": null,
-        "sources": [
-          {
-            "provider": "claude",
-            "status": "ok",
-            "error": null
-          },
-          {
-            "provider": "codex",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
-          }
-        ]
-      },
-      {
-        "device": "d-4b1e0c7a9f3e470181b7fb6c",
-        "label": "eli-thinkpad",
-        "os_user": "eli",
-        "this_device": false,
-        "collector_version": "v1.3.0",
-        "collected_at": "2026-09-23T11:29:00Z",
-        "age_seconds": 660,
-        "last_success_at": "2026-09-23T11:29:00Z",
-        "last_error": null,
-        "sources": [
-          {
-            "provider": "claude",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "codex",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "ok",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
-          }
-        ]
-      },
-      {
-        "device": "d-4b1e0c7a9f3e662fbf0456d6",
-        "label": "fatima-mbp",
-        "os_user": "fatima",
-        "this_device": false,
-        "collector_version": "v1.4.2",
-        "collected_at": "2026-09-23T11:37:00Z",
-        "age_seconds": 180,
-        "last_success_at": "2026-09-23T11:37:00Z",
-        "last_error": null,
-        "sources": [
-          {
-            "provider": "claude",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "codex",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "ok",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
-          }
-        ]
-      },
-      {
-        "device": "d-4b1e0c7a9f3e855dfc50b240",
-        "label": "gpu-box",
-        "os_user": "research",
-        "this_device": false,
-        "collector_version": "v1.4.2",
-        "collected_at": "2026-09-23T11:19:00Z",
-        "age_seconds": 1260,
-        "last_success_at": "2026-09-23T11:19:00Z",
-        "last_error": null,
-        "sources": [
-          {
-            "provider": "claude",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "codex",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "ok",
-            "error": null
-          }
-        ]
-      },
-      {
-        "device": "d-4b1e0c7a9f3ea48c399d0daa",
-        "label": "greg-win",
-        "os_user": "greg",
-        "this_device": false,
-        "collector_version": "v1.4.2",
-        "collected_at": "2026-09-22T05:40:00Z",
-        "age_seconds": 108000,
-        "last_success_at": "2026-09-22T05:40:00Z",
-        "last_error": null,
-        "sources": [
-          {
-            "provider": "claude",
-            "status": "ok",
-            "error": null
-          },
-          {
-            "provider": "codex",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
-          }
-        ]
-      },
-      {
-        "device": "d-4b1e0c7a9f3ec3ba76e96914",
-        "label": "hana-mbp",
-        "os_user": "hana",
-        "this_device": false,
-        "collector_version": "v1.4.2",
-        "collected_at": "2026-09-23T11:32:00Z",
-        "age_seconds": 480,
-        "last_success_at": "2026-09-23T11:32:00Z",
-        "last_error": null,
-        "sources": [
-          {
-            "provider": "claude",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "codex",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "ok",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
-          }
-        ]
-      },
-      {
-        "device": "d-4b1e0c7a9f3ee2e8b435c47e",
-        "label": "ivan-linux",
-        "os_user": "ivan",
-        "this_device": false,
-        "collector_version": "v1.4.2",
-        "collected_at": "2026-09-23T11:24:00Z",
+        "collector_version": "v1.4.0",
+        "collected_at": "2026-09-23T14:22:00Z",
         "age_seconds": 960,
-        "last_success_at": "2026-09-23T11:24:00Z",
+        "last_success_at": "2026-09-23T14:22:00Z",
         "last_error": null,
         "sources": [
           {
-            "provider": "claude",
-            "status": "skipped",
-            "error": null
-          },
+            "provider": "codex",
+            "status": "error",
+            "error": "codex: app-server exited without answering"
+          }
+        ],
+        "error": "codex: app-server exited without answering",
+        "silent": false,
+        "old": true,
+        "usage": {
+          "today": 31560000,
+          "7d": 105200000,
+          "30d": 399760000,
+          "90d": 946800000
+        }
+      },
+      {
+        "device": "d-4e6a8c0e2a4c6e8a0c2e4a6c",
+        "label": "MacBook-Pro-Kim",
+        "os_user": "sam",
+        "this_device": false,
+        "collector_version": "v1.4.0",
+        "collected_at": "2026-09-23T14:08:00Z",
+        "age_seconds": 1800,
+        "last_success_at": "2026-09-23T14:08:00Z",
+        "last_error": null,
+        "sources": [
           {
             "provider": "codex",
             "status": "ok",
             "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
           }
-        ]
+        ],
+        "error": null,
+        "silent": false,
+        "old": true,
+        "usage": {
+          "today": 2985000,
+          "7d": 59700000,
+          "30d": 149250000,
+          "90d": 238800000
+        }
       },
       {
-        "device": "d-4b1e0c7a9f3f0216f1821fe8",
-        "label": "jo-air",
-        "os_user": "jo",
+        "device": "d-b00c1d2e3f4a5b6c7d8e9f00",
+        "label": "bot-a",
+        "os_user": "hermes",
         "this_device": false,
         "collector_version": "v1.4.2",
-        "collected_at": "2026-09-18T11:40:00Z",
-        "age_seconds": 432000,
-        "last_success_at": "2026-09-18T11:40:00Z",
+        "collected_at": "2026-09-23T14:29:00Z",
+        "age_seconds": 540,
+        "last_success_at": "2026-09-23T14:29:00Z",
         "last_error": null,
         "sources": [
-          {
-            "provider": "claude",
-            "status": "ok",
-            "error": null
-          },
-          {
-            "provider": "codex",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
-          }
-        ]
-      },
-      {
-        "device": "d-4b1e0c7a9f3f21452ece7b52",
-        "label": "kai-mbp",
-        "os_user": "kai",
-        "this_device": false,
-        "collector_version": "v1.4.2",
-        "collected_at": "2026-09-23T11:38:00Z",
-        "age_seconds": 120,
-        "last_success_at": "2026-09-23T11:38:00Z",
-        "last_error": null,
-        "sources": [
-          {
-            "provider": "claude",
-            "status": "skipped",
-            "error": null
-          },
           {
             "provider": "codex",
             "status": "ok",
             "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
           }
-        ]
+        ],
+        "error": null,
+        "silent": false,
+        "old": false,
+        "usage": {
+          "today": 4200000,
+          "7d": 30000000,
+          "30d": 105000000,
+          "90d": 210000000
+        }
       },
       {
-        "device": "d-4b1e0c7a9f3f40736c1ad6bc",
-        "label": "lab-mac",
-        "os_user": "design",
+        "device": "d-b01c1d2e3f4a5b6c7d8e9f10",
+        "label": "bot-b",
+        "os_user": "hermes",
         "this_device": false,
         "collector_version": "v1.4.2",
-        "collected_at": "2026-09-23T11:34:00Z",
-        "age_seconds": 360,
-        "last_success_at": "2026-09-23T11:34:00Z",
-        "last_error": null,
-        "sources": [
-          {
-            "provider": "claude",
-            "status": "ok",
-            "error": null
-          },
-          {
-            "provider": "codex",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
-          }
-        ]
-      },
-      {
-        "device": "d-4b1e0c7a9f3f5fa1a9673226",
-        "label": "lena-mbp",
-        "os_user": "lena",
-        "this_device": false,
-        "collector_version": "v1.4.2",
-        "collected_at": "2026-09-23T11:30:00Z",
+        "collected_at": "2026-09-23T14:28:00Z",
         "age_seconds": 600,
-        "last_success_at": "2026-09-23T11:30:00Z",
+        "last_success_at": "2026-09-23T14:28:00Z",
         "last_error": null,
         "sources": [
           {
-            "provider": "claude",
+            "provider": "codex",
             "status": "ok",
             "error": null
-          },
-          {
-            "provider": "codex",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "grok",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
-            "error": null
           }
-        ]
+        ],
+        "error": null,
+        "silent": false,
+        "old": false,
+        "usage": {
+          "today": 3654000,
+          "7d": 26100000,
+          "30d": 91350000,
+          "90d": 182700000
+        }
       },
       {
-        "device": "d-4b1e0c7a9f3f7ecfe6b38d90",
-        "label": "ops-01",
-        "os_user": "ops",
+        "device": "d-b02c1d2e3f4a5b6c7d8e9f20",
+        "label": "bot-c",
+        "os_user": "hermes",
         "this_device": false,
         "collector_version": "v1.4.2",
-        "collected_at": "2026-09-23T11:37:00Z",
-        "age_seconds": 180,
-        "last_success_at": "2026-09-23T11:37:00Z",
+        "collected_at": "2026-09-23T14:27:00Z",
+        "age_seconds": 660,
+        "last_success_at": "2026-09-23T14:27:00Z",
         "last_error": null,
         "sources": [
-          {
-            "provider": "claude",
-            "status": "skipped",
-            "error": null
-          },
           {
             "provider": "codex",
             "status": "ok",
             "error": null
-          },
+          }
+        ],
+        "error": null,
+        "silent": false,
+        "old": false,
+        "usage": {
+          "today": 2324000,
+          "7d": 16600000,
+          "30d": 58100000,
+          "90d": 116200000
+        }
+      },
+      {
+        "device": "d-b03c1d2e3f4a5b6c7d8e9f30",
+        "label": "bot-d",
+        "os_user": "hermes",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T14:26:00Z",
+        "age_seconds": 720,
+        "last_success_at": "2026-09-23T14:26:00Z",
+        "last_error": null,
+        "sources": [
           {
-            "provider": "grok",
-            "status": "skipped",
-            "error": null
-          },
-          {
-            "provider": "hermes",
-            "status": "skipped",
+            "provider": "codex",
+            "status": "ok",
             "error": null
           }
-        ]
+        ],
+        "error": null,
+        "silent": false,
+        "old": false,
+        "usage": {
+          "today": 1680000,
+          "7d": 12000000,
+          "30d": 42000000,
+          "90d": 84000000
+        }
+      },
+      {
+        "device": "d-b04c1d2e3f4a5b6c7d8e9f40",
+        "label": "bot-e",
+        "os_user": "hermes",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T14:25:00Z",
+        "age_seconds": 780,
+        "last_success_at": "2026-09-23T14:25:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "codex",
+            "status": "ok",
+            "error": null
+          }
+        ],
+        "error": null,
+        "silent": false,
+        "old": false,
+        "usage": {
+          "today": 1260000,
+          "7d": 9000000,
+          "30d": 31500000,
+          "90d": 63000000
+        }
+      },
+      {
+        "device": "d-b05c1d2e3f4a5b6c7d8e9f50",
+        "label": "bot-f",
+        "os_user": "hermes",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T14:24:00Z",
+        "age_seconds": 840,
+        "last_success_at": "2026-09-23T14:24:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "codex",
+            "status": "ok",
+            "error": null
+          }
+        ],
+        "error": null,
+        "silent": false,
+        "old": false,
+        "usage": {
+          "today": 980000,
+          "7d": 7000000,
+          "30d": 24500000,
+          "90d": 49000000
+        }
+      },
+      {
+        "device": "d-b06c1d2e3f4a5b6c7d8e9f60",
+        "label": "bot-g",
+        "os_user": "hermes",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T14:23:00Z",
+        "age_seconds": 900,
+        "last_success_at": "2026-09-23T14:23:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "codex",
+            "status": "ok",
+            "error": null
+          }
+        ],
+        "error": null,
+        "silent": false,
+        "old": false,
+        "usage": {
+          "today": 560000,
+          "7d": 4000000,
+          "30d": 14000000,
+          "90d": 28000000
+        }
+      },
+      {
+        "device": "d-b07c1d2e3f4a5b6c7d8e9f70",
+        "label": "bot-h",
+        "os_user": "hermes",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T14:22:00Z",
+        "age_seconds": 960,
+        "last_success_at": "2026-09-23T14:22:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "codex",
+            "status": "ok",
+            "error": null
+          }
+        ],
+        "error": null,
+        "silent": false,
+        "old": false,
+        "usage": {
+          "today": 280000,
+          "7d": 2000000,
+          "30d": 7000000,
+          "90d": 14000000
+        }
+      },
+      {
+        "device": "d-b08c1d2e3f4a5b6c7d8e9f80",
+        "label": "bot-i",
+        "os_user": "hermes",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T14:21:00Z",
+        "age_seconds": 1020,
+        "last_success_at": "2026-09-23T14:21:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "codex",
+            "status": "ok",
+            "error": null
+          }
+        ],
+        "error": null,
+        "silent": false,
+        "old": false,
+        "usage": {
+          "today": 56000,
+          "7d": 400000,
+          "30d": 1400000,
+          "90d": 2800000
+        }
+      },
+      {
+        "device": "d-2f8a6c4e0b9d7f1a3c5e7b9d",
+        "label": "srv1",
+        "os_user": "root",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T14:30:00Z",
+        "age_seconds": 480,
+        "last_success_at": "2026-09-23T14:30:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "codex",
+            "status": "ok",
+            "error": null
+          }
+        ],
+        "error": null,
+        "silent": false,
+        "old": false,
+        "usage": {
+          "today": 31440000,
+          "7d": 262000000,
+          "30d": 786000000,
+          "90d": 2227000000
+        }
       }
     ],
     "providers": [
@@ -1171,369 +1011,124 @@
         "provider": "claude",
         "accounts": [
           {
-            "label": "bo@acme.io",
+            "label": "ann@acme.dev",
+            "name": "ann",
+            "alias": null,
+            "subscription": true,
+            "current": true,
             "devices": [
-              "bo-laptop (bo)",
-              "bo-desktop (bo)",
-              "carla-mbp (carla)",
-              "dev-vm (bo)"
+              "annbook (ann)",
+              "srv1 (root)"
             ],
-            "headline_percent": 96,
-            "level": "critical",
+            "plan": "max",
+            "state": "out",
             "quota": {
-              "observed_at": "2026-09-23T11:36:00Z",
-              "age_seconds": 240,
+              "observed_at": "2026-09-23T14:20:00Z",
+              "age_seconds": 1080,
               "stale": false,
-              "source": "cache",
-              "device": "bo-laptop (bo)",
+              "device": "annbook (ann)",
               "windows": [
                 {
                   "name": "5h",
-                  "percent": 96,
-                  "level": "critical",
-                  "resets_at": "2026-09-23T12:52:00Z",
+                  "percent": 40,
+                  "resets_at": "2026-09-23T16:50:00Z",
                   "minutes": 300,
-                  "pace": null
-                },
-                {
-                  "name": "7d",
-                  "percent": 71,
-                  "level": "ok",
-                  "resets_at": "2026-09-26T15:40:00Z",
-                  "minutes": 10080,
-                  "pace": null
-                }
-              ]
-            },
-            "sessions": 72,
-            "tokens": {
-              "input": 18200000,
-              "output": 30400000,
-              "cache_read": 2100000000,
-              "cache_write": 160000000
-            },
-            "plan": "max 20x",
-            "per_device": [
-              {
-                "device": "bo-laptop (bo)",
-                "device_id": "d-4b1e0c7a9f3d8bec11edd6f0",
-                "current": true,
-                "sessions": 30,
-                "tokens": {
-                  "input": 8100000,
-                  "output": 14000000,
-                  "cache_read": 950000000,
-                  "cache_write": 71000000
-                },
-                "last_active_at": "2026-09-23T11:36:00Z"
-              },
-              {
-                "device": "bo-desktop (bo)",
-                "device_id": "d-4b1e0c7a9f3d6cbdd4a17b86",
-                "current": true,
-                "sessions": 22,
-                "tokens": {
-                  "input": 5200000,
-                  "output": 8900000,
-                  "cache_read": 610000000,
-                  "cache_write": 45000000
-                },
-                "last_active_at": "2026-09-23T11:00:00Z"
-              },
-              {
-                "device": "carla-mbp (carla)",
-                "device_id": "d-4b1e0c7a9f3de976c9d2e92e",
-                "current": true,
-                "sessions": 12,
-                "tokens": {
-                  "input": 3000000,
-                  "output": 5100000,
-                  "cache_read": 330000000,
-                  "cache_write": 27000000
-                },
-                "last_active_at": "2026-09-23T10:05:00Z"
-              },
-              {
-                "device": "dev-vm (bo)",
-                "device_id": "d-4b1e0c7a9f3e27d3446ba002",
-                "current": true,
-                "sessions": 8,
-                "tokens": {
-                  "input": 1900000,
-                  "output": 2400000,
-                  "cache_read": 210000000,
-                  "cache_write": 17000000
-                },
-                "last_active_at": "2026-09-23T06:40:00Z"
-              }
-            ]
-          },
-          {
-            "label": "ann@acme.io",
-            "devices": [
-              "ann-mbp (ann)",
-              "ann-mini (ann)",
-              "dev-vm (ann)"
-            ],
-            "headline_percent": 64,
-            "level": "ok",
-            "quota": {
-              "observed_at": "2026-09-23T11:34:00Z",
-              "age_seconds": 360,
-              "stale": false,
-              "source": "cache",
-              "device": "ann-mbp (ann)",
-              "windows": [
-                {
-                  "name": "5h",
-                  "percent": 31,
-                  "level": "ok",
-                  "resets_at": "2026-09-23T13:50:00Z",
-                  "minutes": 300,
-                  "pace": {
-                    "percent_per_hour": 2,
-                    "fills_at": null
+                  "main": false,
+                  "observed_at": "2026-09-23T14:20:00Z",
+                  "stale": false,
+                  "reset": false,
+                  "state": "ok",
+                  "forecast": {
+                    "percent": 80,
+                    "elapsed": 0.5,
+                    "runs_out_at": null
                   }
                 },
                 {
                   "name": "7d",
-                  "percent": 64,
-                  "level": "ok",
-                  "resets_at": "2026-09-26T15:40:00Z",
+                  "percent": 67,
+                  "resets_at": "2026-09-26T22:00:00Z",
                   "minutes": 10080,
-                  "pace": {
-                    "percent_per_hour": 2.1,
-                    "fills_at": "2026-09-24T04:48:00Z"
+                  "main": true,
+                  "observed_at": "2026-09-22T14:31:00Z",
+                  "stale": true,
+                  "reset": false,
+                  "state": "over",
+                  "forecast": {
+                    "percent": 174,
+                    "elapsed": 0.384,
+                    "runs_out_at": "2026-09-23T22:17:36Z"
                   }
                 },
                 {
-                  "name": "7d Opus",
-                  "percent": 58,
-                  "level": "ok",
-                  "resets_at": "2026-09-26T15:40:00Z",
+                  "name": "7d Fable",
+                  "percent": 100,
+                  "resets_at": "2026-09-26T22:00:00Z",
                   "minutes": 10080,
-                  "pace": {
-                    "percent_per_hour": 1.2,
-                    "fills_at": null
+                  "main": false,
+                  "observed_at": "2026-09-23T14:20:00Z",
+                  "stale": false,
+                  "reset": false,
+                  "state": "out",
+                  "forecast": {
+                    "percent": 190,
+                    "elapsed": 0.5258,
+                    "runs_out_at": null
                   }
                 }
               ]
             },
+            "link": null,
             "sessions": 40,
             "tokens": {
-              "input": 7900000,
-              "output": 16000000,
-              "cache_read": 910000000,
-              "cache_write": 72000000
+              "input": 160335000,
+              "output": 68715000,
+              "cache_read": 2748600000,
+              "cache_write": 76350000
             },
-            "plan": "max 5x",
-            "per_device": [
-              {
-                "device": "ann-mbp (ann)",
-                "device_id": "d-4b1e0c7a9f3d2e615a08c4b2",
-                "current": true,
-                "sessions": 24,
-                "tokens": {
-                  "input": 5100000,
-                  "output": 11200000,
-                  "cache_read": 640000000,
-                  "cache_write": 51300000
-                },
-                "last_active_at": "2026-09-23T11:34:00Z"
-              },
-              {
-                "device": "ann-mini (ann)",
-                "device_id": "d-4b1e0c7a9f3d4d8f9755201c",
-                "current": true,
-                "sessions": 10,
-                "tokens": {
-                  "input": 1900000,
-                  "output": 3600000,
-                  "cache_read": 190000000,
-                  "cache_write": 14100000
-                },
-                "last_active_at": "2026-09-23T08:20:00Z"
-              },
-              {
-                "device": "dev-vm (ann)",
-                "device_id": "d-4b1e0c7a9f3e08a5071f4498",
-                "current": true,
-                "sessions": 6,
-                "tokens": {
-                  "input": 900000,
-                  "output": 1200000,
-                  "cache_read": 80000000,
-                  "cache_write": 6600000
-                },
-                "last_active_at": "2026-09-22T20:40:00Z"
-              }
-            ]
+            "usage": {
+              "today": 4284000,
+              "7d": 21300000,
+              "30d": 86940000,
+              "90d": 229050000
+            },
+            "users": 2,
+            "busiest": "annbook",
+            "last_active_at": "2026-09-23T14:31:00Z",
+            "per_device": [],
+            "linked_usage": []
           },
           {
-            "label": "design@acme.io",
+            "label": "kim@corp.test",
+            "name": "kim",
+            "alias": null,
+            "subscription": true,
+            "current": false,
             "devices": [
-              "lab-mac (design)",
-              "greg-win (greg)",
-              "jo-air (jo)",
-              "lena-mbp (lena)"
+              "Mac.localdomain (kim)"
             ],
-            "headline_percent": 81,
-            "level": "warning",
-            "quota": {
-              "observed_at": "2026-09-22T05:40:00Z",
-              "age_seconds": 108000,
-              "stale": true,
-              "device": "greg-win (greg)",
-              "windows": [
-                {
-                  "name": "5h",
-                  "percent": 30,
-                  "level": "unknown",
-                  "resets_at": "2026-09-22T07:40:00Z",
-                  "minutes": 300,
-                  "pace": null
-                },
-                {
-                  "name": "7d",
-                  "percent": 81,
-                  "level": "warning",
-                  "resets_at": "2026-09-25T20:40:00Z",
-                  "minutes": 10080,
-                  "pace": null
-                }
-              ]
-            },
-            "sessions": 38,
+            "plan": "max",
+            "state": "unknown",
+            "quota": null,
+            "link": null,
+            "sessions": 40,
             "tokens": {
-              "input": 2400000,
-              "output": 4400000,
-              "cache_read": 208000000,
-              "cache_write": 15800000
+              "input": 65519999,
+              "output": 28080001,
+              "cache_read": 1123200000,
+              "cache_write": 31200000
             },
-            "plan": "pro",
-            "per_device": [
-              {
-                "device": "lab-mac (design)",
-                "device_id": "d-4b1e0c7a9f3f40736c1ad6bc",
-                "current": true,
-                "sessions": 20,
-                "tokens": {
-                  "input": 1300000,
-                  "output": 2400000,
-                  "cache_read": 120000000,
-                  "cache_write": 9200000
-                },
-                "last_active_at": "2026-09-23T11:34:00Z"
-              },
-              {
-                "device": "greg-win (greg)",
-                "device_id": "d-4b1e0c7a9f3ea48c399d0daa",
-                "current": true,
-                "sessions": 9,
-                "tokens": {
-                  "input": 600000,
-                  "output": 1100000,
-                  "cache_read": 50000000,
-                  "cache_write": 3800000
-                },
-                "last_active_at": "2026-09-22T05:40:00Z"
-              },
-              {
-                "device": "jo-air (jo)",
-                "device_id": "d-4b1e0c7a9f3f0216f1821fe8",
-                "current": true,
-                "sessions": 5,
-                "tokens": {
-                  "input": 300000,
-                  "output": 500000,
-                  "cache_read": 20000000,
-                  "cache_write": 1600000
-                },
-                "last_active_at": "2026-09-18T11:40:00Z"
-              },
-              {
-                "device": "lena-mbp (lena)",
-                "device_id": "d-4b1e0c7a9f3f5fa1a9673226",
-                "current": true,
-                "sessions": 4,
-                "tokens": {
-                  "input": 200000,
-                  "output": 400000,
-                  "cache_read": 18000000,
-                  "cache_write": 1200000
-                },
-                "last_active_at": "2026-09-23T11:30:00Z"
-              }
-            ]
-          },
-          {
-            "label": "ci-runner-claude@build.acme-internal.io",
-            "devices": [
-              "build-01 (ci)",
-              "build-02 (ci)"
-            ],
-            "headline_percent": null,
-            "level": "unknown",
-            "quota": {
-              "observed_at": "2026-09-21T09:40:00Z",
-              "age_seconds": 180000,
-              "stale": true,
-              "device": "build-01 (ci)",
-              "windows": [
-                {
-                  "name": "5h",
-                  "percent": 12,
-                  "level": "unknown",
-                  "resets_at": "2026-09-21T11:40:00Z",
-                  "minutes": 300,
-                  "pace": null
-                },
-                {
-                  "name": "7d",
-                  "percent": 41,
-                  "level": "unknown",
-                  "resets_at": "2026-09-22T15:40:00Z",
-                  "minutes": 10080,
-                  "pace": null
-                }
-              ]
+            "usage": {
+              "today": 3120000,
+              "7d": 10400000,
+              "30d": 39520000,
+              "90d": 93600000
             },
-            "sessions": 236,
-            "tokens": {
-              "input": 16500000,
-              "output": 6899999,
-              "cache_read": 1860000000,
-              "cache_write": 101000000
-            },
-            "plan": "team",
-            "per_device": [
-              {
-                "device": "build-01 (ci)",
-                "device_id": "d-4b1e0c7a9f3dab1a4f3a325a",
-                "current": true,
-                "sessions": 140,
-                "tokens": {
-                  "input": 9800000,
-                  "output": 4099999,
-                  "cache_read": 1100000000,
-                  "cache_write": 60000000
-                },
-                "last_active_at": "2026-09-21T09:40:00Z"
-              },
-              {
-                "device": "build-02 (ci)",
-                "device_id": "d-4b1e0c7a9f3dca488c868dc4",
-                "current": true,
-                "sessions": 96,
-                "tokens": {
-                  "input": 6700000,
-                  "output": 2800000,
-                  "cache_read": 760000000,
-                  "cache_write": 41000000
-                },
-                "last_active_at": "2026-09-23T11:26:00Z"
-              }
-            ]
+            "users": 1,
+            "busiest": "Mac.localdomain",
+            "last_active_at": "2026-09-23T13:38:00Z",
+            "per_device": [],
+            "linked_usage": []
           }
         ]
       },
@@ -1541,270 +1136,259 @@
         "provider": "codex",
         "accounts": [
           {
-            "label": "ann@acme.io",
+            "label": "ann@acme.dev",
+            "name": "ann",
+            "alias": null,
+            "subscription": true,
+            "current": true,
             "devices": [
-              "ann-mbp (ann)",
-              "dev-vm (ann)"
+              "annbook (ann)",
+              "srv1 (root)"
             ],
-            "headline_percent": 92,
-            "level": "critical",
-            "quota": {
-              "observed_at": "2026-09-23T11:38:00Z",
-              "age_seconds": 120,
-              "stale": false,
-              "source": "harness",
-              "device": "ann-mbp (ann)",
-              "windows": [
-                {
-                  "name": "5h",
-                  "percent": 18,
-                  "level": "ok",
-                  "resets_at": "2026-09-23T15:02:00Z",
-                  "minutes": 300,
-                  "pace": {
-                    "percent_per_hour": 1.5,
-                    "fills_at": null
-                  }
-                },
-                {
-                  "name": "7d",
-                  "percent": 92,
-                  "level": "critical",
-                  "resets_at": "2026-09-26T01:40:00Z",
-                  "minutes": 10080,
-                  "pace": {
-                    "percent_per_hour": 0.4,
-                    "fills_at": null
-                  }
-                }
-              ]
-            },
-            "sessions": 252,
-            "tokens": {
-              "input": 362000000,
-              "output": 34300000,
-              "cache_read": 11500000000,
-              "cache_write": 0
-            },
             "plan": "pro",
-            "per_device": [
-              {
-                "device": "ann-mbp (ann)",
-                "device_id": "d-4b1e0c7a9f3d2e615a08c4b2",
-                "current": true,
-                "sessions": 212,
-                "tokens": {
-                  "input": 301000000,
-                  "output": 28400000,
-                  "cache_read": 9600000000,
-                  "cache_write": 0
-                },
-                "last_active_at": "2026-09-23T11:38:00Z"
-              },
-              {
-                "device": "dev-vm (ann)",
-                "device_id": "d-4b1e0c7a9f3e08a5071f4498",
-                "current": true,
-                "sessions": 40,
-                "tokens": {
-                  "input": 61000000,
-                  "output": 5900000,
-                  "cache_read": 1900000000,
-                  "cache_write": 0
-                },
-                "last_active_at": "2026-09-23T10:20:00Z"
-              }
-            ],
-            "linked_usage": [
-              {
-                "provider": "hermes",
-                "label": "openai-codex",
-                "devices": [
-                  "ann-mbp (ann)"
-                ],
-                "sessions": 18,
-                "tokens": {
-                  "input": 6200000,
-                  "output": 900000,
-                  "cache_read": 120000000,
-                  "cache_write": 0
-                }
-              }
-            ]
-          },
-          {
-            "label": "ann+orca@acme.io",
-            "devices": [
-              "ann-mbp (ann)"
-            ],
-            "headline_percent": 23,
-            "level": "ok",
+            "state": "out",
             "quota": {
-              "observed_at": "2026-09-23T11:38:00Z",
-              "age_seconds": 120,
+              "observed_at": "2026-09-23T14:31:00Z",
+              "age_seconds": 420,
               "stale": false,
-              "source": "harness",
-              "device": "ann-mbp (ann)",
+              "device": "annbook (ann)",
               "windows": [
                 {
                   "name": "5h",
-                  "percent": 10,
-                  "level": "ok",
-                  "resets_at": "2026-09-23T15:40:00Z",
+                  "percent": 0,
+                  "resets_at": "2026-09-23T18:31:00Z",
                   "minutes": 300,
-                  "pace": {
-                    "percent_per_hour": 1,
-                    "fills_at": null
+                  "main": false,
+                  "observed_at": "2026-09-23T14:31:00Z",
+                  "stale": false,
+                  "reset": false,
+                  "state": "under",
+                  "forecast": {
+                    "percent": 0,
+                    "elapsed": 0.2,
+                    "runs_out_at": null
                   }
                 },
                 {
                   "name": "7d",
-                  "percent": 23,
-                  "level": "ok",
-                  "resets_at": "2026-09-28T08:40:00Z",
+                  "percent": 100,
+                  "resets_at": "2026-09-25T14:09:00Z",
                   "minutes": 10080,
-                  "pace": {
-                    "percent_per_hour": 0.2,
-                    "fills_at": null
+                  "main": true,
+                  "observed_at": "2026-09-23T14:31:00Z",
+                  "stale": false,
+                  "reset": false,
+                  "state": "out",
+                  "forecast": {
+                    "percent": 140,
+                    "elapsed": 0.7165,
+                    "runs_out_at": null
                   }
                 }
               ]
             },
-            "sessions": 37,
+            "link": null,
+            "sessions": 40,
             "tokens": {
-              "input": 44000000,
-              "output": 3900000,
-              "cache_read": 1200000000,
-              "cache_write": 0
+              "input": 1455440000,
+              "output": 623760000,
+              "cache_read": 24950400000,
+              "cache_write": 693066666
             },
-            "plan": "plus",
-            "per_device": [
-              {
-                "device": "ann-mbp (ann)",
-                "device_id": "d-4b1e0c7a9f3d2e615a08c4b2",
-                "current": true,
-                "sessions": 37,
-                "tokens": {
-                  "input": 44000000,
-                  "output": 3900000,
-                  "cache_read": 1200000000,
-                  "cache_write": 0
-                },
-                "last_active_at": "2026-09-23T10:35:00Z"
-              }
-            ]
+            "usage": {
+              "today": 39195000,
+              "7d": 191700000,
+              "30d": 790980000,
+              "90d": 2079200000
+            },
+            "users": 2,
+            "busiest": "annbook",
+            "last_active_at": "2026-09-23T13:38:00Z",
+            "per_device": [],
+            "linked_usage": []
           },
           {
-            "label": "ops@acme.io",
+            "label": "sam@mail.test",
+            "name": "sam",
+            "alias": null,
+            "subscription": true,
+            "current": false,
             "devices": [
-              "ops-01 (ops)",
-              "build-02 (ci)",
-              "ivan-linux (ivan)",
-              "kai-mbp (kai)",
-              "ann-mbp (ann)"
+              "MacBook-Pro-Kim (sam)"
             ],
-            "headline_percent": 81,
-            "level": "warning",
+            "plan": "prolite",
+            "state": "over",
             "quota": {
-              "observed_at": "2026-09-23T11:28:00Z",
-              "age_seconds": 720,
+              "observed_at": "2026-09-23T14:08:00Z",
+              "age_seconds": 1800,
               "stale": false,
-              "source": "harness",
-              "device": "ops-01 (ops)",
+              "device": "MacBook-Pro-Kim (sam)",
               "windows": [
                 {
                   "name": "5h",
-                  "percent": 81,
-                  "level": "warning",
-                  "resets_at": "2026-09-23T14:45:00Z",
+                  "percent": 20,
+                  "resets_at": "2026-09-23T16:08:00Z",
                   "minutes": 300,
-                  "pace": null
+                  "main": false,
+                  "observed_at": "2026-09-23T14:08:00Z",
+                  "stale": false,
+                  "reset": false,
+                  "state": "under",
+                  "forecast": {
+                    "percent": 33,
+                    "elapsed": 0.6,
+                    "runs_out_at": null
+                  }
                 },
                 {
                   "name": "7d",
-                  "percent": 38,
-                  "level": "ok",
-                  "resets_at": "2026-09-28T11:40:00Z",
+                  "percent": 42,
+                  "resets_at": "2026-09-28T17:12:00Z",
                   "minutes": 10080,
-                  "pace": null
+                  "main": true,
+                  "observed_at": "2026-09-23T14:01:00Z",
+                  "stale": false,
+                  "reset": false,
+                  "state": "over",
+                  "forecast": {
+                    "percent": 157,
+                    "elapsed": 0.2668,
+                    "runs_out_at": "2026-09-26T03:54:22Z"
+                  }
                 }
               ]
             },
-            "sessions": 250,
+            "link": null,
+            "sessions": 40,
             "tokens": {
-              "input": 348500000,
-              "output": 30500000,
-              "cache_read": 10240000000,
-              "cache_write": 0
+              "input": 167160000,
+              "output": 71640000,
+              "cache_read": 2865600000,
+              "cache_write": 79600000
             },
-            "plan": "plus",
-            "per_device": [
-              {
-                "device": "ops-01 (ops)",
-                "device_id": "d-4b1e0c7a9f3f7ecfe6b38d90",
-                "current": true,
-                "sessions": 150,
-                "tokens": {
-                  "input": 210000000,
-                  "output": 19000000,
-                  "cache_read": 6300000000,
-                  "cache_write": 0
+            "usage": {
+              "today": 2985000,
+              "7d": 59700000,
+              "30d": 149250000,
+              "90d": 238800000
+            },
+            "users": 1,
+            "busiest": "MacBook-Pro-Kim",
+            "last_active_at": "2026-09-23T11:38:00Z",
+            "per_device": [],
+            "linked_usage": []
+          },
+          {
+            "label": "lee@corp.test",
+            "name": "lee",
+            "alias": null,
+            "subscription": true,
+            "current": true,
+            "devices": [
+              "bot-a (hermes)",
+              "bot-b (hermes)",
+              "bot-c (hermes)",
+              "bot-d (hermes)",
+              "bot-e (hermes)",
+              "bot-f (hermes)",
+              "bot-g (hermes)",
+              "bot-h (hermes)",
+              "bot-i (hermes)",
+              "srv1 (root)"
+            ],
+            "plan": "pro",
+            "state": "ok",
+            "quota": {
+              "observed_at": "2026-09-23T14:18:00Z",
+              "age_seconds": 1200,
+              "stale": false,
+              "device": "srv1 (root)",
+              "windows": [
+                {
+                  "name": "5h",
+                  "percent": 4,
+                  "resets_at": "2026-09-23T18:18:00Z",
+                  "minutes": 300,
+                  "main": false,
+                  "observed_at": "2026-09-23T14:18:00Z",
+                  "stale": false,
+                  "reset": false,
+                  "state": "under",
+                  "forecast": {
+                    "percent": 20,
+                    "elapsed": 0.2,
+                    "runs_out_at": null
+                  }
                 },
-                "last_active_at": "2026-09-23T11:28:00Z"
-              },
-              {
-                "device": "build-02 (ci)",
-                "device_id": "d-4b1e0c7a9f3dca488c868dc4",
-                "current": true,
-                "sessions": 44,
-                "tokens": {
-                  "input": 62000000,
-                  "output": 5200000,
-                  "cache_read": 1800000000,
-                  "cache_write": 0
-                },
-                "last_active_at": "2026-09-23T11:26:00Z"
-              },
-              {
-                "device": "ivan-linux (ivan)",
-                "device_id": "d-4b1e0c7a9f3ee2e8b435c47e",
-                "current": true,
-                "sessions": 30,
-                "tokens": {
-                  "input": 40000000,
-                  "output": 3300000,
-                  "cache_read": 1100000000,
-                  "cache_write": 0
-                },
-                "last_active_at": "2026-09-23T10:40:00Z"
-              },
-              {
-                "device": "kai-mbp (kai)",
-                "device_id": "d-4b1e0c7a9f3f21452ece7b52",
-                "current": true,
-                "sessions": 22,
-                "tokens": {
-                  "input": 31000000,
-                  "output": 2600000,
-                  "cache_read": 900000000,
-                  "cache_write": 0
-                },
-                "last_active_at": "2026-09-23T11:38:00Z"
-              },
-              {
-                "device": "ann-mbp (ann)",
-                "device_id": "d-4b1e0c7a9f3d2e615a08c4b2",
-                "current": false,
-                "sessions": 4,
-                "tokens": {
-                  "input": 5500000,
-                  "output": 400000,
-                  "cache_read": 140000000,
-                  "cache_write": 0
-                },
-                "last_active_at": "2026-09-14T11:40:00Z"
-              }
-            ]
+                {
+                  "name": "7d",
+                  "percent": 12,
+                  "resets_at": "2026-09-29T13:30:00Z",
+                  "minutes": 10080,
+                  "main": true,
+                  "observed_at": "2026-09-23T14:18:00Z",
+                  "stale": false,
+                  "reset": false,
+                  "state": "ok",
+                  "forecast": {
+                    "percent": 81,
+                    "elapsed": 0.1476,
+                    "runs_out_at": null
+                  }
+                }
+              ]
+            },
+            "link": null,
+            "sessions": 40,
+            "tokens": {
+              "input": 1944459999,
+              "output": 833340001,
+              "cache_read": 33333600000,
+              "cache_write": 925933333
+            },
+            "usage": {
+              "today": 43556000,
+              "7d": 345400000,
+              "30d": 1088900000,
+              "90d": 2777800000
+            },
+            "users": 10,
+            "busiest": "srv1",
+            "last_active_at": "2026-09-23T14:04:00Z",
+            "per_device": [],
+            "linked_usage": []
+          },
+          {
+            "label": "unknown",
+            "name": "unknown",
+            "alias": null,
+            "subscription": true,
+            "current": false,
+            "devices": [
+              "Mac.localdomain (kim)"
+            ],
+            "plan": null,
+            "state": "unknown",
+            "quota": null,
+            "link": null,
+            "sessions": 40,
+            "tokens": {
+              "input": 597240000,
+              "output": 255960000,
+              "cache_read": 10238400000,
+              "cache_write": 284400000
+            },
+            "usage": {
+              "today": 28440000,
+              "7d": 94800000,
+              "30d": 360240000,
+              "90d": 853200000
+            },
+            "users": 1,
+            "busiest": "Mac.localdomain",
+            "last_active_at": "2026-09-23T14:22:00Z",
+            "per_device": [],
+            "linked_usage": []
           }
         ]
       },
@@ -1812,94 +1396,36 @@
         "provider": "grok",
         "accounts": [
           {
-            "label": "7c1e5a90-93d2-4f6b-8a15-2b9d0c7e41f3",
+            "label": "a4c2e917-6b3d-4f81-9c2a-5e7d1b8f0a36",
+            "name": "a4c2e917",
+            "alias": null,
+            "subscription": true,
+            "current": true,
             "devices": [
-              "fatima-mbp (fatima)",
-              "hana-mbp (hana)",
-              "bo-desktop (bo)",
-              "eli-thinkpad (eli)"
+              "annbook (ann)"
             ],
-            "headline_percent": 35,
-            "level": "ok",
-            "quota": {
-              "observed_at": "2026-09-23T11:15:00Z",
-              "age_seconds": 1500,
-              "stale": false,
-              "source": "log",
-              "device": "fatima-mbp (fatima)",
-              "windows": [
-                {
-                  "name": "7d credits",
-                  "percent": 35,
-                  "level": "ok",
-                  "resets_at": "2026-09-24T18:40:00Z",
-                  "minutes": 10080,
-                  "pace": null
-                }
-              ]
-            },
-            "sessions": 20,
+            "plan": "SuperGrok Heavy",
+            "state": "unknown",
+            "quota": null,
+            "link": null,
+            "sessions": 40,
             "tokens": {
-              "input": 10500000,
-              "output": 810000,
-              "cache_read": 42300000,
-              "cache_write": 0
+              "input": 23870000,
+              "output": 10230000,
+              "cache_read": 409200000,
+              "cache_write": 11366666
             },
-            "plan": "SuperGrok Plus",
-            "per_device": [
-              {
-                "device": "fatima-mbp (fatima)",
-                "device_id": "d-4b1e0c7a9f3e662fbf0456d6",
-                "current": true,
-                "sessions": 9,
-                "tokens": {
-                  "input": 5300000,
-                  "output": 410000,
-                  "cache_read": 22000000,
-                  "cache_write": 0
-                },
-                "last_active_at": "2026-09-23T11:15:00Z"
-              },
-              {
-                "device": "hana-mbp (hana)",
-                "device_id": "d-4b1e0c7a9f3ec3ba76e96914",
-                "current": true,
-                "sessions": 6,
-                "tokens": {
-                  "input": 3400000,
-                  "output": 260000,
-                  "cache_read": 14000000,
-                  "cache_write": 0
-                },
-                "last_active_at": "2026-09-23T06:40:00Z"
-              },
-              {
-                "device": "bo-desktop (bo)",
-                "device_id": "d-4b1e0c7a9f3d6cbdd4a17b86",
-                "current": true,
-                "sessions": 3,
-                "tokens": {
-                  "input": 1100000,
-                  "output": 90000,
-                  "cache_read": 4200000,
-                  "cache_write": 0
-                },
-                "last_active_at": "2026-09-22T02:20:00Z"
-              },
-              {
-                "device": "eli-thinkpad (eli)",
-                "device_id": "d-4b1e0c7a9f3e470181b7fb6c",
-                "current": true,
-                "sessions": 2,
-                "tokens": {
-                  "input": 700000,
-                  "output": 50000,
-                  "cache_read": 2100000,
-                  "cache_write": 0
-                },
-                "last_active_at": "2026-09-23T00:00:00Z"
-              }
-            ]
+            "usage": {
+              "today": 651000,
+              "7d": 3100000,
+              "30d": 13020000,
+              "90d": 34100000
+            },
+            "users": 1,
+            "busiest": "annbook",
+            "last_active_at": "2026-09-23T03:38:00Z",
+            "per_device": [],
+            "linked_usage": []
           }
         ]
       },
@@ -1907,104 +1433,1362 @@
         "provider": "hermes",
         "accounts": [
           {
-            "label": "openai-codex",
-            "devices": [
-              "ann-mbp (ann)"
-            ],
-            "headline_percent": 92,
-            "level": "critical",
-            "quota": {
-              "observed_at": "2026-09-23T11:38:00Z",
-              "age_seconds": 120,
-              "stale": false,
-              "source": "harness",
-              "device": "ann-mbp (ann)",
-              "windows": [
-                {
-                  "name": "5h",
-                  "percent": 18,
-                  "level": "ok",
-                  "resets_at": "2026-09-23T15:02:00Z",
-                  "minutes": 300,
-                  "pace": {
-                    "percent_per_hour": 1.5,
-                    "fills_at": null
-                  }
-                },
-                {
-                  "name": "7d",
-                  "percent": 92,
-                  "level": "critical",
-                  "resets_at": "2026-09-26T01:40:00Z",
-                  "minutes": 10080,
-                  "pace": {
-                    "percent_per_hour": 0.4,
-                    "fills_at": null
-                  }
-                }
-              ],
-              "from": "codex"
-            },
-            "sessions": 18,
-            "tokens": {
-              "input": 6200000,
-              "output": 900000,
-              "cache_read": 120000000,
-              "cache_write": 0
-            },
-            "per_device": [
-              {
-                "device": "ann-mbp (ann)",
-                "device_id": "d-4b1e0c7a9f3d2e615a08c4b2",
-                "current": true,
-                "sessions": 18,
-                "tokens": {
-                  "input": 6200000,
-                  "output": 900000,
-                  "cache_read": 120000000,
-                  "cache_write": 0
-                },
-                "last_active_at": "2026-09-23T08:40:00Z"
-              }
-            ],
-            "link": {
-              "provider": "codex",
-              "label": "ann@acme.io"
-            }
-          },
-          {
             "label": "openrouter",
+            "name": "openrouter",
+            "alias": null,
+            "subscription": false,
+            "current": false,
             "devices": [
-              "gpu-box (research)"
+              "bot-b (hermes)",
+              "bot-c (hermes)",
+              "srv1 (root)"
             ],
-            "headline_percent": null,
-            "level": "unknown",
+            "plan": null,
+            "state": "unknown",
             "quota": null,
-            "sessions": 60,
+            "link": null,
+            "sessions": 40,
             "tokens": {
-              "input": 40000000,
-              "output": 6000000,
-              "cache_read": 300000000,
-              "cache_write": 0
+              "input": 56525000,
+              "output": 24225000,
+              "cache_read": 969000000,
+              "cache_write": 26916666
             },
-            "per_device": [
-              {
-                "device": "gpu-box (research)",
-                "device_id": "d-4b1e0c7a9f3e855dfc50b240",
-                "current": true,
-                "sessions": 60,
-                "tokens": {
-                  "input": 40000000,
-                  "output": 6000000,
-                  "cache_read": 300000000,
-                  "cache_write": 0
-                },
-                "last_active_at": "2026-09-23T11:19:00Z"
-              }
-            ]
+            "usage": {
+              "today": 1210000,
+              "7d": 9800000,
+              "30d": 30250000,
+              "90d": 80750000
+            },
+            "users": 3,
+            "busiest": "srv1",
+            "last_active_at": "2026-09-23T12:38:00Z",
+            "per_device": [],
+            "linked_usage": []
           }
         ]
       }
-    ]
+    ],
+    "matrix": {
+      "columns": [
+        {
+          "provider": "claude",
+          "name": "ann",
+          "no_quota": false,
+          "state": "out",
+          "percent": 67,
+          "usage": {
+            "today": 4284000,
+            "7d": 21300000,
+            "30d": 86940000,
+            "90d": 229050000
+          },
+          "window_tokens": 11715000,
+          "label": "ann@acme.dev"
+        },
+        {
+          "provider": "claude",
+          "name": "kim",
+          "no_quota": false,
+          "state": "unknown",
+          "percent": null,
+          "usage": {
+            "today": 3120000,
+            "7d": 10400000,
+            "30d": 39520000,
+            "90d": 93600000
+          },
+          "window_tokens": 0,
+          "label": "kim@corp.test"
+        },
+        {
+          "provider": "codex",
+          "name": "ann",
+          "no_quota": false,
+          "state": "out",
+          "percent": 100,
+          "usage": {
+            "today": 39195000,
+            "7d": 191700000,
+            "30d": 790980000,
+            "90d": 2079200000
+          },
+          "window_tokens": 138024000,
+          "label": "ann@acme.dev"
+        },
+        {
+          "provider": "codex",
+          "name": "sam",
+          "no_quota": false,
+          "state": "over",
+          "percent": 42,
+          "usage": {
+            "today": 2985000,
+            "7d": 59700000,
+            "30d": 149250000,
+            "90d": 238800000
+          },
+          "window_tokens": 16119000,
+          "label": "sam@mail.test"
+        },
+        {
+          "provider": "codex",
+          "name": "lee",
+          "no_quota": false,
+          "state": "ok",
+          "percent": 12,
+          "usage": {
+            "today": 43556000,
+            "7d": 345400000,
+            "30d": 1088900000,
+            "90d": 2777800000
+          },
+          "window_tokens": 51809999,
+          "label": "lee@corp.test"
+        },
+        {
+          "provider": "codex",
+          "name": "unknown",
+          "no_quota": false,
+          "state": "unknown",
+          "percent": null,
+          "usage": {
+            "today": 28440000,
+            "7d": 94800000,
+            "30d": 360240000,
+            "90d": 853200000
+          },
+          "window_tokens": 0,
+          "label": "unknown"
+        },
+        {
+          "provider": "grok",
+          "name": "a4c2e917",
+          "no_quota": false,
+          "state": "unknown",
+          "percent": null,
+          "usage": {
+            "today": 651000,
+            "7d": 3100000,
+            "30d": 13020000,
+            "90d": 34100000
+          },
+          "window_tokens": 0,
+          "label": "a4c2e917-6b3d-4f81-9c2a-5e7d1b8f0a36"
+        },
+        {
+          "provider": "hermes",
+          "name": "hermes",
+          "no_quota": true,
+          "state": "unknown",
+          "percent": null,
+          "usage": {
+            "today": 1210000,
+            "7d": 9800000,
+            "30d": 30250000,
+            "90d": 80750000
+          },
+          "window_tokens": 0
+        }
+      ],
+      "rows": [
+        {
+          "device": "srv1",
+          "device_id": "d-2f8a6c4e0b9d7f1a3c5e7b9d",
+          "cells": [
+            {
+              "usage": {
+                "today": 252000,
+                "7d": 2100000,
+                "30d": 6300000,
+                "90d": 17850000
+              },
+              "window_tokens": 1155000,
+              "share": 6.61
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 1416000,
+                "7d": 11800000,
+                "30d": 35400000,
+                "90d": 100300000
+              },
+              "window_tokens": 8496000,
+              "share": 6.16
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 28800000,
+                "7d": 240000000,
+                "30d": 720000000,
+                "90d": 2040000000
+              },
+              "window_tokens": 36000000,
+              "share": 8.34
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 972000,
+                "7d": 8100000,
+                "30d": 24300000,
+                "90d": 68850000
+              },
+              "window_tokens": 0,
+              "share": null
+            }
+          ],
+          "usage": {
+            "today": 31440000,
+            "7d": 262000000,
+            "30d": 786000000,
+            "90d": 2227000000
+          }
+        },
+        {
+          "device": "annbook",
+          "device_id": "d-7c3e1a9b5f2d4e8a6c0b1d3f",
+          "cells": [
+            {
+              "usage": {
+                "today": 4032000,
+                "7d": 19200000,
+                "30d": 80640000,
+                "90d": 211200000
+              },
+              "window_tokens": 10560000,
+              "share": 60.39
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 37779000,
+                "7d": 179900000,
+                "30d": 755580000,
+                "90d": 1978900000
+              },
+              "window_tokens": 129527999,
+              "share": 93.84
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 651000,
+                "7d": 3100000,
+                "30d": 13020000,
+                "90d": 34100000
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            }
+          ],
+          "usage": {
+            "today": 42462000,
+            "7d": 202200000,
+            "30d": 849240000,
+            "90d": 2224200000
+          }
+        },
+        {
+          "device": "Mac.localdomain",
+          "device_id": "d-9b1d3f5a7c9e1b3d5f7a9c1e",
+          "cells": [
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 3120000,
+                "7d": 10400000,
+                "30d": 39520000,
+                "90d": 93600000
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 28440000,
+                "7d": 94800000,
+                "30d": 360240000,
+                "90d": 853200000
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            }
+          ],
+          "usage": {
+            "today": 31560000,
+            "7d": 105200000,
+            "30d": 399760000,
+            "90d": 946800000
+          }
+        },
+        {
+          "device": "MacBook-Pro-Kim",
+          "device_id": "d-4e6a8c0e2a4c6e8a0c2e4a6c",
+          "cells": [
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 2985000,
+                "7d": 59700000,
+                "30d": 149250000,
+                "90d": 238800000
+              },
+              "window_tokens": 16119000,
+              "share": 42.0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            }
+          ],
+          "usage": {
+            "today": 2985000,
+            "7d": 59700000,
+            "30d": 149250000,
+            "90d": 238800000
+          }
+        },
+        {
+          "device": "bot-a",
+          "device_id": "d-b00c1d2e3f4a5b6c7d8e9f00",
+          "cells": [
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 4200000,
+                "7d": 30000000,
+                "30d": 105000000,
+                "90d": 210000000
+              },
+              "window_tokens": 4500000,
+              "share": 1.04
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            }
+          ],
+          "usage": {
+            "today": 4200000,
+            "7d": 30000000,
+            "30d": 105000000,
+            "90d": 210000000
+          }
+        },
+        {
+          "device": "bot-b",
+          "device_id": "d-b01c1d2e3f4a5b6c7d8e9f10",
+          "cells": [
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 3500000,
+                "7d": 25000000,
+                "30d": 87500000,
+                "90d": 175000000
+              },
+              "window_tokens": 3750000,
+              "share": 0.87
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 154000,
+                "7d": 1100000,
+                "30d": 3850000,
+                "90d": 7700000
+              },
+              "window_tokens": 0,
+              "share": null
+            }
+          ],
+          "usage": {
+            "today": 3654000,
+            "7d": 26100000,
+            "30d": 91350000,
+            "90d": 182700000
+          }
+        },
+        {
+          "device": "bot-c",
+          "device_id": "d-b02c1d2e3f4a5b6c7d8e9f20",
+          "cells": [
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 2240000,
+                "7d": 16000000,
+                "30d": 56000000,
+                "90d": 112000000
+              },
+              "window_tokens": 2400000,
+              "share": 0.56
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 84000,
+                "7d": 600000,
+                "30d": 2100000,
+                "90d": 4200000
+              },
+              "window_tokens": 0,
+              "share": null
+            }
+          ],
+          "usage": {
+            "today": 2324000,
+            "7d": 16600000,
+            "30d": 58100000,
+            "90d": 116200000
+          }
+        },
+        {
+          "device": "bot-d",
+          "device_id": "d-b03c1d2e3f4a5b6c7d8e9f30",
+          "cells": [
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 1680000,
+                "7d": 12000000,
+                "30d": 42000000,
+                "90d": 84000000
+              },
+              "window_tokens": 1799999,
+              "share": 0.42
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            }
+          ],
+          "usage": {
+            "today": 1680000,
+            "7d": 12000000,
+            "30d": 42000000,
+            "90d": 84000000
+          }
+        },
+        {
+          "device": "bot-e",
+          "device_id": "d-b04c1d2e3f4a5b6c7d8e9f40",
+          "cells": [
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 1260000,
+                "7d": 9000000,
+                "30d": 31500000,
+                "90d": 63000000
+              },
+              "window_tokens": 1349999,
+              "share": 0.31
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            }
+          ],
+          "usage": {
+            "today": 1260000,
+            "7d": 9000000,
+            "30d": 31500000,
+            "90d": 63000000
+          }
+        },
+        {
+          "device": "bot-f",
+          "device_id": "d-b05c1d2e3f4a5b6c7d8e9f50",
+          "cells": [
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 980000,
+                "7d": 7000000,
+                "30d": 24500000,
+                "90d": 49000000
+              },
+              "window_tokens": 1050000,
+              "share": 0.24
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            }
+          ],
+          "usage": {
+            "today": 980000,
+            "7d": 7000000,
+            "30d": 24500000,
+            "90d": 49000000
+          }
+        },
+        {
+          "device": "bot-g",
+          "device_id": "d-b06c1d2e3f4a5b6c7d8e9f60",
+          "cells": [
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 560000,
+                "7d": 4000000,
+                "30d": 14000000,
+                "90d": 28000000
+              },
+              "window_tokens": 600000,
+              "share": 0.14
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            }
+          ],
+          "usage": {
+            "today": 560000,
+            "7d": 4000000,
+            "30d": 14000000,
+            "90d": 28000000
+          }
+        },
+        {
+          "device": "bot-h",
+          "device_id": "d-b07c1d2e3f4a5b6c7d8e9f70",
+          "cells": [
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 280000,
+                "7d": 2000000,
+                "30d": 7000000,
+                "90d": 14000000
+              },
+              "window_tokens": 300000,
+              "share": 0.07
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            }
+          ],
+          "usage": {
+            "today": 280000,
+            "7d": 2000000,
+            "30d": 7000000,
+            "90d": 14000000
+          }
+        },
+        {
+          "device": "bot-i",
+          "device_id": "d-b08c1d2e3f4a5b6c7d8e9f80",
+          "cells": [
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": 0
+            },
+            {
+              "usage": {
+                "today": 56000,
+                "7d": 400000,
+                "30d": 1400000,
+                "90d": 2800000
+              },
+              "window_tokens": 60000,
+              "share": 0.01
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 0,
+                "30d": 0,
+                "90d": 0
+              },
+              "window_tokens": 0,
+              "share": null
+            }
+          ],
+          "usage": {
+            "today": 56000,
+            "7d": 400000,
+            "30d": 1400000,
+            "90d": 2800000
+          }
+        }
+      ]
+    }
   }
 }

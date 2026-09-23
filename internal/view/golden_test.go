@@ -3,6 +3,7 @@ package view
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -30,8 +31,16 @@ func loadReport(t *testing.T, name string) Report {
 // teamDir is the data directory the team fixture's status shows.
 const teamDir = "/Users/ann/Library/Application Support/ai-usage"
 
+// sampleZone is the zone of design.md's sample page: the fixtures' 14:38
+// UTC is its 17:38.
+var sampleZone = time.FixedZone("UTC+3", 3*60*60)
+
+// plainText is the static page as a pipe gets it: every escape stripped.
+func plainText(r Report, o Options) string { return sgr.ReplaceAllString(Text(r, o), "") }
+
 func TestGolden(t *testing.T) {
 	team, single := loadReport(t, "team"), loadReport(t, "single")
+	page := func(w int) Options { return Options{Width: w, Loc: sampleZone} }
 	for _, c := range []struct {
 		name string
 		out  func() string
@@ -39,6 +48,38 @@ func TestGolden(t *testing.T) {
 		{"team-status-80", func() string { return StatusText(team, teamDir, Options{Width: 80, Loc: time.UTC}) }},
 		{"single-status-80", func() string {
 			return StatusText(single, "/Users/sam/Library/Application Support/ai-usage", Options{Width: 80, Loc: time.UTC})
+		}},
+		{"team-80", func() string { return plainText(team, page(80)) }},
+		{"team-120", func() string { return plainText(team, page(120)) }},
+		{"team-160", func() string { return plainText(team, page(160)) }},
+		{"team-120-color", func() string {
+			o := page(120)
+			o.Color, o.Dark = true, true
+			return Text(team, o)
+		}},
+		// Without color only bold and reverse video are left.
+		{"team-120-mono", func() string { return Text(team, page(120)) }},
+		{"team-80-ascii", func() string {
+			o := page(80)
+			o.ASCII = true
+			return plainText(team, o)
+		}},
+		{"team-share", func() string {
+			o := page(120)
+			o.Share = true
+			return plainText(team, o)
+		}},
+		{"team-30d", func() string {
+			o := page(120)
+			o.Period = Month
+			return plainText(team, o)
+		}},
+		{"single-80", func() string { return plainText(single, page(80)) }},
+		{"single-120", func() string { return plainText(single, page(120)) }},
+		{"projects-all", func() string {
+			o := page(100)
+			o.AllProjects = true
+			return plainText(team, o)
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -61,11 +102,11 @@ func TestGolden(t *testing.T) {
 	}
 }
 
-var sgr = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+var sgr = regexp.MustCompile(`\x1b\[[0-9;:]*m`)
 
-// TestWidths draws every fixture's status at the widths around each tier
-// and checks the line contract: nothing wider than T-1, no trailing
-// spaces, only ASCII in ASCII mode, no escapes without color.
+// TestWidths draws every fixture's status and page at the widths around
+// each tier and checks the line contract: nothing wider than T-1, no
+// trailing spaces, only ASCII in ASCII mode, and no color without color.
 func TestWidths(t *testing.T) {
 	reports := map[string]Report{"team": loadReport(t, "team"), "single": loadReport(t, "single")}
 	for name, r := range reports {
@@ -75,15 +116,48 @@ func TestWidths(t *testing.T) {
 				checkLines(t, name, o, StatusText(r, teamDir, o))
 			}
 		}
+		for w := 80; w <= 160; w++ {
+			for _, ascii := range []bool{false, true} {
+				for _, color := range []bool{false, true} {
+					o := Options{Width: w, ASCII: ascii, Color: color, Loc: sampleZone}
+					checkLines(t, name, o, Text(r, o))
+				}
+			}
+		}
+		for _, w := range []int{80, 100, 120, 160} {
+			for _, per := range Periods {
+				for _, share := range []bool{false, true} {
+					for _, ascii := range []bool{false, true} {
+						o := Options{Width: w, Period: per, Share: share, ASCII: ascii, AllProjects: share, Loc: sampleZone}
+						checkLines(t, name, o, Text(r, o))
+						o.Interactive, o.MatrixScroll, o.Busy = true, 3, "|"
+						checkLines(t, name, o, Text(r, o))
+					}
+				}
+			}
+		}
 	}
 }
 
+// monoSGR are the escapes a page without color may carry: bold and
+// reverse video, and their resets.
+var monoSGR = regexp.MustCompile(`^\x1b\[(?:0|1|7|22|27)?(?:;(?:0|1|7|22|27))*m$`)
+
 func checkLines(t *testing.T, name string, o Options, out string) {
 	t.Helper()
-	if strings.Contains(out, "\x1b") {
-		t.Errorf("%s %+v: an escape without color", name, o)
+	if !o.Color {
+		for _, e := range sgr.FindAllString(out, -1) {
+			if !monoSGR.MatchString(e) {
+				t.Errorf("%s %+v: a color without color: %q", name, o, e)
+				break
+			}
+		}
+	}
+	if strings.Contains(sgr.ReplaceAllString(out, ""), "\x1b") {
+		t.Errorf("%s %+v: an escape that is not SGR", name, o)
 	}
 	for i, l := range strings.Split(strings.TrimSuffix(out, "\n"), "\n") {
+		l = sgr.ReplaceAllString(l, "")
 		if width(l) > o.Width-1 {
 			t.Errorf("%s %+v line %d is %d wide:\n%s", name, o, i+1, width(l), l)
 		}
@@ -99,4 +173,47 @@ func checkLines(t *testing.T, name string, o Options, out string) {
 			}
 		}
 	}
+}
+
+// TestPageFits checks that Page.Width is the widest line, and the header
+// ends there.
+func TestPageFits(t *testing.T) {
+	for _, name := range []string{"team", "single"} {
+		r := loadReport(t, name)
+		for _, w := range []int{80, 120, 160} {
+			p := Render(r, Options{Width: w, Loc: sampleZone})
+			widest := 0
+			for _, l := range append([]string{p.Header}, p.Body...) {
+				widest = max(widest, width(sgr.ReplaceAllString(l, "")))
+			}
+			if p.Width != widest {
+				t.Errorf("%s at %d: Width %d, the widest line %d", name, w, p.Width, widest)
+			}
+			if hw := width(sgr.ReplaceAllString(p.Header, "")); hw != p.Width {
+				t.Errorf("%s at %d: the header ends at %d, not %d", name, w, hw, p.Width)
+			}
+			if len(p.Body) < 2 || p.Body[0] != "" || p.Body[1] == "" || p.Body[len(p.Body)-1] == "" {
+				t.Errorf("%s at %d: the body does not start with one blank line, or ends with one", name, w)
+			}
+		}
+		// The health items keep their gap from the left side at every width.
+		for w := 80; w <= 160; w++ {
+			h := sgr.ReplaceAllString(Render(r, Options{Width: w, Loc: sampleZone}).Header, "")
+			if !strings.Contains(h, "  ● collected") {
+				t.Errorf("%s at %d: the header lost its health: %q", name, w, h)
+			}
+		}
+	}
+}
+
+func ExampleText() {
+	r := Report{GeneratedAt: time.Date(2026, 9, 23, 14, 38, 0, 0, time.UTC)}
+	r.Collector.DeviceLabel = "mbp-anna"
+	r.Collector.Version = "dev"
+	fmt.Print(plainText(r, Options{Loc: time.UTC}))
+	// Output:
+	// ai-usage · mbp-anna  ● never collected  ● no relay  ● dev build
+	//
+	// SUBSCRIPTIONS  0
+	//   no subscription has been used on this team's devices yet
 }

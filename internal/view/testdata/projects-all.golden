@@ -1,0 +1,63 @@
+ai-usage · annbook · team qmvrtzpa                ● collected 7m ago  ● relay 7m ago  ● up to date
+
+ATTENTION
+ OUT    codex ann@acme.dev   back Fri 17:09, in 1d 23h
+ OUT    claude ann · Fable   back Sun 01:00, in 3d 7h
+ OVER   claude ann@acme.dev  runs out ~Thu 01:17 at this week's pace · reading 1d old
+ OVER   codex sam@mail.test  runs out ~Sat 06:54 at this week's pace, 2d 13h before reset
+ ERROR  Mac.localdomain      codex: app-server exited without answering
+ OLD    2 devices on v1.4.0  Mac.localdomain, MacBook-Pro-Kim · latest v1.4.2
+
+SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
+
+  CLAUDE         THIS WEEK                 LEFT  RESETS              AT RESET  USERS
+● ann@acme.dev   ━━━━━━━━━╋━━━━━━────────  ~33%  3d 7h  Sun 01:00  ~174% over   2  annbook
+    Fable        ━━━━━━━━━━━━╋━━━━━━━━━━━    0%  3d 7h  Sun 01:00         out
+  kim@corp.test  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  Mac.localdomain
+
+  CODEX
+● ann@acme.dev   ━━━━━━━━━━━━━━━━━╋━━━━━━    0%  1d 23h Fri 17:09         out   2  annbook
+  sam@mail.test  ━━━━━━╋━━━──────────────   58%  5d 2h  Mon 20:12   157% over   1  MacBook-Pro-Kim
+● lee@corp.test  ━━━┃────────────────────   88%  5d 22h Tue 16:30      81% ok  10  srv1
+  unknown        ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  Mac.localdomain
+
+  GROK
+● a4c2e917       ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  annbook
+
+DEVICES × SUBSCRIPTIONS  13 · 7d · M tokens in+out                           ‹tokens›  share
+                   CLAUDE ──────────  CODEX ─────────────────────────────  GROK ───   +1 more
+                        ann      kim       ann      sam      lee  unknown  a4c2e917     TOTAL
+  srv1                    2        ·        12        ·      240        ·         ·       262
+● annbook                19        ·       180        ·        ·        ·         3       202
+× Mac.localdomain         ·       10         ·        ·        ·       95         ·       105
+↓ MacBook-Pro-Kim         ·        ·         ·       60        ·        ·         ·        60
+  bot-a                   ·        ·         ·        ·       30        ·         ·        30
+  bot-b                   ·        ·         ·        ·       25        ·         ·        26
+  bot-c                   ·        ·         ·        ·       16        ·         ·        17
+  bot-d                   ·        ·         ·        ·       12        ·         ·        12
+  bot-e                   ·        ·         ·        ·        9        ·         ·         9
+  bot-f                   ·        ·         ·        ·        7        ·         ·         7
+  bot-g                   ·        ·         ·        ·        4        ·         ·         4
+  bot-h                   ·        ·         ·        ·        2        ·         ·         2
+  bot-i                   ·        ·         ·        ·       <1        ·         ·        <1
+  TOTAL                  21       10       192       60      345       95         3       736
+
+PROJECTS  annbook · by 7d · M tokens in+out
+  PROJECT                                            7D  90D  SESS  VIA            LAST
+  ~/src/acme/app                                    118  420    43  codex, claude    1h
+  ~/Vault                                            43  130    56  codex            3h
+  ~/src/site                                         18   62     6  codex            2d
+  ~/src/ai-usage                                     11   11     3  claude, grok     7m
+  ~/src/acme/os                                       4   12     3  claude, grok    11h
+  ~/src/acme/relay                                    3    9     2  codex            1d
+  ~/dotfiles                                          2    5     4  codex, claude    4d
+  ~/scratch                                           1    3     5  claude           5d
+  ~/src/acme/landing                                 <1    7     2  codex            6d
+  ~/Library/…/Documents/Notes/Projects/2026          <1    2     1  claude           6d
+  ~/src/acme/os-archive                               ·   21    11  codex           12d
+  ~/src/site/old                                      ·    8     3  claude          20d
+  ~/tmp                                               ·   <1     1  codex           40d
+  /private/tmp/scratch                                ·   <1     1  claude          80d
+
+━ used  ─ left  ┃╋ even use by now  ┈ no reading  ~ old reading  ? not known
+— no forecast  ● this device, or logged in here  × error  ↓ old release  · none  ‹› chosen

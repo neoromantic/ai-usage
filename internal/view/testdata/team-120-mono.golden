@@ -1,36 +1,36 @@
-ai-usage · annbook · team qmvrtzpa                                  ● collected 7m ago  ● relay 7m ago  ● up to date
+[1mai-usage[m · annbook · team qmvrtzpa                                  ● collected 7m ago  ● relay 7m ago  ● up to date
 
-ATTENTION
- OUT    codex ann@acme.dev   back Fri 17:09, in 1d 23h
- OUT    claude ann · Fable   back Sun 01:00, in 3d 7h
- OVER   claude ann@acme.dev  runs out ~Thu 01:17 at this week's pace, 2d 23h before reset · reading 1d old
- OVER   codex sam@mail.test  runs out ~Sat 06:54 at this week's pace, 2d 13h before reset
- ERROR  Mac.localdomain      codex: app-server exited without answering
- OLD    2 devices on v1.4.0  Mac.localdomain, MacBook-Pro-Kim · latest v1.4.2
+[1mATTENTION[m
+[7m OUT   [m codex ann@acme.dev   back Fri 17:09, in 1d 23h
+[7m OUT   [m claude ann · Fable   back Sun 01:00, in 3d 7h
+[7m OVER  [m claude ann@acme.dev  runs out ~Thu 01:17 at this week's pace, 2d 23h before reset · reading 1d old
+[7m OVER  [m codex sam@mail.test  runs out ~Sat 06:54 at this week's pace, 2d 13h before reset
+[7m ERROR [m Mac.localdomain      codex: app-server exited without answering
+[7m OLD   [m 2 devices on v1.4.0  Mac.localdomain, MacBook-Pro-Kim · latest v1.4.2
 
-SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
+[1mSUBSCRIPTIONS[m  7 · 2 out · 1 over · 3 no reading
 
-  CLAUDE         PLAN        THIS WEEK                 LEFT  RESETS              AT RESET  USERS                LAST
+  [1mCLAUDE[m         PLAN        THIS WEEK                 LEFT  RESETS              AT RESET  USERS                LAST
 ● ann@acme.dev   max         ━━━━━━━━━╋━━━━━━────────  ~33%  3d 7h  Sun 01:00  ~174% over   2  annbook            7m
     Fable                    ━━━━━━━━━━━━╋━━━━━━━━━━━    0%  3d 7h  Sun 01:00         out
   kim@corp.test  max         ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  Mac.localdomain    1h
 
-  CODEX
+  [1mCODEX[m
 ● ann@acme.dev   pro         ━━━━━━━━━━━━━━━━━╋━━━━━━    0%  1d 23h Fri 17:09         out   2  annbook            1h
   sam@mail.test  prolite     ━━━━━━╋━━━──────────────   58%  5d 2h  Mon 20:12   157% over   1  MacBook-Pro-Kim    3h
 ● lee@corp.test  pro         ━━━┃────────────────────   88%  5d 22h Tue 16:30      81% ok  10  srv1              34m
   unknown                    ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  Mac.localdomain   16m
 
-  GROK
+  [1mGROK[m
 ● a4c2e917       SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  annbook           11h
 
-DEVICES × SUBSCRIPTIONS  13 · 7d · M tokens in+out                                     ‹tokens›  share
+[1mDEVICES × SUBSCRIPTIONS[m  13 · 7d · M tokens in+out                                     [7m‹tokens›[m  share
                    CLAUDE ──────────  CODEX ─────────────────────────────  GROK ───  NO QUOTA
                         ann      kim       ann      sam      lee  unknown  a4c2e917    hermes     TOTAL
-  srv1                    2        ·        12        ·      240        ·         ·         8       262
-● annbook                19        ·       180        ·        ·        ·         3         ·       202
-× Mac.localdomain         ·       10         ·        ·        ·       95         ·         ·       105
-↓ MacBook-Pro-Kim         ·        ·         ·       60        ·        ·         ·         ·        60
+  srv1                    2        ·        12        ·      [1m240[m        ·         ·         [1m8[m       262
+● annbook                [1m19[m        ·       [1m180[m        ·        ·        ·         [1m3[m         ·       202
+× Mac.localdomain         ·       [1m10[m         ·        ·        ·       [1m95[m         ·         ·       105
+↓ MacBook-Pro-Kim         ·        ·         ·       [1m60[m        ·        ·         ·         ·        60
   bot-a                   ·        ·         ·        ·       30        ·         ·         ·        30
   bot-b                   ·        ·         ·        ·       25        ·         ·         1        26
   bot-c                   ·        ·         ·        ·       16        ·         ·        <1        17
@@ -42,7 +42,7 @@ DEVICES × SUBSCRIPTIONS  13 · 7d · M tokens in+out                           
   bot-i                   ·        ·         ·        ·       <1        ·         ·         ·        <1
   TOTAL                  21       10       192       60      345       95         3        10       736
 
-PROJECTS  annbook · by 7d · M tokens in+out
+[1mPROJECTS[m  annbook · by 7d · M tokens in+out
   PROJECT                                            7D  90D  SESS  VIA            LAST
   ~/src/acme/app                                    118  420    43  codex, claude    1h
   ~/Vault                                            43  130    56  codex            3h
