@@ -374,6 +374,13 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 	// last time is a missing file rather than a real drop.
 	partial := false
 	legacy := legacyNamed(st, p)
+	used := map[string]bool{}
+	for _, s := range res.Sessions {
+		used[s.Home] = true
+		for _, h := range s.Homes {
+			used[h] = true
+		}
+	}
 	var probeErrs [][2]string
 	for i, home := range homes {
 		hr := res.Homes[home]
@@ -393,8 +400,11 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 		if p != "hermes" {
 			a := answers[i]
 			// An app's per-account home with nobody logged in is an account
-			// removed or not added yet, not a problem.
-			if a.err != nil && !(isLoggedOut(a.err) && isManaged(p, home)) {
+			// removed or not added yet, and a home with no usage is a tool
+			// installed but never used, as in a bot's image, which Claude
+			// Code makes its home for as soon as it is asked who is logged
+			// in. Neither is a problem.
+			if a.err != nil && !(isLoggedOut(a.err) && (isManaged(p, home) || !used[home])) {
 				probeErrs = append(probeErrs, [2]string{home, shortErr(a.err)})
 			}
 			labels[home] = applyReading(st, p, home, a.reading, isLoggedOut(a.err), hr.Limits, now, prevRun)

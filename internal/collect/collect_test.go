@@ -456,6 +456,23 @@ func TestHomeClaimsOnceItsLogsAreRead(t *testing.T) {
 	}
 }
 
+func TestUnusedHomeWithoutLoginIsNoProblem(t *testing.T) {
+	// A tool in a bot's image that nobody uses: Claude Code makes its home
+	// when asked who is logged in, and the next run finds it empty.
+	w, o := newWorld(t)
+	h := w.home(t, "claude")
+	w.askErr[state.Key("claude", h)] = notLoggedIn("claude")
+	w.readings[state.Key("claude", h)] = probe.Reading{}
+	if got := run(t, o).State.Sources["claude"]; got.Status != "ok" || got.Error != "" {
+		t.Fatalf("claude source = %+v", got)
+	}
+	w.now = t0.Add(15 * time.Minute)
+	w.sessions("claude", h, sess("s1", "/p", 100, w.now))
+	if got := run(t, o).State.Sources["claude"]; got.Status != "partial" {
+		t.Fatalf("a used home logged out: source = %+v", got)
+	}
+}
+
 func TestLoggedOutHomeDoesNotClaimLater(t *testing.T) {
 	// A home that said nobody is logged in has answered; the usage counted
 	// then is no one's, whoever logs in afterwards.

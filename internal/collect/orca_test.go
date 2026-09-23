@@ -81,10 +81,12 @@ func TestDiscoverFindsOrcaCodexHomes(t *testing.T) {
 }
 
 // Each Orca account home is probed on its own. One with nobody logged in
-// holds no account and is not a problem; the default home logged out still is.
+// holds no account and is not a problem; the default home logged out still
+// is, once it has been used.
 func TestOrcaHomeWithoutLoginIsNoAccount(t *testing.T) {
 	w, o := newWorld(t)
 	def := w.home(t, "codex")
+	w.sessions("codex", def, sess("s1", "/p", 100, t0))
 	data := defaultAppData("orca", w.userHome)
 	a := orcaHome(t, data, "7527", true)
 	b := orcaHome(t, data, "99a9", true)
