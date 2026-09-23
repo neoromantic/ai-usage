@@ -76,15 +76,30 @@ Releases are built for amd64 and arm64 on each OS. The installer:
 
 1. downloads the release file for your OS and CPU, and `checksums.txt` from the same release
 2. checks the SHA-256 checksum
-3. installs the binary to `~/.local/bin/ai-usage`, or `%LOCALAPPDATA%\Programs\ai-usage\ai-usage.exe` on Windows, where it also adds that folder to your user `PATH`
+3. installs the binary into a folder on your `PATH` (see below), or to `%LOCALAPPDATA%\Programs\ai-usage\ai-usage.exe` on Windows, where it also adds that folder to your user `PATH`
 4. saves the relay and joins the team, if you gave them
 5. runs `ai-usage` once, which registers it with the scheduler
+
+On macOS and Linux, an upgrade replaces the binary where it is: `~/.local/bin/ai-usage`, or the `ai-usage` found on `PATH`, so there is never a second copy. A new install goes into the first of `~/.local/bin`, `~/bin`, `/opt/homebrew/bin`, and `/usr/local/bin` that is on your `PATH` and that you can write to, and never into a folder that belongs to another tool, such as `~/.cargo/bin`.
+
+When none of them is, the binary goes into `~/.local/bin`, and the installer adds that folder to `PATH` in the profile of your login shell, the one `$SHELL` names:
+
+| Shell | Profile |
+| --- | --- |
+| zsh | `~/.zshrc`, or `$ZDOTDIR/.zshrc` |
+| bash on macOS | the first of `~/.bash_profile`, `~/.bash_login`, and `~/.profile` that exists, else a new `~/.bash_profile`; a terminal on macOS opens a login shell, which reads only that one |
+| bash on Linux | `~/.bashrc` |
+| fish | `~/.config/fish/conf.d/ai-usage.fish`, or the same under `$XDG_CONFIG_HOME` |
+| another shell | `~/.profile` |
+
+It adds a block that starts with `# Added by the ai-usage installer`, once: running the installer again adds nothing. A new terminal finds `ai-usage` by name; in the terminal you installed from, use the full path the installer prints. With `AI_USAGE_NO_MODIFY_PATH=1` it leaves profiles alone and prints the line to add.
 
 The installer asks no questions. Run it again to upgrade in place. It reads these variables:
 
 | Variable | Meaning |
 | --- | --- |
-| `AI_USAGE_BIN_DIR` | where the binary goes |
+| `AI_USAGE_BIN_DIR` | where the binary goes, instead of the folder the installer picks; it edits no profile then |
+| `AI_USAGE_NO_MODIFY_PATH` | leave shell profiles alone |
 | `AI_USAGE_NAME` | this machine's name in the team, instead of its host name |
 | `AI_USAGE_RELAY` | relay URL to save before the first run |
 | `AI_USAGE_TEAM_KEY` | team key to join before the first run |
@@ -261,7 +276,7 @@ On a server, run the collector as a user that can read those folders. Hermes dat
 
 The collector runs in a container as on any Linux machine: install it inside, as the user whose tools it should read, and each container, such as each bot, is a machine in the team. Three things differ.
 
-- The state folder holds the device id and the team key, so it must outlive the container. Keep that user's home, or `AI_USAGE_HOME`, on a volume or a bind mount. A binary installed there, in `~/.local/bin`, keeps its updates too.
+- The state folder holds the device id and the team key, so it must outlive the container. Keep that user's home, or `AI_USAGE_HOME`, on a volume or a bind mount. A binary installed there, in `~/.local/bin`, keeps its updates too. As root, a new install goes into `/usr/local/bin` instead, which the container does not keep, so add `AI_USAGE_BIN_DIR="$HOME/.local/bin"` to the install command.
 - A container's host name is random. Name the machine when installing with `AI_USAGE_NAME`, later with `ai-usage name set`, or with `AI_USAGE_NAME` in the container's environment.
 - Containers rarely have cron. `ai-usage schedule run` is the scheduler there: it collects at once and then every 15 minutes, until it is stopped. Run it beside the container's main process, under its service manager if it has one, or from its entrypoint.
 
@@ -342,7 +357,7 @@ macOS:
 ```sh
 ai-usage schedule remove
 ai-usage team forget-device d-…
-rm ~/.local/bin/ai-usage
+rm "$(command -v ai-usage)"
 rm -r ~/Library/Application\ Support/ai-usage
 ```
 
@@ -351,7 +366,7 @@ Linux:
 ```sh
 ai-usage schedule remove
 ai-usage team forget-device d-…
-rm ~/.local/bin/ai-usage
+rm "$(command -v ai-usage)"
 rm -r "${XDG_CONFIG_HOME:-$HOME/.config}/ai-usage"
 ```
 
@@ -364,6 +379,8 @@ Remove-Item -Recurse "$env:LOCALAPPDATA\Programs\ai-usage", "$env:LOCALAPPDATA\a
 ```
 
 Then open *Edit environment variables for your account* from the Start menu and remove the `…\AppData\Local\Programs\ai-usage` entry from `Path`.
+
+On macOS and Linux, if the installer added `~/.local/bin` to your shell profile, remove the block that starts with `# Added by the ai-usage installer`, or `conf.d/ai-usage.fish` for fish.
 
 If you set `AI_USAGE_BIN_DIR` or `AI_USAGE_HOME`, remove those folders instead.
 

@@ -8,8 +8,10 @@
 # installer there instead of GitHub. The build is a development version, and
 # AI_USAGE_NO_SCHEDULE is set, so the first run neither registers with the
 # system scheduler nor updates itself. On Windows it then registers the task
-# with `schedule install`, checks it, and removes it. Work files go under
-# $RUNNER_TEMP.
+# with `schedule install`, checks it, and removes it. On macOS and Linux it
+# then installs into homes of its own under $RUNNER_TEMP, to check which
+# folder the binary goes to and which shell profile puts it on PATH. Work
+# files go under $RUNNER_TEMP.
 set -eu
 
 fail() {
@@ -51,6 +53,9 @@ for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
 done
 [ "$up" = 1 ] || fail "the local server did not start"
 
+# The collector also reads the harness homes these name, so a local run
+# with a fake HOME would still read the real ones.
+unset CLAUDE_CONFIG_DIR CODEX_HOME GROK_HOME HERMES_HOME
 export AI_USAGE_NO_SCHEDULE=1
 key=$(AI_USAGE_HOME="$work/other" "$built" team key)
 export AI_USAGE_DOWNLOAD_URL="http://127.0.0.1:$port"
@@ -109,5 +114,53 @@ if [ "$goos" = windows ]; then
 	if MSYS_NO_PATHCONV=1 schtasks /Query /TN ai-usage >/dev/null 2>&1; then
 		fail "schedule remove left the task"
 	fi
+else
+	# Without AI_USAGE_BIN_DIR the installer picks the folder and may edit a
+	# shell profile. Each case gets a home of its own and only the system's
+	# folders on PATH, so no real profile or earlier install is involved.
+	unset AI_USAGE_BIN_DIR ZDOTDIR XDG_CONFIG_HOME
+	sys=/usr/bin:/bin:/usr/sbin:/sbin
+
+	# A folder already on PATH is used, and an upgrade stays in it even when
+	# a folder that comes first appears on PATH.
+	h=$work/on-path
+	mkdir -p "$h/bin" "$h/.local/bin"
+	HOME=$h PATH=$h/bin:$sys SHELL=/bin/bash sh install.sh
+	HOME=$h PATH=$h/.local/bin:$h/bin:$sys SHELL=/bin/bash sh install.sh
+	[ -x "$h/bin/ai-usage" ] || fail "the installer did not use the folder on PATH"
+	[ ! -e "$h/.local/bin/ai-usage" ] || fail "the upgrade installed a second copy"
+	if [ -e "$h/.bash_profile" ] || [ -e "$h/.bashrc" ]; then
+		fail "the installer edited a profile with the folder already on PATH"
+	fi
+
+	# With none on PATH, the binary goes into ~/.local/bin, and the login
+	# shell's profile puts that on PATH once, however often the installer
+	# runs. A bash login shell on macOS reads the first profile that exists.
+	for shell in bash zsh; do
+		h=$work/$shell
+		mkdir -p "$h"
+		case $goos/$shell in
+		darwin/bash)
+			: >"$h/.profile"
+			profile=$h/.profile
+			;;
+		*/bash) profile=$h/.bashrc ;;
+		*) profile=$h/.zshrc ;;
+		esac
+		HOME=$h PATH=$sys SHELL=/bin/$shell sh install.sh
+		HOME=$h PATH=$sys SHELL=/bin/$shell sh install.sh
+		[ "$(grep -c ai-usage "$profile")" = 1 ] || fail "$profile does not have one ai-usage block"
+		found=$(HOME=$h PATH=$sys sh -c '. "$1" && command -v ai-usage' sh "$profile" || true)
+		[ "$found" = "$h/.local/bin/ai-usage" ] || fail "$profile puts $found on PATH, not ~/.local/bin/ai-usage"
+	done
+	[ ! -e "$work/bash/.bash_profile" ] || fail "the installer made a .bash_profile that hides .profile"
+
+	# AI_USAGE_NO_MODIFY_PATH leaves profiles alone and says what to add.
+	h=$work/no-modify
+	mkdir -p "$h"
+	HOME=$h PATH=$sys SHELL=/bin/zsh AI_USAGE_NO_MODIFY_PATH=1 sh install.sh 2>"$work/no-modify.err"
+	[ -x "$h/.local/bin/ai-usage" ] || fail "the installer did not fall back to ~/.local/bin"
+	[ ! -e "$h/.zshrc" ] || fail "AI_USAGE_NO_MODIFY_PATH did not leave the profile alone"
+	grep -q 'export PATH=' "$work/no-modify.err" || fail "the installer did not say how to put ~/.local/bin on PATH"
 fi
 echo "install-smoke: ok" >&2

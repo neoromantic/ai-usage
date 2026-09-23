@@ -4,17 +4,23 @@
 #   curl -fsSL https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.sh | sh
 #
 # Environment, all optional:
-#   AI_USAGE_BIN_DIR       where the binary goes (default: $HOME/.local/bin)
-#   AI_USAGE_NAME          this device's name in the team (default: the host name)
-#   AI_USAGE_RELAY         relay URL to save before the first run
-#   AI_USAGE_TEAM_KEY      team key to join before the first run
-#   AI_USAGE_DOWNLOAD_URL  where release files are fetched from (mirrors, tests)
-#   AI_USAGE_ALLOW_ROOT    set to install for root from a sudo shell
+#   AI_USAGE_BIN_DIR         where the binary goes (default: see below)
+#   AI_USAGE_NAME            this device's name in the team (default: the host name)
+#   AI_USAGE_RELAY           relay URL to save before the first run
+#   AI_USAGE_TEAM_KEY        team key to join before the first run
+#   AI_USAGE_DOWNLOAD_URL    where release files are fetched from (mirrors, tests)
+#   AI_USAGE_ALLOW_ROOT      set to install for root from a sudo shell
+#   AI_USAGE_NO_MODIFY_PATH  set to leave shell profiles alone
 #
 # The script downloads the release file for this OS and CPU, checks it against
 # the release's checksums.txt, installs it, and runs it once. That first run
 # registers the collector with the system scheduler (cron on Linux, launchd
 # on macOS). Running the script again upgrades in place.
+#
+# The binary goes where an earlier install is, else into the first of
+# ~/.local/bin, ~/bin, /opt/homebrew/bin, and /usr/local/bin that is on PATH
+# and writable. With none, it goes into ~/.local/bin, and a marked block in
+# the login shell's profile puts that folder on PATH for new terminals.
 
 # Everything is inside main so a partly downloaded script does nothing.
 main() {
@@ -30,7 +36,7 @@ main() {
 	repo="neoromantic/ai-usage"
 	base="${AI_USAGE_DOWNLOAD_URL:-https://github.com/$repo/releases/latest/download}"
 	base="${base%/}"
-	bin_dir="${AI_USAGE_BIN_DIR:-${HOME:?HOME is not set}/.local/bin}"
+	bin_dir="${AI_USAGE_BIN_DIR:-$(find_bin_dir)}"
 
 	os=$(detect_os)
 	arch=$(detect_arch "$os")
@@ -74,11 +80,88 @@ main() {
 		fail "the first run failed; the binary is installed, run $bin to retry"
 	fi
 
+	# find_bin_dir picks a folder on PATH or ~/.local/bin, so only
+	# ~/.local/bin can be off PATH here, unless AI_USAGE_BIN_DIR named another.
+	if on_path "$bin_dir"; then
+		:
+	elif [ -z "${AI_USAGE_BIN_DIR:-}${AI_USAGE_NO_MODIFY_PATH:-}" ] && add_to_path "$os"; then
+		say "a new terminal finds ai-usage by name; in this one, run $bin"
+	else
+		say "$bin_dir is not on PATH; add it to your shell profile:
+  export PATH=\"$bin_dir:\$PATH\""
+	fi
+}
+
+# find_bin_dir prints the folder to install into. An upgrade replaces the
+# earlier binary where it is, so there is never a second copy and the
+# scheduler entry keeps pointing at it. A new install goes into a folder on
+# PATH that is meant for a person's own programs; a tool's own folder, such
+# as ~/.cargo/bin or a node version manager's, belongs to that tool.
+find_bin_dir() {
+	home=${HOME:?HOME is not set}
+	for f in "$home/.local/bin/ai-usage" "$(command -v ai-usage || true)"; do
+		case $f in /*) ;; *) continue ;; esac
+		if [ -f "$f" ] && [ -w "${f%/*}" ]; then
+			echo "${f%/*}"
+			return
+		fi
+	done
+	for d in "$home/.local/bin" "$home/bin" /opt/homebrew/bin /usr/local/bin; do
+		if on_path "$d" && [ -d "$d" ] && [ -w "$d" ]; then
+			echo "$d"
+			return
+		fi
+	done
+	echo "$home/.local/bin"
+}
+
+on_path() {
 	case ":${PATH:-}:" in
-	*":$bin_dir:"*) ;;
-	*) say "$bin_dir is not on PATH; add it to your shell profile:
-  export PATH=\"$bin_dir:\$PATH\"" ;;
+	*":$1:"*) return 0 ;;
 	esac
+	return 1
+}
+
+# add_to_path puts ~/.local/bin on PATH in the profile of the login shell,
+# once. The block names $HOME, not this home's path, so a profile shared
+# between machines still works.
+add_to_path() {
+	mark="# Added by the ai-usage installer"
+	line="export PATH=\"\$HOME/.local/bin:\$PATH\""
+	shell=${SHELL:-}
+	case ${shell##*/} in
+	zsh) profile="${ZDOTDIR:-$HOME}/.zshrc" ;;
+	bash)
+		profile="$HOME/.bashrc"
+		if [ "$1" = darwin ]; then
+			# A macOS terminal opens a login shell, and a bash login shell
+			# reads only the first of these that exists.
+			profile="$HOME/.bash_profile"
+			for f in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+				if [ -e "$f" ]; then
+					profile=$f
+					break
+				fi
+			done
+		fi
+		;;
+	fish)
+		profile="${XDG_CONFIG_HOME:-$HOME/.config}/fish/conf.d/ai-usage.fish"
+		line="contains -- \$HOME/.local/bin \$PATH; or set -gx PATH \$HOME/.local/bin \$PATH"
+		;;
+	*) profile="$HOME/.profile" ;;
+	esac
+
+	if grep -qsF "$mark" "$profile"; then
+		say "$profile already puts $HOME/.local/bin on PATH"
+		return
+	fi
+	mkdir -p "${profile%/*}" || return
+	if [ -s "$profile" ]; then
+		echo >>"$profile" || return
+	fi
+	printf '%s\n' "$mark" "$line" >>"$profile" || return
+	say "added $HOME/.local/bin to PATH in $profile"
 }
 
 say() { printf 'ai-usage install: %s\n' "$*" >&2; }
