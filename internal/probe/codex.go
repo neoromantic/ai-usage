@@ -59,7 +59,7 @@ func codexAt(ctx context.Context, env Env, bin, home string) (r Reading, served 
 	if !isDefaultHome(env.HomeDir, home, ".codex") {
 		custom = home
 	}
-	cmd.Env = env.harnessEnv("CODEX_HOME", custom)
+	cmd.Env = env.pathFor(env.harnessEnv("CODEX_HOME", custom), bin)
 	cmd.WaitDelay = 2 * time.Second
 	var said lastLine
 	cmd.Stderr = &said

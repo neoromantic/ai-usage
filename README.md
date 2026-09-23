@@ -165,7 +165,7 @@ A key cannot be revoked. To shut someone out, start a new team and join the rema
 
 In the team view, token counts add up across machines. Quota percentages do not: an account's quota is the newest reading any machine has for it.
 
-A machine goes by its host name. `ai-usage name set NAME` gives it another, and the team sees it after the machine's next run.
+A machine goes by its host name; a Mac goes by the local host name in Sharing settings, which does not change with the network. `ai-usage name set NAME` gives it another, and the team sees it after the machine's next run.
 
 ## Relay
 

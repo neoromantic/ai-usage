@@ -186,6 +186,33 @@ func (e Env) harnessEnv(key, value string) []string {
 	return out
 }
 
+// pathFor returns env with PATH extended by bin's folder and the shared
+// install places it lacks. An npm install of a harness is a script that runs
+// `env node`, and node sits beside it or in a shared place, which the system
+// scheduler's short PATH can miss. Folders already on PATH keep their order,
+// so the harness finds the node its user's shell would.
+func (e Env) pathFor(env []string, bin string) []string {
+	key, value, at := "PATH", "", -1
+	for i, kv := range env {
+		if name, v, ok := strings.Cut(kv, "="); ok && sameEnvName(name, "PATH") {
+			key, value, at = name, v, i
+		}
+	}
+	dirs := filepath.SplitList(value)
+	for _, d := range append([]string{filepath.Dir(bin)}, e.SystemBinDirs...) {
+		if d != "" && d != "." && !slices.Contains(dirs, d) {
+			dirs = append(dirs, d)
+		}
+	}
+	out := slices.Clone(env)
+	joined := key + "=" + strings.Join(dirs, string(filepath.ListSeparator))
+	if at < 0 {
+		return append(out, joined)
+	}
+	out[at] = joined
+	return out
+}
+
 // sameEnvName compares variable names the way the OS does. Windows ignores
 // case, so a stale Claude_Config_Dir would otherwise survive.
 func sameEnvName(a, b string) bool {

@@ -330,6 +330,62 @@ func TestHarnessEnvWindowsIgnoresCase(t *testing.T) {
 	}
 }
 
+func TestPathFor(t *testing.T) {
+	sep := string(filepath.ListSeparator)
+	bin := filepath.Join("npm", "bin", "codex")
+	e := Env{SystemBinDirs: []string{"/opt/homebrew/bin", "/usr/bin"}}
+	tests := []struct {
+		name    string
+		environ []string
+		want    []string
+	}{
+		{"adds what PATH lacks", []string{"A=1", "PATH=/usr/bin" + sep + "/bin"},
+			[]string{"A=1", "PATH=/usr/bin" + sep + "/bin" + sep + filepath.Join("npm", "bin") + sep + "/opt/homebrew/bin"}},
+		{"keeps the order of what it has", []string{"PATH=/opt/homebrew/bin" + sep + filepath.Join("npm", "bin") + sep + "/usr/bin"},
+			[]string{"PATH=/opt/homebrew/bin" + sep + filepath.Join("npm", "bin") + sep + "/usr/bin"}},
+		{"sets it when missing", []string{"A=1"},
+			[]string{"A=1", "PATH=" + filepath.Join("npm", "bin") + sep + "/opt/homebrew/bin" + sep + "/usr/bin"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			in := slices.Clone(tc.environ)
+			got := e.pathFor(in, bin)
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+			if !slices.Equal(in, tc.environ) {
+				t.Errorf("changed its input: %q", in)
+			}
+		})
+	}
+}
+
+// An npm install of codex is a script that runs `env node`, with node beside
+// it. The system scheduler's PATH has neither, and app-server still answers.
+func TestCodexScriptFindsItsInterpreter(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("scripts with #! lines are for Unix")
+	}
+	dir := filepath.Join(t.TempDir(), "npm", "bin")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	node := "#!/bin/sh\nexec \"$PROBE_TESTBIN\" -test.run='^TestHelperProcess$' -- codex \"$2\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "fakenode"), []byte(node), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "codex"), []byte("#!/usr/bin/env fakenode\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env, _ := fakeEnv(t, "codex-ok", "PATH=/usr/bin:/bin", "PROBE_TESTBIN="+os.Args[0])
+	env.Command = nil
+	env.LookPath = func(string) (string, error) { return filepath.Join(dir, "codex"), nil }
+	r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
+	if err != nil || r.Account != "dev@example.com" {
+		t.Fatalf("reading %+v, error %v", r, err)
+	}
+}
+
 func exeName(name string) string {
 	if runtime.GOOS == "windows" {
 		return name + ".exe"

@@ -125,7 +125,7 @@ func claudeAuthStatus(ctx context.Context, env Env, bin, configDir string) (clau
 	ctx, cancel := context.WithTimeout(ctx, env.timeout())
 	defer cancel()
 	cmd := env.command(ctx, bin, "auth", "status", "--json")
-	cmd.Env = env.harnessEnv("CLAUDE_CONFIG_DIR", configDir)
+	cmd.Env = env.pathFor(env.harnessEnv("CLAUDE_CONFIG_DIR", configDir), bin)
 	cmd.Stdin = nil
 	// A child the CLI leaves behind can hold stdout open after the kill.
 	cmd.WaitDelay = time.Second

@@ -17,6 +17,7 @@ import (
 	"os/signal"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"syscall"
@@ -240,6 +241,16 @@ func validName(n string) error {
 
 // hostname and osUser name this device in reports. Tests pin them.
 var hostname = func() string {
+	// macOS takes its host name from the network, so one Mac can read as
+	// Mac.localdomain on one network and by its own name on another. Its
+	// local host name, set in Sharing settings, stays put.
+	if runtime.GOOS == "darwin" {
+		if out, err := exec.Command("/usr/sbin/scutil", "--get", "LocalHostName").Output(); err == nil {
+			if h := strings.TrimSpace(string(out)); h != "" {
+				return h
+			}
+		}
+	}
 	h, err := os.Hostname()
 	if err != nil {
 		return "unknown"
