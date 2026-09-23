@@ -129,13 +129,6 @@ Recorded on 2026-09-23 with the owner. Not started.
   - A new device asks at its first run. A device that was never named by hand asks once, at its first run after the update. The answer is saved and is not regenerated when the host name or accounts change later.
   - A name set by hand, with `name set` or `AI_USAGE_NAME`, always wins and is never replaced.
   - Open: the model, the prompt, the 64-character limit, and how to avoid two devices in a team getting one name, since the relay cannot see the others' names.
-- **Prune the tests.** Remove the tests that pin incidental detail rather than behavior:
-  - tests that repeat one another;
-  - exact message wording, where only the meaning matters;
-  - the data of one real machine, where a general case already covers it;
-  - internal helpers whose callers are already tested.
-
-  Each behavior in this document keeps a test, and the console keeps its golden files. The relay's checks and the ledger's attribution keep their full coverage.
 - **A refactoring review for short, expressive code.** Find and fix:
   - repeated logic;
   - long functions;
@@ -213,11 +206,12 @@ Done, in short:
   - A damaged `state.json` is set aside as `state.json.bad` rather than stopping every run.
 - **Guide after install.** A new device prints a short guide under the first report a person reads, once. It names the scheduler that now collects every 15 minutes, or says what to do when none was registered. It says what the team sees under this device's name. And it lists the commands worth knowing: the report, `status`, `name set`, inviting a colleague with `ai-usage team key` and the installer's `AI_USAGE_TEAM_KEY` (the key itself is never printed), pausing, and where the README says how to uninstall. The binary prints it, so every installer gets it. `state.json` keeps it due from the first run until a report is printed as text, so scheduled and `--json` runs leave it for later. A device that collected before the guide existed never prints it.
 - **Generic.** Code, tests, fixtures, and docs carry no names, hosts, private paths, or stories of the team that wrote them. Test data uses neutral names such as `ann` and `~/src/acme/app`.
+- **Lean tests.** Tests check behavior. None pins exact wording, a helper whose callers are already tested, or the data of one real machine, and none repeats another. Each behavior in this document keeps a test, the console keeps its golden files, and the relay's checks and the ledger's attribution keep full coverage.
 - **Status**: `ai-usage status` shows the version, the last success, the last error, and the relay, schedule, and update health.
 
 Deferred or not done. These are cumbersome, or they need an action outside this repository:
 
-- **Relay deployment (done).** The relay runs at https://ai-usage-relay.vercel.app. It is the Vercel project `acmeworks/ai-usage`, with Vercel KV (Upstash for Redis from the Vercel Marketplace) on Pay-As-You-Go. The project deploys on every push to `main`. The repository variable `AI_USAGE_RELAY_URL` bakes this URL into release builds as the default relay.
+- **Relay deployment (done).** The relay runs at https://ai-usage-relay.vercel.app. It is a Vercel project with Vercel KV (Upstash for Redis from the Vercel Marketplace) on Pay-As-You-Go. The project deploys on every push to `main`. The repository variable `AI_USAGE_RELAY_URL` bakes this URL into release builds as the default relay.
 - **CI runs on GitHub.** Tests run on Linux and macOS. Windows only cross-compiles and runs the installer smoke test: Windows is not a supported collector host for now.
 - **Windows is not supported yet. Nothing has run on real Windows.** Task Scheduler registration from XML (the task has no explicit user, so it relies on `schtasks /Create /XML` using the caller), the `.old` rename during self-update, and `install.ps1` are covered only by unit tests and the CI definitions.
   - `schtasks` starts a console program, so a console window can flash every 15 minutes. Fixing that needs a GUI-subsystem launcher, or `conhost --headless`, which only newer Windows builds have.
