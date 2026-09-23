@@ -133,6 +133,26 @@ else
 		fail "the installer edited a profile with the folder already on PATH"
 	fi
 
+	# Another program named ai-usage, in a tool's folder that comes first, is
+	# left alone. The binary goes into the usual folder, and the installer
+	# says that the other one still runs by name.
+	h=$work/other-program
+	mkdir -p "$h/.cargo/bin" "$h/.local/bin"
+	printf '#!/bin/sh\necho other\n' >"$h/.cargo/bin/ai-usage"
+	chmod +x "$h/.cargo/bin/ai-usage"
+	HOME=$h PATH=$h/.cargo/bin:$h/.local/bin:$sys SHELL=/bin/bash sh install.sh 2>"$work/other-program.err"
+	[ "$("$h/.cargo/bin/ai-usage")" = other ] || fail "the installer replaced another program named ai-usage"
+	[ -x "$h/.local/bin/ai-usage" ] || fail "the installer did not install into ~/.local/bin beside another program"
+	grep -q 'comes first on PATH' "$work/other-program.err" || fail "the installer did not say another ai-usage comes first on PATH"
+
+	# A link, such as Homebrew's, is not replaced, even one to this program.
+	h=$work/link
+	mkdir -p "$h/brew/bin"
+	ln -s "$built" "$h/brew/bin/ai-usage"
+	HOME=$h PATH=$h/brew/bin:$sys SHELL=/bin/zsh sh install.sh
+	[ -L "$h/brew/bin/ai-usage" ] || fail "the installer replaced a link named ai-usage"
+	[ -x "$h/.local/bin/ai-usage" ] || fail "the installer did not install into ~/.local/bin beside a link"
+
 	# With none on PATH, the binary goes into ~/.local/bin, and the login
 	# shell's profile puts that on PATH once, however often the installer
 	# runs. A bash login shell on macOS reads the first profile that exists.
@@ -162,5 +182,18 @@ else
 	[ -x "$h/.local/bin/ai-usage" ] || fail "the installer did not fall back to ~/.local/bin"
 	[ ! -e "$h/.zshrc" ] || fail "AI_USAGE_NO_MODIFY_PATH did not leave the profile alone"
 	grep -q 'export PATH=' "$work/no-modify.err" || fail "the installer did not say how to put ~/.local/bin on PATH"
+
+	# So does a shell whose profile the installer does not know, and root
+	# under sudo, whose HOME can be the person's.
+	h=$work/tcsh
+	mkdir -p "$h"
+	HOME=$h PATH=$sys SHELL=/bin/tcsh sh install.sh 2>"$work/tcsh.err"
+	[ ! -e "$h/.profile" ] || fail "the installer wrote ~/.profile, which tcsh does not read"
+	grep -q 'export PATH=' "$work/tcsh.err" || fail "the installer did not say what to add for tcsh"
+	h=$work/sudo-home
+	mkdir -p "$h"
+	HOME=$h PATH=$work/fake-root:$sys SUDO_USER=someone AI_USAGE_ALLOW_ROOT=1 SHELL=/bin/fish sh install.sh 2>"$work/sudo-home.err"
+	[ ! -e "$h/.config/fish" ] || fail "the installer edited a profile as root under sudo"
+	grep -q 'export PATH=' "$work/sudo-home.err" || fail "the installer did not say what to add under sudo"
 fi
 echo "install-smoke: ok" >&2

@@ -18,9 +18,10 @@
 # on macOS). Running the script again upgrades in place.
 #
 # The binary goes where an earlier install is, else into the first of
-# ~/.local/bin, ~/bin, /opt/homebrew/bin, and /usr/local/bin that is on PATH
-# and writable. With none, it goes into ~/.local/bin, and a marked block in
-# the login shell's profile puts that folder on PATH for new terminals.
+# ~/.local/bin, ~/bin, /opt/homebrew/bin, and /usr/local/bin that is on PATH,
+# writable, and holds no other program named ai-usage. With none, it goes
+# into ~/.local/bin, and a marked block in the login shell's profile puts
+# that folder on PATH for new terminals.
 
 # Everything is inside main so a partly downloaded script does nothing.
 main() {
@@ -29,14 +30,22 @@ main() {
 	# Under sudo the first run would register root's schedule and collect
 	# root's usage, and could leave root-owned files in this person's home.
 	sudo_user=${SUDO_USER:-${DOAS_USER:-}}
-	if [ "$(id -u)" = 0 ] && [ -n "$sudo_user" ] && [ "$sudo_user" != root ] && [ -z "${AI_USAGE_ALLOW_ROOT:-}" ]; then
-		fail "run the installer as $sudo_user, without sudo; it installs for the user who runs it (AI_USAGE_ALLOW_ROOT=1 installs for root)"
+	under_sudo=
+	if [ "$(id -u)" = 0 ] && [ -n "$sudo_user" ] && [ "$sudo_user" != root ]; then
+		[ -n "${AI_USAGE_ALLOW_ROOT:-}" ] || fail "run the installer as $sudo_user, without sudo; it installs for the user who runs it (AI_USAGE_ALLOW_ROOT=1 installs for root)"
+		under_sudo=1
 	fi
 
 	repo="neoromantic/ai-usage"
 	base="${AI_USAGE_DOWNLOAD_URL:-https://github.com/$repo/releases/latest/download}"
 	base="${base%/}"
 	bin_dir="${AI_USAGE_BIN_DIR:-$(find_bin_dir)}"
+	bin="$bin_dir/ai-usage"
+	# find_bin_dir falls back to ~/.local/bin even when another program by
+	# this name is there; that one is not the installer's to replace.
+	if [ -z "${AI_USAGE_BIN_DIR:-}" ] && taken "$bin"; then
+		fail "$bin is another program or a link; set AI_USAGE_BIN_DIR to install ai-usage elsewhere"
+	fi
 
 	os=$(detect_os)
 	arch=$(detect_arch "$os")
@@ -56,7 +65,6 @@ main() {
 	[ "$got" = "$want" ] || fail "$asset does not match its checksum (got $got, want $want)"
 
 	mkdir -p "$bin_dir"
-	bin="$bin_dir/ai-usage"
 	# Copy beside the target and rename, so a scheduled run never sees half a file.
 	cp "$tmp/$asset" "$bin_dir/.ai-usage.new.$$"
 	chmod 755 "$bin_dir/.ai-usage.new.$$"
@@ -82,9 +90,15 @@ main() {
 
 	# find_bin_dir picks a folder on PATH or ~/.local/bin, so only
 	# ~/.local/bin can be off PATH here, unless AI_USAGE_BIN_DIR named another.
+	# Under sudo HOME can still be the person's, whose profile root must not write.
 	if on_path "$bin_dir"; then
-		:
-	elif [ -z "${AI_USAGE_BIN_DIR:-}${AI_USAGE_NO_MODIFY_PATH:-}" ] && add_to_path "$os"; then
+		# A copy the installer could not replace, or would not, still runs
+		# when ai-usage is typed if its folder comes first.
+		found=$(command -v ai-usage || true)
+		if [ "$found" != "$bin" ]; then
+			say "$found comes first on PATH and is not the copy just installed; remove it or put $bin_dir first"
+		fi
+	elif [ -z "${AI_USAGE_BIN_DIR:-}${AI_USAGE_NO_MODIFY_PATH:-}$under_sudo" ] && add_to_path "$os"; then
 		say "a new terminal finds ai-usage by name; in this one, run $bin"
 	else
 		say "$bin_dir is not on PATH; add it to your shell profile:
@@ -93,26 +107,38 @@ main() {
 }
 
 # find_bin_dir prints the folder to install into. An upgrade replaces the
-# earlier binary where it is, so there is never a second copy and the
-# scheduler entry keeps pointing at it. A new install goes into a folder on
-# PATH that is meant for a person's own programs; a tool's own folder, such
-# as ~/.cargo/bin or a node version manager's, belongs to that tool.
+# earlier binary where it is, so the scheduler entry keeps pointing at it.
+# A new install goes into a folder on PATH that is meant for a person's own
+# programs; a tool's own folder, such as ~/.cargo/bin or a node version
+# manager's, belongs to that tool. Neither replaces another program named
+# ai-usage, or a link such as Homebrew's or a version manager's shim.
 find_bin_dir() {
 	home=${HOME:?HOME is not set}
 	for f in "$home/.local/bin/ai-usage" "$(command -v ai-usage || true)"; do
 		case $f in /*) ;; *) continue ;; esac
-		if [ -f "$f" ] && [ -w "${f%/*}" ]; then
+		if ours "$f" && [ -w "${f%/*}" ]; then
 			echo "${f%/*}"
 			return
 		fi
 	done
 	for d in "$home/.local/bin" "$home/bin" /opt/homebrew/bin /usr/local/bin; do
-		if on_path "$d" && [ -d "$d" ] && [ -w "$d" ]; then
+		if on_path "$d" && [ -d "$d" ] && [ -w "$d" ] && ! taken "$d/ai-usage"; then
 			echo "$d"
 			return
 		fi
 	done
 	echo "$home/.local/bin"
+}
+
+# ours reports whether $1 is a plain file of this program: Go builds the
+# module path into the binary. A link is left to whatever made it.
+ours() {
+	[ -f "$1" ] && [ ! -L "$1" ] && grep -q 'github.com/neoromantic/ai-usage' "$1" 2>/dev/null
+}
+
+# taken reports whether $1 holds something the installer must not replace.
+taken() {
+	{ [ -e "$1" ] || [ -L "$1" ]; } && ! ours "$1"
 }
 
 on_path() {
@@ -124,7 +150,8 @@ on_path() {
 
 # add_to_path puts ~/.local/bin on PATH in the profile of the login shell,
 # once. The block names $HOME, not this home's path, so a profile shared
-# between machines still works.
+# between machines still works. It fails for a shell whose profile it does
+# not know, such as tcsh or nushell, which never read ~/.profile.
 add_to_path() {
 	mark="# Added by the ai-usage installer"
 	line="export PATH=\"\$HOME/.local/bin:\$PATH\""
@@ -149,7 +176,8 @@ add_to_path() {
 		profile="${XDG_CONFIG_HOME:-$HOME/.config}/fish/conf.d/ai-usage.fish"
 		line="contains -- \$HOME/.local/bin \$PATH; or set -gx PATH \$HOME/.local/bin \$PATH"
 		;;
-	*) profile="$HOME/.profile" ;;
+	sh | dash | ash | ksh | mksh) profile="$HOME/.profile" ;;
+	*) return 1 ;;
 	esac
 
 	if grep -qsF "$mark" "$profile"; then

@@ -80,7 +80,9 @@ Releases are built for amd64 and arm64 on each OS. The installer:
 4. saves the relay and joins the team, if you gave them
 5. runs `ai-usage` once, which registers it with the scheduler and prints the report with a short guide under it
 
-On macOS and Linux, an upgrade replaces the binary where it is: `~/.local/bin/ai-usage`, or the `ai-usage` found on `PATH`, so there is never a second copy. A new install goes into the first of `~/.local/bin`, `~/bin`, `/opt/homebrew/bin`, and `/usr/local/bin` that is on your `PATH` and that you can write to, and never into a folder that belongs to another tool, such as `~/.cargo/bin`.
+On macOS and Linux, an upgrade replaces the binary where it is: `~/.local/bin/ai-usage`, or the `ai-usage` found on `PATH` when you can write to its folder. A new install goes into the first of `~/.local/bin`, `~/bin`, `/opt/homebrew/bin`, and `/usr/local/bin` that is on your `PATH` and that you can write to, and never into a folder that belongs to another tool, such as `~/.cargo/bin`.
+
+The installer replaces only its own binary. Another program named `ai-usage`, or a link such as Homebrew's or a version manager's shim, stays where it is, and the installer picks a folder as it would for a new install. When the only folder left holds one, it stops; set `AI_USAGE_BIN_DIR` then. When another `ai-usage` still comes first on your `PATH`, such as an older copy in a folder you cannot write to, the installer says so, because typing `ai-usage` runs that one.
 
 When none of them is, the binary goes into `~/.local/bin`, and the installer adds that folder to `PATH` in the profile of your login shell, the one `$SHELL` names:
 
@@ -90,9 +92,10 @@ When none of them is, the binary goes into `~/.local/bin`, and the installer add
 | bash on macOS | the first of `~/.bash_profile`, `~/.bash_login`, and `~/.profile` that exists, else a new `~/.bash_profile`; a terminal on macOS opens a login shell, which reads only that one |
 | bash on Linux | `~/.bashrc` |
 | fish | `~/.config/fish/conf.d/ai-usage.fish`, or the same under `$XDG_CONFIG_HOME` |
-| another shell | `~/.profile` |
+| sh, dash, ash, ksh, or mksh | `~/.profile` |
+| another shell, such as tcsh or nushell | none; the installer prints the line to add |
 
-It adds a block that starts with `# Added by the ai-usage installer`, once: running the installer again adds nothing. A new terminal finds `ai-usage` by name; in the terminal you installed from, use the full path the installer prints. With `AI_USAGE_NO_MODIFY_PATH=1` it leaves profiles alone and prints the line to add.
+It adds a block that starts with `# Added by the ai-usage installer`, once: running the installer again adds nothing. A new terminal finds `ai-usage` by name; in the terminal you installed from, use the full path the installer prints. With `AI_USAGE_NO_MODIFY_PATH=1`, and as root under `sudo`, where `HOME` can still be yours, it leaves profiles alone and prints the line to add.
 
 The installer asks no questions. Run it again to upgrade in place. It reads these variables:
 
