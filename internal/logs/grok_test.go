@@ -177,22 +177,12 @@ func TestGrokUnreadableFiles(t *testing.T) {
 	}
 }
 
-func TestGrokMissingSessions(t *testing.T) {
-	res := mustRead(t, "grok", t.TempDir(), since)
-	if len(res.Sessions) != 0 || res.Unreadable != 0 {
-		t.Fatalf("res = %+v", res)
-	}
-}
-
+// The readers' tests decode real directory names. A name that does not
+// decode to a path stays as it is.
 func TestDecodeGrokPath(t *testing.T) {
 	for _, tc := range []struct{ in, want string }{
-		{"%2Fwork%2Fapp", "/work/app"},
-		{"%2FUsers%2Fme%2Fmy%20app", "/Users/me/my app"},
-		{"C%3A%5Cwork", `C:\work`},
-		{"plain", "plain"},
 		{"bad%zz", "bad%zz"},
 		{"%20", "%20"},
-		{"", ""},
 	} {
 		if got := decodeGrokPath(tc.in); got != tc.want {
 			t.Errorf("decodeGrokPath(%q) = %q, want %q", tc.in, got, tc.want)

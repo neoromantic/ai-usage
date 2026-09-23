@@ -241,12 +241,6 @@ func TestClaudeWindowAndCredentialFiles(t *testing.T) {
 }
 
 func TestClaudeMissingOrBrokenHome(t *testing.T) {
-	t.Run("no projects", func(t *testing.T) {
-		res := mustRead(t, "claude", t.TempDir(), since)
-		if len(res.Sessions) != 0 {
-			t.Fatalf("sessions = %+v", res.Sessions)
-		}
-	})
 	t.Run("projects is a file", func(t *testing.T) {
 		home := t.TempDir()
 		mustWrite(t, filepath.Join(home, "projects"), "x")

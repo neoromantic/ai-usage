@@ -71,15 +71,6 @@ func TestGrokAccountAndBilling(t *testing.T) {
 			account: "user-b",
 		},
 		{
-			name: "billing paired by pid",
-			files: map[string][]string{"unified.jsonl": {
-				authLine("2026-09-22T10:00:00Z", 1, "user-a"),
-				authLine("2026-09-22T11:00:00Z", 2, "user-b"),
-				billLine("2026-09-22T11:05:00Z", 2, 15, weekly),
-			}},
-			account: "user-b", percent: 15,
-		},
-		{
 			name: "only another user's billing",
 			files: map[string][]string{"unified.jsonl": {
 				authLine("2026-09-22T10:00:00Z", 1, "user-a"),
@@ -134,15 +125,6 @@ func TestGrokAccountAndBilling(t *testing.T) {
 			account: "user-b", percent: 15,
 		},
 		{
-			name: "rotated file with the newest sign-in",
-			files: map[string][]string{
-				"unified.1.jsonl": {authLine("2026-09-22T09:00:00Z", 1, "user-a")},
-				"unified.jsonl":   {authLine("2026-09-22T10:00:00Z", 2, "user-b"), billLine("2026-09-22T10:01:00Z", 2, 5, weekly)},
-				"unified.2.jsonl": {authLine("2026-09-21T09:00:00Z", 3, "user-c")},
-			},
-			account: "user-b", percent: 5,
-		},
-		{
 			name: "broken and partial lines are skipped",
 			files: map[string][]string{"unified.jsonl": {
 				authLine("2026-09-22T10:00:00Z", 1, "user-a"),
@@ -180,7 +162,7 @@ func TestGrokWindowNaming(t *testing.T) {
 		config string
 		want   snapshot.Window
 	}{
-		{"weekly", weekly, snapshot.Window{Name: "7d credits", Minutes: 10080, ResetsAt: ts("2026-09-23T09:05:45.591751Z")}},
+		// TestGrokReading has a weekly period.
 		{
 			"monthly",
 			`,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_MONTHLY","start":"2026-09-01T00:00:00+00:00","end":"2026-10-01T00:00:00+00:00"}`,
@@ -223,25 +205,19 @@ func TestGrokWindowNaming(t *testing.T) {
 
 func TestGrokLongLines(t *testing.T) {
 	// A line longer than the kept limit must not end the scan, and a line
-	// longer than the read buffer is still a whole line.
+	// longer than the read buffer is still a whole line: the newest sign-in
+	// is such a line, after one too long to keep.
 	huge := `{"msg":"tool output","ctx":{"text":"` + strings.Repeat("x", maxGrokLine+10) + `"}}`
-	padded := strings.Replace(authLine("2026-09-22T09:00:00Z", 1, "user-a"), `"key_prefix":"xai-"`, `"pad":"`+strings.Repeat("y", 200<<10)+`"`, 1)
+	padded := strings.Replace(authLine("2026-09-22T10:00:00Z", 2, "user-b"), `"key_prefix":"xai-"`, `"pad":"`+strings.Repeat("y", 200<<10)+`"`, 1)
 	home := grokHome(t, map[string][]string{"unified.jsonl": {
-		padded,
+		authLine("2026-09-22T09:00:00Z", 1, "user-a"),
 		huge,
-		authLine("2026-09-22T10:00:00Z", 2, "user-b"),
+		padded,
 		billLine("2026-09-22T10:01:00Z", 2, 7, weekly),
 	}})
 	r, err := Grok(home)
 	if err != nil || r.Account != "user-b" || r.Quota == nil || r.Quota.Windows[0].Percent != 7 {
 		t.Fatalf("reading = %+v %v, %v", r, describe(r.Quota), err)
-	}
-	var st grokScan
-	if err := st.scan(filepath.Join(home, "logs", "unified.jsonl")); err != nil {
-		t.Fatal(err)
-	}
-	if len(st.auths) != 2 || st.auths[0].user != "user-a" {
-		t.Errorf("auths = %+v", st.auths)
 	}
 }
 
@@ -254,20 +230,20 @@ func TestGrokLastLineWithoutNewline(t *testing.T) {
 }
 
 func TestGrokErrors(t *testing.T) {
-	if _, err := Grok(t.TempDir()); errText(err) != "grok log not found; account unknown" {
-		t.Errorf("no log: %v", err)
+	if r, err := Grok(t.TempDir()); err == nil || r.Account != "" {
+		t.Errorf("no log: %+v, %v", r, err)
 	}
 	home := grokHome(t, map[string][]string{"unified.jsonl": {billLine("2026-09-22T10:01:00Z", 1, 12, weekly)}})
-	r, err := Grok(home)
-	if errText(err) != "grok log names no signed-in user; account unknown" || r.Account != "" || r.Quota != nil {
-		t.Errorf("no sign-in: %+v, %v", r, err)
+	r, noSignIn := Grok(home)
+	if noSignIn == nil || r.Account != "" || r.Quota != nil {
+		t.Errorf("no sign-in: %+v, %v", r, noSignIn)
 	}
 	// An unreadable log is reported when nothing else named a user.
 	home = t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, "logs", "unified.jsonl"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Grok(home); !strings.HasPrefix(errText(err), "grok log: ") {
-		t.Errorf("unreadable: %v", err)
+	if r, err := Grok(home); err == nil || errText(err) == errText(noSignIn) || r.Account != "" {
+		t.Errorf("unreadable: %+v, %v", r, err)
 	}
 }

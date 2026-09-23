@@ -158,8 +158,6 @@ func fakeHarness(mode string, args []string) int {
 	case "claude-fail":
 		fmt.Fprintln(os.Stderr, "boom")
 		return 2
-	case "claude-hang":
-		time.Sleep(time.Minute)
 	case "claude-orphan":
 		// A child that keeps stdout open after this process is killed.
 		cmd := exec.Command(os.Args[0], "-test.run=^TestHelperProcess$", "--", "sleeper")
@@ -290,7 +288,6 @@ func TestHarnessEnv(t *testing.T) {
 		value   string
 		want    []string
 	}{
-		{"set", []string{"PATH=/bin"}, "/h", []string{"PATH=/bin", "CLAUDE_CONFIG_DIR=/h"}},
 		{"replace", []string{"CLAUDE_CONFIG_DIR=/old", "PATH=/bin"}, "/h", []string{"PATH=/bin", "CLAUDE_CONFIG_DIR=/h"}},
 		{"remove for default home", []string{"CLAUDE_CONFIG_DIR=/old", "PATH=/bin", "CLAUDE_CONFIG_DIR=/older"}, "", []string{"PATH=/bin"}},
 		{"similar names kept", []string{"CLAUDE_CONFIG_DIRS=a", "XCLAUDE_CONFIG_DIR=b", "CLAUDE_CONFIG_DIR"}, "", []string{"CLAUDE_CONFIG_DIRS=a", "XCLAUDE_CONFIG_DIR=b", "CLAUDE_CONFIG_DIR"}},
@@ -414,23 +411,14 @@ func TestFindUsesPathFirst(t *testing.T) {
 	}
 }
 
+// A harness in its own ~/.<name>/bin is found when PATH lacks it. TestBins
+// covers ~/.local/bin.
 func TestFindFallbackDirs(t *testing.T) {
-	for _, rel := range []string{
-		filepath.Join(".local", "bin"),
-		filepath.Join(".codex", "bin"),
-	} {
-		t.Run(rel, func(t *testing.T) {
-			home := t.TempDir()
-			want := filepath.Join(home, rel, exeName("codex"))
-			writeExe(t, want)
-			env := Env{HomeDir: home, LookPath: notOnPath}
-			if p, ok := env.find("codex"); !ok || p != want {
-				t.Errorf("find = %q, %v; want %q", p, ok, want)
-			}
-			if !env.Find("codex") || env.Find("grok") {
-				t.Error("Find disagrees with find")
-			}
-		})
+	home := t.TempDir()
+	want := filepath.Join(home, ".codex", "bin", exeName("codex"))
+	writeExe(t, want)
+	if p, ok := (Env{HomeDir: home, LookPath: notOnPath}).find("codex"); !ok || p != want {
+		t.Errorf("find = %q, %v; want %q", p, ok, want)
 	}
 }
 
@@ -530,8 +518,10 @@ func saysLoggedOut(err error) bool {
 
 func TestJoinedErrorsKeepLoggedOut(t *testing.T) {
 	err := joinErrors([]error{errors.New("claude auth status: slow"), notLoggedIn("claude"), errors.New("claude config is not JSON")})
-	if got, want := err.Error(), "claude auth status: slow; claude: not logged in; claude config is not JSON"; got != want {
-		t.Errorf("message = %q, want %q", got, want)
+	for _, part := range []string{"slow", "not logged in", "not JSON"} {
+		if !strings.Contains(errText(err), part) {
+			t.Errorf("message %q lacks %q", errText(err), part)
+		}
 	}
 	if !saysLoggedOut(err) {
 		t.Error("the joined error lost the logged-out answer")

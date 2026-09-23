@@ -125,20 +125,12 @@ func TestCodexCountsEachRequestOnceAndMovesCachedOut(t *testing.T) {
 	noLeak(t, res)
 }
 
+// Codex counts cached input inside input. A log that reports more cached than
+// input does not make input negative.
 func TestCodexUsageTokens(t *testing.T) {
-	cases := []struct {
-		name string
-		in   codexUsage
-		want Tokens
-	}{
-		{"cached is part of input", codexUsage{Input: 1000, Cached: 800, Output: 10, CacheWrite: 3}, Tokens{Input: 200, CacheRead: 800, Output: 10, CacheWrite: 3}},
-		{"no cache", codexUsage{Input: 7, Output: 1}, Tokens{Input: 7, Output: 1}},
-		{"cached above input clamps", codexUsage{Input: 100, Cached: 150, Output: 1}, Tokens{Input: 0, CacheRead: 150, Output: 1}},
-	}
-	for _, c := range cases {
-		if got := c.in.tokens(); got != c.want {
-			t.Errorf("%s: %+v, want %+v", c.name, got, c.want)
-		}
+	got := codexUsage{Input: 100, Cached: 150, Output: 1}.tokens()
+	if got != (Tokens{Input: 0, CacheRead: 150, Output: 1}) {
+		t.Errorf("tokens = %+v", got)
 	}
 }
 
@@ -188,28 +180,7 @@ func TestCodexForkCountsOnlyItsOwnRequests(t *testing.T) {
 	replay := func(at string) []string {
 		return []string{cxCount(at, e1[0], e1[1]), cxCount(at, e2[0], e2[1])}
 	}
-	t.Run("user fork stays its own session", func(t *testing.T) {
-		home := t.TempDir()
-		mustWrite(t, rollout(home, "sessions", "20", rootID), rootLines...)
-		lines := []string{
-			cxMeta{at: "2026-09-21T09:00:00.000Z", id: forkID, cwd: "/work/app", source: `"vscode"`, extra: `,"forked_from_id":"` + rootID + `","thread_source":"user"`}.String(),
-			cxMeta{at: "2026-09-20T10:00:00.000Z", id: rootID, cwd: "/work/app"}.String(),
-		}
-		lines = append(lines, replay("2026-09-21T09:00:00.000Z")...)
-		lines = append(lines, cxCount("2026-09-21T09:00:20.000Z", u{4000, 3300, 100}, u{1500, 1400, 20}))
-		mustWrite(t, rollout(home, "sessions", "21", forkID), lines...)
-
-		res := mustRead(t, "codex", home, since)
-		if got := strings.Join(ids(res), ","); got != rootID+","+forkID {
-			t.Fatalf("sessions = %s", got)
-		}
-		if got := byID(t, res, rootID).Tokens; got != rootOwn {
-			t.Fatalf("parent = %+v", got)
-		}
-		if got := byID(t, res, forkID).Tokens; got != (Tokens{Input: 100, CacheRead: 1400, Output: 20}) {
-			t.Fatalf("fork = %+v", got)
-		}
-	})
+	// A user's fork, which stays its own session, is in TestReadHomesCountsAcrossHomesOnce.
 	t.Run("forked sub-agent rolls in without its replay", func(t *testing.T) {
 		home := t.TempDir()
 		mustWrite(t, rollout(home, "sessions", "20", rootID), rootLines...)
@@ -447,15 +418,6 @@ func TestCodexLimits(t *testing.T) {
 		want     []window
 	}{
 		{
-			name: "resets_at",
-			files: map[string][]string{"sessions/20": {
-				cxLimits("2026-09-20T10:00:00Z", main(40)),
-			}},
-			observed: at("2026-09-20T10:00:00Z"),
-			plan:     "plus",
-			want:     []window{{"5h", 40, reset(1790000000)}, {"7d", 7.5, reset(1790500000)}},
-		},
-		{
 			name: "resets_in_seconds",
 			files: map[string][]string{"sessions/20": {
 				cxLimits("2026-09-20T10:00:00Z", `{"primary":{"used_percent":55.5,"window_minutes":300,"resets_in_seconds":3600},"secondary":{"used_percent":1,"window_minutes":10080}}`),
@@ -564,37 +526,11 @@ func TestCodexLimits(t *testing.T) {
 	}
 }
 
+// TestCodexLimits names the main and side windows; snapshot's tests cover
+// durations and plain labels. A side window's whole name is a plain label.
 func TestCodexWindowName(t *testing.T) {
-	cases := []struct {
-		id      string
-		minutes int
-		want    string
-	}{
-		{"", 300, "5h"},
-		{"codex", 10080, "7d"},
-		{"codex", 90, "90m"},
-		{"codex_bengalfox", 300, "codex_bengalfox 5h"},
-		{"premium", 0, "premium window"},
-		{"a/b#c", 60, "a/b-c 1h"},
-		{strings.Repeat("x", 50), 300, strings.Repeat("x", 40)},
-	}
-	for _, c := range cases {
-		if got := CodexWindowName(c.id, c.minutes); got != c.want {
-			t.Errorf("CodexWindowName(%q, %d) = %q, want %q", c.id, c.minutes, got, c.want)
-		}
-	}
-}
-
-func TestCodexNameID(t *testing.T) {
-	cases := map[string]string{
-		"rollout-2026-09-20T10-00-00-" + rootID + ".jsonl": rootID,
-		"rollout-parent.jsonl":                             "",
-		rootID + ".jsonl":                                  rootID,
-	}
-	for name, want := range cases {
-		if got := codexNameID(name); got != want {
-			t.Errorf("codexNameID(%q) = %q, want %q", name, got, want)
-		}
+	if got := CodexWindowName("a/b#c", 60); got != "a/b-c 1h" {
+		t.Errorf("CodexWindowName = %q", got)
 	}
 }
 

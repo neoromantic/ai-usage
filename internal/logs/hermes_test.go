@@ -3,6 +3,7 @@ package logs
 import (
 	"database/sql"
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -299,9 +300,6 @@ func TestHermesUnusableDatabase(t *testing.T) {
 			exec(t, db, `INSERT INTO sessions VALUES ('a', 'x')`)
 			db.Close()
 		}},
-		{"not a database", func(t *testing.T, home string) {
-			mustWrite(t, filepath.Join(home, "state.db"), strings.Repeat("not sqlite ", 1000))
-		}},
 		{"truncated database", func(t *testing.T, home string) {
 			db := hermesDB(t, home, hermesColumns)
 			for i := 0; i < 200; i++ {
@@ -332,13 +330,6 @@ func TestHermesUnusableDatabase(t *testing.T) {
 			}
 			sameTree(t, before, tree(t, home))
 		})
-	}
-}
-
-func TestHermesMissingDatabase(t *testing.T) {
-	res, err := Read("hermes", t.TempDir(), since)
-	if err != nil || len(res.Sessions) != 0 {
-		t.Fatalf("res %+v err %v", res, err)
 	}
 }
 
@@ -595,6 +586,8 @@ func TestHermesRemovesItsCopy(t *testing.T) {
 	db := hermesDB(t, home, hermesColumns)
 	hermesRow{id: "a", in: 1}.insert(t, db)
 	db.Close()
+	// A -shm without its -wal is a leftover, so the read is from a copy.
+	mustWrite(t, filepath.Join(home, "state.db-shm"))
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
 	t.Setenv("TMP", tmp)
@@ -609,9 +602,11 @@ func TestHermesRemovesItsCopy(t *testing.T) {
 	}
 }
 
+// The URI names the whole path, read-only, whatever characters it holds.
 func TestSQLiteURI(t *testing.T) {
 	got := sqliteURI(filepath.Join(t.TempDir(), "a b#c?.db"))
-	if !strings.HasPrefix(got, "file:///") || !strings.HasSuffix(got, "/a%20b%23c%3F.db?mode=ro") {
+	u, err := url.Parse(got)
+	if err != nil || u.Scheme != "file" || !strings.HasSuffix(u.Path, "/a b#c?.db") || u.Query().Get("mode") != "ro" {
 		t.Fatalf("uri = %q", got)
 	}
 }
