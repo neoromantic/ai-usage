@@ -91,7 +91,7 @@ Claude's `homes` include the Claude Code home the Claude desktop app keeps for e
 | `observed_at` | time | when the tool took the reading |
 | `age_seconds` | number | the reading's age when the report was made |
 | `stale` | bool | the reading is more than 6 hours old, unless it is a refusal whose window has not reset |
-| `source` | string | `harness` when the tool answered a command, `cache` when it came from the tool's own cache file, `log` when it came from the tool's logs, `rejection` when Claude refused a request because a window was full: that window alone at 100%, as of the refusal, until it resets; only on this device's accounts |
+| `source` | string | `harness` when the tool answered a command, `cache` when it came from the tool's own cache file, `log` when it came from the tool's logs, `rejection` when Claude refused requests because windows were full: those windows alone at 100%, as of the newest refusal, until they reset; only on this device's accounts |
 | `from` | string | the tool whose account took the reading, when it is the reading of the account in `link`, unchanged, observation time included; absent otherwise. With no reading for that account, `quota` is `null` |
 | `device` | string | the device that took the reading, as `host (user)`; only on team accounts |
 | `windows` | list | the windows the tool reported; see below |

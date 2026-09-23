@@ -4,6 +4,7 @@
 package collect
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -603,22 +604,24 @@ func setQuota(acct *state.Account, q *probe.Quota, now time.Time) {
 		return
 	}
 	// A stored reading from a clock that has since gone back would otherwise
-	// block every real reading until the clock caught up. One from a refused
-	// request holds only until its window resets; after that it would hide
-	// an older reading of the windows it says nothing about.
+	// block every real reading until the clock caught up. One from refused
+	// requests holds only until its windows reset; after that it would hide
+	// an older reading of the windows it says nothing about. Each run gathers
+	// every refusal still in force, so a newer gathering replaces it whole.
 	old := acct.Quota
-	if old == nil || old.At.After(now) || !at.Before(old.At) || (old.Source == RejectionSource && allReset(old.Windows, now)) {
+	refused := old != nil && old.Source == RejectionSource && (q.Source == RejectionSource || allReset(old.Windows, now))
+	if old == nil || old.At.After(now) || !at.Before(old.At) || refused {
 		acct.Quota = &state.Quota{At: at, Source: q.Source, Windows: clampWindows(q.Windows, now)}
 	}
 }
 
-// applyRejected gives each account the newest request refused for a full
-// window, among the sessions attributed to it, whose window has not reset.
-// The refusal says that window was at 100% then and stays so until it
-// resets, and nothing about the other windows, so the reading is that window
-// alone, as of the refusal: carrying the older reading's windows along would
-// make them look newer than they are. It counts when it is newer than the
-// account's reading. A refusal since the previous run goes where this run
+// applyRejected gives each account the requests refused for a full window,
+// among the sessions attributed to it, whose window has not reset: the newest
+// of each window, as one reading as of the newest. A refusal says that window
+// was at 100% then and stays so until it resets, and nothing about the other
+// windows, so the reading is those windows alone: carrying the older
+// reading's windows along would make them look newer than they are. It
+// counts when it is newer than the account's reading. A refusal since the previous run goes where this run
 // puts the session's growth. One from before it belongs to whoever used the
 // session then, and the ledger keeps only each account's share, so it counts
 // only when the whole session is this account's, as a session read for the
@@ -627,7 +630,7 @@ func setQuota(acct *state.Account, q *probe.Quota, now time.Time) {
 // is as likely the earlier account's, even in a session the ledger gives
 // wholly to the new one.
 func applyRejected(st *state.State, p string, read []readSession, now, prevRun time.Time) {
-	newest := map[string]*logs.Limits{}
+	held := map[string][]*logs.Limits{}
 	for _, r := range read {
 		if r.label == UnknownAccount {
 			continue
@@ -640,13 +643,21 @@ func applyRejected(st *state.State, p string, read []readSession, now, prevRun t
 			if x.ObservedAt.Before(prevRun) && !soleAccount(st.Sessions[state.Key(p, r.s.ID)], r.label) {
 				continue
 			}
-			if n := newest[r.label]; n == nil || x.ObservedAt.After(n.ObservedAt) {
-				newest[r.label] = x
-			}
+			held[r.label] = logs.AddRejected(held[r.label], x)
 		}
 	}
-	for label, x := range newest {
-		setQuota(touchAccount(st, p, label), &probe.Quota{At: x.ObservedAt, Source: RejectionSource, Windows: x.Windows}, now)
+	for label, xs := range held {
+		q := &probe.Quota{Source: RejectionSource}
+		for _, x := range xs {
+			if x.ObservedAt.After(q.At) {
+				q.At = x.ObservedAt
+			}
+			q.Windows = append(q.Windows, x.Windows...)
+		}
+		slices.SortFunc(q.Windows, func(a, b snapshot.Window) int {
+			return cmp.Or(cmp.Compare(a.Minutes, b.Minutes), strings.Compare(a.Name, b.Name))
+		})
+		setQuota(touchAccount(st, p, label), q, now)
 	}
 }
 

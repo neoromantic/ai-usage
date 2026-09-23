@@ -152,7 +152,7 @@ func countClaude(files []*claudeFile) []Session {
 			}
 			f.sess.Tokens = f.sess.Tokens.Add(m.tokens)
 			if m.rejected != nil {
-				f.sess.Rejected = addRejected(f.sess.Rejected, m.rejected)
+				f.sess.Rejected = AddRejected(f.sess.Rejected, m.rejected)
 			}
 		}
 	}

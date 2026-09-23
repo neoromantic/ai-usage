@@ -757,7 +757,7 @@ func TestClaudeRejectionHoldsUntilItsWindowResets(t *testing.T) {
 	}
 }
 
-func TestClaudeRejectionOfAWeeklyWindowOutlastsANewer5h(t *testing.T) {
+func TestClaudeRejectionsInForceReadTogether(t *testing.T) {
 	w, o := newWorld(t)
 	h := w.home(t, "claude")
 	w.login("claude", h, "ann", quota(t0.Add(-5*time.Hour), 40, 20))
@@ -767,14 +767,15 @@ func TestClaudeRejectionOfAWeeklyWindowOutlastsANewer5h(t *testing.T) {
 	s.Rejected = append(s.Rejected, opus)
 	w.sessions("claude", h, s)
 	res := run(t, o)
-	if q := totalsFor(t, res.State, "claude", "ann").Quota; !q.At.Equal(t0.Add(-2 * time.Hour)) {
-		t.Fatalf("quota = %+v, want the newest refusal", q)
+	// Both are in force: one reading of the two windows, as of the newer.
+	if q := totalsFor(t, res.State, "claude", "ann").Quota; !q.At.Equal(t0.Add(-2*time.Hour)) || len(q.Windows) != 2 || q.Windows[0].Name != "5h" || q.Windows[1].Name != "7d Opus" {
+		t.Fatalf("quota = %+v, want the 5h and 7d Opus refusals", q)
 	}
 
 	// Once the 5h window resets, the weekly one still holds.
 	w.now = t0.Add(90 * time.Minute)
 	res = run(t, o)
-	if q := totalsFor(t, res.State, "claude", "ann").Quota; q.Source != "rejection" || !q.At.Equal(opus.ObservedAt) || q.Windows[0].Name != "7d Opus" {
+	if q := totalsFor(t, res.State, "claude", "ann").Quota; q.Source != "rejection" || !q.At.Equal(opus.ObservedAt) || len(q.Windows) != 1 || q.Windows[0].Name != "7d Opus" {
 		t.Fatalf("quota = %+v, want the 7d Opus refusal", q)
 	}
 }
