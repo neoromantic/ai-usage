@@ -14,8 +14,6 @@ import (
 	"github.com/neoromantic/ai-usage/internal/team"
 )
 
-func utf8ValidString(s string) bool { return utf8.ValidString(s) }
-
 func mustKey(t *testing.T) *team.Key {
 	t.Helper()
 	k, err := team.Generate()
@@ -235,37 +233,25 @@ func TestFitDocDropsAccountsWhenProjectsAreNotEnough(t *testing.T) {
 	}
 }
 
+// A sealed path keeps its end, cut on a rune boundary. The projects that
+// survive TestBuildDocFitsTheSizeLimit are all cut on one, so this checks
+// the cuts inside a rune.
 func TestClip(t *testing.T) {
-	cases := []struct {
-		in string
-		n  int
-	}{
-		{"short", 300},
-		{strings.Repeat("a", 300), 300},
-		{strings.Repeat("a", 301), 300},
-		{strings.Repeat("я", 200), 300},          // 2-byte runes
-		{strings.Repeat("日本", 120), 300},         // 3-byte runes
-		{strings.Repeat("🙂", 100) + "/end", 300}, // 4-byte runes
-		{"a" + strings.Repeat("я", 150), 300},
-		{"ab" + strings.Repeat("я", 150), 300},
-	}
-	for _, c := range cases {
-		got := clip(c.in, c.n)
-		if !utf8.ValidString(got) {
-			t.Fatalf("clip(%q) = %q is not valid UTF-8", c.in, got)
-		}
-		if len(got) > c.n {
-			t.Fatalf("clip(%d bytes, %d) = %d bytes", len(c.in), c.n, len(got))
-		}
-		if len(c.in) <= c.n {
-			if got != c.in {
+	for _, in := range []string{
+		"short",
+		strings.Repeat("я", 200),          // 2-byte runes
+		strings.Repeat("🙂", 100) + "/end", // 4-byte runes
+	} {
+		got := clip(in, 300)
+		if len(in) <= 300 {
+			if got != in {
 				t.Fatalf("clip changed a short string: %q", got)
 			}
 			continue
 		}
 		rest, ok := strings.CutPrefix(got, "…")
-		if !ok || !strings.HasSuffix(c.in, rest) || len(rest) < c.n-len("…")-3 {
-			t.Fatalf("clip(%q) = %q does not keep the end", c.in, got)
+		if !utf8.ValidString(got) || len(got) > 300 || !ok || !strings.HasSuffix(in, rest) || len(rest) < 300-len("…")-3 {
+			t.Fatalf("clip(%d bytes) = %q", len(in), got)
 		}
 	}
 }

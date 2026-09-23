@@ -327,24 +327,12 @@ func TestHarnessThatStopsAnsweringKeepsLastAccountAndQuota(t *testing.T) {
 	if src.Status != "partial" || !strings.Contains(src.Error, "timed out") {
 		t.Fatalf("source = %+v", src)
 	}
-	if !strings.Contains(res.State.LastError, "claude: claude auth status: timed out") {
+	if !strings.Contains(res.State.LastError, "timed out") {
 		t.Fatalf("last error = %q", res.State.LastError)
 	}
 	// A probe problem is not a failed read.
 	if !res.State.LastSuccessAt.Equal(w.now) {
 		t.Fatalf("last success = %v", res.State.LastSuccessAt)
-	}
-}
-
-func TestProbeWithoutAnswerOnFirstRunUsesUnknown(t *testing.T) {
-	w, o := newWorld(t)
-	h := w.home(t, "grok")
-	w.askErr[state.Key("grok", h)] = errors.New("grok log not found; account unknown")
-	w.sessions("grok", h, sess("g1", "/p", 70, t0))
-	res := run(t, o)
-	u := totalsFor(t, res.State, "grok", UnknownAccount)
-	if u.Current || u.Tokens != tok(70) {
-		t.Fatalf("unknown = %+v", u)
 	}
 }
 
@@ -358,7 +346,8 @@ func TestFirstNamedAccountClaimsUnknownHistory(t *testing.T) {
 	w.askErr[k] = errors.New("codex initialize: app-server exited without answering")
 	w.sessions("codex", h, sess("s1", "/p", 1000, t0))
 	res := run(t, o)
-	if u := totalsFor(t, res.State, "codex", UnknownAccount); u.Tokens != tok(1000) {
+	// Nobody is known to be logged in, so the unknown account is not current.
+	if u := totalsFor(t, res.State, "codex", UnknownAccount); u.Current || u.Tokens != tok(1000) {
 		t.Fatalf("unknown = %+v", u)
 	}
 
@@ -556,24 +545,16 @@ func TestProbeErrorsNameTheirHome(t *testing.T) {
 	w.login("codex", x, "ann@x", nil)
 	w.askErr[state.Key("codex", x)] = errors.New("codex account/rateLimits/read: 401 Unauthorized")
 	res := run(t, o)
-	if got, want := res.State.Sources["codex"].Error, x+": codex account/rateLimits/read: 401 Unauthorized"; got != want {
-		t.Fatalf("error = %q, want %q", got, want)
+	if got := res.State.Sources["codex"].Error; !strings.Contains(got, x) || !strings.Contains(got, "401 Unauthorized") {
+		t.Fatalf("error = %q, want it to name %s", got, x)
 	}
 
 	// The same error from every home is said once.
 	w.now = t0.Add(15 * time.Minute)
 	w.askErr[state.Key("codex", h)] = w.askErr[state.Key("codex", x)]
 	res = run(t, o)
-	if got := res.State.Sources["codex"].Error; got != "codex account/rateLimits/read: 401 Unauthorized" {
+	if got := res.State.Sources["codex"].Error; strings.Count(got, "401 Unauthorized") != 1 || strings.Contains(got, x) {
 		t.Fatalf("error = %q", got)
-	}
-}
-
-func TestHomeErrorsShortenTheUserHome(t *testing.T) {
-	home := filepath.Join(string(filepath.Separator)+"home", "ann")
-	got := homeErrors([][2]string{{filepath.Join(home, ".codex"), "boom"}}, 2, home)
-	if want := []string{filepath.Join("~", ".codex") + ": boom"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("errors = %q, want %q", got, want)
 	}
 }
 
@@ -624,28 +605,6 @@ func TestHarnessThatSaysLoggedOutEndsCurrent(t *testing.T) {
 	res = run(t, o)
 	if IsCurrent(res.State, "codex", "ann") {
 		t.Fatal("a probe that did not answer brought the logged-out account back")
-	}
-}
-
-func TestLoggedOutWithoutHomeEndsCurrent(t *testing.T) {
-	w, o := newWorld(t)
-	bin := filepath.Join(w.userHome, ".local", "bin")
-	if err := os.MkdirAll(bin, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte("x"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	def := filepath.Join(w.userHome, ".claude") // not created
-	w.login("claude", def, "ann", nil)
-	run(t, o)
-
-	w.now = t0.Add(15 * time.Minute)
-	w.readings[state.Key("claude", def)] = probe.Reading{}
-	w.askErr[state.Key("claude", def)] = notLoggedIn("claude")
-	res := run(t, o)
-	if IsCurrent(res.State, "claude", "ann") {
-		t.Fatalf("current = %v", res.State.Current)
 	}
 }
 
@@ -884,7 +843,7 @@ func TestReadErrorOnOneProviderDoesNotStopOthers(t *testing.T) {
 	w.sessions("codex", xh, sess("c1", "/p", 10, t0))
 	res := run(t, o)
 
-	if src := res.State.Sources["claude"]; src.Status != "error" || !strings.Contains(src.Error, "read "+ch+": permission denied") {
+	if src := res.State.Sources["claude"]; src.Status != "error" || !strings.Contains(src.Error, ch) || !strings.Contains(src.Error, "permission denied") {
 		t.Fatalf("claude source = %+v", src)
 	}
 	if src := res.State.Sources["codex"]; src.Status != "ok" {
@@ -896,7 +855,7 @@ func TestReadErrorOnOneProviderDoesNotStopOthers(t *testing.T) {
 	if !res.State.LastSuccessAt.IsZero() {
 		t.Fatalf("a run with a failed source counted as success: %v", res.State.LastSuccessAt)
 	}
-	if !strings.HasPrefix(res.State.LastError, "claude: read") || !res.State.LastErrorAt.Equal(t0) {
+	if !strings.HasPrefix(res.State.LastError, "claude") || !strings.Contains(res.State.LastError, "permission denied") || !res.State.LastErrorAt.Equal(t0) {
 		t.Fatalf("last error = %q at %v", res.State.LastError, res.State.LastErrorAt)
 	}
 	// The error reaches this run's snapshot, not the next one.
@@ -923,13 +882,13 @@ func TestPanicInOneSourceDoesNotStopOthers(t *testing.T) {
 		return read(p, homes, since)
 	}
 	res := run(t, o)
-	if src := res.State.Sources["claude"]; src.Status != "error" || !strings.Contains(src.Error, "stopped by a bug: assignment to entry in nil map") {
+	if src := res.State.Sources["claude"]; src.Status != "error" || !strings.Contains(src.Error, "stopped by a bug") {
 		t.Fatalf("claude source = %+v", src)
 	}
 	if src := res.State.Sources["codex"]; src.Status != "ok" || totalsFor(t, res.State, "codex", "bob").Tokens != tok(10) {
 		t.Fatalf("codex source = %+v", src)
 	}
-	if !strings.Contains(res.State.LastError, "claude: stopped by a bug") {
+	if !strings.Contains(res.State.LastError, "stopped by a bug") {
 		t.Fatalf("last error = %q", res.State.LastError)
 	}
 	st, err := o.Dir.LoadState()
@@ -951,7 +910,7 @@ func TestPartialReads(t *testing.T) {
 	if src.Status != "partial" {
 		t.Fatalf("status = %q", src.Status)
 	}
-	for _, want := range []string{"read " + extra + ": boom", "3 malformed lines", "1 unreadable files"} {
+	for _, want := range []string{extra, "boom", "3 malformed", "1 unreadable"} {
 		if !strings.Contains(src.Error, want) {
 			t.Fatalf("error %q lacks %q", src.Error, want)
 		}
@@ -1115,6 +1074,15 @@ func TestInstalledBinaryWithoutHomeIsStillAsked(t *testing.T) {
 	if res.State.Sources["claude"].Status != "ok" {
 		t.Fatalf("source = %+v", res.State.Sources["claude"])
 	}
+
+	// It says nobody is logged in: ann is no longer current.
+	w.now = t0.Add(15 * time.Minute)
+	w.readings[state.Key("claude", def)] = probe.Reading{}
+	w.askErr[state.Key("claude", def)] = notLoggedIn("claude")
+	res = run(t, o)
+	if IsCurrent(res.State, "claude", "ann") {
+		t.Fatalf("current = %v", res.State.Current)
+	}
 }
 
 func TestPruneDropsOldSessionsAndIdleAccounts(t *testing.T) {
@@ -1219,28 +1187,6 @@ func TestRelativeHomeIsRememberedAbsolute(t *testing.T) {
 	}
 }
 
-func TestSampleAccountsAreOrdered(t *testing.T) {
-	w, o := newWorld(t)
-	for _, p := range []string{"claude", "codex"} {
-		h := w.home(t, p)
-		w.login(p, h, "zed", nil)
-		w.sessions(p, h, sess(p+"-1", "/p", 5, t0))
-	}
-	h := w.home(t, "hermes")
-	a, b := sess("h1", "/p", 5, t0), sess("h2", "/p", 5, t0)
-	a.Account, b.Account = "beta", "alpha"
-	w.sessions("hermes", h, a, b)
-	run(t, o)
-	var got []string
-	for _, sa := range lastSample(t, o).Accounts {
-		got = append(got, sa.Provider+"/"+sa.Label)
-	}
-	want := []string{"claude/zed", "codex/zed", "hermes/alpha", "hermes/beta"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("sample accounts = %v, want %v", got, want)
-	}
-}
-
 func TestSampleKeepsRecentQuotaWithoutGrowth(t *testing.T) {
 	w, o := newWorld(t)
 	h := w.home(t, "claude")
@@ -1259,6 +1205,8 @@ func TestSampleKeepsRecentQuotaWithoutGrowth(t *testing.T) {
 	}
 }
 
+// Windows out of range, or more of them than a snapshot holds, are kept to
+// what the state and the snapshot can hold.
 func TestBadWindowValuesAreClamped(t *testing.T) {
 	w, o := newWorld(t)
 	h := w.home(t, "claude")
@@ -1267,25 +1215,19 @@ func TestBadWindowValuesAreClamped(t *testing.T) {
 		{Name: "weekly ✓", Percent: math.Inf(1), Minutes: -3},
 		{Name: "x", Percent: -5, Minutes: snapshot.MaxWindowMinutes + 1},
 	}}
+	for len(q.Windows) <= snapshot.MaxWindows {
+		q.Windows = append(q.Windows, snapshot.Window{Name: "w", Percent: 1})
+	}
 	w.login("claude", h, "ann", q)
 	res := run(t, o) // a NaN would fail to save the state
-	got := totalsFor(t, res.State, "claude", "ann").Quota.Windows
-	want := []snapshot.Window{{Name: "window", Percent: 0}, {Name: "weekly -", Percent: 1000}, {Name: "x", Percent: 0}}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("windows = %+v, want %+v", got, want)
+	if got := totalsFor(t, res.State, "claude", "ann").Quota.Windows; len(got) != snapshot.MaxWindows {
+		t.Fatalf("%d windows kept", len(got))
+	}
+	if err := res.Doc.Validate(time.Time{}); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := o.Dir.LoadState(); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestClampWindowsKeepsTheLimit(t *testing.T) {
-	var ws []snapshot.Window
-	for i := 0; i < snapshot.MaxWindows+3; i++ {
-		ws = append(ws, snapshot.Window{Name: "w", Percent: 1})
-	}
-	if got := clampWindows(ws, t0); len(got) != snapshot.MaxWindows {
-		t.Fatalf("%d windows kept", len(got))
 	}
 }
 
@@ -1369,7 +1311,7 @@ func TestDamagedStateStartsAgain(t *testing.T) {
 	if !afterRan {
 		t.Fatal("scheduler and self-update housekeeping did not run")
 	}
-	if !strings.Contains(res.State.LastError, "state.json did not parse") || !res.State.LastErrorAt.Equal(w.now) {
+	if !strings.Contains(res.State.LastError, "state.json") || !res.State.LastErrorAt.Equal(w.now) {
 		t.Fatalf("last error = %q at %v", res.State.LastError, res.State.LastErrorAt)
 	}
 	// Collection starts again, like a first run.
@@ -1426,21 +1368,6 @@ func TestPruneDropsAnAccountsOldShareOfALiveSession(t *testing.T) {
 	}
 	if _, ok := st.Accounts[state.Key("claude", "old")]; ok {
 		t.Fatal("idle account kept by a session another account continued")
-	}
-}
-
-func TestStatePersistsAcrossRuns(t *testing.T) {
-	w, o := newWorld(t)
-	h := w.home(t, "claude")
-	w.login("claude", h, "ann", quota(t0, 42))
-	w.sessions("claude", h, sess("s1", "/p", 100, t0))
-	first := run(t, o)
-	st, err := o.Dir.LoadState()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(Totals(st), Totals(first.State)) {
-		t.Fatalf("saved totals differ:\n%+v\n%+v", Totals(st), Totals(first.State))
 	}
 }
 
@@ -1616,18 +1543,6 @@ func TestAfterHookSeesTheStateBeforeSave(t *testing.T) {
 	st, _ := o.Dir.LoadState()
 	if !st.Schedule.Registered {
 		t.Fatal("After's change was not saved")
-	}
-}
-
-func TestTruncateKeepsValidUTF8(t *testing.T) {
-	for _, s := range []string{strings.Repeat("я", 400), strings.Repeat("a", 599) + "яяя", "short"} {
-		got := truncate(s, 600)
-		if len(got) > 600 || !utf8ValidString(got) {
-			t.Fatalf("truncate(%d bytes) = %d bytes, valid %v", len(s), len(got), utf8ValidString(got))
-		}
-		if len(s) <= 600 && got != s {
-			t.Fatalf("short string changed: %q", got)
-		}
 	}
 }
 

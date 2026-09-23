@@ -50,19 +50,19 @@ func TestRememberEnvKeepsClaudeConfigDirVerbatim(t *testing.T) {
 	}
 }
 
+// The scheduler run and a variable naming this home are covered end to end
+// by TestSchedulerRunProbesClaudeWithRememberedConfigDir.
 func TestClaudeEnvUsesRememberedValueWhenUnset(t *testing.T) {
 	home := filepath.Join(t.TempDir(), ".claude")
 	remembered := home + string(filepath.Separator)
-	base := probe.Env{Environ: []string{"PATH=/usr/bin", "CLAUDE_CONFIG_DIR=" + filepath.Join(filepath.Dir(home), "other")}}
+	other := "CLAUDE_CONFIG_DIR=" + filepath.Join(filepath.Dir(home), "other")
 
 	for _, tc := range []struct {
 		name, remembered string
 		environ          []string
 		want             string
 	}{
-		{"scheduler run", remembered, []string{"PATH=/usr/bin"}, remembered},
-		{"variable names another home", remembered, base.Environ, remembered},
-		{"variable names this home", remembered, []string{"PATH=/usr/bin", "CLAUDE_CONFIG_DIR=" + home}, home},
+		{"variable names another home", remembered, []string{"PATH=/usr/bin", other}, remembered},
 		{"nothing remembered", "", []string{"PATH=/usr/bin"}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
