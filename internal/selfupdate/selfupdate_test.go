@@ -391,7 +391,9 @@ func TestCheckSlowDownload(t *testing.T) {
 	if err != nil || !res.Installed {
 		t.Fatalf("Check = %+v, %v", res, err)
 	}
-	if took := time.Since(start); took < 2*u.Stall {
+	// Eight pieces 60ms apart take longer than one stall period in total, so
+	// only a per-piece stall timer lets this download finish.
+	if took := time.Since(start); took <= u.Stall {
 		t.Fatalf("download took %s, too fast to show anything", took)
 	}
 	if read(t, exe) != string(bin) {

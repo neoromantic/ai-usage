@@ -45,15 +45,15 @@ jobs:
       - name: Cross-compile every release target
         run: sh .github/scripts/dist.sh v0.0.0-ci "$RUNNER_TEMP/dist"
 
+  # Windows builds and installs (see lint and install), but its unit tests are
+  # not a release gate: Windows is not a supported collector host yet.
   test:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      # Windows runners check out CRLF by default; keep files byte for byte.
-      - run: git config --global core.autocrlf false
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
