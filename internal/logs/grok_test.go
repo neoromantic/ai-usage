@@ -197,7 +197,7 @@ func turnAt(at, prompt string, usage [4]int64) string {
 
 // Each prompt's input and output go to the hour of the turn_completed that is
 // counted for it. Grok writes Unix seconds; milliseconds and RFC 3339 read
-// too. A turn without a time goes to the hour the session was last written.
+// too. A turn without a time is spread over the others in proportion.
 func TestGrokHours(t *testing.T) {
 	home := t.TempDir()
 	dir := filepath.Join(home, "sessions", "%2Fwork%2Fapp", "sid")
@@ -231,10 +231,11 @@ func TestGrokHours(t *testing.T) {
 		t.Fatalf("malformed = %d", res.Malformed)
 	}
 	checkHours(t, byID(t, res, "sid"), map[string]int64{
-		"2026-09-21T00:00:05Z": 14,
-		"2026-09-21T06:30:00Z": 23,
-		"2026-09-21T07:15:00Z": 6,
-		"2026-09-21T08:00:00Z": 6,
-		"2026-09-22T11:00:00Z": 8 + 3,
+		// 14, 23, 6, and 6, with the 11 of the turns without a time spread
+		// over them in proportion.
+		"2026-09-21T00:00:05Z": 17,
+		"2026-09-21T06:30:00Z": 29,
+		"2026-09-21T07:15:00Z": 7,
+		"2026-09-21T08:00:00Z": 7,
 	})
 }

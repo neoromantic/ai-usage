@@ -402,7 +402,7 @@ func TestClaudeRejectedRequests(t *testing.T) {
 
 // Each message's input and output go to the hour of its last snapshot, in the
 // session that counts it. What the log gives no time for, a line without one
-// or the tracker's side calls, goes to the hour the session was last written.
+// or the tracker's side calls, is spread over those hours in proportion.
 func TestClaudeHours(t *testing.T) {
 	t.Run("messages, sub-agents, copies, and the tracker", func(t *testing.T) {
 		home := t.TempDir()
@@ -433,12 +433,13 @@ func TestClaudeHours(t *testing.T) {
 		if want := (Tokens{Input: 50, Output: 20, CacheWrite: 5, CacheRead: 7}); got.Tokens != want {
 			t.Fatalf("orig tokens = %+v, want %+v", got.Tokens, want)
 		}
+		// The messages with a time spent 22, 19, and 8. The 21 left, m3 and
+		// what the tracker adds to the messages, goes along in proportion,
+		// with what rounding leaves to the largest hour.
 		checkHours(t, got, map[string]int64{
-			"2026-09-20T22:10:00Z": 22,
-			"2026-09-21T00:00:01Z": 19,
-			"2026-09-21T05:30:00Z": 8,
-			// m3, and what the tracker adds to the messages: 13 input and 5 output.
-			"2026-09-22T11:00:00Z": 3 + 18,
+			"2026-09-20T22:10:00Z": 32,
+			"2026-09-21T00:00:01Z": 27,
+			"2026-09-21T05:30:00Z": 11,
 		})
 		checkHours(t, byID(t, res, "copy"), map[string]int64{"2026-09-21T09:00:00Z": 44})
 	})

@@ -48,9 +48,10 @@ type Session struct {
 	// Hours is the session's input plus output tokens by the UTC hour they
 	// were spent in, keyed by HourOf. A reader fills it from the times its
 	// log records for each use. ReadHomes then makes it add up to Tokens:
-	// what the log does not place in time, such as Claude's side calls, goes
-	// to the hour of Updated. It stays nil when the log records no times at
-	// all, and the ledger then places growth at the run that saw it.
+	// what the log does not place in time, such as Claude's side calls, is
+	// spread over the hours it does place, in their proportion. It stays nil
+	// when the log records no times at all, and the ledger then places
+	// growth at the run that saw it.
 	Hours map[int64]int64
 }
 
@@ -75,30 +76,29 @@ func AddHour(hours *map[int64]int64, t time.Time, n int64) {
 func InOut(t Tokens) int64 { return t.Input + t.Output }
 
 // fitHours makes a session's hours add up to its input plus output. The
-// part no time was recorded for goes to the hour of its last activity; a
-// sum above the total, which only a reader's bug makes, is scaled down.
+// part no time was recorded for, such as Claude's side calls, is spread
+// over the hours with a time in their proportion: side calls go along with
+// the work that makes them, and a resumed session does not move them all
+// to its newest day. With no hour placed, it all goes to the hour of the
+// last activity. A sum above the total, which only a reader's bug makes, is
+// scaled down.
 func fitHours(s *Session) {
 	if s.Hours == nil {
 		return
 	}
 	want := InOut(s.Tokens)
-	var sum, last int64
+	var sum int64
 	for h, n := range s.Hours {
 		if n <= 0 {
 			delete(s.Hours, h)
 			continue
 		}
 		sum += n
-		last = max(last, h)
 	}
 	switch {
-	case sum < want:
-		at := last
-		if !s.Updated.IsZero() {
-			at = HourOf(s.Updated)
-		}
-		s.Hours[at] += want - sum
-	case sum > want:
+	case sum == 0 && want > 0 && !s.Updated.IsZero():
+		s.Hours[HourOf(s.Updated)] = want
+	case sum != want:
 		ScaleHours(s.Hours, want)
 	}
 }
