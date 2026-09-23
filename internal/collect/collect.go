@@ -374,8 +374,6 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 		}
 	}
 	labels := map[string]string{}
-	// switched holds the homes whose login changed since the previous run.
-	switched := map[string]bool{}
 	var answers []answer
 	if p != "hermes" {
 		answers = askAll(ctx, func(ctx context.Context, p, home string) (probe.Reading, error) {
@@ -424,9 +422,7 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 			if a.err != nil && !(isLoggedOut(a.err) && (isManaged(p, home) || !used[home])) {
 				probeErrs = append(probeErrs, [2]string{home, shortErr(a.err)})
 			}
-			prev := st.Current[state.Key(p, home)]
 			labels[home] = applyReading(st, p, home, a.reading, isLoggedOut(a.err), hr.Limits, now, prevRun)
-			switched[home] = prev != "" && prev != labels[home]
 		}
 	}
 	errs = append(errs, homeErrors(probeErrs, len(homes), o.UserHome)...)
@@ -465,7 +461,7 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 			linkGrowth(st, o, r.s, grown)
 		}
 	}
-	applyRejected(st, p, read, switched, now, prevRun)
+	applyRejected(st, p, read, now, prevRun)
 	probed := homes
 	if p == "hermes" {
 		markHermesCurrent(st, read)
@@ -539,8 +535,8 @@ func isLoggedOut(err error) bool {
 	return errors.As(err, &lo) && lo.LoggedOut()
 }
 
-// applyReading records who is logged in at home and their quota, and returns
-// the label new tokens from that home belong to.
+// applyReading records who is logged in at home, when that changed, and
+// their quota, and returns the label new tokens from that home belong to.
 func applyReading(st *state.State, p, home string, r probe.Reading, loggedOut bool, logLimits *logs.Limits, now, prevRun time.Time) string {
 	cur := state.Key(p, home)
 	prev := st.Current[cur]
@@ -559,6 +555,12 @@ func applyReading(st *state.State, p, home string, r probe.Reading, loggedOut bo
 		label = prev
 	default:
 		label = UnknownAccount
+	}
+	if prev != "" && label != prev {
+		if st.Switched == nil {
+			st.Switched = map[string]time.Time{}
+		}
+		st.Switched[cur] = now
 	}
 	acct := touchAccount(st, p, label)
 	if answered {
@@ -617,27 +619,25 @@ func setQuota(acct *state.Account, q *probe.Quota, now time.Time) {
 // alone, as of the refusal: carrying the older reading's windows along would
 // make them look newer than they are. It counts when it is newer than the
 // account's reading. A refusal since the previous run goes where this run
-// puts the session's growth, unless the home's login changed since then: a
-// full window is the usual reason to switch, so the refusal is as likely the
-// earlier account's, and it is skipped. One from before the previous run
-// belongs to whoever used the session then, and the ledger keeps only each
-// account's share, so it counts only when the whole session is this
-// account's, as a session read for the first time is.
-func applyRejected(st *state.State, p string, read []readSession, switched map[string]bool, now, prevRun time.Time) {
+// puts the session's growth. One from before it belongs to whoever used the
+// session then, and the ledger keeps only each account's share, so it counts
+// only when the whole session is this account's, as a session read for the
+// first time is. Neither counts when it is older than the run that found the
+// home's login changed: a full window is the usual reason to switch, so it
+// is as likely the earlier account's, even in a session the ledger gives
+// wholly to the new one.
+func applyRejected(st *state.State, p string, read []readSession, now, prevRun time.Time) {
 	newest := map[string]*logs.Limits{}
 	for _, r := range read {
 		if r.label == UnknownAccount {
 			continue
 		}
+		switched := st.Switched[state.Key(p, r.s.Home)]
 		for _, x := range r.s.Rejected {
-			if allReset(x.Windows, now) {
+			if allReset(x.Windows, now) || x.ObservedAt.Before(switched) {
 				continue
 			}
-			if x.ObservedAt.Before(prevRun) {
-				if !soleAccount(st.Sessions[state.Key(p, r.s.ID)], r.label) {
-					continue
-				}
-			} else if switched[r.s.Home] {
+			if x.ObservedAt.Before(prevRun) && !soleAccount(st.Sessions[state.Key(p, r.s.ID)], r.label) {
 				continue
 			}
 			if n := newest[r.label]; n == nil || x.ObservedAt.After(n.ObservedAt) {
@@ -1252,7 +1252,8 @@ func markHermesCurrent(st *state.State, read []readSession) {
 }
 
 // keepCurrent forgets who was logged in at homes of p that this run did not
-// see, so an account on a removed home is no longer shown as logged in.
+// see, and when that changed, so an account on a removed home is no longer
+// shown as logged in.
 func keepCurrent(st *state.State, p string, homes []string) {
 	keep := map[string]bool{}
 	for _, h := range homes {
@@ -1261,6 +1262,11 @@ func keepCurrent(st *state.State, p string, homes []string) {
 	for k := range st.Current {
 		if state.SplitKey(k)[0] == p && !keep[k] {
 			delete(st.Current, k)
+		}
+	}
+	for k := range st.Switched {
+		if state.SplitKey(k)[0] == p && !keep[k] {
+			delete(st.Switched, k)
 		}
 	}
 }

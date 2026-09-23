@@ -795,16 +795,24 @@ func TestClaudeRejectionGoesToTheSessionsAccount(t *testing.T) {
 		t.Fatalf("bob quota = %+v", q)
 	}
 
-	// Bob is refused again and switches to carl. That refusal came after
-	// the previous run, but it is bob's, not carl's. One in a session no
-	// run read before, as in a folder added since, from before that run is
-	// carl's: the ledger gives carl that whole session.
+	// A session no run read before, as in a folder added since, is all
+	// ann's in the ledger, so its refusal from before the previous run is
+	// hers. Bob starts a session, is refused, and switches to carl. The
+	// ledger gives carl that session, but the refusal is bob's, now and at
+	// later runs.
 	w.now = t0.Add(15 * time.Minute)
 	w.login("claude", work, "carl", nil)
-	w.sessions("claude", work, rejectedSession("s2", t0.Add(5*time.Minute), t0.Add(time.Hour)), rejectedSession("s3", t0.Add(-20*time.Minute), t0.Add(time.Hour)))
-	res = run(t, o)
-	if q := totalsFor(t, res.State, "claude", "carl").Quota; q == nil || !q.At.Equal(t0.Add(-20*time.Minute)) {
-		t.Fatalf("carl quota = %+v, want the refusal in s3 alone", q)
+	w.sessions("claude", def, sess("s1", "/p", 100, t0), rejectedSession("s3", t0.Add(-20*time.Minute), t0.Add(time.Hour)))
+	w.sessions("claude", work, rejectedSession("s2", t0.Add(-10*time.Minute), t0.Add(time.Hour)), rejectedSession("s4", t0.Add(5*time.Minute), t0.Add(time.Hour)))
+	for range 2 {
+		res = run(t, o)
+		if q := totalsFor(t, res.State, "claude", "carl").Quota; q != nil {
+			t.Fatalf("carl got bob's refusal at %v: %+v", w.now, q)
+		}
+		w.now = w.now.Add(15 * time.Minute)
+	}
+	if q := totalsFor(t, res.State, "claude", "ann").Quota; q == nil || !q.At.Equal(t0.Add(-20*time.Minute)) {
+		t.Fatalf("ann quota = %+v, want the refusal in s3", q)
 	}
 }
 

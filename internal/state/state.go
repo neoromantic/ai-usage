@@ -140,9 +140,13 @@ type State struct {
 	// the account it names then, and only then. False is a home that named
 	// an account in a run that could not read all its logs; it claims at a
 	// run that does.
-	Answered map[string]bool     `json:"answered,omitempty"`
-	Accounts map[string]*Account `json:"accounts"`
-	Sessions map[string]*Session `json:"sessions"`
+	Answered map[string]bool `json:"answered,omitempty"`
+	// Switched is, by provider and home, when a run last found another
+	// account logged in there than the run before it, or nobody. A request
+	// refused there before then is not the account logged in now.
+	Switched map[string]time.Time `json:"switched,omitempty"`
+	Accounts map[string]*Account  `json:"accounts"`
+	Sessions map[string]*Session  `json:"sessions"`
 
 	Relay    Relay    `json:"relay"`
 	Update   Update   `json:"update"`
