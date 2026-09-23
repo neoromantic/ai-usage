@@ -27,11 +27,11 @@ var profiles = map[string]struct{ dir, marker string }{
 
 // Discover returns candidate homes per provider: the default home, the one an
 // environment variable names, the ones remembered from earlier runs, the ones
-// an app keeps per account, and the profiles inside each of them. Only
-// directories that exist are returned. The default home comes first and the
-// rest follow in path order, so a run with the variables and one without
-// them, like the scheduler's, read the same homes in the same order: where two
-// homes hold the same log, the first one holds the session.
+// an app keeps per account or per session, and the profiles inside each of
+// them. Only directories that exist are returned. The default home comes
+// first and the rest follow in path order, so a run with the variables and
+// one without them, like the scheduler's, read the same homes in the same
+// order: where two homes hold the same log, the first one holds the session.
 func Discover(userHome string, getenv func(string) string, remembered map[string][]string) map[string][]string {
 	out := map[string][]string{}
 	for _, p := range Providers {
@@ -46,6 +46,7 @@ func Discover(userHome string, getenv func(string) string, remembered map[string
 		}
 		cands = append(cands, remembered[p]...)
 		cands = append(cands, managedHomes(p, userHome, getenv)...)
+		cands = append(cands, claudeAppSessionHomes(p, userHome, getenv)...)
 		found := map[string]bool{}
 		for _, c := range cands {
 			// A relative CODEX_HOME and the like is remembered for scheduler
@@ -213,7 +214,7 @@ func Remember(remembered map[string][]string, userHome string, found map[string]
 			if userHome != "" && h == filepath.Join(userHome, "."+p) {
 				continue
 			}
-			if isProfile(p, h, homes) || managedByDefault(p, h, userHome) {
+			if isProfile(p, h, homes) || managedByDefault(p, h, userHome) || claudeAppRecord(p, h) != "" {
 				continue
 			}
 			if contains(remembered[p], h) {

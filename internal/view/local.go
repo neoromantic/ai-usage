@@ -86,8 +86,14 @@ func (u *ui) thisDevice(allProjects bool) {
 			}
 			return accts[i].Tokens.Total() > accts[j].Tokens.Total()
 		})
+		logins := 0
+		for _, h := range pv.Homes {
+			if !claudeAppHome.MatchString(h) {
+				logins++
+			}
+		}
 		for _, a := range accts {
-			u.localAccount(p, a, labelW, allProjects, len(pv.Homes) > 1)
+			u.localAccount(p, a, labelW, allProjects, logins > 1)
 		}
 	}
 	if len(idle) > 0 {

@@ -365,10 +365,23 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 	if len(homes) > 0 {
 		res = o.ReadLogs(p, homes, since)
 	}
+	// The Claude app's session homes have no login to ask about: the app
+	// recorded the account each session ran under.
+	apps := map[string]claudeAppSession{}
+	for _, h := range homes {
+		if rec := claudeAppRecord(p, h); rec != "" {
+			apps[h] = readClaudeAppSession(rec)
+		}
+	}
 	labels := map[string]string{}
 	var answers []answer
 	if p != "hermes" {
-		answers = askAll(ctx, o.Ask, p, homes)
+		answers = askAll(ctx, func(ctx context.Context, p, home string) (probe.Reading, error) {
+			if _, ok := apps[home]; ok {
+				return probe.Reading{}, nil
+			}
+			return o.Ask(ctx, p, home)
+		}, p, homes)
 	}
 	// partial means some home's read was incomplete, so a lower count than
 	// last time is a missing file rather than a real drop.
@@ -397,7 +410,9 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 			errs = append(errs, fmt.Sprintf("%d unreadable files", hr.Unreadable))
 			partial = true
 		}
-		if p != "hermes" {
+		if app, ok := apps[home]; ok {
+			labels[home] = touchAccount(st, p, app.account()).Label
+		} else if p != "hermes" {
 			a := answers[i]
 			// An app's per-account home with nobody logged in is an account
 			// removed or not added yet, and a home with no usage is a tool
@@ -428,6 +443,9 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 		}
 		if label == "" {
 			label = UnknownAccount
+		}
+		if app, ok := apps[s.Home]; ok {
+			s.Project = app.project()
 		}
 		read = append(read, readSession{s: s, label: label})
 	}
@@ -693,7 +711,8 @@ func homeErrors(errs [][2]string, homes int, userHome string) []string {
 
 // legacyNamed reports whether the ledger is from before the homes that
 // answered were recorded, and has an account of p that a harness named. Such
-// a ledger does not know which homes answered, and none of them claims.
+// a ledger does not know which homes answered, and none of them claims. An
+// account only the Claude app's records name was never seen by a harness.
 func legacyNamed(st *state.State, p string) bool {
 	for k := range st.Answered {
 		if state.SplitKey(k)[0] == p {
@@ -701,7 +720,7 @@ func legacyNamed(st *state.State, p string) bool {
 		}
 	}
 	for _, a := range st.Accounts {
-		if a.Provider == p && a.Label != UnknownAccount {
+		if a.Provider == p && a.Label != UnknownAccount && !a.LastSeenAt.IsZero() {
 			return true
 		}
 	}

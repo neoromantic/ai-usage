@@ -531,6 +531,18 @@ func TestStatusFoldsManyHomes(t *testing.T) {
 	}
 }
 
+// A home the Claude app keeps for a session ends in .claude, but the user's
+// home folder is not above it.
+func TestClaudeAppHomeIsNotTheUsersHome(t *testing.T) {
+	st := emptyState()
+	st.Sources["claude"] = state.Source{Status: "ok", Homes: []string{"/Users/ann/Library/Application Support/Claude/local-agent-mode-sessions/a/b/local_c1/.claude"}}
+	st.Sources["codex"] = state.Source{Status: "ok", Homes: []string{"/Users/ann/.codex"}}
+	status := StatusText(Build(newFixture(t, st).in), "", Options{Width: 100, Loc: time.UTC})
+	if want := "codex   ~/.codex · no accounts yet\n"; !strings.Contains(status, want) {
+		t.Fatalf("status lacks %q:\n%s", want, status)
+	}
+}
+
 // TestStatusUpdateLine: a release installed by hand that is newer than the
 // last update check saw is the newest release, not an older one.
 func TestStatusUpdateLine(t *testing.T) {

@@ -119,6 +119,10 @@ var defaultHomes = []string{".claude", ".codex", ".grok", ".hermes"}
 func homeOf(r *Report) string {
 	for _, p := range r.Providers {
 		for _, h := range p.Homes {
+			// A home the Claude app keeps for a session ends in .claude too.
+			if claudeAppHome.MatchString(h) {
+				continue
+			}
 			for _, d := range defaultHomes {
 				for _, sep := range []string{"/", `\`} {
 					if strings.HasSuffix(h, sep+d) {
@@ -178,18 +182,32 @@ func (u *ui) path(p string) string {
 	return p
 }
 
-var managedHome = regexp.MustCompile(`[/\\](orca)[/\\]codex-accounts[/\\]([^/\\]+)[/\\]home$`)
+// claudeAppHome is a home the Claude app keeps for one of its sessions. No
+// one logs in to it: the app records the account each session ran under.
+var claudeAppHome = regexp.MustCompile(`[/\\]local-agent-mode-sessions[/\\].+[/\\]local_(?:[^/\\]*_)?([^/\\_]+)[/\\]\.claude$`)
 
-// homeName is how a harness home is printed: an app's per-account home by
-// the app and the account id, anything else as a path. An id that is a UUID
+// appHomes are the homes an app keeps per account or per session, and the
+// app's name.
+var appHomes = []struct {
+	re  *regexp.Regexp
+	app string
+}{
+	{regexp.MustCompile(`[/\\]orca[/\\]codex-accounts[/\\]([^/\\]+)[/\\]home$`), "orca"},
+	{claudeAppHome, "claude app"},
+}
+
+// homeName is how a harness home is printed: an app's home by the app and
+// the account or session id, anything else as a path. An id that is a UUID
 // is known by its first 8 hex digits.
 func (u *ui) homeName(p string) string {
-	if m := managedHome.FindStringSubmatch(p); m != nil {
-		id := m[2]
-		if uuidRe.MatchString(id) {
-			id = id[:8]
+	for _, a := range appHomes {
+		if m := a.re.FindStringSubmatch(p); m != nil {
+			id := m[1]
+			if uuidRe.MatchString(id) {
+				id = id[:8]
+			}
+			return a.app + " " + id
 		}
-		return m[1] + " " + id
 	}
 	return u.path(p)
 }

@@ -131,7 +131,7 @@ func cmdHome(ctx context.Context, args []string, stdout, stderr io.Writer) error
 		for _, h := range homes {
 			for _, k := range kept {
 				if samePath(h, k) {
-					return fmt.Errorf("%s is still read by every run: it is inside a home that stays, an app's account home, or one an environment variable names", h)
+					return fmt.Errorf("%s is still read by every run: it is inside a home that stays, a home an app keeps per account or per session, or one an environment variable names", h)
 				}
 			}
 		}

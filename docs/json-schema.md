@@ -80,6 +80,8 @@ A Hermes account is named after the billing provider it used, such as `openai-co
 
 A session's tokens go to the account logged in to the home it was read from. Codex's `homes` include the per-account homes Orca keeps under its app data folder (`codex-accounts/<id>/home`); one with nobody logged in adds no account. Orca links each rollout file into `~/.codex` and every account's home, so such a file is read once. Its tokens go to the one account, among those logged in to the homes that hold the file, whose current quota reading has its longest window resetting within a minute of the reset time the session last recorded. When no account matches, or several do, they go to the account in the first of those homes, `~/.codex` first. A session from an earlier week cannot be matched this way; a collector running every 15 minutes matches sessions while they run.
 
+Claude's `homes` include the Claude Code home the Claude desktop app keeps for each agent-mode session (`local-agent-mode-sessions/…/local_<id>/.claude` in its data folder). Nobody logs in to such a home, so it is never an account's `home`. A session read there goes to the account the app recorded for it, `unknown` when that record is missing or names none, and its project `path` is the first folder the person gave the session, else `Claude app`.
+
 `tokens` has four counts: `input`, `output`, `cache_read`, and `cache_write`. `input` does not include cache reads.
 
 `quota`:
