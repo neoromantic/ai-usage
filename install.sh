@@ -18,7 +18,7 @@
 main() {
 	set -eu
 
-	# Under sudo the first run would register root's crontab and collect
+	# Under sudo the first run would register root's schedule and collect
 	# root's usage, and could leave root-owned files in this person's home.
 	sudo_user=${SUDO_USER:-${DOAS_USER:-}}
 	if [ "$(id -u)" = 0 ] && [ -n "$sudo_user" ] && [ "$sudo_user" != root ] && [ -z "${AI_USAGE_ALLOW_ROOT:-}" ]; then

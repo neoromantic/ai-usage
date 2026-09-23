@@ -12,7 +12,7 @@ Source notes are from [PitStop](https://github.com/Livin21/pitstop). Account swi
 
 - Keep it small. No extra service to deploy, no database, no plugin system.
 - One codebase and one binary for Windows, macOS, and Linux.
-- Install with one command. The first run registers itself with the system scheduler: cron on macOS and Linux, Task Scheduler on Windows. Later runs are just the binary.
+- Install with one command. The first run registers itself with the system scheduler: cron on Linux, launchd on macOS, Task Scheduler on Windows. Later runs are just the binary.
 - The binary updates itself from GitHub releases. The run that notices a new release finishes on the old binary and leaves the new binary in place, so the next run is the update. Self-update cannot be turned off.
 - Reading never writes. It must not change, refresh, or replace Codex, Claude, Grok, or Hermes credentials, keychain items, or cookies. It must not run a login, logout, or token-refresh command.
 - Account switching is deferred. Version 1 only monitors.
@@ -92,7 +92,8 @@ Done, in short:
 
 - **Binary and scheduling**
   - One pure-Go binary (`cmd/ai-usage`) for Windows, macOS, and Linux on amd64 and arm64. `install.sh` and `install.ps1` install it with one command. `install.sh` refuses `sudo`, so that it never registers root's crontab.
-  - The first run of a release build registers `*/15` in cron, or a 15-minute Task Scheduler task. The Windows task comes from a task definition that also runs on battery.
+  - The first run of a release build registers `*/15` in cron on Linux, a launch agent with a `StartCalendarInterval` at minutes 0, 15, 30, and 45 on macOS (unlike `StartInterval`, it runs once on wake for runs missed during sleep), or a 15-minute Task Scheduler task on Windows. The Windows task comes from a task definition that also runs on battery.
+  - macOS uses launchd because writing the crontab there waits on a prompt to let the terminal administer the computer: an install that nobody answered was killed after 30 seconds and left no schedule. The launch agent runs in the login session, so the collector can read the keychain. It is loaded with `launchctl bootstrap gui/<uid>`; a Mac with no one logged in at the screen gets no schedule until someone logs in, and `status` says so. A run the agent itself started never boots the agent out, since that would stop the run before it loaded the agent again; it only writes the plist back. A crontab line an earlier version wrote is removed by the next run the person starts, since writing the crontab can prompt; until then `status` reports it, so cron and launchd never both run the collector unnoticed. `launchctl disable` alone does not unload a loaded agent, so the README pauses with `disable` and `bootout`.
   - The scheduler entry names this device's state folder (`collect --quiet --home DIR`), so scheduled runs never fork the device, the key, or the ledger.
 - **Self-update**
   - Updates come from GitHub releases, with SHA-256 checksums, inside the run lock. The downloaded binary must start and report the release's version before it replaces the old one.

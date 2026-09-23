@@ -64,20 +64,27 @@ The first run:
 
 - creates the state folder
 - generates a new team key, unless the installer joined a team, so an install starts as a team of one
-- registers with the scheduler: a line in your crontab on macOS and Linux, a task named `ai-usage` in Task Scheduler on Windows
+- registers with the scheduler: a line in your crontab on Linux, a launch agent on macOS, a task named `ai-usage` in Task Scheduler on Windows
 - collects and prints the report
 
 The crontab line looks like this. It keeps the `PATH` of the shell that installed it, so that scheduled runs find the tools, and it names the state folder, so that scheduled runs use the same device, team key, and history as your own runs:
 
 ```
-*/15 * * * * PATH='/opt/homebrew/bin:/usr/bin:/bin' '/Users/ann/.local/bin/ai-usage' collect --quiet --home '/Users/ann/Library/Application Support/ai-usage' >/dev/null 2>&1 # ai-usage
+*/15 * * * * PATH='/home/ann/.local/bin:/usr/bin:/bin' '/home/ann/.local/bin/ai-usage' collect --quiet --home '/home/ann/.config/ai-usage' >/dev/null 2>&1 # ai-usage
 ```
+
+On macOS the same command and `PATH` go into `~/Library/LaunchAgents/io.github.neoromantic.ai-usage.plist`, which launchd runs at every quarter hour in your login session, where the collector can read the keychain. Registering it needs no prompt, though macOS may show a notification that ai-usage added a background item. If the Mac missed runs while asleep, launchd runs it once on wake. With no one logged in at the screen, as over SSH before the first login, there is no session to register in, and `ai-usage status` says so. A crontab line an earlier version wrote on macOS is removed by the next run you start yourself, which may bring up the prompt asking to let your terminal administer the computer once; until then `ai-usage status` says the line is still there.
 
 The Windows task runs `ai-usage.exe collect --quiet --home <state folder>` every 15 minutes. Unlike Task Scheduler's defaults, it also runs on battery, runs once after the computer wakes if it missed a run, never runs twice at once, and is stopped after 10 minutes.
 
-To pause the collector, comment out the crontab line, or disable the task in Task Scheduler. Runs leave it that way, and `ai-usage status` says it was disabled by hand. `ai-usage schedule install` turns it back on.
+To pause the collector, comment out the crontab line, disable the task in Task Scheduler, or on macOS run:
 
-On macOS, changing the crontab may bring up a prompt asking to let your terminal administer the computer. If you decline, the schedule is not registered, and `ai-usage status` says why. Later runs try to register again until `ai-usage schedule remove` turns that off.
+```
+launchctl disable gui/$(id -u)/io.github.neoromantic.ai-usage
+launchctl bootout gui/$(id -u)/io.github.neoromantic.ai-usage
+```
+
+Runs leave it that way, and `ai-usage status` says it was disabled by hand. `ai-usage schedule install` turns it back on.
 
 The state folder is `~/Library/Application Support/ai-usage` on macOS, `$XDG_CONFIG_HOME/ai-usage` or `~/.config/ai-usage` on Linux, and `%LOCALAPPDATA%\ai-usage` on Windows (not the roaming profile, so the device id stays on this machine). `AI_USAGE_HOME` moves it. The scheduler entry follows the folder of the last run that registered it, so after moving the folder, run `ai-usage` once with the new `AI_USAGE_HOME`. It holds:
 

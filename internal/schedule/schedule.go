@@ -1,5 +1,5 @@
 // Package schedule registers the collector with the system scheduler: the
-// user's crontab on macOS and Linux, Task Scheduler on Windows.
+// user's crontab on Linux, a launch agent on macOS, Task Scheduler on Windows.
 package schedule
 
 import (
@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -40,8 +41,12 @@ const (
 	Absent State = iota
 	// Other means an entry runs another binary or another state folder.
 	Other
+	// Duplicate means the launch agent runs the collector, and a crontab
+	// line an older version wrote on macOS runs it too.
+	Duplicate
 	// Disabled means the person commented the entry out or disabled the
-	// task. Runs leave it alone; Install turns it back on.
+	// task or the launch agent. Runs leave it alone; Install turns it back
+	// on.
 	Disabled
 	// Active means the entry runs this binary with this state folder.
 	Active
@@ -54,10 +59,22 @@ type Runner func(ctx context.Context, name string, args []string, stdin []byte) 
 type Scheduler struct {
 	GOOS string
 	Run  Runner
+	// AgentDir holds the macOS launch agent, and UID names the login
+	// session launchd runs it in. InAgent says this process is a run the
+	// launch agent started.
+	AgentDir string
+	UID      int
+	InAgent  bool
 }
 
 // Default uses the real OS and commands.
-func Default() Scheduler { return Scheduler{GOOS: runtime.GOOS, Run: execRunner} }
+func Default() Scheduler {
+	s := Scheduler{GOOS: runtime.GOOS, Run: execRunner, UID: os.Getuid(), InAgent: os.Getenv("XPC_SERVICE_NAME") == AgentLabel}
+	if h, err := os.UserHomeDir(); err == nil {
+		s.AgentDir = filepath.Join(h, "Library", "LaunchAgents")
+	}
+	return s
+}
 
 func execRunner(ctx context.Context, name string, args []string, stdin []byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -158,8 +175,11 @@ func (s Scheduler) Install(ctx context.Context, exe, home, path string) error {
 		// A line break would end the entry and start another one.
 		return errors.New("cannot schedule a binary path, state folder, or PATH that contains a line break")
 	}
-	if s.GOOS == "windows" {
+	switch s.GOOS {
+	case "windows":
 		return s.installTask(ctx, exe, home)
+	case "darwin":
+		return s.installAgent(ctx, exe, home, path)
 	}
 	lines, err := s.cronLines(ctx)
 	if err != nil {
@@ -275,6 +295,9 @@ func utf16LE(s string) []byte {
 
 // Remove deletes the registration. Removing an absent one is not an error.
 func (s Scheduler) Remove(ctx context.Context) error {
+	if s.GOOS == "darwin" {
+		return s.removeAgent(ctx)
+	}
 	if s.GOOS == "windows" {
 		if got, _ := s.Lookup(ctx, "", ""); got == Absent {
 			return nil
@@ -295,6 +318,9 @@ func (s Scheduler) Remove(ctx context.Context) error {
 
 // Lookup reports whether the scheduler runs exe with the state folder home.
 func (s Scheduler) Lookup(ctx context.Context, exe, home string) (State, error) {
+	if s.GOOS == "darwin" {
+		return s.lookupAgent(ctx, exe, home)
+	}
 	if s.GOOS == "windows" {
 		out, err := s.Run(ctx, "schtasks", []string{"/Query", "/TN", Marker, "/XML"}, nil)
 		if err != nil {

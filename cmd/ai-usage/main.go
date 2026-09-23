@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
@@ -98,7 +99,9 @@ Environment:
 `
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	// launchd stops a run it started with SIGTERM; the run still releases its
+	// lock on the way out.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	os.Exit(run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
@@ -405,7 +408,7 @@ func ensureSchedule(ctx context.Context, d state.Dir, st *state.State, now time.
 }
 
 // job is what the scheduler should run: this binary, collecting into the
-// absolute state folder, since cron starts in the home directory.
+// absolute state folder, since the scheduler starts it in another directory.
 func job(d state.Dir) (exe, home string, err error) {
 	if exe, err = executable(); err != nil {
 		return "", "", err
@@ -820,6 +823,8 @@ func cmdSchedule(ctx context.Context, args []string, stdout io.Writer) error {
 			fmt.Fprintf(stdout, "registered: %s runs every %s with state folder %s\n", exe, schedule.Interval, home)
 		case schedule.Other:
 			fmt.Fprintln(stdout, "registered, but for a different binary path or state folder; `ai-usage schedule install` registers this one")
+		case schedule.Duplicate:
+			fmt.Fprintln(stdout, "registered, but a crontab line from an older version runs the collector too; `ai-usage schedule install` removes it")
 		case schedule.Disabled:
 			fmt.Fprintln(stdout, disabledByHand)
 		default:
