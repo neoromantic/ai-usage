@@ -145,6 +145,16 @@ else
 	[ -x "$h/.local/bin/ai-usage" ] || fail "the installer did not install into ~/.local/bin beside another program"
 	grep -q 'comes first on PATH' "$work/other-program.err" || fail "the installer did not say another ai-usage comes first on PATH"
 
+	# A link that comes first but leads to the copy just installed runs that
+	# copy, so there is nothing to say.
+	h=$work/link-first
+	mkdir -p "$h/links" "$h/.local/bin"
+	ln -s "$h/.local/bin/ai-usage" "$h/links/ai-usage"
+	HOME=$h PATH=$h/links:$h/.local/bin:$sys SHELL=/bin/zsh sh install.sh 2>"$work/link-first.err"
+	if grep -q 'comes first on PATH' "$work/link-first.err"; then
+		fail "the installer said a link to the copy just installed comes first on PATH"
+	fi
+
 	# A link, such as Homebrew's, is not replaced, even one to this program.
 	h=$work/link
 	mkdir -p "$h/brew/bin"

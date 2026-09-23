@@ -93,9 +93,12 @@ main() {
 	# Under sudo HOME can still be the person's, whose profile root must not write.
 	if on_path "$bin_dir"; then
 		# A copy the installer could not replace, or would not, still runs
-		# when ai-usage is typed if its folder comes first.
+		# when ai-usage is typed if its folder comes first. A link to the
+		# copy just installed is that copy, which -ef sees.
 		found=$(command -v ai-usage || true)
-		if [ "$found" != "$bin" ]; then
+		# POSIX has had -ef since 2024; older shellcheck does not know that.
+		# shellcheck disable=SC3013
+		if [ ! "$found" -ef "$bin" ]; then
 			say "$found comes first on PATH and is not the copy just installed; remove it or put $bin_dir first"
 		fi
 	elif [ -z "${AI_USAGE_BIN_DIR:-}${AI_USAGE_NO_MODIFY_PATH:-}$under_sudo" ] && add_to_path "$os"; then
