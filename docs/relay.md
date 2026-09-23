@@ -88,7 +88,7 @@ Ctrl-C stops the relay gracefully.
 
 ## Limits
 
-These are fixed in the code, in `DefaultLimits` in `internal/relay/server.go`.
+These are fixed in the code, in `DefaultLimits` in `relay/server.go`.
 
 | Limit | Value |
 | --- | --- |

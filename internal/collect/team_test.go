@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/neoromantic/ai-usage/internal/relay"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
+	"github.com/neoromantic/ai-usage/relay"
 )
 
 // testRelay is a relay server on the test's clock.

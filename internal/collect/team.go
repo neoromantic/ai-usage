@@ -7,9 +7,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/neoromantic/ai-usage/internal/relay"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
+	"github.com/neoromantic/ai-usage/relay"
 )
 
 // TeamCache is the last verified team read, kept so the console can show the

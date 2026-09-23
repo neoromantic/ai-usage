@@ -16,10 +16,10 @@ import (
 
 	"github.com/neoromantic/ai-usage/internal/logs"
 	"github.com/neoromantic/ai-usage/internal/probe"
-	"github.com/neoromantic/ai-usage/internal/relay"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
+	"github.com/neoromantic/ai-usage/relay"
 )
 
 // UnknownAccount labels usage the harness did not attribute to anyone.

@@ -2,6 +2,7 @@
 /*
 !/api
 !/internal
+!/relay
 !/go.mod
 !/go.sum
 !/vercel.json

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/neoromantic/ai-usage/internal/relay"
+	"github.com/neoromantic/ai-usage/relay"
 )
 
 var (

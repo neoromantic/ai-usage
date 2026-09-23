@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/neoromantic/ai-usage/internal/relay"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/team"
+	"github.com/neoromantic/ai-usage/relay"
 )
 
 var now = time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)

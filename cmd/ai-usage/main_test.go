@@ -23,13 +23,13 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/probe"
-	"github.com/neoromantic/ai-usage/internal/relay"
 	"github.com/neoromantic/ai-usage/internal/schedule"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
 	"github.com/neoromantic/ai-usage/internal/view"
+	"github.com/neoromantic/ai-usage/relay"
 )
 
 // TestMain lets this test binary stand in for a release binary: run as

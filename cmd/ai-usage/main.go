@@ -22,13 +22,13 @@ import (
 
 	"github.com/neoromantic/ai-usage/internal/collect"
 	"github.com/neoromantic/ai-usage/internal/probe"
-	"github.com/neoromantic/ai-usage/internal/relay"
 	"github.com/neoromantic/ai-usage/internal/schedule"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
 	"github.com/neoromantic/ai-usage/internal/view"
+	"github.com/neoromantic/ai-usage/relay"
 )
 
 // Set at release build time with -ldflags "-X main.version=v1.2.3 -X main.defaultRelay=https://…".
