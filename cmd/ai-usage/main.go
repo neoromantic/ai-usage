@@ -80,6 +80,9 @@ Usage:
                                          their sessions, for homes another collector reads now
   ai-usage relay show|set URL|clear      choose the relay this device publishes to
   ai-usage name show|set NAME|clear      what the team calls this device, instead of its host name
+  ai-usage alias [ACCOUNT NAME | ACCOUNT --clear]
+                                         list or set the short name the whole team sees for an
+                                         account; ACCOUNT is a label, a name, or PROVIDER:LABEL
   ai-usage relay serve [--addr :8080] [--client-ip-header NAME]
                                          run a relay (Vercel KV from env, else memory)
   ai-usage schedule install|remove|status
@@ -139,6 +142,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdRelay(ctx, args, stdout, stderr)
 	case "name":
 		err = cmdName(args, stdout)
+	case "alias":
+		err = cmdAlias(args, stdout)
 	case "schedule":
 		err = cmdSchedule(ctx, args, stdout, stderr)
 	case "update":
@@ -162,6 +167,9 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 			return 2
 		}
 		fmt.Fprintf(stderr, "ai-usage: %s\n", err)
+		if errors.As(err, new(argError)) {
+			return 2
+		}
 		return 1
 	}
 	return 0
