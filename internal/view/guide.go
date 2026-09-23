@@ -27,11 +27,17 @@ func Guide(r Report, scheduler string, o Options) string {
 		h := u.scheduleHealth()
 		u.para(line{{h.glyph + " ", h.st}}, h.detail, h.st)
 	}
-	team := "no relay, so no team sees this device yet: ai-usage relay set URL"
+	team := []string{"no relay, so no team sees this device yet: ai-usage relay set URL"}
 	if c.Relay.URL != nil {
-		team = "the team sees this device's totals as " + c.DeviceLabel + "; names and paths are sealed"
+		// Sealing hides these from the relay, not from the team.
+		team = []string{
+			"the team sees this device as " + c.DeviceLabel + ", with accounts, emails, and projects",
+			"the relay sees only numbers: names and paths are sealed with the team key",
+		}
 	}
-	u.para(line{{"  ", plain}}, team, plain)
+	for _, s := range team {
+		u.para(line{{"  ", plain}}, s, plain)
+	}
 	cmds := [][2]string{
 		{"ai-usage", "collect now and show this report"},
 		{"ai-usage status", "the collector's health, with full errors"},

@@ -136,7 +136,7 @@ The first run:
 - generates a new team key, unless the installer joined a team, so an install starts as a team of one
 - registers with the scheduler: a line in your crontab on Linux, a launch agent on macOS, a task named `ai-usage` in Task Scheduler on Windows
 - collects and prints the report
-- prints a short guide under the report: which scheduler now collects every 15 minutes, or what to do when none could be registered; what the team sees; and the commands worth knowing, with how to invite a colleague, how to pause the system scheduler's runs, and how to uninstall
+- prints a short guide under the report: which scheduler now collects every 15 minutes, or what to do when none could be registered; what the team and the relay see; and the commands worth knowing, with how to invite a colleague, how to pause the system scheduler's runs, and how to uninstall
 
 The guide is printed once. When the scheduler collected first, or the first run you started used `--json`, the guide comes with the next `ai-usage` that prints text; `ai-usage report` never prints it. A machine that collected with a version before the guide never prints it.
 

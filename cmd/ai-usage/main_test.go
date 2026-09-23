@@ -356,9 +356,10 @@ func TestReportBeforeAnyRunWritesNothing(t *testing.T) {
 
 // TestCollectWhileAnotherRunCollects: while the scheduled run holds the run
 // lock, a run the person started waits and shows that run's result instead
-// of collecting twice, the scheduler's own run skips, and editing the config
-// does not wait at all. After a change to what would be collected, or a
-// holder that did not collect, the waiting run collects itself.
+// of collecting twice, with the guide when it is the first report; the
+// scheduler's own run skips, and editing the config does not wait at all.
+// After a change to what would be collected, or a holder that did not
+// collect, the waiting run collects itself.
 func TestCollectWhileAnotherRunCollects(t *testing.T) {
 	hermetic(t)
 	d := newDevice(t)
@@ -396,6 +397,9 @@ func TestCollectWhileAnotherRunCollects(t *testing.T) {
 	r := d.run("", "collect", "--offline")
 	if r.code != 0 || !strings.Contains(r.stderr, "collecting now") || !strings.Contains(r.stdout, "ACCOUNTS") {
 		t.Fatalf("run the person started: %+v", r)
+	}
+	if !strings.Contains(r.stdout, "\nHOW IT WORKS") || d.state().GuideDue {
+		t.Fatalf("the first report, which waited, printed no guide or left it due:\n%s", r.stdout)
 	}
 	if got := d.state().LastRunAt; !got.Equal(collected) {
 		t.Fatalf("collected a second time: last run %s, want %s", got, collected)
@@ -1486,7 +1490,7 @@ func TestGuideAfterInstall(t *testing.T) {
 	if !ok {
 		t.Fatalf("the first run printed no guide:\n%s", first)
 	}
-	for _, want := range []string{"cron", "test-host", "ai-usage status", "ai-usage name set", "AI_USAGE_TEAM_KEY", "ai-usage schedule remove"} {
+	for _, want := range []string{"cron", "test-host", "emails", "ai-usage status", "ai-usage name set", "AI_USAGE_TEAM_KEY", "ai-usage schedule remove"} {
 		if !strings.Contains(guide, want) {
 			t.Fatalf("the guide lacks %q:\n%s", want, guide)
 		}

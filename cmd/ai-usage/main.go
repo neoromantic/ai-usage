@@ -342,7 +342,29 @@ func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) (e
 	if *quiet {
 		return nil
 	}
+	// A run that waited shows the other run's result and has no After of
+	// its own, so it takes the guide here.
+	if res.Waited && res.State.GuideDue && !*jsonOut {
+		guide = takeGuide(d)
+	}
 	return printReport(stdout, d, res, endpoint, *jsonOut, guide, disp)
+}
+
+// takeGuide clears the guide's due mark under the run lock and reports
+// whether this run should print it. While another run holds the lock, the
+// guide is left for a later report.
+func takeGuide(d state.Dir) bool {
+	unlock, err := d.Lock()
+	if err != nil {
+		return false
+	}
+	defer unlock()
+	st, err := d.LoadState()
+	if err != nil || !st.GuideDue {
+		return false
+	}
+	st.GuideDue = false
+	return d.SaveState(st) == nil
 }
 
 // panicError is a collection that panicked.
