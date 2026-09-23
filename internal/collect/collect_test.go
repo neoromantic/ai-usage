@@ -431,6 +431,31 @@ func TestEachHomeClaimsItsOwnUnknownHistory(t *testing.T) {
 	}
 }
 
+func TestHomeClaimsOnceItsLogsAreRead(t *testing.T) {
+	// The home names its account first in a run that could not read its
+	// logs. The history stays unknown then and is claimed when they read.
+	w, o := newWorld(t)
+	h := w.home(t, "codex")
+	k := state.Key("codex", h)
+	w.askErr[k] = errors.New("no answer")
+	w.sessions("codex", h, sess("s1", "/p", 1000, t0))
+	run(t, o)
+	w.now = t0.Add(15 * time.Minute)
+	delete(w.askErr, k)
+	w.login("codex", h, "ann@x", nil)
+	w.readErr[k] = errors.New("permission denied")
+	run(t, o)
+	w.now = t0.Add(30 * time.Minute)
+	delete(w.readErr, k)
+	res := run(t, o)
+	if a := totalsFor(t, res.State, "codex", "ann@x"); a.Tokens != tok(1000) {
+		t.Fatalf("ann = %+v", a)
+	}
+	if hasTotals(res.State, "codex", UnknownAccount) {
+		t.Fatal("unknown account kept history")
+	}
+}
+
 func TestLoggedOutHomeDoesNotClaimLater(t *testing.T) {
 	// A home that said nobody is logged in has answered; the usage counted
 	// then is no one's, whoever logs in afterwards.

@@ -178,6 +178,44 @@ func TestMirroredSessionFollowsItsRateLimits(t *testing.T) {
 	}
 }
 
+// History counted before any Orca home answered goes to the account whose
+// weekly window the rollout shows, as new usage does, not to the first home's.
+func TestMirroredUnknownHistoryFollowsItsRateLimits(t *testing.T) {
+	w, o := newWorld(t)
+	def := w.home(t, "codex")
+	data := defaultAppData("orca", w.userHome)
+	a := orcaHome(t, data, "7527", true)
+	b := orcaHome(t, data, "99a9", true)
+	for _, h := range []string{def, a, b} {
+		w.askErr[state.Key("codex", h)] = errors.New("no answer")
+	}
+	samReset, beaReset := t0.Add(50*time.Hour), t0.Add(100*time.Hour)
+	near := beaReset.Add(20 * time.Second)
+	w.sessions("codex", def,
+		mirrored("bea-ran", 100, t0, &near, def, a, b),
+		mirrored("sam-ran", 200, t0, &samReset, def, a, b),
+	)
+	run(t, o)
+
+	// The default home says nobody is logged in; the Orca homes name their
+	// accounts for the first time.
+	w.now = t0.Add(15 * time.Minute)
+	for _, h := range []string{def, a, b} {
+		delete(w.askErr, state.Key("codex", h))
+	}
+	w.askErr[state.Key("codex", def)] = notLoggedIn("codex")
+	w.readings[state.Key("codex", def)] = probe.Reading{}
+	w.login("codex", a, "bea", weekly(w.now, 60, beaReset))
+	w.login("codex", b, "sam", weekly(w.now, 30, samReset))
+	res := run(t, o)
+	if by := res.State.Sessions[state.Key("codex", "bea-ran")].By; !reflect.DeepEqual(by, map[string]snapshot.Tokens{"bea": tok(100)}) {
+		t.Fatalf("bea-ran = %+v", by)
+	}
+	if by := res.State.Sessions[state.Key("codex", "sam-ran")].By; !reflect.DeepEqual(by, map[string]snapshot.Tokens{"sam": tok(200)}) {
+		t.Fatalf("sam-ran = %+v", by)
+	}
+}
+
 // The homes of one provider are asked at once, so a harness that does not
 // answer in one of several Orca homes costs its timeout once, not per home.
 func TestHomesAreAskedTogether(t *testing.T) {

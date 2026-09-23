@@ -350,7 +350,7 @@ func (u *ui) note(r drow, w int) (line, []line) {
 	g := u.g
 	if len(r.problems) == 0 {
 		if len(r.uses) > 0 {
-			return line{{nameList(r.uses, w, g.ell), gray}}, nil
+			return line{{nameList(r.uses, nil, w, g.ell), gray}}, nil
 		}
 		return line{{"no usage yet", gray}}, nil
 	}

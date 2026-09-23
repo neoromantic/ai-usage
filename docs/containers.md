@@ -97,4 +97,4 @@ A collector on the host may have read the container's folders before, added with
 ai-usage home remove hermes /srv/bots/mybot/.hermes --forget
 ```
 
-The container's first run counts the folders' history again, from the last 90 days. `--forget` drops the sessions the host counted from them, with the profiles inside them, so the team does not count that history twice. It waits for a collection in progress, and the team sees the change after the host's next collection. Without it, the host keeps those sessions until they are 90 days old.
+The container's first run counts the folders' history again, from the last 90 days. `--forget` drops the sessions the host counted from them, with the profiles inside them, so the team does not count that history twice. A session that a folder the host keeps reading also holds stays counted there. It refuses a folder the host's runs would still find, such as a profile inside a folder that stays, or one an environment variable names. It waits for a collection in progress, and the team sees the change after the host's next collection. Without it, the host keeps those sessions until they are 90 days old.

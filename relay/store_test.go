@@ -257,6 +257,14 @@ func (f *fakeKV) run(cmd []string) (any, error) {
 		}
 		sort.Strings(out)
 		return out, nil
+	case "SCARD":
+		if err := need(1); err != nil {
+			return nil, err
+		}
+		if _, ok := f.str[args[0]]; ok {
+			return nil, errWrongType
+		}
+		return len(f.sets[args[0]]), nil
 	case "MGET":
 		if err := need(1); err != nil {
 			return nil, err

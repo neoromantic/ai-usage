@@ -169,7 +169,7 @@ Stores the device's snapshot. The body is a snapshot document (§7) of at most 3
 6. the document: strict decoding, every rule of §7, and `collected_at` at most 10 minutes ahead of the relay's clock (`422`);
 7. `team` and `device` in the document equal to `{team}` and `{device}` (`422`);
 8. the team's write limit (`429`);
-9. the rules for replacing the stored snapshot (§8.2): `409`, or for a new device the device cap (`403`) and the new-team and new-device limits (`429`).
+9. the rules for replacing the stored snapshot (§8.2): the device cap (`403`), `409`, and for a new device the new-team and new-device limits (`429`).
 
 On success it answers `200`:
 
@@ -211,7 +211,7 @@ Removes one device's snapshot. Signed as in §5. Answers `200` whether or not a 
 | `200` | all | success |
 | `400` | `PUT` | the body could not be read; the reference relay allows 30 seconds for it |
 | `401` | `PUT`, `GET` team, `DELETE` | the signature does not verify, or `X-Aiu-Time` is missing, is not a number, or is more than 300 seconds from the relay's clock |
-| `403` | `PUT`, `GET` team, `DELETE` | `X-Aiu-Key` is missing, is malformed, or does not match `{team}`; or, for a new device, the team already has the most devices allowed |
+| `403` | `PUT`, `GET` team, `DELETE` | `X-Aiu-Key` is missing, is malformed, or does not match `{team}`; or the team already has the most devices allowed and this device is not among them |
 | `404` | all | `{team}` or `{device}` is not a valid id, or the relay does not serve the path |
 | `405` | all | the relay serves the path, but not with this method |
 | `409` | `PUT` | the stored snapshot for this device has a later `collected_at` |
@@ -445,7 +445,7 @@ When a valid `PUT` arrives:
 
 Once a record expires or is deleted, the next valid snapshot for the device is accepted whatever its time, and counts as a new device.
 
-The reference relay counts the team's devices and then writes, which is not atomic. First writes from new devices racing each other can pass the cap by a few. Its team read still lists at most the cap, the devices first stored earliest, so that the read fits in one response.
+The reference relay counts the team's devices and then writes, which is not atomic. First writes from new devices racing each other can pass the cap by a few. Its team read still lists at most the cap, the devices with the earliest *since*, so that the read fits in one response. A device past them is turned away with `403` and its record deleted: at once after its first write when it can tell, else at its next write, which checks whenever the team is over the cap. When a first write cannot tell, because the store failed, the relay deletes the record and answers `503`.
 
 ### 8.3 Lifetime
 
@@ -465,7 +465,7 @@ A relay SHOULD limit requests, and SHOULD answer `429` with `Retry-After` in sec
 
 | Limit | Value | Counted |
 | --- | --- | --- |
-| devices per team | 100 | live records, checked on a new device's first write |
+| devices per team | 100 | live records, checked on a new device's first write, and on every write while the team is over the cap |
 | requests per IP address | 2000 an hour | every request the relay routes, before any other check; IPv6 per /64 |
 | writes per team | 1000 an hour | `PUT`s that pass the signature and document checks |
 | new teams per IP address | 5 a day | first writes to a team with no live record; IPv6 per /48 |

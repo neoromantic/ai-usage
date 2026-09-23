@@ -105,14 +105,14 @@ func cmdHome(ctx context.Context, args []string, stdout, stderr io.Writer) error
 		refs = append(refs, homeRef{provider: qp, home: abs})
 	}
 
-	// Sessions to forget are read first, so a home that cannot be read
-	// changes nothing.
-	var forgotten []string
+	// A home whose sessions cannot be read changes nothing. They are read
+	// again under the run lock, once no run reads the home any more.
 	if forget {
-		if forgotten, err = collect.SessionsIn(p, homes, clock()); err != nil {
+		if err := collect.CheckReadable(p, homes, clock()); err != nil {
 			return err
 		}
 	}
+	var kept []string
 
 	// The config has a lock of its own, so this never waits for a
 	// collection, and it is released before anything is printed: a process
@@ -122,13 +122,26 @@ func cmdHome(ctx context.Context, args []string, stdout, stderr io.Writer) error
 			addHomes(cfg, userHome, p, homes, refs)
 			return nil
 		}
-		return removeHomes(cfg, userHome, p, homes, forget)
+		if err := removeHomes(cfg, userHome, p, homes, forget); err != nil || !forget {
+			return err
+		}
+		// Forgetting a home that runs still find would only count its
+		// sessions again from nothing.
+		kept = collect.Discover(userHome, os.Getenv, cfg.Homes)[p]
+		for _, h := range homes {
+			for _, k := range kept {
+				if samePath(h, k) {
+					return fmt.Errorf("%s is still read by every run: it is inside a home that stays, an app's account home, or one an environment variable names", h)
+				}
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return err
 	}
 	if forget {
-		n, err := collect.Forget(ctx, d, forgotten, func() (func(), error) {
+		n, err := collect.Forget(ctx, d, p, homes, kept, clock(), func() (func(), error) {
 			return waitLock(ctx, d, stderr)
 		})
 		if err != nil {
@@ -340,6 +353,16 @@ func tilde(p, userHome string) string {
 		return "~" + p[len(userHome):]
 	}
 	return p
+}
+
+// samePath reports whether a and b are one folder, links resolved.
+func samePath(a, b string) bool {
+	if a == b {
+		return true
+	}
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && ra == rb
 }
 
 func contains(list []string, s string) bool {

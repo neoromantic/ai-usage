@@ -31,6 +31,9 @@ type Store interface {
 	Delete(ctx context.Context, teamFP, device string) error
 	// List returns the team's live documents keyed by device.
 	List(ctx context.Context, teamFP string) (map[string]Record, error)
+	// Size is about how many devices the team has, cheaply. It may count
+	// documents that expired and that List has not dropped yet.
+	Size(ctx context.Context, teamFP string) (int, error)
 	// Count increments a counter that expires after window and returns it.
 	Count(ctx context.Context, key string, window time.Duration) (int64, error)
 }
@@ -118,6 +121,12 @@ func (m *Memory) List(_ context.Context, teamFP string) (map[string]Record, erro
 	return out, nil
 }
 
+func (m *Memory) Size(_ context.Context, teamFP string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.docs[teamFP]), nil
+}
+
 func (m *Memory) Count(_ context.Context, key string, window time.Duration) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -200,6 +209,18 @@ func (kv *KV) Put(ctx context.Context, teamFP, device string, rec Record, ttl ti
 		[]any{"EXPIRE", setKey(teamFP), secs, "GT"},
 	)
 	return err
+}
+
+func (kv *KV) Size(ctx context.Context, teamFP string) (int, error) {
+	res, err := kv.pipeline(ctx, []any{"SCARD", setKey(teamFP)})
+	if err != nil {
+		return 0, err
+	}
+	var n int
+	if err := json.Unmarshal(res[0], &n); err != nil {
+		return 0, fmt.Errorf("kv: SCARD: %w", err)
+	}
+	return n, nil
 }
 
 func (kv *KV) Delete(ctx context.Context, teamFP, device string) error {

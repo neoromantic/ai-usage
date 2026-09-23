@@ -65,6 +65,7 @@ type arow struct {
 	q                     *Quota
 	here                  string // "here", "seen", or ""
 	consumers             []string
+	consumerHosts         []string // consumers without their users
 	link                  *Link
 	linked                []LinkedUsage
 }
@@ -108,7 +109,7 @@ func (u *ui) accountRows(provider string) []arow {
 					row.q = &q
 				}
 			}
-			row.consumers = u.consumerNames(a)
+			row.consumers, row.consumerHosts = u.consumerNames(a)
 			rows = append(rows, row)
 		}
 	}
@@ -126,21 +127,24 @@ func (u *ui) accountRows(provider string) []arow {
 	return rows
 }
 
-// consumerNames orders the devices that used an account by their tokens.
-func (u *ui) consumerNames(a TeamAccount) []string {
-	var names []string
+// consumerNames orders the devices that used an account by their tokens. It
+// also gives each one's host alone, for when a name does not fit.
+func (u *ui) consumerNames(a TeamAccount) (names, hosts []string) {
+	devices := a.Devices
 	if len(a.PerDevice) > 0 {
 		ds := append([]DeviceUsage(nil), a.PerDevice...)
 		sort.SliceStable(ds, func(i, j int) bool { return ds[i].Tokens.Total() > ds[j].Tokens.Total() })
+		devices = nil
 		for _, d := range ds {
-			names = append(names, u.shortDevice(d.Device))
+			devices = append(devices, d.Device)
 		}
-		return names
 	}
-	for _, d := range a.Devices {
+	for _, d := range devices {
+		host, _ := splitHostUser(d)
 		names = append(names, u.shortDevice(d))
+		hosts = append(hosts, host)
 	}
-	return names
+	return names, hosts
 }
 
 // splitHostUser undoes hostUser. The OS user is the last parenthesis, since a
@@ -317,7 +321,7 @@ func (u *ui) accountRow(c acctCols, a arow) {
 		l = append(l, seg{padLeft(age(u.now.Sub(a.q.ObservedAt)), readCell), plain})
 	}
 	if c.used > 0 {
-		l = append(l, seg{"  " + nameList(a.consumers, c.used, g.ell), plain})
+		l = append(l, seg{"  " + nameList(a.consumers, a.consumerHosts, c.used, g.ell), plain})
 	}
 	u.emit(l)
 

@@ -137,7 +137,9 @@ type State struct {
 	// Answered keys, by provider and home, the homes whose harness has
 	// answered who is logged in there, or that nobody is, at some run. It is
 	// never pruned: usage counted before a home first answers is given to
-	// the account it names then, and only then.
+	// the account it names then, and only then. False is a home that named
+	// an account in a run that could not read all its logs; it claims at a
+	// run that does.
 	Answered map[string]bool     `json:"answered,omitempty"`
 	Accounts map[string]*Account `json:"accounts"`
 	Sessions map[string]*Session `json:"sessions"`

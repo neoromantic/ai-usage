@@ -231,8 +231,10 @@ func truncPath(p string, w int, ell string) string {
 }
 
 // nameList fits as many whole names as it can, then says how many more.
-// When not even the first fits, its host is cut instead.
-func nameList(names []string, w int, ell string) string {
+// When not even the first fits, it takes short[0], the first name's shorter
+// form if there is one, such as a device's host without its user, and cuts
+// that with an ellipsis if it still does not fit.
+func nameList(names, short []string, w int, ell string) string {
 	if len(names) == 0 {
 		return ""
 	}
@@ -256,12 +258,15 @@ func nameList(names []string, w int, ell string) string {
 	if shown > 0 {
 		return out + more(len(names)-shown)
 	}
-	host, _, _ := strings.Cut(names[0], "/")
-	tail := more(len(names) - 1)
-	if width(host+tail) <= w {
-		return host + tail
+	first := names[0]
+	if len(short) > 0 && short[0] != "" {
+		first = short[0]
 	}
-	return truncEnd(host, w-width(tail), ell) + tail
+	tail := more(len(names) - 1)
+	if width(first+tail) <= w {
+		return first + tail
+	}
+	return truncEnd(first, w-width(tail), ell) + tail
 }
 
 // human prints 1234567 as 1.2M: K, M, G, T with one decimal below 100.

@@ -662,6 +662,102 @@ func TestFirstWritePastTheCapGivesWay(t *testing.T) {
 	}
 }
 
+// failing hides the team from the first List, as racing does, and then fails
+// the calls fail names, as a store error or a client that hung up would.
+type failing struct {
+	Store
+	lists int
+	fail  map[string]bool
+}
+
+func (f *failing) List(ctx context.Context, teamFP string) (map[string]Record, error) {
+	f.lists++
+	if f.lists == 1 {
+		return map[string]Record{}, nil
+	}
+	if f.fail["list"] {
+		return nil, errBroken
+	}
+	return f.Store.List(ctx, teamFP)
+}
+
+func (f *failing) Delete(ctx context.Context, teamFP, device string) error {
+	if f.fail["delete"] {
+		return errBroken
+	}
+	return f.Store.Delete(ctx, teamFP, device)
+}
+
+// A first write past the cap that cannot tell whether it gave way is not
+// stored, or is turned away at its next write.
+func TestFirstWritePastTheCapFailsClosed(t *testing.T) {
+	for _, broken := range []string{"list", "delete"} {
+		t.Run(broken, func(t *testing.T) {
+			e := newRelay(t, Limits{DevicesPerTeam: 2})
+			k := newKey(t)
+			c := e.client(k)
+			ctx := context.Background()
+			for _, dev := range []string{"device-a", "device-b"} {
+				e.clock.Add(time.Minute)
+				if err := c.Publish(ctx, dev, marshal(t, docFor(k, dev, e.clock.Now()))); err != nil {
+					t.Fatal(err)
+				}
+			}
+			e.srv.Store = &failing{Store: e.mem, fail: map[string]bool{broken: true}}
+			e.clock.Add(time.Minute)
+			err := c.Publish(ctx, "device-z", marshal(t, docFor(k, "device-z", e.clock.Now())))
+			if statusOf(err) != http.StatusServiceUnavailable {
+				t.Fatalf("write past the cap: %v", err)
+			}
+			e.srv.Store = e.mem
+			e.clock.Add(time.Minute)
+			err = c.Publish(ctx, "device-z", marshal(t, docFor(k, "device-z", e.clock.Now())))
+			if statusOf(err) != http.StatusForbidden {
+				t.Fatalf("next write past the cap: %v", err)
+			}
+			if rec, _ := e.mem.Get(ctx, k.Fingerprint(), "device-z"); rec != nil {
+				t.Fatal("the device past the cap is still stored")
+			}
+		})
+	}
+}
+
+// Devices are ranked by when they joined, as each handler's clock tells it,
+// so a device that was told it was stored can find itself past the cap once
+// a slower first write with an earlier time lands. Its next write says so.
+func TestDevicePushedPastTheCapIsTold(t *testing.T) {
+	e := newRelay(t, Limits{DevicesPerTeam: 2})
+	k := newKey(t)
+	c := e.client(k)
+	ctx := context.Background()
+	e.clock.Add(time.Minute)
+	if err := c.Publish(ctx, "device-a", marshal(t, docFor(k, "device-a", e.clock.Now()))); err != nil {
+		t.Fatal(err)
+	}
+	early := e.clock.Now().Add(30 * time.Second)
+	e.clock.Add(time.Minute)
+	if err := c.Publish(ctx, "device-x", marshal(t, docFor(k, "device-x", e.clock.Now()))); err != nil {
+		t.Fatal(err)
+	}
+	// device-y's first write took its time before x's and lands after it.
+	y := docFor(k, "device-y", e.clock.Now())
+	body := marshal(t, y)
+	if err := e.mem.Put(ctx, k.Fingerprint(), "device-y", Record{Body: body, Sig: k.Sign(body), Since: early}, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	e.clock.Add(time.Minute)
+	err := c.Publish(ctx, "device-x", marshal(t, docFor(k, "device-x", e.clock.Now())))
+	if statusOf(err) != http.StatusForbidden {
+		t.Fatalf("write from the device past the cap: %v", err)
+	}
+	if rec, _ := e.mem.Get(ctx, k.Fingerprint(), "device-x"); rec != nil {
+		t.Fatal("the device past the cap is still stored")
+	}
+	if err := c.Publish(ctx, "device-y", marshal(t, docFor(k, "device-y", e.clock.Now()))); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTeamWriteLimit(t *testing.T) {
 	e := newRelay(t, Limits{WritesPerTeam: 2})
 	k, other := newKey(t), newKey(t)
@@ -1205,6 +1301,13 @@ func (b brokenStore) List(ctx context.Context, teamFP string) (map[string]Record
 		return nil, errBroken
 	}
 	return b.Memory.List(ctx, teamFP)
+}
+
+func (b brokenStore) Size(ctx context.Context, teamFP string) (int, error) {
+	if b.fail["size"] {
+		return 0, errBroken
+	}
+	return b.Memory.Size(ctx, teamFP)
 }
 
 func (b brokenStore) Count(ctx context.Context, key string, window time.Duration) (int64, error) {

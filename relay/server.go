@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -277,6 +278,19 @@ func (s *Server) put(w http.ResponseWriter, r *http.Request) {
 	}
 	since := s.now()
 	if prev != nil {
+		// A device that racing first writes left past the cap is out of
+		// every team read, so its writes are turned away too, and it is
+		// told. Its record goes, so it stops counting against the cap.
+		out, err := s.pastCap(ctx, teamFP, device)
+		if err != nil {
+			fail(w, http.StatusServiceUnavailable, "store unavailable")
+			return
+		}
+		if out {
+			_ = s.Store.Delete(context.WithoutCancel(ctx), teamFP, device)
+			fail(w, http.StatusForbidden, "team has the most devices allowed")
+			return
+		}
 		if bytes.Equal(prev.Body, body) {
 			writeJSON(w, http.StatusOK, map[string]any{"stored": true})
 			return
@@ -317,14 +331,40 @@ func (s *Server) put(w http.ResponseWriter, r *http.Request) {
 		// A new device that raced others past the cap would be left out of
 		// every team read while its writes succeed. The read lists the
 		// devices that joined first, so one past them gives way and is told.
-		recs, err := s.Store.List(ctx, teamFP)
-		if err == nil && len(recs) > s.Limits.DevicesPerTeam && !slices.Contains(firstDevices(recs, s.Limits.DevicesPerTeam), device) {
+		// A client that hangs up does not stop this; when the answer is not
+		// known, the record goes and the device tries again later.
+		ctx := context.WithoutCancel(ctx)
+		out, err := s.pastCap(ctx, teamFP, device)
+		switch {
+		case err != nil:
 			_ = s.Store.Delete(ctx, teamFP, device)
+			fail(w, http.StatusServiceUnavailable, "store unavailable")
+			return
+		case out:
+			if err := s.Store.Delete(ctx, teamFP, device); err != nil {
+				fail(w, http.StatusServiceUnavailable, "store unavailable")
+				return
+			}
 			fail(w, http.StatusForbidden, "team has the most devices allowed")
 			return
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"stored": true})
+}
+
+// pastCap reports whether the team has more devices than the cap and device
+// is not among those that joined first, which team reads list. Only a team
+// over the cap is listed in full.
+func (s *Server) pastCap(ctx context.Context, teamFP, device string) (bool, error) {
+	n, err := s.Store.Size(ctx, teamFP)
+	if err != nil || n <= s.Limits.DevicesPerTeam {
+		return false, err
+	}
+	recs, err := s.Store.List(ctx, teamFP)
+	if err != nil || len(recs) <= s.Limits.DevicesPerTeam {
+		return false, err
+	}
+	return !slices.Contains(firstDevices(recs, s.Limits.DevicesPerTeam), device), nil
 }
 
 // firstDevices lists up to n of a team's devices, the ones that joined first.

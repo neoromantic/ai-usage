@@ -13,6 +13,7 @@ import (
 	"math/bits"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -401,7 +402,7 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 	}
 	errs = append(errs, homeErrors(probeErrs, len(homes), o.UserHome)...)
 	if p != "hermes" {
-		claimUnknown(st, p, homes, answers, res.Sessions, legacy)
+		claimUnknown(st, p, homes, answers, res, labels, legacy)
 	}
 	var read []readSession
 	for _, s := range res.Sessions {
@@ -641,9 +642,13 @@ func legacyNamed(st *state.State, p string) bool {
 // history before it. Until then, as when an old binary cannot answer, that
 // usage is unknown rather than someone else's. A home that said nobody is
 // logged in has answered: what grew there then is no one's, and stays so.
-// Each session read this run is claimed by the home it was read from.
-// legacy is legacyNamed from before this run's readings.
-func claimUnknown(st *state.State, p string, homes []string, answers []answer, sessions []logs.Session, legacy bool) {
+// Each session read this run is claimed by the home it was read from, or,
+// for a file several homes hold, by the account servedBy names when a home
+// logged in to it claims this run. A home whose logs were not all read this
+// run claims at a later one, since the sessions it missed would stay unknown.
+// labels are this run's accounts by home. legacy is legacyNamed from before
+// this run's readings.
+func claimUnknown(st *state.State, p string, homes []string, answers []answer, res logs.Result, labels map[string]string, legacy bool) {
 	claim := map[string]string{}
 	for i, home := range homes {
 		label := strings.TrimSpace(answers[i].reading.Account)
@@ -651,19 +656,31 @@ func claimUnknown(st *state.State, p string, homes []string, answers []answer, s
 			continue
 		}
 		k := state.Key(p, home)
-		if !st.Answered[k] && !legacy && label != "" && label != UnknownAccount {
-			claim[home] = label
-		}
 		if st.Answered == nil {
 			st.Answered = map[string]bool{}
+		}
+		if st.Answered[k] {
+			continue
+		}
+		if !legacy && label != "" && label != UnknownAccount {
+			if hr := res.Homes[home]; hr.Err != nil || hr.Unreadable > 0 {
+				// It claims at a run that reads them all. The entry still
+				// tells this ledger from one older than Answered.
+				st.Answered[k] = false
+				continue
+			}
+			claim[home] = label
 		}
 		st.Answered[k] = true
 	}
 	if len(claim) == 0 {
 		return
 	}
-	for _, rs := range sessions {
+	for _, rs := range res.Sessions {
 		label, ok := claim[rs.Home]
+		if l := servedBy(st, p, rs, labels); l != "" {
+			label, ok = l, slices.ContainsFunc(rs.Homes, func(h string) bool { return claim[h] == l })
+		}
 		if !ok {
 			continue
 		}

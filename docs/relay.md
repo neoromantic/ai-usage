@@ -195,7 +195,7 @@ A relay older than `quota_from` or `linked` answers `422` to a snapshot that car
 | --- | --- |
 | `400` | the `PUT` body could not be read within 30 seconds |
 | `401` | missing or bad signature, or a request time too far from the server's |
-| `403` | the key is missing or does not match the team, or the team already has 100 devices |
+| `403` | the key is missing or does not match the team, or the team already has 100 devices without this one |
 | `404` | not a valid team or device id |
 | `409` | a newer snapshot for this device is already stored |
 | `413` | the body is larger than 32 KB |

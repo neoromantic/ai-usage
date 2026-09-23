@@ -165,12 +165,16 @@ func TestNameList(t *testing.T) {
 		{12, "ann-mbp +3"},
 		{8, "ann-… +3"},
 	} {
-		if got := nameList(names, c.w, "…"); got != c.want || width(got) > c.w {
+		if got := nameList(names, nil, c.w, "…"); got != c.want || width(got) > c.w {
 			t.Errorf("nameList(%d) = %q, want %q", c.w, got, c.want)
 		}
 	}
-	if got := nameList([]string{"box/ann", "box/bo"}, 8, "…"); got != "box +1" {
+	if got := nameList([]string{"box/ann", "box/bo"}, []string{"box", "box"}, 8, "…"); got != "box +1" {
 		t.Errorf("nameList of host/user = %q", got)
+	}
+	// A name of its own with a slash is not a host and a user.
+	if got := nameList([]string{"team/support-bot", "box"}, []string{"team/support-bot", "box"}, 12, "…"); got != "team/sup… +1" {
+		t.Errorf("nameList of a name with a slash = %q", got)
 	}
 }
 

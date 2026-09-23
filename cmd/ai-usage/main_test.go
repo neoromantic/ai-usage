@@ -903,17 +903,25 @@ func TestHomeRemoveForgetsItsSessions(t *testing.T) {
 	d.write("bot/.codex/sessions/2026/09/23/rollout-c-bot.jsonl",
 		`{"timestamp":"2026-09-23T10:00:00Z","type":"session_meta","payload":{"id":"c-bot","cwd":"/work/bot"}}`+"\n"+
 			`{"timestamp":"2026-09-23T10:01:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":900,"output_tokens":90}}}}`+"\n")
+	// The bot's home was seeded with a copy of the default one: that session
+	// stays counted, since the default home is still read.
+	own0, err := os.ReadFile(filepath.Join(d.home, ".codex/sessions/2026/09/23/rollout-c-own.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.write("bot/.codex/sessions/2026/09/23/rollout-c-own.jsonl", string(own0))
 	d.ok("home", "add", "codex", bot)
 	d.ok("collect", "--quiet", "--offline")
 	own, botKey := state.Key("codex", "c-own"), state.Key("codex", "c-bot")
-	if st := d.state(); st.Sessions[own] == nil || st.Sessions[botKey] == nil {
-		t.Fatalf("sessions before = %v", st.Sessions)
+	before := d.state().Sessions[own]
+	if before == nil || d.state().Sessions[botKey] == nil {
+		t.Fatalf("sessions before = %v", d.state().Sessions)
 	}
 
 	if out := d.ok("home", "remove", "codex", bot, "--forget"); !strings.Contains(out, "forgot 1 session counted") {
 		t.Fatalf("home remove --forget printed:\n%s", out)
 	}
-	if st := d.state(); st.Sessions[botKey] != nil || st.Sessions[own] == nil {
+	if st := d.state(); st.Sessions[botKey] != nil || !reflect.DeepEqual(st.Sessions[own], before) {
 		t.Fatalf("sessions after = %v", st.Sessions)
 	}
 	if cfg := d.config(); len(cfg.Homes) != 0 {
@@ -936,6 +944,18 @@ func TestHomeRemoveForgetsItsSessions(t *testing.T) {
 	if r := d.run("", "home", "add", "codex", bot, "--forget"); r.code != 2 {
 		t.Fatalf("home add --forget: exit %d, %s", r.code, r.stderr)
 	}
+	// A home runs still find is not forgotten: its sessions would only be
+	// counted again from nothing.
+	named := filepath.Join(d.home, "named", ".codex")
+	d.write("named/.codex/sessions/2026/09/23/rollout-c-named.jsonl",
+		strings.ReplaceAll(strings.ReplaceAll(string(own0), "c-own", "c-named"), "/work/api", "/work/named"))
+	t.Setenv("CODEX_HOME", named)
+	d.ok("collect", "--quiet", "--offline")
+	if r := d.run("", "home", "remove", "codex", named, "--forget"); r.code != 1 || !strings.Contains(r.stderr, "still read") ||
+		d.state().Sessions[state.Key("codex", "c-named")] == nil {
+		t.Fatalf("forgetting a home runs still find: exit %d, %s", r.code, r.stderr)
+	}
+	t.Setenv("CODEX_HOME", "")
 	// A home that cannot be read changes nothing.
 	gone := filepath.Join(d.home, "gone")
 	if r := d.run("", "home", "remove", "codex", gone, "--forget"); r.code != 1 || !strings.Contains(r.stderr, "cannot read") {
