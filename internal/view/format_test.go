@@ -112,7 +112,7 @@ func TestDurations(t *testing.T) {
 }
 
 func TestTruncation(t *testing.T) {
-	const uuid = "a4c2e917-3b5d-4e6f-8a7b-9c0d1e2f3a4b"
+	const uuid = "5a0c7e21-3b9f-4d82-a6e4-1c93f0b72d58"
 	for _, c := range []struct {
 		s    string
 		w    int
@@ -120,7 +120,7 @@ func TestTruncation(t *testing.T) {
 	}{
 		{"ann@acme.io", 16, "ann@acme.io"},
 		{"a-very-long-label@acme.io", 16, "a-very-long-lab…"},
-		{uuid, 16, "a4c2e917…"},
+		{uuid, 16, "5a0c7e21…"},
 		{uuid, 36, uuid},
 		{"日本語のラベル", 9, "日本語の…"},
 	} {
@@ -128,7 +128,7 @@ func TestTruncation(t *testing.T) {
 			t.Errorf("truncLabel(%q, %d) = %q, want %q", c.s, c.w, got, c.want)
 		}
 	}
-	if got := truncLabel(uuid, 16, "..."); got != "a4c2e917..." {
+	if got := truncLabel(uuid, 16, "..."); got != "5a0c7e21..." {
 		t.Errorf("ASCII uuid = %q", got)
 	}
 	for _, c := range []struct {
@@ -137,12 +137,12 @@ func TestTruncation(t *testing.T) {
 		want string
 	}{
 		{"~/src/acme/api", 20, "~/src/acme/api"},
-		{"~/orca/workspaces/monorepo/optimize-data-connection", 40, "~/orca/…/optimize-data-connection"},
+		{"~/orca/workspaces/monorepo/faster-dashboard-queries", 40, "~/orca/…/faster-dashboard-queries"},
 		{"~/orca/workspaces/monorepo/fix-x", 30, "~/orca/…/monorepo/fix-x"},
 		{"/opt/build/agents/workspace/project", 26, "/opt/…/workspace/project"},
 		// Without the first folder, the root and the last one still fit.
 		{"/Users/someone/deep/project-name-that-is-long", 28, "/…/project-name-that-is-long"},
-		{"~/Developer/orbit/worktrees/flight-skill-evaluation", 36, "~/…/flight-skill-evaluation"},
+		{"~/Developer/acme/worktrees/checkout-flow-migration", 36, "~/…/checkout-flow-migration"},
 		// Not even the root: the last folder alone.
 		{"/Users/someone/deep/project-name-that-is-long", 27, "…/project-name-that-is-long"},
 		// Not even that: the middle goes.

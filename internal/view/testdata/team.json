@@ -115,7 +115,7 @@
               }
             },
             {
-              "path": "/Users/ann/.codex/worktrees/2386/api",
+              "path": "/Users/ann/.codex/worktrees/c7a9/api",
               "sessions": 3,
               "tokens": {
                 "input": 600000,
@@ -155,7 +155,7 @@
       "error": null,
       "homes": [
         "/Users/ann/.codex",
-        "/Users/ann/Library/Application Support/orca/codex-accounts/7527/home"
+        "/Users/ann/Library/Application Support/orca/codex-accounts/5b21/home"
       ],
       "accounts": [
         {
@@ -214,7 +214,7 @@
               }
             },
             {
-              "path": "/Users/ann/Vault",
+              "path": "/Users/ann/Notes",
               "sessions": 41,
               "tokens": {
                 "input": 52000000,
@@ -224,7 +224,7 @@
               }
             },
             {
-              "path": "/Users/ann/.codex/worktrees/4d2c/monorepo",
+              "path": "/Users/ann/.codex/worktrees/5e0b/monorepo",
               "sessions": 30,
               "tokens": {
                 "input": 40000000,
@@ -254,7 +254,7 @@
               }
             },
             {
-              "path": "/Users/ann/src/coliving:chats",
+              "path": "/Users/ann/src/helpdesk:chats",
               "sessions": 9,
               "tokens": {
                 "input": 8000000,
@@ -264,7 +264,7 @@
               }
             },
             {
-              "path": "/Users/ann/src/darbiz",
+              "path": "/Users/ann/src/portal",
               "sessions": 5,
               "tokens": {
                 "input": 3000000,
@@ -334,7 +334,7 @@
           "last_active_at": "2026-09-23T10:35:00Z",
           "projects": [
             {
-              "path": "/Users/ann/orca/workspaces/monorepo/optimize-data-connection",
+              "path": "/Users/ann/orca/workspaces/monorepo/faster-dashboard-queries",
               "sessions": 25,
               "tokens": {
                 "input": 30000000,
@@ -354,7 +354,7 @@
               }
             }
           ],
-          "home": "/Users/ann/Library/Application Support/orca/codex-accounts/7527/home"
+          "home": "/Users/ann/Library/Application Support/orca/codex-accounts/5b21/home"
         },
         {
           "label": "ops@acme.io",
@@ -471,7 +471,7 @@
           "last_active_at": "2026-09-23T08:40:00Z",
           "projects": [
             {
-              "path": "/Users/ann/Vault",
+              "path": "/Users/ann/Notes",
               "sessions": 14,
               "tokens": {
                 "input": 5000000,

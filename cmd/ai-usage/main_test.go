@@ -1188,11 +1188,11 @@ func TestDeviceName(t *testing.T) {
 			t.Fatalf("name set %q: exit %d, %s", bad, r.code, r.stderr)
 		}
 	}
-	a.ok("name", "set", "  Mita bot  ")
-	if got := a.config().Name; got != "Mita bot" {
+	a.ok("name", "set", "  Build bot  ")
+	if got := a.config().Name; got != "Build bot" {
 		t.Fatalf("config name = %q", got)
 	}
-	if out := a.ok("name"); out != "Mita bot\n" {
+	if out := a.ok("name"); out != "Build bot\n" {
 		t.Fatalf("name = %q", out)
 	}
 	a.ok("collect", "--quiet")
@@ -1207,18 +1207,18 @@ func TestDeviceName(t *testing.T) {
 		}
 		return ""
 	}
-	if r := a.report(); r.Collector.DeviceLabel != "Mita bot" || label(r, a.config().Device) != "Mita bot" {
+	if r := a.report(); r.Collector.DeviceLabel != "Build bot" || label(r, a.config().Device) != "Build bot" {
 		t.Fatalf("own label = %q, in the team %q", r.Collector.DeviceLabel, label(r, a.config().Device))
 	}
-	if got := label(b.report(), a.config().Device); got != "Mita bot" {
+	if got := label(b.report(), a.config().Device); got != "Build bot" {
 		t.Fatalf("the team sees %q", got)
 	}
 
 	t.Setenv("AI_USAGE_NAME", "from-env")
-	if out := a.ok("name"); out != "from-env (from AI_USAGE_NAME, in runs that see it; runs without it, such as the system scheduler's, use Mita bot)\n" {
+	if out := a.ok("name"); out != "from-env (from AI_USAGE_NAME, in runs that see it; runs without it, such as the system scheduler's, use Build bot)\n" {
 		t.Fatalf("name with AI_USAGE_NAME = %q", out)
 	}
-	if out := a.ok("name", "set", "Mita bot"); out != "saved Mita bot; while AI_USAGE_NAME is set, this device is from-env\n" {
+	if out := a.ok("name", "set", "Build bot"); out != "saved Build bot; while AI_USAGE_NAME is set, this device is from-env\n" {
 		t.Fatalf("name set with AI_USAGE_NAME = %q", out)
 	}
 	a.ok("collect", "--quiet")
@@ -1230,10 +1230,10 @@ func TestDeviceName(t *testing.T) {
 
 	// A name set would refuse is not used from the environment either.
 	t.Setenv("AI_USAGE_NAME", "evil\nFAKE LINE\x1b[2J")
-	if out := a.ok("name"); out != "AI_USAGE_NAME is ignored: a name cannot contain control characters\nMita bot\n" {
+	if out := a.ok("name"); out != "AI_USAGE_NAME is ignored: a name cannot contain control characters\nBuild bot\n" {
 		t.Fatalf("name with a bad AI_USAGE_NAME = %q", out)
 	}
-	if r := a.report(); r.Collector.DeviceLabel != "Mita bot" {
+	if r := a.report(); r.Collector.DeviceLabel != "Build bot" {
 		t.Fatalf("own label with a bad AI_USAGE_NAME = %q", r.Collector.DeviceLabel)
 	}
 	t.Setenv("AI_USAGE_NAME", "")

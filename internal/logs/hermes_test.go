@@ -208,9 +208,9 @@ func TestHermesActivityTime(t *testing.T) {
 	}
 }
 
-// Hermes writes REAL seconds, but a row can hold an ISO string, as one
-// ended_at in a real database did. It dates the session like a number, and
-// one odd row does not stop the home from being read.
+// Hermes writes REAL seconds, but a row can hold an ISO string instead. It
+// dates the session like a number, and one odd row does not stop the home
+// from being read.
 func TestHermesTimesAsText(t *testing.T) {
 	home := t.TempDir()
 	db := hermesDB(t, home, hermesColumns)

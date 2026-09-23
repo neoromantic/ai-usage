@@ -526,14 +526,14 @@ These vectors come from a fixed, published seed. The key is made up; never use i
 | fingerprint | `kzdvvj2umnduyauf35o36k6kw462mujv` |
 | seal key (hex) | `4d5309a98ca65d2a801b1025424ec2b1e7aacd870a061e1b82e49653e2eae8e3` |
 
-Sealing `mita` with the nonce `000102030405060708090a0b`:
+Sealing `sam` with the nonce `000102030405060708090a0b`:
 
 | Item | Value |
 | --- | --- |
-| nonce, ciphertext, tag (hex) | `000102030405060708090a0b` `7e9db057` `1015760e446859f9034c747904369c42` |
-| sealed string | `AAECAwQFBgcICQoLfp2wVxAVdg5EaFn5A0x0eQQ2nEI` |
+| nonce, ciphertext, tag (hex) | `000102030405060708090a0b` `6095a9` `041f2830abdf7c875333db498f1ef5e9` |
+| sealed string | `AAECAwQFBgcICQoLYJWpBB8oMKvffIdTM9tJjx716Q` |
 
-Opening that string with the same key gives `mita`. Opening it with other additional data fails.
+Opening that string with the same key gives `sam`. Opening it with other additional data fails.
 
 A team read at `X-Aiu-Time: 1760000000`. The message, with `\n` for 0x0A:
 

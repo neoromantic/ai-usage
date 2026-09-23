@@ -37,7 +37,7 @@ claude ● sam@example.com                   20    4.5M   10.1M     603M    48.1
 codex  ● sam@example.com                  369    552M   51.1M    16.8G        0
     ~/src/garden/app                      212    301M   28.0M     9.6G        0
     ~/src/garden/api                       88    140M   13.0M     4.3G        0
-    ~/.codex/worktrees/4d2c/app            41   70.0M    6.6M     2.1G        0
+    ~/.codex/worktrees/5e0b/app            41   70.0M    6.6M     2.1G        0
     + 1 more project · ai-usage --projects
 codex  ○ sam.old@example.com                6    9.4M    820K     210M        0
     ~/src/old-job/site                      6    9.4M    820K     210M        0
@@ -56,7 +56,7 @@ The header says whether collection, the relay, the schedule, and self-update are
 
 With a relay and more than one machine in the team, ACCOUNTS adds a USED BY column, and a DEVICES section lists every machine with its version, when it last reported, and each tool's state. Past 12 machines, the healthy ones fold into one line.
 
-A terminal 100 columns or wider also gets a PLAN column in ACCOUNTS and a LAST column, each account's last activity, in THIS DEVICE. When one tool has several data folders on the machine, such as the per-account Codex homes Orca keeps, each account in THIS DEVICE names the folder it is logged in to, such as `~/.codex` or `orca 7527b7a4`.
+A terminal 100 columns or wider also gets a PLAN column in ACCOUNTS and a LAST column, each account's last activity, in THIS DEVICE. When one tool has several data folders on the machine, such as the per-account Codex homes Orca keeps, each account in THIS DEVICE names the folder it is logged in to, such as `~/.codex` or `orca 5b21e0c4`.
 
 ## Install
 

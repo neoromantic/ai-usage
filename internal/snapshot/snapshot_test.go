@@ -175,7 +175,7 @@ func TestValidate(t *testing.T) {
 		{"sealed std base64", func(d *Doc) { d.OSUser = "ab+/" }, false},
 		{"sealed with space", func(d *Doc) { d.OSUser = "ab cd" }, false},
 		{"sealed plain text", func(d *Doc) { d.OSUser = "ann@example.com" }, false},
-		{"sealed non-ascii", func(d *Doc) { d.OSUser = "сергей" }, false},
+		{"sealed non-ascii", func(d *Doc) { d.OSUser = "анна" }, false},
 		{"last_error optional", func(d *Doc) { d.LastError = "" }, true},
 		{"last_error sealed", func(d *Doc) { d.LastError = sealed(30) }, true},
 		{"last_error plain text", func(d *Doc) { d.LastError = "exit status 1" }, false},
@@ -480,7 +480,7 @@ func TestPrintable(t *testing.T) {
 	for in, want := range map[string]string{
 		"evil\nFAKE LINE\x1b[2J": "evil FAKE LINE [2J",
 		"a​b‮c":                  "abc",
-		"Mita bot · ℹ":           "Mita bot · ℹ",
+		"Build bot · ℹ":          "Build bot · ℹ",
 		// Joiners are part of names and emoji.
 		"\u0644\u067e\u200c\u062a\u0627\u067e":    "\u0644\u067e\u200c\u062a\u0627\u067e",
 		"Acme\u200dCo \U0001f469\u200d\U0001f4bb": "Acme\u200dCo \U0001f469\u200d\U0001f4bb",

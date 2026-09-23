@@ -226,9 +226,9 @@ func TestSealOpen(t *testing.T) {
 	k := mustGenerate(t)
 	for _, plain := range []string{
 		"a",
-		"ann",
-		"/Users/ann/Developer/orbit/ai-usage",
-		"C:\\Users\\Сергей\\проект",
+		"ann-mbp",
+		"/Users/ann/src/acme/app",
+		"C:\\Users\\Анна\\проект",
 		"emoji 😀 and \x00 nul",
 		strings.Repeat("x", 300),
 	} {

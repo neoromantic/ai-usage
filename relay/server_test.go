@@ -106,7 +106,7 @@ func docFor(k *team.Key, device string, at time.Time) snapshot.Doc {
 		Team:             k.Fingerprint(),
 		Device:           device,
 		DeviceLabel:      k.Seal("host " + device),
-		OSUser:           k.Seal("ann"),
+		OSUser:           k.Seal("me"),
 		CollectorVersion: "v1.0.0",
 		CollectedAt:      at,
 		LastSuccessAt:    at,
@@ -119,7 +119,7 @@ func docFor(k *team.Key, device string, at time.Time) snapshot.Doc {
 			Windows:  []snapshot.Window{{Name: "5h", Percent: 61.5, ResetsAt: &resets, Minutes: 300}},
 			Sessions: 4,
 			Tokens:   tok,
-			Projects: []snapshot.Project{{Path: k.Seal("/Users/ann/src/app"), Sessions: 4, Tokens: tok}},
+			Projects: []snapshot.Project{{Path: k.Seal("/Users/me/src/app"), Sessions: 4, Tokens: tok}},
 		}},
 		Sources: []snapshot.Source{{Provider: "codex", Status: "ok"}},
 	}

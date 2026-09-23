@@ -41,8 +41,8 @@ func TestDiscoverFindsOrcaCodexHomes(t *testing.T) {
 		t.Fatal(err)
 	}
 	data := defaultAppData("orca", home)
-	b := orcaHome(t, data, "99a9", true)
-	a := orcaHome(t, data, "7527", true)
+	b := orcaHome(t, data, "e4c8", true)
+	a := orcaHome(t, data, "5b21", true)
 	orcaHome(t, data, "unmarked", false)
 	// Orca's own runtime home is not an account's.
 	if err := os.MkdirAll(filepath.Join(data, "codex-runtime-home", "home"), 0o700); err != nil {
@@ -88,8 +88,8 @@ func TestOrcaHomeWithoutLoginIsNoAccount(t *testing.T) {
 	def := w.home(t, "codex")
 	w.sessions("codex", def, sess("s1", "/p", 100, t0))
 	data := defaultAppData("orca", w.userHome)
-	a := orcaHome(t, data, "7527", true)
-	b := orcaHome(t, data, "99a9", true)
+	a := orcaHome(t, data, "5b21", true)
+	b := orcaHome(t, data, "e4c8", true)
 	w.login("codex", def, "sam", nil)
 	w.login("codex", a, "bea", quota(t0, 20))
 	w.askErr[state.Key("codex", b)] = notLoggedIn("codex")
@@ -147,8 +147,8 @@ func TestMirroredSessionFollowsItsRateLimits(t *testing.T) {
 	w, o := newWorld(t)
 	def := w.home(t, "codex")
 	data := defaultAppData("orca", w.userHome)
-	a := orcaHome(t, data, "7527", true)
-	b := orcaHome(t, data, "99a9", true)
+	a := orcaHome(t, data, "5b21", true)
+	b := orcaHome(t, data, "e4c8", true)
 	samReset, beaReset := t0.Add(50*time.Hour), t0.Add(100*time.Hour)
 	w.login("codex", def, "sam", weekly(t0, 30, samReset))
 	w.login("codex", a, "bea", weekly(t0, 60, beaReset))
@@ -186,8 +186,8 @@ func TestMirroredUnknownHistoryFollowsItsRateLimits(t *testing.T) {
 	w, o := newWorld(t)
 	def := w.home(t, "codex")
 	data := defaultAppData("orca", w.userHome)
-	a := orcaHome(t, data, "7527", true)
-	b := orcaHome(t, data, "99a9", true)
+	a := orcaHome(t, data, "5b21", true)
+	b := orcaHome(t, data, "e4c8", true)
 	for _, h := range []string{def, a, b} {
 		w.askErr[state.Key("codex", h)] = errors.New("no answer")
 	}
@@ -224,7 +224,7 @@ func TestHomesAreAskedTogether(t *testing.T) {
 	w, o := newWorld(t)
 	def := w.home(t, "codex")
 	data := defaultAppData("orca", w.userHome)
-	homes := []string{def, orcaHome(t, data, "7527", true), orcaHome(t, data, "99a9", true)}
+	homes := []string{def, orcaHome(t, data, "5b21", true), orcaHome(t, data, "e4c8", true)}
 	for i, h := range homes {
 		w.login("codex", h, []string{"sam", "bea", "kim"}[i], nil)
 	}

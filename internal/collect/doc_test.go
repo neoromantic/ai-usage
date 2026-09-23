@@ -29,10 +29,10 @@ func ledger() *state.State {
 	reset := t0.Add(3 * time.Hour)
 	return &state.State{
 		LastSuccessAt: t0,
-		LastError:     "codex: read /Users/сергей/.codex: permission denied",
+		LastError:     "codex: read /Users/анна/.codex: permission denied",
 		Sources: map[string]state.Source{
 			"claude": {Status: "ok"},
-			"codex":  {Status: "error", Error: "read /Users/сергей/.codex: permission denied"},
+			"codex":  {Status: "error", Error: "read /Users/анна/.codex: permission denied"},
 			"grok":   {Status: "skipped"},
 		},
 		Current: map[string]string{state.Key("claude", "/h/.claude"): "ann@example.com"},
@@ -134,7 +134,7 @@ func TestBuildDocDecodesAndOpens(t *testing.T) {
 	if open(doc.DeviceLabel) != "workbox" || open(doc.OSUser) != "sam" || !strings.Contains(open(doc.LastError), "permission denied") {
 		t.Fatal("sealed header fields do not open")
 	}
-	for _, plain := range []string{"workbox", "ann@example.com", "/work/api", "сергей", "permission"} {
+	for _, plain := range []string{"workbox", "ann@example.com", "/work/api", "анна", "permission"} {
 		if strings.Contains(string(body), plain) {
 			t.Fatalf("%q is in the published body in plain text", plain)
 		}
@@ -191,7 +191,7 @@ func TestBuildDocFitsTheSizeLimit(t *testing.T) {
 		label := fmt.Sprintf("account-%02d@%s.example", a, strings.Repeat("x", 200))
 		st.Accounts[state.Key("claude", label)] = &state.Account{Provider: "claude", Label: label}
 		for p := 0; p < snapshot.MaxProjects+5; p++ {
-			path := fmt.Sprintf("/Users/сергей/%s/project-%02d", strings.Repeat("каталог/", 60), p)
+			path := fmt.Sprintf("/Users/анна/%s/project-%02d", strings.Repeat("каталог/", 60), p)
 			st.Sessions[state.Key("claude", fmt.Sprintf("%d-%d", a, p))] = &state.Session{
 				Provider: "claude", Project: path, Updated: t0,
 				By: map[string]snapshot.Tokens{label: tok(int64(1000*(a+1) + p))},
