@@ -729,6 +729,103 @@ func TestLogLimitsNeverGoToTheUnknownAccount(t *testing.T) {
 	}
 }
 
+// rejectedSession is a Claude session with a request refused at at because
+// its 5h window was full until resets.
+func rejectedSession(id string, at, resets time.Time) logs.Session {
+	s := sess(id, "/p", 100, at)
+	s.Rejected = &logs.Limits{ObservedAt: at, Windows: []snapshot.Window{{Name: "5h", Percent: 100, ResetsAt: &resets, Minutes: 300}}}
+	return s
+}
+
+func TestClaudeRejectionReadsItsWindowFull(t *testing.T) {
+	cached := quota(t0.Add(-2*time.Hour), 40, 20)
+	tests := []struct {
+		name       string
+		at, resets time.Time
+		full       bool
+	}{
+		{"in force and newer than the reading", t0.Add(-30 * time.Minute), t0.Add(time.Hour), true},
+		{"reset since", t0.Add(-30 * time.Minute), t0.Add(-time.Minute), false},
+		{"older than the reading", t0.Add(-3 * time.Hour), t0.Add(time.Hour), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			w, o := newWorld(t)
+			h := w.home(t, "claude")
+			w.login("claude", h, "ann", cached)
+			w.sessions("claude", h, rejectedSession("s1", tc.at, tc.resets))
+			res := run(t, o)
+			q := totalsFor(t, res.State, "claude", "ann").Quota
+			if !tc.full {
+				if q.Source != "harness" || !q.At.Equal(cached.At) || len(q.Windows) != 2 {
+					t.Fatalf("quota = %+v, want the cached reading", q)
+				}
+				return
+			}
+			// The refused window alone, as of the refusal: the cached 7d
+			// reading is older and does not ride along.
+			want := snapshot.Window{Name: "5h", Percent: 100, ResetsAt: &tc.resets, Minutes: 300}
+			if q.Source != "rejection" || !q.At.Equal(tc.at) || !reflect.DeepEqual(q.Windows, []snapshot.Window{want}) {
+				t.Fatalf("quota = %+v, want %+v at %v", q, want, tc.at)
+			}
+			if d := res.Doc.Accounts[0]; d.QuotaAt == nil || !d.QuotaAt.Equal(tc.at) || d.Windows[0].Percent != 100 {
+				t.Fatalf("snapshot = %+v", d)
+			}
+		})
+	}
+}
+
+func TestClaudeRejectionHoldsUntilItsWindowResets(t *testing.T) {
+	w, o := newWorld(t)
+	h := w.home(t, "claude")
+	cached := quota(t0.Add(-2*time.Hour), 40, 20)
+	w.login("claude", h, "ann", cached)
+	w.sessions("claude", h, rejectedSession("s1", t0.Add(-30*time.Minute), t0.Add(time.Hour)))
+	run(t, o)
+
+	// The older cached reading does not replace it while the window is full.
+	w.now = t0.Add(15 * time.Minute)
+	res := run(t, o)
+	if q := totalsFor(t, res.State, "claude", "ann").Quota; q.Source != "rejection" {
+		t.Fatalf("quota = %+v, want the rejection", q)
+	}
+
+	// Once it resets, the cached reading of the other windows comes back.
+	w.now = t0.Add(time.Hour + 15*time.Minute)
+	res = run(t, o)
+	if q := totalsFor(t, res.State, "claude", "ann").Quota; q.Source != "harness" || !q.At.Equal(cached.At) {
+		t.Fatalf("quota = %+v, want the cached reading", q)
+	}
+}
+
+func TestClaudeRejectionGoesToTheSessionsAccount(t *testing.T) {
+	w, o := newWorld(t)
+	def := w.home(t, "claude")
+	work := w.extraHome(t, "claude", "claude-work")
+	w.login("claude", def, "ann", nil)
+	w.login("claude", work, "bob", nil)
+	w.sessions("claude", def, sess("s1", "/p", 100, t0))
+	w.sessions("claude", work, rejectedSession("s2", t0.Add(-10*time.Minute), t0.Add(time.Hour)))
+	res := run(t, o)
+	if q := totalsFor(t, res.State, "claude", "ann").Quota; q != nil {
+		t.Fatalf("ann got another session's rejection: %+v", q)
+	}
+	if q := totalsFor(t, res.State, "claude", "bob").Quota; q == nil || q.Source != "rejection" {
+		t.Fatalf("bob quota = %+v", q)
+	}
+
+	// Another account logs in there. The refusal in bob's session is not
+	// carl's. One in a session no run read before, as in a folder added
+	// since, is: the ledger gives carl that whole session.
+	w.now = t0.Add(15 * time.Minute)
+	w.login("claude", work, "carl", nil)
+	w.sessions("claude", work, rejectedSession("s2", t0.Add(-10*time.Minute), t0.Add(time.Hour)), rejectedSession("s3", t0.Add(-20*time.Minute), t0.Add(time.Hour)))
+	res = run(t, o)
+	if q := totalsFor(t, res.State, "claude", "carl").Quota; q == nil || !q.At.Equal(t0.Add(-20*time.Minute)) {
+		t.Fatalf("carl quota = %+v, want the refusal in s3 alone", q)
+	}
+}
+
 func TestHermesAttributesByBillingProvider(t *testing.T) {
 	w, o := newWorld(t)
 	h := w.home(t, "hermes")

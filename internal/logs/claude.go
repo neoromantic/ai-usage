@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
 // claudeFiles parses the session files in <home>/projects, for countClaude.
@@ -105,8 +107,9 @@ func claudeFiles(home string, since time.Time) ([]*claudeFile, HomeRead) {
 // with a request id counts once, in the session that started first, whichever
 // home holds it. Files that share a session id (one session under two project
 // directories or in two homes) become one session, and a message both hold
-// counts once. A session is raised to the usage Claude Code tracked for it,
-// when that is more.
+// counts once. A refused request belongs to the session its message counts
+// in. A session is raised to the usage Claude Code tracked for it, when that
+// is more.
 func countClaude(files []*claudeFile) []Session {
 	order := make([]int, len(files))
 	for i := range order {
@@ -148,6 +151,7 @@ func countClaude(files []*claudeFile) []Session {
 				claimed[key] = f.root()
 			}
 			f.sess.Tokens = f.sess.Tokens.Add(m.tokens)
+			f.sess.Rejected = later(f.sess.Rejected, m.rejected)
 		}
 	}
 	// Merge here, not in dedupeSessions: that keeps the larger row, and after
@@ -231,6 +235,8 @@ type claudeMsg struct {
 	// anon is a message with neither an id nor a line uuid; it cannot be matched.
 	anon   bool
 	tokens Tokens
+	// rejected is set on a request Claude refused because a window was full.
+	rejected *Limits
 }
 
 func parseClaude(path, id, parent string) (*claudeFile, int, error) {
@@ -296,6 +302,7 @@ func parseClaude(path, id, parent string) (*claudeFile, int, error) {
 				CacheRead:  u.CacheReadInputTokens,
 				CacheWrite: u.CacheCreationInputTokens,
 			},
+			rejected: claudeRejected(row.QuotaLimits, parseTime(row.Timestamp)),
 		}
 		i, ok := index[msgID]
 		if !ok {
@@ -339,6 +346,46 @@ type claudeLine struct {
 		CacheReadInputTokens     int64 `json:"cacheReadInputTokens"`
 		CacheCreationInputTokens int64 `json:"cacheCreationInputTokens"`
 	} `json:"modelUsage"`
+	// QuotaLimits is on the message of a request Claude answered with a rate
+	// limit. It stays raw so an odd value does not reject the line.
+	QuotaLimits json.RawMessage `json:"quotaLimits"`
+}
+
+// ClaudeWindows are the windows Claude names by key, in its usage cache and
+// in the limit it names when it refuses a request, in the order they show.
+var ClaudeWindows = []struct {
+	Key, Name string
+	Minutes   int
+}{
+	{"five_hour", "5h", 300},
+	{"seven_day", "7d", 10080},
+	{"seven_day_opus", "7d Opus", 10080},
+	{"seven_day_sonnet", "7d Sonnet", 10080},
+}
+
+// claudeRejected is the reading a refused request gives: at the time of the
+// refusal, the window it names was full, and it stays full until it resets.
+// A limit that was not rejected, a window not in ClaudeWindows, or a refusal
+// without its times gives none.
+func claudeRejected(raw json.RawMessage, at time.Time) *Limits {
+	if len(raw) == 0 || at.IsZero() {
+		return nil
+	}
+	var q struct {
+		Status        string  `json:"status"`
+		RateLimitType string  `json:"rateLimitType"`
+		ResetsAt      float64 `json:"resetsAt"`
+	}
+	if json.Unmarshal(raw, &q) != nil || q.Status != "rejected" || q.ResetsAt <= 0 {
+		return nil
+	}
+	for _, w := range ClaudeWindows {
+		if w.Key == q.RateLimitType {
+			reset := time.Unix(int64(q.ResetsAt), 0).UTC()
+			return &Limits{ObservedAt: at, Windows: []snapshot.Window{{Name: w.Name, Percent: 100, ResetsAt: &reset, Minutes: w.Minutes}}}
+		}
+	}
+	return nil
 }
 
 // tracked adds up a cost-state line across models. Model names there differ

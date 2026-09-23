@@ -89,7 +89,7 @@ A session's tokens go to the account logged in to the home it was read from. Cod
 | `observed_at` | time | when the tool took the reading |
 | `age_seconds` | number | the reading's age when the report was made |
 | `stale` | bool | the reading is more than 6 hours old |
-| `source` | string | `harness` when the tool answered a command, `cache` when it came from the tool's own cache file, `log` when it came from the tool's logs; only on this device's accounts |
+| `source` | string | `harness` when the tool answered a command, `cache` when it came from the tool's own cache file, `log` when it came from the tool's logs, `rejection` when Claude refused a request because a window was full: that window alone at 100%, as of the refusal, until it resets; only on this device's accounts |
 | `from` | string | the tool whose account took the reading, when it is the reading of the account in `link`, unchanged, observation time included; absent otherwise. With no reading for that account, `quota` is `null` |
 | `device` | string | the device that took the reading, as `host (user)`; only on team accounts |
 | `windows` | list | the windows the tool reported; see below |

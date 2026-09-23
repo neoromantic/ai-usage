@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
 // cl is one Claude transcript line. Usage is [input, output, cache write, cache read].
@@ -354,4 +357,45 @@ func TestClaudeForkDoesNotRepeatParentTracker(t *testing.T) {
 			t.Fatalf("fork = %+v", got)
 		}
 	})
+}
+
+// rejected is a request Claude refused with a rate limit, in the shape Claude
+// Code writes it.
+func rejected(id, session, at, status, limit string, resets time.Time) string {
+	return fmt.Sprintf(`{"parentUuid":null,"isSidechain":false,"cwd":"/work/claude","sessionId":%q,"type":"assistant","message":{"id":%q,"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":%q}],"usage":{"input_tokens":0,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"requestId":"req-%s","uuid":"u-%s","timestamp":%q,"error":"rate_limit","isApiErrorMessage":true,"apiErrorStatus":429,"quotaLimits":{"status":%q,"resetsAt":%d,"rateLimitType":%q,"overageStatus":"rejected","isUsingOverage":false}}`,
+		session, id, secret, id, id, at, status, resets.Unix(), limit)
+}
+
+func TestClaudeRejectedRequests(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, "projects", "-work-claude")
+	hour := time.Date(2026, 9, 20, 15, 0, 0, 0, time.UTC)
+	week := time.Date(2026, 9, 25, 0, 0, 0, 0, time.UTC)
+	mustWrite(t, filepath.Join(dir, "sess.jsonl"),
+		cl{id: "m1", req: "r1", session: "sess", cwd: "/work/claude", at: "2026-09-20T10:00:00Z", usage: use(10, 1, 0, 0)}.String(),
+		rejected("x1", "sess", "2026-09-20T10:04:00Z", "rejected", "five_hour", hour),
+		rejected("x2", "sess", "2026-09-20T10:05:00Z", "rejected", "five_hour", hour),
+		// Only a refusal counts, and only for a window Claude's usage cache names.
+		rejected("x3", "sess", "2026-09-20T10:20:00Z", "rejected", "fortnight", week),
+		rejected("x4", "sess", "2026-09-20T10:25:00Z", "allowed_warning", "five_hour", hour),
+	)
+	// A refusal in a sub-agent is its session's.
+	mustWrite(t, filepath.Join(dir, "other.jsonl"),
+		cl{id: "m2", req: "r2", session: "other", cwd: "/work/claude", at: "2026-09-20T10:00:00Z", usage: use(5, 1, 0, 0)}.String())
+	mustWrite(t, filepath.Join(dir, "other", "subagents", "agent-1.jsonl"),
+		rejected("x5", "other", "2026-09-20T10:10:00Z", "rejected", "seven_day", week))
+
+	res := mustRead(t, "claude", home, since)
+	if res.Malformed != 0 || byID(t, res, "sess").Tokens != (Tokens{Input: 10, Output: 1}) {
+		t.Fatalf("malformed %d, sess %+v", res.Malformed, byID(t, res, "sess"))
+	}
+	for id, want := range map[string]*Limits{
+		"sess":  {ObservedAt: time.Date(2026, 9, 20, 10, 5, 0, 0, time.UTC), Windows: []snapshot.Window{{Name: "5h", Percent: 100, ResetsAt: &hour, Minutes: 300}}},
+		"other": {ObservedAt: time.Date(2026, 9, 20, 10, 10, 0, 0, time.UTC), Windows: []snapshot.Window{{Name: "7d", Percent: 100, ResetsAt: &week, Minutes: 10080}}},
+	} {
+		if got := byID(t, res, id).Rejected; !reflect.DeepEqual(got, want) {
+			t.Errorf("%s rejected = %+v, want %+v", id, got, want)
+		}
+	}
+	noLeak(t, res)
 }

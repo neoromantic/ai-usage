@@ -52,9 +52,16 @@ func fillFrom(dst *Session, src Session) {
 			dst.Homes = append(dst.Homes, h)
 		}
 	}
-	if src.Limits != nil && (dst.Limits == nil || src.Limits.ObservedAt.After(dst.Limits.ObservedAt)) {
-		dst.Limits = src.Limits
+	dst.Limits = later(dst.Limits, src.Limits)
+	dst.Rejected = later(dst.Rejected, src.Rejected)
+}
+
+// later is the reading observed last.
+func later(a, b *Limits) *Limits {
+	if b != nil && (a == nil || b.ObservedAt.After(a.ObservedAt)) {
+		return b
 	}
+	return a
 }
 
 // addParts adds src's parts onto dst's.

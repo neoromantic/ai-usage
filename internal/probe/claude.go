@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/logs"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
@@ -211,16 +212,8 @@ func claudeCachedUsage(path string) (*Quota, error) {
 		}
 	}
 	if len(q.Windows) == 0 {
-		for _, k := range []struct {
-			key, name string
-			minutes   int
-		}{
-			{"five_hour", "5h", 300},
-			{"seven_day", "7d", 10080},
-			{"seven_day_opus", "7d Opus", 10080},
-			{"seven_day_sonnet", "7d Sonnet", 10080},
-		} {
-			raw, ok := c.Utilization[k.key]
+		for _, k := range logs.ClaudeWindows {
+			raw, ok := c.Utilization[k.Key]
 			if !ok {
 				continue
 			}
@@ -228,7 +221,7 @@ func claudeCachedUsage(path string) (*Quota, error) {
 			if json.Unmarshal(raw, &w) != nil || w.Utilization == nil {
 				continue
 			}
-			q.Windows = append(q.Windows, snapshot.Window{Name: k.name, Percent: *w.Utilization, Minutes: k.minutes, ResetsAt: parseTime(w.ResetsAt)})
+			q.Windows = append(q.Windows, snapshot.Window{Name: k.Name, Percent: *w.Utilization, Minutes: k.Minutes, ResetsAt: parseTime(w.ResetsAt)})
 		}
 	}
 	if len(q.Windows) == 0 {

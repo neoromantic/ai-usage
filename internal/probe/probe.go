@@ -32,7 +32,7 @@ type Reading struct {
 // Quota is a set of windows observed at one moment.
 type Quota struct {
 	At      time.Time
-	Source  string // "harness", "cache", or "log"
+	Source  string // "harness", "cache", "log", or "rejection"
 	Windows []snapshot.Window
 }
 
