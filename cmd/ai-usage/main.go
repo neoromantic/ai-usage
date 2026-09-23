@@ -101,6 +101,8 @@ Display:
                          auto colors a terminal, unless NO_COLOR is set or TERM=dumb
   --ascii                ASCII glyphs; the default without a UTF-8 locale
   --width N              columns, 80 to 160; default: the terminal's, else COLUMNS, else 80
+  --plain                print the report; on a terminal, the default is the interactive
+                         view, with every key under ?
 
 Environment:
   AI_USAGE_HOME          collector directory (default: OS config dir/ai-usage)
@@ -131,7 +133,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	case "", "collect":
 		err = cmdCollect(ctx, args, stdout, stderr)
 	case "report":
-		err = cmdReport(args, stdout)
+		err = cmdReport(ctx, args, stdout)
 	case "status":
 		err = cmdStatus(args, stdout)
 	case "team":
@@ -354,6 +356,9 @@ func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) (e
 	// its own, so it takes the guide here.
 	if res.Waited && res.State.GuideDue && !*jsonOut {
 		guide = takeGuide(d)
+	}
+	if disp.interactive(stdout, *jsonOut, guide) {
+		return showView(ctx, d, res, endpoint, disp, *offline, stdout)
 	}
 	return printReport(stdout, d, res, endpoint, *jsonOut, guide, disp)
 }
@@ -606,7 +611,7 @@ func loadResult(d state.Dir) (*collect.Result, error) {
 	return &collect.Result{Config: cfg, State: st, Key: key, Doc: doc, Team: cache}, nil
 }
 
-func cmdReport(args []string, stdout io.Writer) error {
+func cmdReport(ctx context.Context, args []string, stdout io.Writer) error {
 	fs := flags("report")
 	jsonOut := fs.Bool("json", false, "")
 	disp := displayFlags(fs, true)
@@ -629,6 +634,9 @@ func cmdReport(args []string, stdout io.Writer) error {
 	res, err := loadResult(d)
 	if err != nil {
 		return err
+	}
+	if disp.interactive(stdout, *jsonOut, false) {
+		return showView(ctx, d, res, relayURL(res.Config), disp, false, stdout)
 	}
 	return printReport(stdout, d, res, relayURL(res.Config), *jsonOut, false, disp)
 }

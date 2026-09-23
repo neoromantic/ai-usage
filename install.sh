@@ -84,7 +84,9 @@ main() {
 	fi
 
 	say "first run: collecting and registering with the system scheduler"
-	if ! "$bin"; then
+	# Input that is not a terminal prints the report rather than open the
+	# interactive view, which would hold the installer until it is closed.
+	if ! "$bin" </dev/null; then
 		fail "the first run failed; the binary is installed, run $bin to retry"
 	fi
 

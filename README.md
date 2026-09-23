@@ -266,7 +266,7 @@ Or, from a clone with the Vercel CLI logged in, run `sh scripts/deploy-relay.sh`
 | `--color=auto\|always\|never` | `auto`, the default, colors a terminal unless `NO_COLOR` is set or `TERM` is `dumb` |
 | `--ascii` | draw with ASCII only; the default when the locale (`LC_ALL`, `LC_CTYPE`, `LANG`) is not UTF-8, except in Windows Terminal |
 | `--width N` | lay out for N columns, 80 to 160; the default is the terminal's width, else `COLUMNS`, else 80 |
-| `--plain` | print the report; on a terminal, the default is the interactive view |
+| `--plain` | print the report; when standard input and output are both a terminal, the default is the interactive view, which scrolls, reloads, and lists its keys under `?` |
 
 | Variable | Meaning |
 | --- | --- |

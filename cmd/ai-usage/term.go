@@ -19,6 +19,9 @@ type display struct {
 	ascii    bool
 	width    int
 	projects bool
+	// plain prints the static report on a terminal too, rather than open
+	// the interactive view.
+	plain bool
 }
 
 // displayFlags adds the console flags to fs, and the view choices with views.
@@ -27,6 +30,7 @@ func displayFlags(fs *flag.FlagSet, views bool) *display {
 	fs.StringVar(&d.color, "color", "auto", "")
 	fs.BoolVar(&d.ascii, "ascii", false, "")
 	fs.IntVar(&d.width, "width", 0, "")
+	fs.BoolVar(&d.plain, "plain", false, "")
 	if views {
 		fs.BoolVar(&d.projects, "projects", false, "")
 	}

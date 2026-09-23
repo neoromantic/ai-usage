@@ -127,6 +127,8 @@
     }
 
     Say 'first run: collecting and registering with Task Scheduler'
-    & $exe
+    # Piped input is not the console, so the report prints rather than open
+    # the interactive view, which would hold the installer until it is closed.
+    $null | & $exe
     if ($LASTEXITCODE -ne 0) { throw "ai-usage install: the first run failed; the binary is installed, run $exe to retry" }
 }
