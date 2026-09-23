@@ -199,8 +199,10 @@ func (u *ui) clock(t time.Time, layout string) string { return t.In(u.loc).Forma
 // spread puts right at the page's right edge after left, when both fit.
 func (u *ui) spread(left, right line) line {
 	left = left.cut(u.w, u.g.ell)
-	gap := u.page - left.width() - right.width()
-	if gap < 2 {
+	// A left side too long for a one-device page, such as a long host
+	// name, runs past the page rather than lose the right side.
+	gap := max(u.page-left.width()-right.width(), 2)
+	if left.width()+gap+right.width() > u.w {
 		return left
 	}
 	return append(append(left, seg{strings.Repeat(" ", gap), plain}), right...)

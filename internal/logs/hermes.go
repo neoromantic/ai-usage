@@ -1,6 +1,7 @@
 package logs
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"io"
@@ -31,19 +32,88 @@ func readHermes(home string, since time.Time) (Result, error) {
 	} else if err != nil {
 		return Result{}, err
 	}
+	// SQLite keeps the -wal and -shm beside the file a link points to.
+	if real, err := filepath.EvalSymlinks(dbPath); err == nil {
+		dbPath = real
+	}
+	for attempt := 1; ; attempt++ {
+		before, err := statDB(dbPath)
+		if err != nil {
+			return Result{}, err
+		}
+		res, live, err := readHermesDB(dbPath, since)
+		afterHermesRead()
+		if live || attempt == hermesAttempts {
+			return res, err
+		}
+		// A read that took the database as unchanging, or a copy of it, can
+		// mix pages from before and after a Hermes that opened it meanwhile.
+		if after, serr := statDB(dbPath); serr == nil && after == before {
+			return res, err
+		}
+	}
+}
 
-	uri, cleanup, err := hermesURI(dbPath)
+// hermesAttempts bounds the reads of a database that keeps changing under a
+// read that assumed it would not.
+const hermesAttempts = 3
+
+// afterHermesRead runs after each read of a state.db, and
+// betweenHermesQueries between its usage and sessions queries. Tests change
+// the database there.
+var afterHermesRead, betweenHermesQueries = func() {}, func() {}
+
+// dbState is what a write to a database changes: its size and time, and the
+// -wal and -shm files a writer holds open.
+type dbState struct {
+	size, mod int64
+	wal, shm  bool
+}
+
+func statDB(dbPath string) (dbState, error) {
+	info, err := os.Stat(dbPath)
 	if err != nil {
-		return Result{}, err
+		return dbState{}, err
+	}
+	st := dbState{size: info.Size(), mod: info.ModTime().UnixNano()}
+	if st.wal, err = exists(dbPath + "-wal"); err != nil {
+		return st, err
+	}
+	st.shm, err = exists(dbPath + "-shm")
+	return st, err
+}
+
+// querier is a database or a transaction.
+type querier interface {
+	Query(query string, args ...any) (*sql.Rows, error)
+}
+
+// readHermesDB reads state.db once. live is whether it was read in place
+// while Hermes had it open.
+func readHermesDB(dbPath string, since time.Time) (res Result, live bool, err error) {
+	uri, live, cleanup, err := hermesURI(dbPath)
+	if err != nil {
+		return Result{}, false, err
 	}
 	defer cleanup()
 
 	db, err := sql.Open("sqlite", uri)
 	if err != nil {
-		return Result{}, err
+		return Result{}, live, err
 	}
 	defer db.Close()
+	// One transaction, so the usage and sessions queries see the same
+	// commit of a database Hermes is writing.
+	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return Result{}, live, err
+	}
+	defer tx.Rollback()
+	res, err = readHermesTx(tx, since)
+	return res, live, err
+}
 
+func readHermesTx(db querier, since time.Time) (Result, error) {
 	cols, err := tableColumns(db, "sessions")
 	if err != nil {
 		return Result{}, err
@@ -55,6 +125,7 @@ func readHermes(home string, since time.Time) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	betweenHermesQueries()
 	// Columns were added over Hermes releases. Token and time columns an older
 	// table lacks read as zero or unknown; a table without the basic token
 	// counts is not one this reader knows, and the query fails visibly.
@@ -183,7 +254,7 @@ func (u *hermesSessionUsage) parts(billing string, row Tokens) map[string]Tokens
 // hermesUsage reads session_model_usage by session. A state.db from before
 // the table has none. One from before the task column holds main-loop rows
 // only.
-func hermesUsage(db *sql.DB) (map[string]*hermesSessionUsage, error) {
+func hermesUsage(db querier) (map[string]*hermesSessionUsage, error) {
 	cols, err := tableColumns(db, "session_model_usage")
 	if err != nil || len(cols) == 0 {
 		return nil, err
@@ -287,7 +358,7 @@ func hermesTime(v any) float64 {
 	return 0
 }
 
-func tableColumns(db *sql.DB, table string) (map[string]bool, error) {
+func tableColumns(db querier, table string) (map[string]bool, error) {
 	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
 	if err != nil {
 		return nil, err
@@ -311,27 +382,28 @@ func tableColumns(db *sql.DB, table string) (map[string]bool, error) {
 // as immutable, which creates neither. Otherwise, as with a -wal left
 // without its -shm, a private copy is read. Copying is the exception, not
 // the rule: on a server Hermes databases run to gigabytes, and the
-// scheduler reads them every 15 minutes.
-func hermesURI(dbPath string) (string, func(), error) {
+// scheduler reads them every 15 minutes. live is whether the database is
+// read in place with Hermes' own -wal and -shm.
+func hermesURI(dbPath string) (uri string, live bool, cleanup func(), err error) {
 	wal, err := exists(dbPath + "-wal")
 	if err != nil {
-		return "", nil, err
+		return "", false, nil, err
 	}
 	shm, err := exists(dbPath + "-shm")
 	if err != nil {
-		return "", nil, err
+		return "", false, nil, err
 	}
 	switch {
 	case wal && shm:
-		return sqliteURI(dbPath), func() {}, nil
+		return sqliteURI(dbPath), true, func() {}, nil
 	case !wal && !shm:
-		return sqliteURI(dbPath) + "&immutable=1", func() {}, nil
+		return sqliteURI(dbPath) + "&immutable=1", false, func() {}, nil
 	}
 	snapshot, cleanup, err := snapshotSQLite(dbPath)
 	if err != nil {
-		return "", nil, err
+		return "", false, nil, err
 	}
-	return sqliteURI(snapshot), cleanup, nil
+	return sqliteURI(snapshot), false, cleanup, nil
 }
 
 func exists(path string) (bool, error) {

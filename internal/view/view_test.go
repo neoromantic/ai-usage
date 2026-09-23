@@ -742,3 +742,12 @@ func TestJSONFieldNamesAreStable(t *testing.T) {
 		}
 	}
 }
+
+func TestHeaderKeepsTheClockPastAOneDevicePage(t *testing.T) {
+	f := newFixture(t, emptyState())
+	f.in.Hostname = "runner-" + strings.Repeat("x", 45)
+	head, _, _ := strings.Cut(Text(Build(f.in), Options{Width: 120, Loc: time.UTC}), "\n")
+	if !strings.HasSuffix(head, now.In(time.UTC).Format("Mon 2 Jan 15:04")) || width(head) > 119 {
+		t.Fatalf("header lost its clock or overran the terminal: %q", head)
+	}
+}

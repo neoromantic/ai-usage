@@ -25,6 +25,7 @@ const (
 	MaxAccounts       = 24
 	MaxWindows        = 8
 	MaxProjects       = 12
+	MaxLinked         = 4
 	MaxSources        = 12
 	MaxSealed         = 512
 	MaxPlain          = 40
@@ -68,6 +69,19 @@ type Account struct {
 	Tokens       Tokens     `json:"tokens"`
 	LastActiveAt *time.Time `json:"last_active_at,omitempty"`
 	Projects     []Project  `json:"projects"`
+	// Linked is what accounts of other providers on this device spent
+	// through this one and are assumed to have billed to it (Hermes on this
+	// Codex login). It is counted in their tokens, not in Tokens.
+	Linked []Linked `json:"linked,omitempty"`
+}
+
+// Linked is what one account of another provider spent through an account.
+// Label is sealed.
+type Linked struct {
+	Provider string `json:"provider"`
+	Label    string `json:"label"`
+	Sessions int    `json:"sessions"`
+	Tokens   Tokens `json:"tokens"`
 }
 
 // Window is one quota window as the harness reported it.
@@ -263,6 +277,20 @@ func (a Account) validate() error {
 		}
 		if err := checkCounts(p.Sessions, p.Tokens); err != nil {
 			return fmt.Errorf("projects[%d]: %w", i, err)
+		}
+	}
+	if len(a.Linked) > MaxLinked {
+		return fmt.Errorf("%d linked, limit %d", len(a.Linked), MaxLinked)
+	}
+	for i, l := range a.Linked {
+		if !knownProvider(l.Provider) || l.Provider == a.Provider {
+			return fmt.Errorf("linked[%d]: must name another provider", i)
+		}
+		if err := checkSealed("label", l.Label, true); err != nil {
+			return fmt.Errorf("linked[%d]: %w", i, err)
+		}
+		if err := checkCounts(l.Sessions, l.Tokens); err != nil {
+			return fmt.Errorf("linked[%d]: %w", i, err)
 		}
 	}
 	return nil

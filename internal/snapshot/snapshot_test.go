@@ -252,6 +252,20 @@ func TestValidate(t *testing.T) {
 		{"quota_from itself", func(d *Doc) { d.Accounts[0].QuotaFrom = "claude" }, false},
 		{"quota_from unknown provider", func(d *Doc) { d.Accounts[0].QuotaFrom = "openai-codex" }, false},
 		{"quota_from label shape", func(d *Doc) { d.Accounts[0].QuotaFrom = sealed(40) }, false},
+		{"linked", func(d *Doc) {
+			d.Accounts[0].Linked = []Linked{{Provider: "hermes", Label: sealed(40), Sessions: 3, Tokens: Tokens{Input: 5}}}
+		}, true},
+		{"linked itself", func(d *Doc) { d.Accounts[0].Linked = []Linked{{Provider: "claude", Label: sealed(40)}} }, false},
+		{"linked unknown provider", func(d *Doc) { d.Accounts[0].Linked = []Linked{{Provider: "openai-codex", Label: sealed(40)}} }, false},
+		{"linked plain label", func(d *Doc) { d.Accounts[0].Linked = []Linked{{Provider: "hermes", Label: "open ai"}} }, false},
+		{"linked negative tokens", func(d *Doc) {
+			d.Accounts[0].Linked = []Linked{{Provider: "hermes", Label: sealed(40), Tokens: Tokens{Output: -1}}}
+		}, false},
+		{"too many linked", func(d *Doc) {
+			for range MaxLinked + 1 {
+				d.Accounts[0].Linked = append(d.Accounts[0].Linked, Linked{Provider: "hermes", Label: sealed(40)})
+			}
+		}, false},
 		{"quota_from without windows", func(d *Doc) {
 			d.Accounts[0].Provider, d.Accounts[0].QuotaFrom = "hermes", "codex"
 			d.Accounts[0].QuotaAt, d.Accounts[0].Windows = nil, []Window{}

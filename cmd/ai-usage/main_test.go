@@ -69,12 +69,17 @@ func hermetic(t *testing.T) {
 		probeEnv              func() probe.Env
 		newScheduler          func() schedule.Scheduler
 		newUpdater            func() *selfupdate.Updater
-	}{version, defaultRelay, clock, probeEnv, newScheduler, newUpdater}
+		hostname, osUser      func() string
+	}{version, defaultRelay, clock, probeEnv, newScheduler, newUpdater, hostname, osUser}
 	t.Cleanup(func() {
 		version, defaultRelay, clock = saved.version, saved.defaultRelay, saved.clock
 		probeEnv, newScheduler, newUpdater = saved.probeEnv, saved.newScheduler, saved.newUpdater
+		hostname, osUser = saved.hostname, saved.osUser
 	})
 	version, defaultRelay, clock = "dev", "", time.Now
+	// A CI runner's host name can be long enough to change the layout.
+	hostname = func() string { return "test-host" }
+	osUser = func() string { return "tester" }
 	probeEnv = fakeProbeEnv
 	newScheduler = func() schedule.Scheduler {
 		return schedule.Scheduler{GOOS: runtime.GOOS, Run: func(_ context.Context, name string, args []string, _ []byte) ([]byte, error) {
@@ -655,7 +660,6 @@ func TestTwoDevicesShareATeam(t *testing.T) {
 	}
 }
 
-// A device keeps collecting while the relay is down and says so.
 // home add registers homes by absolute path and, for Hermes, the home whose
 // login they bill through, which it reads too. home remove undoes it.
 func TestHomeCommands(t *testing.T) {
@@ -663,7 +667,7 @@ func TestHomeCommands(t *testing.T) {
 	d := newDevice(t)
 	root := filepath.Dir(d.home)
 	bots := filepath.Join(root, "bots")
-	for _, dir := range []string{".codex", ".hermes-a/profiles/p", ".hermes-b"} {
+	for _, dir := range []string{".codex", ".grok", ".hermes-a/profiles/p", ".hermes-b", ".codex-gone"} {
 		if err := os.MkdirAll(filepath.Join(bots, dir), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -689,16 +693,48 @@ func TestHomeCommands(t *testing.T) {
 		}
 	}
 	cfg := d.config()
-	ref := state.HomeRef{Provider: "codex", Home: codex}
 	if !reflect.DeepEqual(cfg.Homes, map[string][]string{"codex": {codex}, "hermes": {a, b}}) ||
-		!reflect.DeepEqual(cfg.QuotaFrom, map[string]state.HomeRef{a: ref, b: ref}) {
+		!reflect.DeepEqual(cfg.QuotaFrom, map[string]map[string]string{a: {"codex": codex}, b: {"codex": codex}}) {
 		t.Fatalf("config = %+v %+v", cfg.Homes, cfg.QuotaFrom)
+	}
+
+	// A home can take each harness's quota from its own home.
+	grok := filepath.Join(bots, ".grok")
+	d.ok("home", "add", "hermes", ".hermes-a", "--quota-from=grok:.grok")
+	if got := d.config().QuotaFrom[a]; !reflect.DeepEqual(got, map[string]string{"codex": codex, "grok": grok}) {
+		t.Fatalf("quota from = %+v", got)
 	}
 
 	d.ok("home", "remove", "hermes", b)
 	cfg = d.config()
 	if !reflect.DeepEqual(cfg.Homes["hermes"], []string{a}) || len(cfg.QuotaFrom) != 1 {
 		t.Fatalf("after remove = %+v %+v", cfg.Homes, cfg.QuotaFrom)
+	}
+
+	// An added home that is gone is listed as missing, not dropped.
+	gone := filepath.Join(bots, ".codex-gone")
+	d.ok("home", "add", "codex", gone)
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	if out := d.ok("home"); !strings.Contains(strings.Join(strings.Fields(out), " "), "codex "+gone+" missing") {
+		t.Fatalf("home lacks the missing home:\n%s", out)
+	}
+	d.ok("home", "remove", "codex", gone)
+
+	// The default Hermes home can be named a quota home, and unnamed again.
+	defHermes := filepath.Join(d.home, ".hermes")
+	if err := os.MkdirAll(defHermes, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	d.ok("home", "add", "hermes", defHermes, "--quota-from", "codex:"+codex)
+	if d.config().QuotaFrom[defHermes]["codex"] != codex {
+		t.Fatalf("quota from = %+v", d.config().QuotaFrom)
+	}
+	d.ok("home", "remove", "hermes", defHermes)
+	cfg = d.config()
+	if _, ok := cfg.QuotaFrom[defHermes]; ok {
+		t.Fatalf("quota from after remove = %+v", cfg.QuotaFrom)
 	}
 
 	for _, bad := range [][]string{
@@ -709,6 +745,11 @@ func TestHomeCommands(t *testing.T) {
 		{"home", "add", "hermes", ".hermes-b", "--quota-from"},
 		{"home", "remove", "hermes", ".hermes-b", "--quota-from", "codex:.codex"},
 		{"home", "frob"},
+		// An empty directory, as from an unset variable, is not the
+		// working directory.
+		{"home", "add", "hermes", ""},
+		{"home", "add", "hermes", ".hermes-b", "--quota-from", "codex:"},
+		{"home", "add", "hermes", ".hermes-b", "--quota-from="},
 	} {
 		if r := d.run("", bad...); r.code != 2 {
 			t.Fatalf("%v: exit %d, %s", bad, r.code, r.stderr)
@@ -718,16 +759,25 @@ func TestHomeCommands(t *testing.T) {
 		{"home", "add", "hermes", "missing"},
 		{"home", "remove", "hermes", ".hermes-b"},
 		{"home", "remove", "codex", filepath.Join(d.home, ".codex")},
+		{"home", "remove", "hermes", defHermes},
+		// A Hermes home is not a Codex home.
+		{"home", "remove", "codex", a},
 	} {
 		if r := d.run("", bad...); r.code != 1 {
 			t.Fatalf("%v: exit %d, %s", bad, r.code, r.stderr)
 		}
+	}
+	// Removing the home Hermes takes its quota from would quietly move it to
+	// the default login.
+	if r := d.run("", "home", "remove", "codex", codex); r.code != 1 || !strings.Contains(r.stderr, "take their quota from") {
+		t.Fatalf("removing a quota home: exit %d, %s", r.code, r.stderr)
 	}
 	if !reflect.DeepEqual(d.config().Homes, cfg.Homes) {
 		t.Fatal("a rejected command changed the config")
 	}
 }
 
+// A device keeps collecting while the relay is down and says so.
 func TestUnreachableRelay(t *testing.T) {
 	hermetic(t)
 	srv := httptest.NewServer(http.NotFoundHandler())

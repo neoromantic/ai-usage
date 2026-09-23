@@ -126,9 +126,11 @@ Headers, with binary values in unpadded base64url:
 
 A `PUT` body must be a valid snapshot in exactly the form `encoding/json` writes it, naming the same team and device as the path. The team read returns each stored body and signature as they were written, so every reader verifies them again.
 
-An account in a snapshot may carry `quota_from`, a provider name in plain text. It says that the account's quota windows are the reading of another provider's account on the same device, which this account is assumed to bill through: Hermes on a Codex or SuperGrok subscription shows the quota of the account logged in to `~/.codex` or `~/.grok`. It must name a known provider other than the account's own, and it comes only with windows. A snapshot without it is valid as before.
+An account in a snapshot may carry `quota_from`, a provider name in plain text. It says that the account's quota windows are the reading of another provider's account on the same device, which this account is assumed to bill through: Hermes on a Codex or SuperGrok subscription shows the quota of the Codex or Grok account it is taken to use. It must name a known provider other than the account's own, and it comes only with windows. A snapshot without it is valid as before.
 
-A relay older than `quota_from` answers `422` to a snapshot that carries it. The collector then keeps that snapshot pending and does not read the team either, so the device sees only itself until the relay is updated. An older collector reading the team counts such a snapshot as unreadable and leaves that device out. Deploy the relay first, then update the collectors.
+An account may also carry `linked`, at most 4 entries of `{provider, label, sessions, tokens}`: what an account of another provider on the same device spent through this one, such as Hermes on this Codex login. `label` is sealed like every label, `provider` must be another known provider, and the counts have the same limits as the account's own. Readers add these up for the team's "also used by" lines. A snapshot without it is valid as before.
+
+A relay older than `quota_from` or `linked` answers `422` to a snapshot that carries it. The collector then keeps that snapshot pending and does not read the team either, so the device sees only itself until the relay is updated. An older collector reading the team counts such a snapshot as unreadable and leaves that device out. Deploy the relay first, then update the collectors.
 
 | Status | Meaning |
 | --- | --- |

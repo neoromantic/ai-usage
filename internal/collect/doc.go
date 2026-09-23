@@ -212,6 +212,11 @@ func BuildDoc(st *state.State, key *team.Key, device, hostname, osUser, version 
 			}
 			sa.Projects = append(sa.Projects, snapshot.Project{Path: seal(p.Path), Sessions: p.Sessions, Tokens: p.Tokens})
 		}
+		// Only Hermes bills through another harness's login, by one route
+		// per harness.
+		if b := HermesBilling(a.Provider); b != "" && a.LinkedSessions > 0 {
+			sa.Linked = []snapshot.Linked{{Provider: "hermes", Label: seal(b), Sessions: a.LinkedSessions, Tokens: a.Linked}}
+		}
 		doc.Accounts = append(doc.Accounts, sa)
 	}
 	fitDoc(&doc)

@@ -68,7 +68,7 @@ An account is one login. After you switch accounts, the previous one stays, with
 | `headline_percent` | number | the fullest window's percentage, leaving out windows that have reset since the reading; `null` without a reading, or when every window has reset |
 | `level` | string | the level of `headline_percent` |
 | `quota` | object | the last good quota reading, `null` if there never was one; see below |
-| `link` | object | `{provider, label}`: the account of another tool this one is assumed to bill through, `null` when there is none. Only Hermes has one: its `openai-codex` account is linked to the account logged in to `~/.codex`, and `xai-oauth` to the one in `~/.grok`. Hermes keeps its own login, so the link is an assumption, not a reading |
+| `link` | object | `{provider, label}`: the account of another tool this one is assumed to bill through, `null` when there is none. Only Hermes has one: its `openai-codex` account is linked to a Codex account and `xai-oauth` to a Grok one. Each Hermes folder is taken to bill through the account logged in to the folder `ai-usage home add --quota-from` named for it, else to `~/.codex` or `~/.grok`; when its folders bill through several, the link is the one most of the account's tokens in the last 90 days went through. Hermes keeps its own login, so the link is an assumption, not a reading |
 | `sessions` | number | sessions in the last 90 days |
 | `tokens` | object | tokens in the last 90 days; see below |
 | `linked_usage` | list | `{provider, sessions, tokens}` for each other tool assumed to bill through this account, such as Hermes on this Codex login; `[]` when none. These tokens are that tool's and are not in `tokens` |
@@ -140,7 +140,7 @@ A team account:
 | `link` | object | `{provider, label}`, as for a device's account; `null` when there is none. This device's accounts use their own link. For another device's account, whose snapshot carries no link, it is the one account on that snapshot of the tool in `quota.from` with the same reading: the same observation time and windows. When none or several match, `label` is `""` |
 | `sessions`, `tokens` | | summed across devices |
 | `per_device` | list | `{device, device_id, current, sessions, tokens, last_active_at}` for each device that has the account, `device` as `host (user)`; most tokens first, then by `device` |
-| `linked_usage` | list | `{provider, label, devices, sessions, tokens}` for each account of another tool linked to this one on any device, by the rule for `link`, summed across devices, with the devices it ran on; `[]` when none. These tokens are that account's and are not in `tokens` |
+| `linked_usage` | list | `{provider, label, devices, sessions, tokens}` for each account of another tool that spent through this one on any device, as each device counted it session by session, summed across devices, with the devices it ran on; `[]` when none. These tokens are that account's and are not in `tokens` |
 
 ## Example
 

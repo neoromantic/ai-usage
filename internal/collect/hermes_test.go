@@ -234,18 +234,20 @@ func TestHermesPartsDoNotRecountOldLedger(t *testing.T) {
 }
 
 // A Hermes home the person named a Codex home for bills through the login
-// there, and so do the profiles inside it. Other Hermes homes keep the
-// default home's login. The Hermes account follows its newest session's home,
-// and with no session read, the home every entry names.
+// there, and so do the profiles inside it, whatever path names it. Other
+// Hermes homes keep the default home's login. The Hermes account shows the
+// quota of the login most of its tokens went through, and with no session
+// read, keeps its link.
 func TestHermesQuotaFromNamedHome(t *testing.T) {
 	w, o := newWorld(t)
 	codex := w.home(t, "codex")
 	hermes := w.home(t, "hermes")
 	root := filepath.Dir(w.userHome)
 	bots := filepath.Join(root, "bots", ".codex")
+	botsGrok := filepath.Join(root, "bots", ".grok")
 	agent := filepath.Join(root, "bots", ".hermes-agent")
 	profile := filepath.Join(agent, "profiles", "helper")
-	for _, d := range []string{bots, profile} {
+	for _, d := range []string{bots, botsGrok, profile} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -253,12 +255,17 @@ func TestHermesQuotaFromNamedHome(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(profile, "state.db"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// The entry names the home by a symlink; the run finds it by its path.
+	alias := filepath.Join(root, "agent-alias")
+	if err := os.Symlink(agent, alias); err != nil {
+		t.Fatal(err)
+	}
 	cfg, err := o.Dir.LoadConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.Homes = map[string][]string{"codex": {bots}, "hermes": {agent}}
-	cfg.QuotaFrom = map[string]state.HomeRef{agent: {Provider: "codex", Home: bots}}
+	cfg.Homes = map[string][]string{"codex": {bots}, "grok": {botsGrok}, "hermes": {agent}}
+	cfg.QuotaFrom = map[string]map[string]string{alias: {"codex": bots, "grok": botsGrok}}
 	if err := o.Dir.SaveConfig(cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -266,8 +273,12 @@ func TestHermesQuotaFromNamedHome(t *testing.T) {
 	botsQuota := quota(t0.Add(-time.Minute), 40, 60)
 	w.login("codex", codex, "sam", quota(t0, 5, 10))
 	w.login("codex", bots, "bots", botsQuota)
-	w.sessions("hermes", agent, hermesSess("a1", "openai-codex", t0.Add(-time.Hour), map[string]snapshot.Tokens{"openai-codex": tok(1000)}))
-	w.sessions("hermes", profile, hermesSess("p1", "openai-codex", t0.Add(-30*time.Minute), map[string]snapshot.Tokens{"openai-codex": tok(500)}))
+	w.login("grok", botsGrok, "bots-x", nil)
+	w.sessions("hermes", agent, hermesSess("a1", "openai-codex", t0.Add(-time.Hour), map[string]snapshot.Tokens{
+		"openai-codex": tok(1000), "xai-oauth": tok(30),
+	}))
+	// A part that names no route is the session's own route's.
+	w.sessions("hermes", profile, hermesSess("p1", "openai-codex", t0.Add(-30*time.Minute), map[string]snapshot.Tokens{"": tok(500)}))
 	w.sessions("hermes", hermes, hermesSess("d1", "openai-codex", t0.Add(-2*time.Hour), map[string]snapshot.Tokens{"openai-codex": tok(70)}))
 	res := run(t, o)
 
@@ -281,22 +292,33 @@ func TestHermesQuotaFromNamedHome(t *testing.T) {
 	if s := totalsFor(t, res.State, "codex", "sam"); s.Linked != tok(70) {
 		t.Fatalf("codex sam = %+v", s)
 	}
+	if x := totalsFor(t, res.State, "hermes", "xai-oauth"); !reflect.DeepEqual(x.Link, &state.Link{Provider: "grok", Label: "bots-x"}) {
+		t.Fatalf("hermes xai-oauth = %+v", x.Link)
+	}
 
-	// The default home's session is now the newest, so the account follows it.
+	// The default home's session is now the newest, but most tokens still
+	// went through the bots' login, so the link holds.
 	w.now = t0.Add(15 * time.Minute)
 	w.sessions("hermes", hermes, hermesSess("d1", "openai-codex", w.now, map[string]snapshot.Tokens{"openai-codex": tok(90)}))
 	res = run(t, o)
-	if h := totalsFor(t, res.State, "hermes", "openai-codex"); h.Link == nil || h.Link.Label != "sam" {
+	if h := totalsFor(t, res.State, "hermes", "openai-codex"); h.Link == nil || h.Link.Label != "bots" {
 		t.Fatalf("hermes after a default-home session = %+v", h.Link)
 	}
-
-	// No session read at all: the one home every entry names.
+	// Once most tokens go through the person's own login, it follows.
 	w.now = t0.Add(30 * time.Minute)
+	w.sessions("hermes", hermes, hermesSess("d1", "openai-codex", w.now, map[string]snapshot.Tokens{"openai-codex": tok(5000)}))
+	res = run(t, o)
+	if h := totalsFor(t, res.State, "hermes", "openai-codex"); h.Link == nil || h.Link.Label != "sam" {
+		t.Fatalf("hermes after the default home took most = %+v", h.Link)
+	}
+
+	// No session read at all: the link stays.
+	w.now = t0.Add(45 * time.Minute)
 	for _, home := range []string{agent, profile, hermes} {
 		w.sessions("hermes", home)
 	}
 	res = run(t, o)
-	if h := totalsFor(t, res.State, "hermes", "openai-codex"); h.Link == nil || h.Link.Label != "bots" {
+	if h := totalsFor(t, res.State, "hermes", "openai-codex"); h.Link == nil || h.Link.Label != "sam" {
 		t.Fatalf("hermes with no sessions = %+v", h.Link)
 	}
 }

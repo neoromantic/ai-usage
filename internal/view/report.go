@@ -461,8 +461,8 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 			if a.QuotaAt != nil && len(a.Windows) > 0 && a.QuotaAt.After(x.qAt) {
 				x.qAt, x.qWins, x.qDev, x.qFrom, x.qLink = *a.QuotaAt, a.Windows, devName, a.QuotaFrom, link
 			}
-			if link != nil && link.Label != "" {
-				addLinked(linked, link, a.Provider, l, devName, a)
+			for _, u := range a.Linked {
+				addLinked(linked, a.Provider, l, u.Provider, open(u.Label), devName, u)
 			}
 		}
 	}
@@ -556,9 +556,9 @@ func sameTime(a, b *time.Time) bool {
 }
 
 // addLinked counts what account (provider, label) on one device spent
-// through the account link names.
-func addLinked(linked map[string]map[string]*LinkedUsage, link *Link, provider, label, device string, a snapshot.Account) {
-	target := state.Key(link.Provider, link.Label)
+// through the account (to, toLabel).
+func addLinked(linked map[string]map[string]*LinkedUsage, to, toLabel, provider, label, device string, a snapshot.Linked) {
+	target := state.Key(to, toLabel)
 	if linked[target] == nil {
 		linked[target] = map[string]*LinkedUsage{}
 	}

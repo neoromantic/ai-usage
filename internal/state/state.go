@@ -59,21 +59,16 @@ type Config struct {
 	// the string itself. Claude Code names its login after the exact
 	// CLAUDE_CONFIG_DIR, even when it names the default ~/.claude.
 	HomeEnv map[string]map[string]string `json:"home_env,omitempty"`
-	// QuotaFrom names, by Hermes home, the home of another harness whose
-	// login that Hermes home bills its subscription through. It is set with
-	// `ai-usage home add hermes DIR --quota-from codex:DIR`. A Hermes home
-	// without an entry is taken to use the login in the harness's default
-	// home. An entry covers the profiles inside its home too.
-	QuotaFrom map[string]HomeRef `json:"quota_from,omitempty"`
+	// QuotaFrom names, by Hermes home and then by harness, the home of that
+	// harness whose login the Hermes home bills its subscription through. It
+	// is set with `ai-usage home add hermes DIR --quota-from codex:DIR`. A
+	// Hermes home without an entry for a harness is taken to use the login
+	// in that harness's default home. An entry covers the profiles inside
+	// its home too.
+	QuotaFrom map[string]map[string]string `json:"quota_from,omitempty"`
 	// ScheduleOff is set by `ai-usage schedule remove` so a later run does not
 	// register again.
 	ScheduleOff bool `json:"schedule_off,omitempty"`
-}
-
-// HomeRef is one harness home.
-type HomeRef struct {
-	Provider string `json:"provider"`
-	Home     string `json:"home"`
 }
 
 // LoadConfig reads config.json, creating a device id on first use.

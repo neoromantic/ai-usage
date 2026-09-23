@@ -53,8 +53,9 @@ type Options struct {
 	// layer uses it for scheduler registration and self-update bookkeeping.
 	After func(ctx context.Context, cfg *state.Config, st *state.State)
 
-	// quotaFrom is Config.QuotaFrom, set by Run.
-	quotaFrom map[string]state.HomeRef
+	// quotaFrom is Config.QuotaFrom keyed by resolved home, set by Run.
+	quotaFrom map[string]map[string]string
+	paths     paths
 }
 
 // Result is what a run leaves behind for the views.
@@ -176,7 +177,8 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	if o.Ask == nil {
 		o.Ask = askHarness(o.Probe, cfg.HomeEnv)
 	}
-	o.quotaFrom = cfg.QuotaFrom
+	o.paths = paths{}
+	o.quotaFrom = quotaLinks(cfg.QuotaFrom, o.paths)
 
 	sample := state.Sample{At: now}
 	growth := map[string]snapshot.Tokens{}
@@ -729,6 +731,84 @@ var hermesLinks = map[string]string{
 	"xai-oauth":    "grok",
 }
 
+// BillsThrough reports whether Hermes can bill a subscription through the
+// login of harness p.
+func BillsThrough(p string) bool {
+	return HermesBilling(p) != ""
+}
+
+// HermesBilling is the Hermes billing provider that bills through the login
+// of harness p, or "".
+func HermesBilling(p string) string {
+	for b, v := range hermesLinks {
+		if v == p {
+			return b
+		}
+	}
+	return ""
+}
+
+// paths resolves symlinks in paths, once per path and run, so a home named
+// by one path still matches when it is found by another.
+type paths map[string]string
+
+func (r paths) resolve(p string) string {
+	if p == "" || r == nil {
+		return p
+	}
+	if v, ok := r[p]; ok {
+		return v
+	}
+	v := filepath.Clean(p)
+	if e, err := filepath.EvalSymlinks(v); err == nil {
+		v = e
+	}
+	r[p] = v
+	return v
+}
+
+// quotaLinks is Config.QuotaFrom keyed by resolved Hermes home.
+func quotaLinks(named map[string]map[string]string, r paths) map[string]map[string]string {
+	out := map[string]map[string]string{}
+	for h, refs := range named {
+		k := r.resolve(h)
+		for p, at := range refs {
+			if out[k] == nil {
+				out[k] = map[string]string{}
+			}
+			out[k][p] = at
+		}
+	}
+	return out
+}
+
+// quotaHome is the home of harness p named for a Hermes home, or for the
+// home a profile is kept in, or "". named is keyed by resolved home.
+func quotaHome(named map[string]map[string]string, r paths, hermesHome, p string) string {
+	h := r.resolve(hermesHome)
+	if at := named[h][p]; at != "" {
+		return at
+	}
+	if parent := filepath.Dir(h); filepath.Base(parent) == profiles["hermes"].dir {
+		return named[filepath.Dir(parent)][p]
+	}
+	return ""
+}
+
+// QuotaHomesOf is, by harness, the home named for a Hermes home or for the
+// home a profile is kept in.
+func QuotaHomesOf(named map[string]map[string]string, hermesHome string) map[string]string {
+	r := paths{}
+	links := quotaLinks(named, r)
+	out := map[string]string{}
+	for _, p := range Providers {
+		if at := quotaHome(links, r, hermesHome, p); at != "" {
+			out[p] = at
+		}
+	}
+	return out
+}
+
 // linkedAccount is the account a Hermes billing provider in the Hermes home
 // is assumed to bill through: the one logged in now to the home the person
 // named for it, or to the linked harness's default home.
@@ -737,100 +817,104 @@ func linkedAccount(st *state.State, o Options, hermesHome, billing string) *stat
 	if !ok {
 		return nil
 	}
-	at := quotaHome(o.quotaFrom, hermesHome, p)
-	if at == "" && o.UserHome != "" {
+	at := quotaHome(o.quotaFrom, o.paths, hermesHome, p)
+	if at == "" {
+		if o.UserHome == "" {
+			return nil
+		}
 		at = filepath.Join(o.UserHome, "."+p)
 	}
 	label := st.Current[state.Key(p, at)]
-	if at == "" || label == "" {
+	if label == "" {
+		// The home may be found under another path than it was named by.
+		want := o.paths.resolve(at)
+		for k, l := range st.Current {
+			if parts := state.SplitKey(k); len(parts) == 2 && parts[0] == p && o.paths.resolve(parts[1]) == want {
+				label = l
+				break
+			}
+		}
+	}
+	if label == "" {
 		return nil
 	}
 	return &state.Link{Provider: p, Label: label}
 }
 
-// quotaHome is the home of p named for a Hermes home, or for the home a
-// profile is kept in. With no Hermes home to go by, as for an account with no
-// session read this run, it is the home of p every entry names, if they agree.
-func quotaHome(named map[string]state.HomeRef, hermesHome, p string) string {
-	if hermesHome == "" {
-		one := ""
-		for _, ref := range named {
-			if ref.Provider != p {
+// linkHermes points each Hermes account billed through a subscription at the
+// login most of its tokens read this run went through, or at none when
+// nobody is logged in there. Homes can bill one route through different
+// logins, as bots on a shared login beside the person's own Hermes; the
+// account shows the quota of the login it uses most, which holds from run to
+// run. An account with no session read this run keeps its link.
+func linkHermes(st *state.State, o Options, read []readSession) {
+	type use struct {
+		tokens int64
+		last   time.Time
+	}
+	seen := map[string]bool{}
+	uses := map[string]map[state.Link]*use{}
+	for _, r := range read {
+		for billing, t := range hermesParts(r.s) {
+			seen[billing] = true
+			link := linkedAccount(st, o, r.s.Home, billing)
+			if link == nil {
 				continue
 			}
-			if one != "" && ref.Home != one {
-				return ""
+			if uses[billing] == nil {
+				uses[billing] = map[state.Link]*use{}
 			}
-			one = ref.Home
-		}
-		return one
-	}
-	ref, ok := named[hermesHome]
-	if parent := filepath.Dir(hermesHome); !ok && filepath.Base(parent) == profiles["hermes"].dir {
-		ref, ok = named[filepath.Dir(parent)]
-	}
-	if !ok || ref.Provider != p {
-		return ""
-	}
-	return ref.Home
-}
-
-// BillsThrough reports whether Hermes can bill a subscription through the
-// login of harness p.
-func BillsThrough(p string) bool {
-	for _, v := range hermesLinks {
-		if v == p {
-			return true
-		}
-	}
-	return false
-}
-
-// QuotaHomeOf is the home of another harness the person named for a Hermes
-// home, or for the home a profile is kept in.
-func QuotaHomeOf(named map[string]state.HomeRef, hermesHome string) (state.HomeRef, bool) {
-	if hermesHome == "" {
-		return state.HomeRef{}, false
-	}
-	for _, p := range Providers {
-		if h := quotaHome(named, hermesHome, p); h != "" {
-			return state.HomeRef{Provider: p, Home: h}, true
-		}
-	}
-	return state.HomeRef{}, false
-}
-
-// linkHermes points each Hermes account billed through a subscription at the
-// account it is assumed to use, or at none when nobody is logged in there.
-// Where Hermes homes bill through different logins, the account follows the
-// home of its newest session read this run.
-func linkHermes(st *state.State, o Options, read []readSession) {
-	newest := map[string]logs.Session{}
-	for _, r := range read {
-		for _, billing := range billedBy(r.s) {
-			if n, ok := newest[billing]; !ok || r.s.Updated.After(n.Updated) ||
-				(r.s.Updated.Equal(n.Updated) && r.s.ID > n.ID) {
-				newest[billing] = r.s
+			u := uses[billing][*link]
+			if u == nil {
+				u = &use{}
+				uses[billing][*link] = u
+			}
+			u.tokens += t.Total()
+			if r.s.Updated.After(u.last) {
+				u.last = r.s.Updated
 			}
 		}
 	}
 	for _, acct := range st.Accounts {
-		if acct.Provider == "hermes" {
-			acct.Link = linkedAccount(st, o, newest[acct.Label].Home, acct.Label)
+		if acct.Provider != "hermes" {
+			continue
 		}
+		if _, ok := hermesLinks[acct.Label]; !ok {
+			acct.Link = nil
+			continue
+		}
+		if !seen[acct.Label] {
+			continue
+		}
+		var best *state.Link
+		var top *use
+		for l, u := range uses[acct.Label] {
+			if top == nil || u.tokens > top.tokens ||
+				(u.tokens == top.tokens && (u.last.After(top.last) || (u.last.Equal(top.last) && l.Label < best.Label))) {
+				l := l
+				best, top = &l, u
+			}
+		}
+		acct.Link = best
 	}
 }
 
-// billedBy lists the billing providers a Hermes session holds tokens under.
-func billedBy(s logs.Session) []string {
+// hermesParts is a Hermes session's tokens by billing provider, with a part
+// that names none credited to the session's own, as attribute does.
+func hermesParts(s logs.Session) map[string]snapshot.Tokens {
+	own := strings.TrimSpace(s.Account)
 	if s.Parts == nil {
-		return []string{s.Account}
+		return map[string]snapshot.Tokens{own: s.Tokens}
 	}
-	var out []string
+	out := map[string]snapshot.Tokens{}
 	for b, t := range s.Parts {
-		if !t.Zero() {
-			out = append(out, b)
+		if t.Zero() {
+			continue
 		}
+		if b = strings.TrimSpace(b); b == "" {
+			b = own
+		}
+		out[b] = out[b].Add(t)
 	}
 	return out
 }

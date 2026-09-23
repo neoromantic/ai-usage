@@ -188,7 +188,8 @@ func relayURL(cfg state.Config) string {
 	return defaultRelay
 }
 
-func hostname() string {
+// hostname and osUser name this device in reports. Tests pin them.
+var hostname = func() string {
 	h, err := os.Hostname()
 	if err != nil {
 		return "unknown"
@@ -196,7 +197,7 @@ func hostname() string {
 	return strings.TrimSuffix(h, ".local")
 }
 
-func osUser() string {
+var osUser = func() string {
 	if u, err := user.Current(); err == nil && u.Username != "" {
 		return u.Username
 	}

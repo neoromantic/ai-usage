@@ -44,6 +44,7 @@ func cmdHome(args []string, stdout io.Writer) error {
 	}
 
 	var quotaFrom string
+	var hasQuotaFrom bool
 	var rest []string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -53,9 +54,9 @@ func cmdHome(args []string, stdout io.Writer) error {
 				return usageError("--quota-from takes PROVIDER:DIR")
 			}
 			i++
-			quotaFrom = args[i]
+			quotaFrom, hasQuotaFrom = args[i], true
 		case strings.HasPrefix(a, "--quota-from=") || strings.HasPrefix(a, "-quota-from="):
-			quotaFrom = a[strings.Index(a, "=")+1:]
+			quotaFrom, hasQuotaFrom = a[strings.Index(a, "=")+1:], true
 		case strings.HasPrefix(a, "-"):
 			return usageError("unknown flag " + a)
 		default:
@@ -77,20 +78,20 @@ func cmdHome(args []string, stdout io.Writer) error {
 		}
 		homes = append(homes, abs)
 	}
-	var ref *state.HomeRef
-	if quotaFrom != "" {
+	var ref *homeRef
+	if quotaFrom != "" || hasQuotaFrom {
 		if sub != "add" || p != "hermes" {
 			return usageError("--quota-from is for home add hermes")
 		}
 		qp, qdir, ok := strings.Cut(quotaFrom, ":")
-		if !ok || !collect.BillsThrough(qp) {
+		if !ok || !collect.BillsThrough(qp) || strings.TrimSpace(qdir) == "" {
 			return usageError("--quota-from takes codex:DIR or grok:DIR")
 		}
 		abs, err := homePath(qdir, true)
 		if err != nil {
 			return err
 		}
-		ref = &state.HomeRef{Provider: qp, Home: abs}
+		ref = &homeRef{provider: qp, home: abs}
 	}
 
 	cfg, err := changeHomes(d, func(cfg *state.Config) error {
@@ -134,8 +135,16 @@ func known(p string) bool {
 	return false
 }
 
+// homeRef is one harness home.
+type homeRef struct{ provider, home string }
+
 // homePath makes h absolute. A home being added must be a directory.
 func homePath(h string, mustExist bool) (string, error) {
+	// An empty argument, as from an unset shell variable, would otherwise be
+	// the working directory.
+	if strings.TrimSpace(h) == "" {
+		return "", usageError("a directory is empty")
+	}
 	if strings.HasPrefix(h, "~"+string(filepath.Separator)) || h == "~" {
 		if u, err := os.UserHomeDir(); err == nil {
 			h = filepath.Join(u, h[1:])
@@ -157,7 +166,7 @@ func homePath(h string, mustExist bool) (string, error) {
 	return filepath.Clean(abs), nil
 }
 
-func addHomes(cfg *state.Config, userHome, p string, homes []string, ref *state.HomeRef) {
+func addHomes(cfg *state.Config, userHome, p string, homes []string, ref *homeRef) {
 	add := func(p, h string) {
 		if h == filepath.Join(userHome, "."+p) || contains(cfg.Homes[p], h) {
 			return
@@ -172,25 +181,32 @@ func addHomes(cfg *state.Config, userHome, p string, homes []string, ref *state.
 		add(p, h)
 		if ref != nil {
 			if cfg.QuotaFrom == nil {
-				cfg.QuotaFrom = map[string]state.HomeRef{}
+				cfg.QuotaFrom = map[string]map[string]string{}
 			}
-			cfg.QuotaFrom[h] = *ref
+			if cfg.QuotaFrom[h] == nil {
+				cfg.QuotaFrom[h] = map[string]string{}
+			}
+			cfg.QuotaFrom[h][ref.provider] = ref.home
 		}
 	}
 	// The login is read where it lives, so that home is read too.
 	if ref != nil {
-		add(ref.Provider, ref.Home)
+		add(ref.provider, ref.home)
 	}
 }
 
 func removeHomes(cfg *state.Config, userHome, p string, homes []string) error {
 	for _, h := range homes {
-		if h == filepath.Join(userHome, "."+p) {
+		named := p == "hermes" && cfg.QuotaFrom[h] != nil
+		if h == filepath.Join(userHome, "."+p) && !named {
 			return errors.New(h + " is the default " + p + " home, which is always read")
 		}
-		_, named := cfg.QuotaFrom[h]
 		if !contains(cfg.Homes[p], h) && !named {
 			return errors.New(h + " is not an added " + p + " home")
+		}
+		// Hermes homes would quietly fall back to the default login.
+		if users := quotaUsers(cfg, p, h); len(users) > 0 {
+			return fmt.Errorf("%s is where %d hermes homes take their quota from, such as %s; remove them first, or add them again with another --quota-from", h, len(users), users[0])
 		}
 	}
 	for _, h := range homes {
@@ -209,6 +225,18 @@ func removeHomes(cfg *state.Config, userHome, p string, homes []string) error {
 		}
 	}
 	return nil
+}
+
+// quotaUsers lists the Hermes homes that take their quota from home h of p.
+func quotaUsers(cfg *state.Config, p, h string) []string {
+	var out []string
+	for hermes, refs := range cfg.QuotaFrom {
+		if refs[p] == h {
+			out = append(out, hermes)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // listHomes prints every home a run would read, and what each bills through.
@@ -231,23 +259,39 @@ func listHomes(cfg state.Config, userHome string, stdout io.Writer) error {
 				notes = append(notes, "added")
 			}
 			if p == "hermes" {
-				if ref, ok := collect.QuotaHomeOf(cfg.QuotaFrom, h); ok {
-					notes = append(notes, "quota from "+ref.Provider+" "+tilde(ref.Home, userHome))
-				}
+				notes = append(notes, quotaNotes(collect.QuotaHomesOf(cfg.QuotaFrom, h), userHome)...)
 			}
 			fmt.Fprintf(tw, "%s\t%s\t%s\n", name, tilde(h, userHome), strings.Join(notes, " · "))
 		}
 	}
-	// A named home that is gone is not read; say so rather than drop it.
-	var missing []string
-	for h, ref := range cfg.QuotaFrom {
-		if !contains(found["hermes"], h) {
-			missing = append(missing, tilde(h, userHome)+" (quota from "+ref.Provider+" "+tilde(ref.Home, userHome)+")")
+	// A home added or named that is gone is not read; say so rather than
+	// drop it.
+	for _, p := range collect.Providers {
+		var missing []string
+		gone := map[string]bool{}
+		for _, h := range cfg.Homes[p] {
+			if !contains(found[p], h) {
+				gone[h] = true
+			}
 		}
-	}
-	sort.Strings(missing)
-	for _, m := range missing {
-		fmt.Fprintf(tw, "hermes\t%s\tmissing\n", m)
+		if p == "hermes" {
+			for h := range cfg.QuotaFrom {
+				if !contains(found[p], h) {
+					gone[h] = true
+				}
+			}
+		}
+		for h := range gone {
+			notes := []string{"missing"}
+			if p == "hermes" {
+				notes = append(notes, quotaNotes(cfg.QuotaFrom[h], userHome)...)
+			}
+			missing = append(missing, tilde(h, userHome)+"\t"+strings.Join(notes, " · "))
+		}
+		sort.Strings(missing)
+		for _, m := range missing {
+			fmt.Fprintf(tw, "%s\t%s\n", p, m)
+		}
 	}
 	if err := tw.Flush(); err != nil {
 		return err
@@ -258,6 +302,17 @@ func listHomes(cfg state.Config, userHome string, stdout io.Writer) error {
 		}
 	}
 	return nil
+}
+
+// quotaNotes says, by harness, where a Hermes home takes its quota from.
+func quotaNotes(refs map[string]string, userHome string) []string {
+	var out []string
+	for _, p := range collect.Providers {
+		if at := refs[p]; at != "" {
+			out = append(out, "quota from "+p+" "+tilde(at, userHome))
+		}
+	}
+	return out
 }
 
 func tilde(p, userHome string) string {

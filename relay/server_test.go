@@ -227,7 +227,8 @@ func TestPublishPullRoundTrip(t *testing.T) {
 }
 
 // A Hermes account that shows the quota of the Codex account it bills
-// through names that provider. The relay stores it and hands it back as is.
+// through names that provider, and the Codex account says what Hermes spent
+// through it. The relay stores both and hands them back as they are.
 func TestPublishLinkedQuota(t *testing.T) {
 	e := newRelay(t, Limits{})
 	k := newKey(t)
@@ -235,6 +236,7 @@ func TestPublishLinkedQuota(t *testing.T) {
 	d := docFor(k, "work-laptop", t0)
 	linked := d.Accounts[0]
 	linked.Provider, linked.Label, linked.QuotaFrom, linked.Plan = "hermes", k.Seal("openai-codex"), "codex", ""
+	d.Accounts[0].Linked = []snapshot.Linked{{Provider: "hermes", Label: k.Seal("openai-codex"), Sessions: 2, Tokens: snapshot.Tokens{Input: 7}}}
 	d.Accounts = append(d.Accounts, linked)
 	body := marshal(t, d)
 	if err := e.client(k).Publish(ctx, "work-laptop", body); err != nil {
@@ -246,6 +248,9 @@ func TestPublishLinkedQuota(t *testing.T) {
 	}
 	if got := devices[0].Doc.Accounts[1]; got.QuotaFrom != "codex" || !got.QuotaAt.Equal(*d.Accounts[0].QuotaAt) {
 		t.Fatalf("linked account = %+v", got)
+	}
+	if got := devices[0].Doc.Accounts[0].Linked; len(got) != 1 || got[0].Sessions != 2 {
+		t.Fatalf("linked usage = %+v", got)
 	}
 }
 

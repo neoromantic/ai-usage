@@ -86,6 +86,8 @@ func TestTeamLinkFromTheWire(t *testing.T) {
 	}
 }
 
+// A borrowed reading that matches two accounts names neither. What Hermes
+// spent through each is on the wire, so it still goes to the right one.
 func TestTeamLinkThatMatchesTwoAccountsHasNoLabel(t *testing.T) {
 	f := newFixture(t, emptyState())
 	other := emptyState()
@@ -99,10 +101,11 @@ func TestTeamLinkThatMatchesTwoAccountsHasNoLabel(t *testing.T) {
 	if h.Link == nil || *h.Link != (Link{"codex", ""}) || h.Quota == nil || h.Quota.From != "codex" {
 		t.Fatalf("link = %+v, quota = %+v", h.Link, h.Quota)
 	}
-	for _, label := range []string{"bob", "carl"} {
-		if a := findTeamAccount(t, r, "codex", label); len(a.LinkedUsage) != 0 {
-			t.Fatalf("%s linked usage = %+v", label, a.LinkedUsage)
-		}
+	if bob := findTeamAccount(t, r, "codex", "bob"); len(bob.LinkedUsage) != 1 || bob.LinkedUsage[0].Tokens != (snapshot.Tokens{Input: 40, Output: 20}) {
+		t.Fatalf("bob linked usage = %+v", bob.LinkedUsage)
+	}
+	if carl := findTeamAccount(t, r, "codex", "carl"); len(carl.LinkedUsage) != 0 {
+		t.Fatalf("carl linked usage = %+v", carl.LinkedUsage)
 	}
 	if out := text(r); !strings.Contains(out, "  └ quota of codex, assumed the same account\n") {
 		t.Fatalf("text:\n%s", out)
@@ -157,6 +160,28 @@ func TestTeamLinkedUsageAddsUpAcrossDevices(t *testing.T) {
 	want := []LinkedUsage{{Provider: "hermes", Label: "openai-codex", Devices: []string{"abox (kim)", "bbox (kim)"}, Sessions: 2, Tokens: snapshot.Tokens{Input: 30, Output: 15}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("linked usage = %+v", got)
+	}
+}
+
+// A device whose Hermes homes bill one route through two logins credits
+// each with what went through it, not with all of Hermes' tokens.
+func TestTeamLinkedUsageSplitsByLogin(t *testing.T) {
+	f := newFixture(t, emptyState())
+	other := emptyState()
+	addAccount(other, "codex", "bots", false, codexQuota(now.Add(-time.Hour), 40), 0)
+	addAccount(other, "codex", "sam", true, codexQuota(now.Add(-2*time.Hour), 5), 0)
+	addHermes(other, "openai-codex", "codex", "bots", 400)
+	other.Sessions[state.Key("hermes", "own")] = &state.Session{
+		Provider: "hermes", Project: "/work/own", Updated: now.Add(-time.Hour),
+		By:  map[string]snapshot.Tokens{"openai-codex": {Input: 20}},
+		Via: map[string]snapshot.Tokens{state.Key("codex", "sam"): {Input: 20}},
+	}
+	r := withTeam(t, f, otherDoc(t, f.key, "d-other-device", "otherbox", now, other))
+	for label, want := range map[string]snapshot.Tokens{"bots": {Input: 400, Output: 200}, "sam": {Input: 20}} {
+		got := findTeamAccount(t, r, "codex", label).LinkedUsage
+		if len(got) != 1 || got[0].Tokens != want || got[0].Sessions != 1 {
+			t.Fatalf("%s linked usage = %+v", label, got)
+		}
 	}
 }
 
