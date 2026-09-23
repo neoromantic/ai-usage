@@ -310,7 +310,9 @@ type TeamAccount struct {
 	State   string   `json:"state"`
 	Quota   *Quota   `json:"quota"`
 	Link    *Link    `json:"link"`
-	// Sessions and Tokens are over the 90 days the devices keep.
+	// Sessions and Tokens are over the 90 days the devices keep. Usage is
+	// the account's own input plus output; what linked accounts spent
+	// through it is in LinkedUsage and in the matrix.
 	Sessions int             `json:"sessions"`
 	Tokens   snapshot.Tokens `json:"tokens"`
 	Usage    Usage           `json:"usage"`
@@ -354,14 +356,19 @@ type Column struct {
 	NoQuota bool   `json:"no_quota"`
 	State   string `json:"state"`
 	// Percent is how full the subscription's main window is, when that is
-	// known; the share mode splits it between the devices.
+	// known and it has not reset since; the share mode splits it between
+	// the devices.
 	Percent *float64 `json:"percent"`
-	Usage   Usage    `json:"usage"`
-	// WindowTokens is the team's tokens since the main window began.
+	// Usage is the team's tokens on the subscription, what Hermes spent
+	// through the login included.
+	Usage Usage `json:"usage"`
+	// WindowTokens is the team's tokens since the main window began, what
+	// Hermes spent through the login included.
 	WindowTokens int64 `json:"window_tokens"`
 }
 
 type Row struct {
+	// Device is the device's label.
 	Device   string `json:"device"`
 	DeviceID string `json:"device_id"`
 	// Cells has one entry per column.

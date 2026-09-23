@@ -2,16 +2,19 @@ package view
 
 import (
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
 
 // teamAccount is one team account while the device docs are merged.
 type teamAccount struct {
-	ta TeamAccount
+	provider string
+	ta       TeamAccount
 	// wins are the newest reading of each window, by name, and the device
 	// and provider each came from.
 	wins   map[string]*winReading
@@ -20,6 +23,10 @@ type teamAccount struct {
 	qAt    time.Time
 	local  *Link // this device's own link, which wins
 	planAt time.Time
+	// start is when the main window began, when it is known and has not
+	// reset; main is its name.
+	start time.Time
+	main  string
 }
 
 type winReading struct {
@@ -27,6 +34,25 @@ type winReading struct {
 	at   time.Time
 	dev  string
 	from string
+}
+
+// devAccount is one account on one device doc.
+type devAccount struct {
+	provider, label string
+	usage           Usage
+	days            []int64
+	recent          []snapshot.Recent
+	// link is the account a Hermes account bills through on that device.
+	link *Link
+}
+
+// device is one device doc while the team is merged.
+type device struct {
+	dev         *TeamDevice
+	name        string // label (OS user), as account lists show it
+	collectedAt time.Time
+	shift       int
+	accts       []devAccount
 }
 
 func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
@@ -57,9 +83,11 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 	byProv := map[string]map[string]*teamAccount{}
 	// linked holds, by the account billed, what linked accounts spent.
 	linked := map[string]map[string]*LinkedUsage{}
+	var devs []*device
+	aliases := map[string]snapshot.Alias{}
 	for _, d := range docs {
 		label := open(d.DeviceLabel)
-		dev := TeamDevice{
+		dev := &TeamDevice{
 			Device:           d.Device,
 			Label:            label,
 			OSUser:           open(d.OSUser),
@@ -70,13 +98,24 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 			LastSuccessAt:    timePtr(d.LastSuccessAt),
 			LastError:        strPtr(open(d.LastError)),
 			Sources:          []Source{},
+			Silent:           now.Sub(d.CollectedAt) > SilentAfter,
 		}
 		for _, s := range d.Sources {
 			dev.Sources = append(dev.Sources, Source{Provider: s.Provider, Status: s.Status, Error: strPtr(open(s.Error))})
 		}
-		shift := dayShift(d.CollectedAt, now)
+		dev.Error = deviceError(*dev)
+		dv := &device{dev: dev, name: label + " (" + dev.OSUser + ")", collectedAt: d.CollectedAt, shift: dayShift(d.CollectedAt, now)}
+		devs = append(devs, dv)
+		for _, a := range d.Aliases {
+			k := state.Key(a.Provider, open(a.Label))
+			if cur, ok := aliases[k]; !ok || a.At.After(cur.At) {
+				if a.Name != "" {
+					a.Name = open(a.Name)
+				}
+				aliases[k] = a
+			}
+		}
 
-		devName := label + " (" + dev.OSUser + ")"
 		labels := make([]string, len(d.Accounts))
 		for i, a := range d.Accounts {
 			labels[i] = open(a.Label)
@@ -89,17 +128,18 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 			x := byProv[a.Provider][l]
 			if x == nil {
 				x = &teamAccount{
+					provider: a.Provider,
 					ta: TeamAccount{
-						Label: l, Name: l, Subscription: a.Provider != "hermes",
+						Label: l, Name: l, Subscription: subscription(a.Provider),
 						Devices: []string{}, State: StateUnknown, PerDevice: []DeviceUsage{}, LinkedUsage: []LinkedUsage{},
 					},
 					wins: map[string]*winReading{},
 				}
 				byProv[a.Provider][l] = x
 			}
-			usage := usageOf(a.Days, shift)
+			usage := usageOf(a.Days, dv.shift)
 			dev.Usage = dev.Usage.add(usage)
-			x.ta.Devices = append(x.ta.Devices, devName)
+			x.ta.Devices = append(x.ta.Devices, dv.name)
 			x.ta.Sessions += a.Sessions
 			x.ta.Tokens = x.ta.Tokens.Add(a.Tokens)
 			x.ta.Usage = x.ta.Usage.add(usage)
@@ -107,7 +147,7 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 				x.ta.Current = true
 			}
 			x.ta.PerDevice = append(x.ta.PerDevice, DeviceUsage{
-				Device: devName, DeviceID: d.Device, Current: a.Current,
+				Device: dv.name, DeviceID: d.Device, Current: a.Current,
 				Sessions: a.Sessions, Tokens: a.Tokens, Usage: usage, LastActiveAt: timeOf(a.LastActiveAt),
 			})
 			if a.LastActiveAt != nil && (x.ta.LastActiveAt == nil || a.LastActiveAt.After(*x.ta.LastActiveAt)) {
@@ -128,7 +168,7 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 						x.order = append(x.order, w.Name)
 					}
 					if cur == nil || a.QuotaAt.After(cur.at) {
-						x.wins[w.Name] = &winReading{w: w, at: *a.QuotaAt, dev: devName, from: a.QuotaFrom}
+						x.wins[w.Name] = &winReading{w: w, at: *a.QuotaAt, dev: dv.name, from: a.QuotaFrom}
 					}
 				}
 				if len(a.Windows) > 0 && a.QuotaAt.After(x.qAt) {
@@ -136,21 +176,18 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 				}
 			}
 			for _, u := range a.Linked {
-				addLinked(linked, a.Provider, l, u.Provider, open(u.Label), devName, u)
+				addLinked(linked, a.Provider, l, u.Provider, open(u.Label), dv.name, u)
 			}
+			dv.accts = append(dv.accts, devAccount{provider: a.Provider, label: l, usage: usage, days: a.Days, recent: a.Recent, link: link})
 		}
-		t.Devices = append(t.Devices, dev)
 	}
-	sort.Slice(t.Devices, func(i, j int) bool {
-		a, b := t.Devices[i], t.Devices[j]
-		if a.This != b.This {
-			return a.This
-		}
-		if a.Label != b.Label {
-			return a.Label < b.Label
-		}
-		return a.Device < b.Device
-	})
+
+	t.Latest = strPtr(latestVersion(in.State.Update.Latest, devs))
+	for _, dv := range devs {
+		d := dv.dev
+		d.Old = t.Latest != nil && selfupdate.Newer(*t.Latest, d.CollectorVersion)
+	}
+
 	for _, p := range collect.Providers {
 		m := byProv[p]
 		if len(m) == 0 {
@@ -164,16 +201,86 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 			}
 			if len(x.wins) > 0 {
 				x.ta.Quota = x.quota(now)
+				if mw := mainWindow(x.ta.Quota.Windows); mw != nil && !mw.Reset {
+					if s, ok := x.wins[mw.Name].w.Start(); ok {
+						x.start, x.main = s, mw.Name
+					}
+				}
 			}
 			sort.Strings(x.ta.Devices)
 			sortPerDevice(x.ta.PerDevice)
 			x.ta.LinkedUsage = linkedList(linked[state.Key(p, x.ta.Label)])
+		}
+		names(p, m, aliases)
+		users(p, m, devs)
+		for _, x := range m {
 			tp.Accounts = append(tp.Accounts, x.ta)
 		}
 		sortTeamAccounts(tp.Accounts)
 		t.Providers = append(t.Providers, tp)
 	}
+	t.Matrix = matrix(t.Providers, byProv, devs)
+	for _, dv := range devs {
+		t.Devices = append(t.Devices, *dv.dev)
+	}
+	sort.Slice(t.Devices, func(i, j int) bool {
+		a, b := t.Devices[i], t.Devices[j]
+		if a.This != b.This {
+			return a.This
+		}
+		if a.Label != b.Label {
+			return a.Label < b.Label
+		}
+		return a.Device < b.Device
+	})
 	return t
+}
+
+// subscription says a provider's accounts have a quota of their own. Hermes
+// is a harness: it spends through other logins, or through keys with none.
+func subscription(provider string) bool { return provider != "hermes" }
+
+// deviceError is what fails on a device now: a source's error, named after
+// its provider, else the last run's error when no success followed it.
+func deviceError(d TeamDevice) *string {
+	for _, s := range d.Sources {
+		if s.Status != "error" && s.Status != "partial" {
+			continue
+		}
+		if s.Error != nil {
+			return strPtr(sourceError(s.Provider, *s.Error))
+		}
+		return strPtr(s.Provider + ": " + s.Status)
+	}
+	if d.LastError != nil && (d.LastSuccessAt == nil || d.CollectedAt.After(*d.LastSuccessAt)) {
+		return d.LastError
+	}
+	return nil
+}
+
+// sourceError names the provider once before a source's error. A harness's
+// own messages already start with its name, as "codex: not logged in" does.
+func sourceError(p, msg string) string {
+	if strings.HasPrefix(msg, p+":") || strings.HasPrefix(msg, p+" ") {
+		return msg
+	}
+	return p + ": " + msg
+}
+
+// latestVersion is the newest release this device's update check or any
+// device knows.
+func latestVersion(checked string, devs []*device) string {
+	best := ""
+	consider := func(v string) {
+		if !selfupdate.Dev(v) && (best == "" || selfupdate.Newer(v, best)) {
+			best = v
+		}
+	}
+	consider(checked)
+	for _, d := range devs {
+		consider(d.dev.CollectorVersion)
+	}
+	return best
 }
 
 // quota is the team account's reading: the newest reading of each window,
@@ -192,6 +299,224 @@ func (x *teamAccount) quota(now time.Time) *Quota {
 	q.From = newest.from
 	q.Windows, x.ta.State = readQuota(rs, now)
 	return q
+}
+
+// sinceStart is a device account's tokens since start, the beginning of
+// the window named window. The device counted them itself when its reading
+// of the window began then; otherwise they are its days from start's day
+// on, which may count part of that day too many.
+func (a devAccount) sinceStart(window string, start time.Time, collectedAt time.Time) int64 {
+	if collectedAt.Before(start) {
+		return 0
+	}
+	for _, r := range a.recent {
+		if r.Window == window && absDuration(r.Start.Sub(start)) <= time.Hour {
+			return r.Tokens
+		}
+	}
+	n := int(collectedAt.Unix()/86400 - start.Unix()/86400)
+	var sum int64
+	for i := 0; i <= n && i < len(a.days); i++ {
+		sum += a.days[i]
+	}
+	return sum
+}
+
+func absDuration(d time.Duration) time.Duration {
+	if d < 0 {
+		return -d
+	}
+	return d
+}
+
+// billsTo is the subscription account a device account's tokens count
+// against: its own, or for Hermes the login it spends through, when that
+// is an account of the team. It is nil for tokens with no quota.
+func billsTo(a devAccount, byProv map[string]map[string]*teamAccount) *teamAccount {
+	if subscription(a.provider) {
+		return byProv[a.provider][a.label]
+	}
+	if a.link == nil || a.link.Label == "" {
+		return nil
+	}
+	return byProv[a.link.Provider][a.link.Label]
+}
+
+// users counts the devices with tokens on each account of a provider since
+// its main window began, what linked accounts spent through it included,
+// or in the last 7 days without a main window. The busiest is the one with
+// the most.
+func users(provider string, m map[string]*teamAccount, devs []*device) {
+	for _, x := range m {
+		var best int64
+		for _, dv := range devs {
+			var n int64
+			for _, a := range dv.accts {
+				own := a.provider == provider && a.label == x.ta.Label
+				through := !subscription(a.provider) && a.link != nil && a.link.Provider == provider && a.link.Label == x.ta.Label
+				if !own && !through {
+					continue
+				}
+				if x.main != "" {
+					n += a.sinceStart(x.main, x.start, dv.collectedAt)
+				} else {
+					n += a.usage.Week
+				}
+			}
+			if n <= 0 {
+				continue
+			}
+			x.ta.Users++
+			if n > best {
+				best = n
+				x.ta.Busiest = strPtr(dv.dev.Label)
+			}
+		}
+	}
+}
+
+// names gives each account of a provider its short name: the alias the
+// team gave it, else the part of an email before the @, else the first 8
+// characters of an id. Two default names that would be the same are both
+// the full label.
+func names(provider string, m map[string]*teamAccount, aliases map[string]snapshot.Alias) {
+	count := map[string]int{}
+	for _, x := range m {
+		count[defaultName(x.ta.Label)]++
+	}
+	for _, x := range m {
+		x.ta.Name = x.ta.Label
+		if n := defaultName(x.ta.Label); count[n] == 1 {
+			x.ta.Name = n
+		}
+		if a, ok := aliases[state.Key(provider, x.ta.Label)]; ok && a.Name != "" {
+			x.ta.Name, x.ta.Alias = a.Name, strPtr(a.Name)
+		}
+	}
+}
+
+// defaultName is a label's short name before collisions: the part of an
+// email before the @, or the first 8 characters of an id.
+func defaultName(label string) string {
+	if i := strings.Index(label, "@"); i > 0 {
+		return label[:i]
+	}
+	if idLike(label) {
+		return label[:8]
+	}
+	return label
+}
+
+// idLike is a label that is an opaque id: a UUID, or a long run of letters
+// and digits with digits in it.
+func idLike(s string) bool {
+	if uuidRe.MatchString(s) {
+		return true
+	}
+	if len(s) < 16 {
+		return false
+	}
+	digits := false
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			digits = true
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r == '-', r == '_':
+		default:
+			return false
+		}
+	}
+	return digits
+}
+
+// matrix is every device against every subscription, and the tokens with
+// no quota, one column per provider.
+func matrix(providers []TeamProvider, byProv map[string]map[string]*teamAccount, devs []*device) Matrix {
+	mx := Matrix{Columns: []Column{}, Rows: []Row{}}
+	type colKey struct {
+		provider, label string
+		noQuota         bool
+	}
+	index := map[colKey]int{}
+	for _, tp := range providers {
+		for _, a := range tp.Accounts {
+			if !a.Subscription {
+				continue
+			}
+			c := Column{Provider: tp.Provider, Label: a.Label, Name: a.Name, State: a.State}
+			if a.Quota != nil {
+				if mw := mainWindow(a.Quota.Windows); mw != nil && !mw.Reset {
+					p := mw.Percent
+					c.Percent = &p
+				}
+			}
+			index[colKey{tp.Provider, a.Label, false}] = len(mx.Columns)
+			mx.Columns = append(mx.Columns, c)
+		}
+	}
+	// Tokens with no quota get a column per provider after the rest.
+	for _, dv := range devs {
+		for _, a := range dv.accts {
+			if billsTo(a, byProv) != nil {
+				continue
+			}
+			k := colKey{a.provider, "", true}
+			if _, ok := index[k]; !ok {
+				index[k] = -1
+			}
+		}
+	}
+	for _, p := range collect.Providers {
+		k := colKey{p, "", true}
+		if _, ok := index[k]; ok {
+			index[k] = len(mx.Columns)
+			mx.Columns = append(mx.Columns, Column{Provider: p, Name: p, NoQuota: true, State: StateUnknown})
+		}
+	}
+
+	for _, dv := range devs {
+		row := Row{Device: dv.dev.Label, DeviceID: dv.dev.Device, Cells: make([]Cell, len(mx.Columns))}
+		for _, a := range dv.accts {
+			x := billsTo(a, byProv)
+			k := colKey{a.provider, "", true}
+			if x != nil {
+				k = colKey{x.provider, x.ta.Label, false}
+			}
+			i := index[k]
+			c := &row.Cells[i]
+			c.Usage = c.Usage.add(a.usage)
+			if x != nil && x.main != "" {
+				c.WindowTokens += a.sinceStart(x.main, x.start, dv.collectedAt)
+			}
+			row.Usage = row.Usage.add(a.usage)
+		}
+		for i, c := range row.Cells {
+			mx.Columns[i].Usage = mx.Columns[i].Usage.add(c.Usage)
+			mx.Columns[i].WindowTokens += c.WindowTokens
+		}
+		mx.Rows = append(mx.Rows, row)
+	}
+	for _, row := range mx.Rows {
+		for i := range row.Cells {
+			col := mx.Columns[i]
+			if col.Percent == nil || col.WindowTokens <= 0 {
+				continue
+			}
+			s := float64(row.Cells[i].WindowTokens) / float64(col.WindowTokens) * *col.Percent
+			row.Cells[i].Share = &s
+		}
+	}
+	sort.SliceStable(mx.Rows, func(i, j int) bool {
+		a, b := mx.Rows[i], mx.Rows[j]
+		if a.Usage.Week != b.Usage.Week {
+			return a.Usage.Week > b.Usage.Week
+		}
+		if a.Device != b.Device {
+			return a.Device < b.Device
+		}
+		return a.DeviceID < b.DeviceID
+	})
+	return mx
 }
 
 // sortTeamAccounts puts the worst state first, ties to the one with less

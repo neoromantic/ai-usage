@@ -6,7 +6,6 @@ import (
 
 	"github.com/neoromantic/ai-usage/internal/collect"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
-	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
 
@@ -97,7 +96,30 @@ func Build(in Input) Report {
 	}
 	sortProjects(r.Projects, Week)
 	r.Team = buildTeam(in, totals, now)
+	for i := range r.Providers {
+		for j := range r.Providers[i].Accounts {
+			a := &r.Providers[i].Accounts[j]
+			a.Name = teamName(r.Team, r.Providers[i].Provider, a.Label)
+		}
+	}
+	r.Attention = attention(r.Team, now)
 	return r
+}
+
+// teamName is an account's short name in the team, or its default name
+// when the team view does not hold it.
+func teamName(t Team, provider, label string) string {
+	for _, p := range t.Providers {
+		if p.Provider != provider {
+			continue
+		}
+		for _, a := range p.Accounts {
+			if a.Label == label {
+				return a.Name
+			}
+		}
+	}
+	return defaultName(label)
 }
 
 // currentHome is the first of the provider's homes whose login is label.
@@ -221,5 +243,3 @@ func orDefault(s, d string) string {
 	}
 	return s
 }
-
-var _ = snapshot.MaxDays
