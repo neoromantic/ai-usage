@@ -108,6 +108,43 @@ Sketch:
 - New views: `--days` and `--weeks` tables, and a utilization view per account. JSON carries the same data.
 - An account switch is placed at the run that first saw the new login, which is within 15 minutes. Placing it more exactly, from the quota jump in Codex's rollout, is not worth it.
 
+## Backlog
+
+Recorded on 2026-09-23 with the owner. Not started.
+
+- **A generated device name.** A device gets a readable name from one small, free LLM call instead of the bare host name. `Mac.localdomain` is the kind of name this replaces.
+  - Input: host name, OS user, OS and machine model, whether it runs in a container, and the account labels the harnesses report, emails included. The owner accepts that for this one call these reach the relay and the model in the clear. Everywhere else the labels stay sealed. The product rules say so, and that exception belongs in them.
+  - With the official relay, the call goes through a relay endpoint that holds the project's Vercel AI Gateway token, so no client carries a key. The endpoint is rate-limited like the rest of the relay. A relay without that endpoint, no relay, or a failed call leaves the host name, as today.
+  - A new device asks at its first run. A device that was never named by hand asks once, at its first run after the update. The answer is saved and is not regenerated when the host name or accounts change later.
+  - A name set by hand, with `name set` or `AI_USAGE_NAME`, always wins and is never replaced.
+  - Open: the model, the prompt, the 64-character limit, and how to avoid two devices in a team getting one name, since the relay cannot see the others' names.
+- **The installer puts `ai-usage` on `PATH`.** On a Mac with bash, `install.sh` left the binary off `PATH` and only printed the line to add.
+  - It installs into a writable folder that is already on `PATH`, preferring one in the user's home.
+  - When there is none, it installs into `~/.local/bin` and adds one marked line to the profile of the shell the person uses: `~/.zshrc`, `~/.bash_profile` on macOS or `~/.bashrc` on Linux, and fish's `conf.d`. Running it again does not add the line twice. It also says that a new terminal is needed, or prints the full path for this one.
+  - Self-update and the scheduler entry already follow the binary wherever it is.
+- **A short guide after install.** After the first run, the person sees a few lines, not the full help:
+  - what happens now: collection runs by itself every 15 minutes, and the team sees sealed totals;
+  - the commands worth knowing: the report (`ai-usage`), `status`, `name set`, and inviting a colleague with the team key;
+  - how to pause or remove it.
+
+  The binary prints it at its first interactive run, so `install.ps1` and container installs get it too.
+- **Prune the tests.** Remove the tests that pin incidental detail rather than behavior:
+  - tests that repeat one another;
+  - exact message wording, where only the meaning matters;
+  - the data of one real machine, where a general case already covers it;
+  - internal helpers whose callers are already tested.
+
+  Each behavior in this document keeps a test, and the console keeps its golden files. The relay's checks and the ledger's attribution keep their full coverage.
+- **No team specifics.** Remove what only fits this team from code, tests, comments, and docs, this file included: its machines, people, paths such as `orbit`, and one-off stories such as the teammate's Mac with 2,854 unknown sessions. Support for Orca, Hermes, and the ChatGPT app stays, since they are products other people use too.
+- **A refactoring review for short, expressive code.** Find and fix:
+  - repeated logic;
+  - long functions;
+  - layers, options, and branches nothing needs;
+  - dead code;
+  - comments that restate the code.
+
+  The CLI, the snapshot (`schema_version` 2), and the relay protocol stay compatible, and behavior does not change. Run it with the current tests, before they are pruned, so they check the refactor.
+
 ## Implementation status
 
 Status as of 2026-09-23. The Go code in this repository implements version 1. See `README.md` for use and `docs/` for the JSON schema, the relay, and releasing. Everything above is covered except the items listed below. After it was built, the code went through an adversarial review against this document, and the confirmed findings were fixed. A real end-to-end run with two devices and a local relay passed: token sums, a quota that is not summed, the offline backlog, and `forget-device`.
