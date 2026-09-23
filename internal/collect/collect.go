@@ -374,6 +374,8 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 		}
 	}
 	labels := map[string]string{}
+	// switched holds the homes whose login changed since the previous run.
+	switched := map[string]bool{}
 	var answers []answer
 	if p != "hermes" {
 		answers = askAll(ctx, func(ctx context.Context, p, home string) (probe.Reading, error) {
@@ -422,7 +424,9 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 			if a.err != nil && !(isLoggedOut(a.err) && (isManaged(p, home) || !used[home])) {
 				probeErrs = append(probeErrs, [2]string{home, shortErr(a.err)})
 			}
+			prev := st.Current[state.Key(p, home)]
 			labels[home] = applyReading(st, p, home, a.reading, isLoggedOut(a.err), hr.Limits, now, prevRun)
+			switched[home] = prev != "" && prev != labels[home]
 		}
 	}
 	errs = append(errs, homeErrors(probeErrs, len(homes), o.UserHome)...)
@@ -461,7 +465,7 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 			linkGrowth(st, o, r.s, grown)
 		}
 	}
-	applyRejected(st, p, read, now, prevRun)
+	applyRejected(st, p, read, switched, now, prevRun)
 	probed := homes
 	if p == "hermes" {
 		markHermesCurrent(st, read)
@@ -579,8 +583,8 @@ func applyReading(st *state.State, p, home string, r probe.Reading, loggedOut bo
 	return label
 }
 
-// rejectionSource is the source of a reading taken from a refused request.
-const rejectionSource = "rejection"
+// RejectionSource is the source of a reading taken from a refused request.
+const RejectionSource = "rejection"
 
 // setQuota makes q the account's reading unless the account has a newer one.
 func setQuota(acct *state.Account, q *probe.Quota, now time.Time) {
@@ -601,38 +605,48 @@ func setQuota(acct *state.Account, q *probe.Quota, now time.Time) {
 	// request holds only until its window resets; after that it would hide
 	// an older reading of the windows it says nothing about.
 	old := acct.Quota
-	if old == nil || old.At.After(now) || !at.Before(old.At) || (old.Source == rejectionSource && allReset(old.Windows, now)) {
+	if old == nil || old.At.After(now) || !at.Before(old.At) || (old.Source == RejectionSource && allReset(old.Windows, now)) {
 		acct.Quota = &state.Quota{At: at, Source: q.Source, Windows: clampWindows(q.Windows, now)}
 	}
 }
 
 // applyRejected gives each account the newest request refused for a full
-// window among the sessions attributed to it. The refusal says that window
-// was at 100% then and stays so until it resets, and nothing about the other
-// windows, so the reading is that window alone, as of the refusal: carrying
-// the older reading's windows along would make them look newer than they
-// are. It counts while the window has not reset and when it is newer than the
+// window, among the sessions attributed to it, whose window has not reset.
+// The refusal says that window was at 100% then and stays so until it
+// resets, and nothing about the other windows, so the reading is that window
+// alone, as of the refusal: carrying the older reading's windows along would
+// make them look newer than they are. It counts when it is newer than the
 // account's reading. A refusal since the previous run goes where this run
-// puts the session's growth. One from before it belongs to whoever used the
-// session then, and the ledger keeps only each account's share, so it counts
-// only when the whole session is this account's, as a session read for the
-// first time is. A later login never takes an earlier account's refusal.
-func applyRejected(st *state.State, p string, read []readSession, now, prevRun time.Time) {
+// puts the session's growth, unless the home's login changed since then: a
+// full window is the usual reason to switch, so the refusal is as likely the
+// earlier account's, and it is skipped. One from before the previous run
+// belongs to whoever used the session then, and the ledger keeps only each
+// account's share, so it counts only when the whole session is this
+// account's, as a session read for the first time is.
+func applyRejected(st *state.State, p string, read []readSession, switched map[string]bool, now, prevRun time.Time) {
 	newest := map[string]*logs.Limits{}
 	for _, r := range read {
-		x := r.s.Rejected
-		if x == nil || r.label == UnknownAccount || allReset(x.Windows, now) {
+		if r.label == UnknownAccount {
 			continue
 		}
-		if x.ObservedAt.Before(prevRun) && !soleAccount(st.Sessions[state.Key(p, r.s.ID)], r.label) {
-			continue
-		}
-		if n := newest[r.label]; n == nil || x.ObservedAt.After(n.ObservedAt) {
-			newest[r.label] = x
+		for _, x := range r.s.Rejected {
+			if allReset(x.Windows, now) {
+				continue
+			}
+			if x.ObservedAt.Before(prevRun) {
+				if !soleAccount(st.Sessions[state.Key(p, r.s.ID)], r.label) {
+					continue
+				}
+			} else if switched[r.s.Home] {
+				continue
+			}
+			if n := newest[r.label]; n == nil || x.ObservedAt.After(n.ObservedAt) {
+				newest[r.label] = x
+			}
 		}
 	}
 	for label, x := range newest {
-		setQuota(touchAccount(st, p, label), &probe.Quota{At: x.ObservedAt, Source: rejectionSource, Windows: x.Windows}, now)
+		setQuota(touchAccount(st, p, label), &probe.Quota{At: x.ObservedAt, Source: RejectionSource, Windows: x.Windows}, now)
 	}
 }
 

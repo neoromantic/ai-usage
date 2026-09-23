@@ -316,7 +316,7 @@ func quotaView(at time.Time, source, device string, ws []snapshot.Window, now ti
 	q := &Quota{
 		ObservedAt: at,
 		AgeSeconds: int64(now.Sub(at).Seconds()),
-		Stale:      now.Sub(at) > StaleAfter,
+		Stale:      stale(at, source, ws, now),
 		Source:     source,
 		Device:     device,
 		Windows:    []Window{},
@@ -333,6 +333,15 @@ func quotaView(at time.Time, source, device string, ws []snapshot.Window, now ti
 		q.Windows = append(q.Windows, win)
 	}
 	return q
+}
+
+// stale reports whether a reading is old enough to doubt. A refused request
+// says its window stays full until it resets, however long ago it was.
+func stale(at time.Time, source string, ws []snapshot.Window, now time.Time) bool {
+	if p, _ := headline(ws, now); source == collect.RejectionSource && p != nil {
+		return false
+	}
+	return now.Sub(at) > StaleAfter
 }
 
 // hasReset reports whether a window's reset time has passed since it was read.
@@ -376,6 +385,7 @@ type teamAccount struct {
 	qAt    time.Time
 	qWins  []snapshot.Window
 	qDev   string
+	qSrc   string // the source, when the reading is this device's own
 	qFrom  string
 	qLink  *Link // the link on the device that sent the chosen reading
 	local  *Link // this device's own link, which wins
@@ -403,8 +413,13 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 	// This device knows its links even when the linked account has no
 	// reading to match on the wire.
 	localLinks := map[string]*Link{}
+	// Only this device knows where its own readings came from.
+	localSrc := map[string]string{}
 	for _, a := range totals {
 		localLinks[state.Key(a.Provider, a.Label)] = linkView(a.Link)
+		if a.Quota != nil {
+			localSrc[state.Key(a.Provider, a.Label)] = a.Quota.Source
+		}
 	}
 
 	byProv := map[string]map[string]*teamAccount{}
@@ -461,6 +476,10 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 			}
 			if a.QuotaAt != nil && len(a.Windows) > 0 && a.QuotaAt.After(x.qAt) {
 				x.qAt, x.qWins, x.qDev, x.qFrom, x.qLink = *a.QuotaAt, a.Windows, devName, a.QuotaFrom, link
+				x.qSrc = ""
+				if dev.This {
+					x.qSrc = localSrc[state.Key(a.Provider, l)]
+				}
 			}
 			for _, u := range a.Linked {
 				addLinked(linked, a.Provider, l, u.Provider, open(u.Label), devName, u)
@@ -494,6 +513,7 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 					from, label = x.ta.Link.Provider, x.ta.Link.Label
 				}
 				x.ta.Quota = quotaView(x.qAt, "", x.qDev, x.qWins, now, in.Samples, from, label)
+				x.ta.Quota.Stale = stale(x.qAt, x.qSrc, x.qWins, now)
 				x.ta.Quota.From = x.qFrom
 				x.ta.HeadlinePercent, x.ta.Level = headline(x.qWins, now)
 			}

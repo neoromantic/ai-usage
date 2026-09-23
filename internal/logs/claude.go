@@ -151,7 +151,9 @@ func countClaude(files []*claudeFile) []Session {
 				claimed[key] = f.root()
 			}
 			f.sess.Tokens = f.sess.Tokens.Add(m.tokens)
-			f.sess.Rejected = later(f.sess.Rejected, m.rejected)
+			if m.rejected != nil {
+				f.sess.Rejected = addRejected(f.sess.Rejected, m.rejected)
+			}
 		}
 	}
 	// Merge here, not in dedupeSessions: that keeps the larger row, and after

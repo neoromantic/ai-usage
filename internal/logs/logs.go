@@ -40,10 +40,11 @@ type Session struct {
 	// Limits is the newest main quota reading the session's log recorded,
 	// which is the quota of the account that served it (Codex).
 	Limits *Limits
-	// Rejected is the newest request of the session that was refused
-	// because a window was full, as a reading of that window alone at 100%
-	// (Claude).
-	Rejected *Limits
+	// Rejected holds, for each window, the newest request of the session
+	// that was refused because that window was full, as a reading of that
+	// window alone at 100% (Claude). A weekly window refused before a 5h
+	// one stays full after the 5h one resets.
+	Rejected []*Limits
 }
 
 // Result is a read. Malformed and Unreadable make a source partial.

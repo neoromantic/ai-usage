@@ -90,7 +90,7 @@ Claude's `homes` include the Claude Code home the Claude desktop app keeps for e
 | --- | --- | --- |
 | `observed_at` | time | when the tool took the reading |
 | `age_seconds` | number | the reading's age when the report was made |
-| `stale` | bool | the reading is more than 6 hours old |
+| `stale` | bool | the reading is more than 6 hours old, unless it is a refusal whose window has not reset |
 | `source` | string | `harness` when the tool answered a command, `cache` when it came from the tool's own cache file, `log` when it came from the tool's logs, `rejection` when Claude refused a request because a window was full: that window alone at 100%, as of the refusal, until it resets; only on this device's accounts |
 | `from` | string | the tool whose account took the reading, when it is the reading of the account in `link`, unchanged, observation time included; absent otherwise. With no reading for that account, `quota` is `null` |
 | `device` | string | the device that took the reading, as `host (user)`; only on team accounts |
@@ -139,7 +139,7 @@ A team account:
 | `label` | string | the account label |
 | `devices` | list of strings | the devices that saw it, as `host (user)` |
 | `plan` | string | the plan from the newest snapshot, by `collected_at`, that has one; `null` when none has |
-| `headline_percent`, `level`, `quota` | | as for a device's account, from the newest reading any device has; percentages are never added. `quota.from` is set when that reading is the linked account's |
+| `headline_percent`, `level`, `quota` | | as for a device's account, from the newest reading any device has; percentages are never added. `quota.from` is set when that reading is the linked account's. Snapshots do not say where a reading came from, so another device's refusal is `stale` after 6 hours |
 | `link` | object | `{provider, label}`, as for a device's account; `null` when there is none. This device's accounts use their own link. For another device's account, whose snapshot carries no link, it is the one account on that snapshot of the tool in `quota.from` with the same reading: the same observation time and windows. When none or several match, `label` is `""` |
 | `sessions`, `tokens` | | summed across devices |
 | `per_device` | list | `{device, device_id, current, sessions, tokens, last_active_at}` for each device that has the account, `device` as `host (user)`; most tokens first, then by `device` |

@@ -692,7 +692,7 @@ func TestLogLimitsNeverGoToTheUnknownAccount(t *testing.T) {
 // its 5h window was full until resets.
 func rejectedSession(id string, at, resets time.Time) logs.Session {
 	s := sess(id, "/p", 100, at)
-	s.Rejected = &logs.Limits{ObservedAt: at, Windows: []snapshot.Window{{Name: "5h", Percent: 100, ResetsAt: &resets, Minutes: 300}}}
+	s.Rejected = []*logs.Limits{{ObservedAt: at, Windows: []snapshot.Window{{Name: "5h", Percent: 100, ResetsAt: &resets, Minutes: 300}}}}
 	return s
 }
 
@@ -757,6 +757,28 @@ func TestClaudeRejectionHoldsUntilItsWindowResets(t *testing.T) {
 	}
 }
 
+func TestClaudeRejectionOfAWeeklyWindowOutlastsANewer5h(t *testing.T) {
+	w, o := newWorld(t)
+	h := w.home(t, "claude")
+	w.login("claude", h, "ann", quota(t0.Add(-5*time.Hour), 40, 20))
+	s := rejectedSession("s1", t0.Add(-2*time.Hour), t0.Add(time.Hour))
+	week := t0.Add(96 * time.Hour)
+	opus := &logs.Limits{ObservedAt: t0.Add(-3 * time.Hour), Windows: []snapshot.Window{{Name: "7d Opus", Percent: 100, ResetsAt: &week, Minutes: 10080}}}
+	s.Rejected = append(s.Rejected, opus)
+	w.sessions("claude", h, s)
+	res := run(t, o)
+	if q := totalsFor(t, res.State, "claude", "ann").Quota; !q.At.Equal(t0.Add(-2 * time.Hour)) {
+		t.Fatalf("quota = %+v, want the newest refusal", q)
+	}
+
+	// Once the 5h window resets, the weekly one still holds.
+	w.now = t0.Add(90 * time.Minute)
+	res = run(t, o)
+	if q := totalsFor(t, res.State, "claude", "ann").Quota; q.Source != "rejection" || !q.At.Equal(opus.ObservedAt) || q.Windows[0].Name != "7d Opus" {
+		t.Fatalf("quota = %+v, want the 7d Opus refusal", q)
+	}
+}
+
 func TestClaudeRejectionGoesToTheSessionsAccount(t *testing.T) {
 	w, o := newWorld(t)
 	def := w.home(t, "claude")
@@ -773,12 +795,13 @@ func TestClaudeRejectionGoesToTheSessionsAccount(t *testing.T) {
 		t.Fatalf("bob quota = %+v", q)
 	}
 
-	// Another account logs in there. The refusal in bob's session is not
-	// carl's. One in a session no run read before, as in a folder added
-	// since, is: the ledger gives carl that whole session.
+	// Bob is refused again and switches to carl. That refusal came after
+	// the previous run, but it is bob's, not carl's. One in a session no
+	// run read before, as in a folder added since, from before that run is
+	// carl's: the ledger gives carl that whole session.
 	w.now = t0.Add(15 * time.Minute)
 	w.login("claude", work, "carl", nil)
-	w.sessions("claude", work, rejectedSession("s2", t0.Add(-10*time.Minute), t0.Add(time.Hour)), rejectedSession("s3", t0.Add(-20*time.Minute), t0.Add(time.Hour)))
+	w.sessions("claude", work, rejectedSession("s2", t0.Add(5*time.Minute), t0.Add(time.Hour)), rejectedSession("s3", t0.Add(-20*time.Minute), t0.Add(time.Hour)))
 	res = run(t, o)
 	if q := totalsFor(t, res.State, "claude", "carl").Quota; q == nil || !q.At.Equal(t0.Add(-20*time.Minute)) {
 		t.Fatalf("carl quota = %+v, want the refusal in s3 alone", q)

@@ -1,5 +1,7 @@
 package logs
 
+import "slices"
+
 // UnknownProject is the project of a session whose log names no directory.
 const UnknownProject = "unknown"
 
@@ -53,7 +55,7 @@ func fillFrom(dst *Session, src Session) {
 		}
 	}
 	dst.Limits = later(dst.Limits, src.Limits)
-	dst.Rejected = later(dst.Rejected, src.Rejected)
+	dst.Rejected = addRejected(dst.Rejected, src.Rejected...)
 }
 
 // later is the reading observed last.
@@ -62,6 +64,24 @@ func later(a, b *Limits) *Limits {
 		return b
 	}
 	return a
+}
+
+// addRejected adds refusals to have, keeping the newest of each window. It
+// returns a new list, since copies of one session share have.
+func addRejected(have []*Limits, add ...*Limits) []*Limits {
+	out := slices.Clone(have)
+	for _, x := range add {
+		if x == nil || len(x.Windows) == 0 {
+			continue
+		}
+		i := slices.IndexFunc(out, func(y *Limits) bool { return y.Windows[0].Name == x.Windows[0].Name })
+		if i < 0 {
+			out = append(out, x)
+		} else {
+			out[i] = later(out[i], x)
+		}
+	}
+	return out
 }
 
 // addParts adds src's parts onto dst's.

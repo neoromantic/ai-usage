@@ -367,6 +367,9 @@ func TestClaudeRejectedRequests(t *testing.T) {
 	week := time.Date(2026, 9, 25, 0, 0, 0, 0, time.UTC)
 	mustWrite(t, filepath.Join(dir, "sess.jsonl"),
 		cl{id: "m1", req: "r1", session: "sess", cwd: "/work/claude", at: "2026-09-20T10:00:00Z", usage: use(10, 1, 0, 0)}.String(),
+		// A newer refusal of another window does not hide this one, which
+		// holds after the 5h window resets.
+		rejected("x0", "sess", "2026-09-20T10:02:00Z", "rejected", "seven_day_opus", week),
 		rejected("x1", "sess", "2026-09-20T10:04:00Z", "rejected", "five_hour", hour),
 		rejected("x2", "sess", "2026-09-20T10:05:00Z", "rejected", "five_hour", hour),
 		// Only a refusal counts, and only for a window Claude's usage cache names.
@@ -383,9 +386,12 @@ func TestClaudeRejectedRequests(t *testing.T) {
 	if res.Malformed != 0 || byID(t, res, "sess").Tokens != (Tokens{Input: 10, Output: 1}) {
 		t.Fatalf("malformed %d, sess %+v", res.Malformed, byID(t, res, "sess"))
 	}
-	for id, want := range map[string]*Limits{
-		"sess":  {ObservedAt: time.Date(2026, 9, 20, 10, 5, 0, 0, time.UTC), Windows: []snapshot.Window{{Name: "5h", Percent: 100, ResetsAt: &hour, Minutes: 300}}},
-		"other": {ObservedAt: time.Date(2026, 9, 20, 10, 10, 0, 0, time.UTC), Windows: []snapshot.Window{{Name: "7d", Percent: 100, ResetsAt: &week, Minutes: 10080}}},
+	for id, want := range map[string][]*Limits{
+		"sess": {
+			{ObservedAt: time.Date(2026, 9, 20, 10, 2, 0, 0, time.UTC), Windows: []snapshot.Window{{Name: "7d Opus", Percent: 100, ResetsAt: &week, Minutes: 10080}}},
+			{ObservedAt: time.Date(2026, 9, 20, 10, 5, 0, 0, time.UTC), Windows: []snapshot.Window{{Name: "5h", Percent: 100, ResetsAt: &hour, Minutes: 300}}},
+		},
+		"other": {{ObservedAt: time.Date(2026, 9, 20, 10, 10, 0, 0, time.UTC), Windows: []snapshot.Window{{Name: "7d", Percent: 100, ResetsAt: &week, Minutes: 10080}}}},
 	} {
 		if got := byID(t, res, id).Rejected; !reflect.DeepEqual(got, want) {
 			t.Errorf("%s rejected = %+v, want %+v", id, got, want)

@@ -204,6 +204,36 @@ func TestStaleAfterSixHours(t *testing.T) {
 	}
 }
 
+// A refused request's reading keeps its window full until it resets, however
+// old it is, and reads no other window: those are unknown, not missing.
+func TestRejectionReading(t *testing.T) {
+	st := emptyState()
+	refused := func(at time.Time, name string) *state.Quota {
+		return &state.Quota{At: at, Source: "rejection", Windows: []snapshot.Window{{Name: name, Percent: 100, ResetsAt: tp(now.Add(72 * time.Hour)), Minutes: 10080}}}
+	}
+	addAccount(st, "claude", "ann", true, refused(now.Add(-48*time.Hour), "7d"), 1000)
+	addAccount(st, "claude", "bob", false, refused(now.Add(-15*time.Minute), "7d Opus"), 1000)
+	r := Build(newFixture(t, st).in)
+	if findAccount(t, r, "claude", "ann").Quota.Stale || findTeamAccount(t, r, "claude", "ann").Quota.Stale {
+		t.Fatal("a refusal whose window has not reset is stale")
+	}
+	out := text(r)
+	hasLine(t, out, "● ann", "100% !!", "?", "3d", "2d")
+	// A weekly model window does not stand in for 7d.
+	hasLine(t, out, "└ also 7d Opus 100% !!")
+	for _, l := range strings.Split(out, "\n") {
+		if strings.HasPrefix(l, "○ bob") && strings.Count(l, "?") != 2 {
+			t.Fatalf("bob's 5h and 7d are not both unknown: %q", l)
+		}
+	}
+	hasLine(t, out, "? not read since refusal")
+	for _, s := range []string{"stale", "~", "no window"} {
+		if strings.Contains(out, s) {
+			t.Fatalf("%q in:\n%s", s, out)
+		}
+	}
+}
+
 func sampleWith(at, quotaAt time.Time, provider, label string, ws ...snapshot.Window) state.Sample {
 	return state.Sample{At: at, Accounts: []state.SampleAccount{{Provider: provider, Label: label, QuotaAt: tp(quotaAt), Windows: ws}}}
 }

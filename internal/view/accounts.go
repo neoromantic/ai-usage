@@ -298,14 +298,18 @@ func (u *ui) accountRow(c acctCols, a arow) {
 	l = append(l, u.headlineCell(a.head, a.level, borrowed, c.bar)...)
 	l = append(l, seg{"  ", plain})
 
+	// A refused request reads its window alone. A column it does not name
+	// is not read, which is not the same as no window, and a weekly model
+	// window does not stand in for 7d.
+	unread := a.q != nil && a.q.Source == collect.RejectionSource
 	var short, long *Window
 	var extra []Window
 	if a.q != nil {
-		short, long, extra = slots(a.q.Windows)
+		short, long, extra = slots(a.q.Windows, unread)
 	}
-	l = append(l, u.winCell(short, borrowed)...)
+	l = append(l, u.winCell(short, borrowed, unread)...)
 	l = append(l, seg{" ", plain})
-	l = append(l, u.winCell(long, borrowed)...)
+	l = append(l, u.winCell(long, borrowed, unread)...)
 	l = append(l, seg{"  ", plain})
 
 	switch {
@@ -398,14 +402,18 @@ func (u *ui) bar(p float64, w int) (fill, track string) {
 }
 
 // slots puts each window in the short (a day or less) or the weekly column.
-// A window named exactly 5h or 7d takes its column over from another name.
-// The rest, such as "7d Opus", are extras for a note line, in report order.
-func slots(ws []Window) (short, long *Window, extra []Window) {
+// A window named exactly 5h or 7d takes its column over from another name,
+// and with exact only such a window takes one. The rest, such as "7d Opus",
+// are extras for a note line, in report order.
+func slots(ws []Window, exact bool) (short, long *Window, extra []Window) {
 	si, li := -1, -1
 	for i, w := range ws {
 		slot, canon := &li, "7d"
 		if isShort(w) {
 			slot, canon = &si, "5h"
+		}
+		if exact && w.Name != canon {
+			continue
 		}
 		if *slot < 0 || (w.Name == canon && ws[*slot].Name != canon) {
 			*slot = i
@@ -437,8 +445,13 @@ func isShort(w Window) bool {
 func (u *ui) hasReset(w Window) bool { return w.ResetsAt != nil && !w.ResetsAt.After(u.now) }
 
 // winCell is 11 columns: percent 4, pace flag 1, space, reset countdown 5.
-func (u *ui) winCell(w *Window, borrowed bool) line {
+// A missing window is unknown when the reading does not cover it.
+func (u *ui) winCell(w *Window, borrowed, unread bool) line {
 	g := u.g
+	if w == nil && unread {
+		u.legend["unread"] = true
+		return line{{padLeft(g.question, 4) + "       ", gray}}
+	}
 	if w == nil {
 		u.legend["dash"] = true
 		return line{{padLeft(g.dash, 4) + "       ", gray}}

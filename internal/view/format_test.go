@@ -12,7 +12,7 @@ import (
 // A 5h or 7d window takes its column from another name, and the extras keep
 // the report's order.
 func TestSlots(t *testing.T) {
-	s, l, x := slots([]Window{{Name: "7d Opus", Minutes: 10080}, {Name: "3h", Minutes: 180}, {Name: "7d", Minutes: 10080}, {Name: "5h", Minutes: 300}})
+	s, l, x := slots([]Window{{Name: "7d Opus", Minutes: 10080}, {Name: "3h", Minutes: 180}, {Name: "7d", Minutes: 10080}, {Name: "5h", Minutes: 300}}, false)
 	if s == nil || s.Name != "5h" || l == nil || l.Name != "7d" || len(x) != 2 || x[0].Name != "7d Opus" || x[1].Name != "3h" {
 		t.Errorf("slots = %v %v %v", s, l, x)
 	}

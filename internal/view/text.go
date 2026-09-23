@@ -398,11 +398,12 @@ func (u *ui) footer(more bool) {
 		{"warn", g.warnMark + " " + g.ge + "75%"},
 		{"pace", g.pace + " fills before reset"},
 		{"old", g.stale + " old: " + u.oldLegend()},
-		{"reset", g.question + " reset since reading"},
+		{"unknown", g.question + " " + u.unknownLegend()},
 		{"dash", g.dash + " no window"},
 		{"outdated", g.old + " outdated"},
 	}
 	u.legend["old"] = u.legend["oldReading"] || u.legend["oldDevice"]
+	u.legend["unknown"] = u.legend["reset"] || u.legend["unread"]
 	var items []line
 	for _, e := range entries {
 		if u.legend[e.key] {
@@ -439,6 +440,19 @@ func (u *ui) oldLegend() string {
 	}
 	if u.legend["oldDevice"] {
 		parts = append(parts, "device 1d+")
+	}
+	return strings.Join(parts, ", ")
+}
+
+// unknownLegend explains ? for what it marks on screen: a window that has
+// reset since its reading, one a refusal's reading does not cover, or both.
+func (u *ui) unknownLegend() string {
+	var parts []string
+	if u.legend["reset"] {
+		parts = append(parts, "reset since reading")
+	}
+	if u.legend["unread"] {
+		parts = append(parts, "not read since refusal")
 	}
 	return strings.Join(parts, ", ")
 }
