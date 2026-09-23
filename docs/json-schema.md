@@ -1,25 +1,29 @@
-# JSON output, schema version 2
+# JSON output, schema version 3
 
 `ai-usage --json`, `ai-usage collect --json`, and `ai-usage report --json` print one report object. `ai-usage status --json` prints a smaller object, described at the end.
 
-A field changes meaning only with a new `schema_version`. New fields can appear within a version, so ignore the ones you do not know.
+A field changes meaning only with a new `schema_version`. New fields can appear within a version, so ignore the ones you do not know. [Changes from version 2](#changes-from-version-2) lists what version 3 added and removed.
 
 Conventions:
 
 - Times are RFC 3339 strings. A time that never happened is `null`.
 - An optional string is `null` when there is nothing to say. An error field is `null` when there was no error.
 - Lists are `[]` when empty, never `null`.
-- Percentages run from 0 to 100.
-- `level` is `ok` below 75%, `warning` from 75%, `critical` from 90%, and `unknown` when there is no reading. A window whose `resets_at` has passed since the reading has no reading for its new period, so its `level` is `unknown`.
+- Percentages run from 0 to 100, except a forecast, which can pass 100.
+- `tokens` has the four counts the tools record over the last 90 days. `usage`, `days`, and `window_tokens` count input plus output tokens only, cache left out.
+- Days are UTC days. A `usage` object has four periods, each ending with the report's UTC day: `today`, `7d`, `30d`, and `90d`, the last that many UTC days up to and including it.
+- A `state` is one of `out`, `over`, `tight`, `ok`, `under`, and `unknown`; see [states](#states).
 
 ## Report
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `schema_version` | number | `2` |
+| `schema_version` | number | `3` |
 | `generated_at` | time | when the report was made |
 | `collector` | object | this collector's health; see [collector](#collector) |
+| `attention` | list | what needs attention now, most urgent first; see [attention](#attention) |
 | `providers` | list | one entry each for `claude`, `codex`, `grok`, and `hermes`, in that order; see [providers](#providers) |
+| `projects` | list | this device's projects over every account, most tokens in the last 7 days first; see [projects](#projects) |
 | `team` | object | every device in the team, this one included; see [team](#team) |
 
 ### collector
@@ -48,6 +52,35 @@ Conventions:
 | `update.staged` | string | a release already installed; the next run uses it |
 | `update.error` | string | the last update error |
 
+### attention
+
+Each entry is one thing that needs attention, from the team's view of each subscription and device. The report lists them most urgent first, by `kind` in the order of this table; within a kind, the earliest `at` first, the lowest forecast first for `under`, and by device for `error`. The fields that apply depend on the kind; the others are absent.
+
+| `kind` | When | Fields |
+| --- | --- | --- |
+| `out` | a window of a subscription is at 100% | `provider`, `account`, `name`, `window`; `at` is when it resets |
+| `over` | a window of a subscription will run out before it resets, at its pace so far | `provider`, `account`, `name`, `window`; `at` is when it runs out, `resets_at` when it resets, `percent` its forecast |
+| `error` | a device's collector or one of its tools fails | `devices` names the device; `message` is the error |
+| `silent` | a device has not reported for a day, and nothing fails on it | `devices` names the device; `at` is when it last reported |
+| `old` | devices run an older release than the team's newest | `devices` lists every one of them; `message` is the newest release |
+| `under` | past half of a subscription's main window, its forecast is under 50% | `provider`, `account`, `name`; `resets_at` is when it resets, `percent` its forecast |
+
+A window is the account's main one or one that limits it more; see the account's `state`. An `out`, `over`, or `under` entry has `reading_age_seconds` when its window's reading is stale.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `kind` | string | one of the kinds above |
+| `provider` | string | the account's provider |
+| `account` | string | the account's label |
+| `name` | string | the account's short name |
+| `window` | string | the window's name, when it is not the account's main one |
+| `devices` | list of strings | the names of the devices it is about |
+| `at` | time | as the table says for each kind |
+| `resets_at` | time | when the window resets |
+| `percent` | number | the window's forecast at its reset |
+| `reading_age_seconds` | number | how old the reading is, when it is stale |
+| `message` | string | an error's text, or the newest release |
+
 ### providers
 
 | Field | Type | Meaning |
@@ -63,18 +96,20 @@ An account is one login. After you switch accounts, the previous one stays, with
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `label` | string | what the tool calls the account, such as an email address or a user id; `unknown` when it did not say |
+| `name` | string | the account's short name: the one the team gave it with `ai-usage alias`, else the part of an email before the `@`, the first 8 characters of an id (a UUID, or 16 or more letters, digits, `-`, and `_` with a digit among them), or else the whole label. When two accounts of one provider would get the same name without an alias, both use their full label |
 | `current` | bool | logged in right now. It turns `false` when the tool answers that nobody is logged in; a tool that does not answer leaves the last account current |
 | `home` | string | the first of `homes` the account is logged in to now; absent when it is not logged in |
 | `plan` | string | the plan the tool reports |
-| `headline_percent` | number | the fullest window's percentage, leaving out windows that have reset since the reading; `null` without a reading, or when every window has reset |
-| `level` | string | the level of `headline_percent` |
+| `state` | string | the worst state of the windows that limit the account: its main window, and each other window that has not reset and is `out`, `over`, or fuller than the main one; `unknown` without a reading |
 | `quota` | object | the last good quota reading, `null` if there never was one; see below |
 | `link` | object | `{provider, label}`: the account of another tool this one is assumed to bill through, `null` when there is none. Only Hermes has one: its `openai-codex` account is linked to a Codex account and `xai-oauth` to a Grok one. Each Hermes folder is taken to bill through the account logged in to the folder `ai-usage home add --quota-from` named for it, else to `~/.codex` or `~/.grok`; when its folders bill through several, the link is the one most of the account's tokens in the last 90 days went through. Hermes keeps its own login, so the link is an assumption, not a reading |
 | `sessions` | number | sessions in the last 90 days |
 | `tokens` | object | tokens in the last 90 days; see below |
+| `usage` | object | input plus output tokens on this device in each period |
+| `days` | list of numbers | input plus output tokens on this device per UTC day, newest first: the first is the report's UTC day, the next the day before, and so on, for up to 90 days. Trailing zeros are left out |
 | `linked_usage` | list | `{provider, sessions, tokens}` for each other tool assumed to bill through this account, such as Hermes on this Codex login; `[]` when none. These tokens are that tool's and are not in `tokens` |
 | `last_active_at` | time | the newest session activity that used this account |
-| `projects` | list | `{path, sessions, tokens}` per working folder, most tokens first |
+| `projects` | list | `{path, sessions, tokens, usage, last_active_at}` per working folder, this account's part only, most tokens first |
 
 A Hermes account is named after the billing provider it used, such as `openai-codex`, `xai-oauth`, `anthropic`, or `openrouter`. Its tokens include Hermes' auxiliary calls, such as title generation, compression, and vision, under the provider each call billed. An auxiliary call on a fallback route, which Hermes records with no provider, goes to the `unknown` account.
 
@@ -88,12 +123,12 @@ Claude's `homes` include the Claude Code home the Claude desktop app keeps for e
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `observed_at` | time | when the tool took the reading |
+| `observed_at` | time | when the tool took the reading; on a team account, the newest window's reading |
 | `age_seconds` | number | the reading's age when the report was made |
-| `stale` | bool | the reading is more than 6 hours old, unless it is a refusal whose window has not reset |
+| `stale` | bool | a window's reading is stale; see the window's `stale` |
 | `source` | string | `harness` when the tool answered a command, `cache` when it came from the tool's own cache file, `log` when it came from the tool's logs, `rejection` when Claude refused requests because windows were full: those windows alone at 100%, as of the newest refusal, until they reset; only on this device's accounts |
 | `from` | string | the tool whose account took the reading, when it is the reading of the account in `link`, unchanged, observation time included; absent otherwise. With no reading for that account, `quota` is `null` |
-| `device` | string | the device that took the reading, as `host (user)`; only on team accounts |
+| `device` | string | the device whose reading is newest, as `host (user)`; only on team accounts |
 | `windows` | list | the windows the tool reported; see below |
 
 A window:
@@ -102,20 +137,61 @@ A window:
 | --- | --- | --- |
 | `name` | string | the tool's name for it, such as `5h` or `7d` |
 | `percent` | number | how full it was at the reading; kept after `resets_at` passes, as the last value seen |
-| `level` | string | the level of `percent`; `unknown` once `resets_at` has passed |
 | `resets_at` | time | when it resets, if the tool said |
 | `minutes` | number | its length in minutes; absent when the tool did not say |
-| `pace` | object | how fast it is filling; `null` without enough readings, or once `resets_at` has passed |
-| `pace.percent_per_hour` | number | the rate, fitted to the readings of the last 6 hours within the current window, at least 10 minutes apart |
-| `pace.fills_at` | time | when it reaches 100% at that rate; `null` unless that happens before it resets |
+| `main` | bool | the account's main window: the one named `7d`, else the first a week long, else the longest. An account with windows has exactly one |
+| `observed_at` | time | when this window was read. In the team view the windows of one account can come from different devices and readings |
+| `stale` | bool | this window's reading is more than 6 hours old and the window was not full. A full window stays full until it resets, however old the reading |
+| `reset` | bool | the window has reset since it was read, so how full it is now is not known; its `state` is `unknown` and `forecast` is `null` |
+| `unread` | bool | a Claude weekly window the newest reading does not cover, because a request refused for a full window reads that window alone. Its `percent` is 0, `resets_at` and `forecast` are `null`, and its `state` is `unknown`. Absent when `false` |
+| `state` | string | see [states](#states) |
+| `forecast` | object | how full the window will be at its reset if it is used from now on at its average pace so far; see below. `null` when the length or the reset time is unknown, when it has reset, and in its first tenth unless it is over already |
+
+`forecast`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `percent` | number | `percent` divided by `elapsed`, as a whole percent up to `999`. Over 100 means demand is larger than the quota: the window runs out before it resets |
+| `elapsed` | number | the share of the window that had passed at the reading, from 0 to 1. The window began at `resets_at` minus its length, which is `minutes`, else the length its name starts with, such as `5h` or `7d` |
+| `runs_out_at` | time | when the window reaches 100% at that pace, when `percent` is over 100 and the window is not full yet; `null` otherwise |
+
+The pace is the average since the window began, nights and weekends included, so one busy hour does not raise an alarm, and it follows a change of pace slowly.
+
+#### States
+
+| State | When |
+| --- | --- |
+| `out` | the window is at 100% |
+| `over` | its forecast is 100% or more |
+| `tight` | its forecast is 85% to 99% |
+| `ok` | its forecast is 50% to 84% |
+| `under` | its forecast is below 50% |
+| `unknown` | there is no forecast: no reading, a window that has reset since it was read or that the reading does not cover, an unknown length or reset time, or less than a tenth of the window gone and not over |
+
+### projects
+
+`projects` in the report lists this device's working folders, with every account's tokens in each. The same object lists one account's part of each folder under that account, without `providers`.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | string | the working folder |
+| `sessions` | number | sessions in the last 90 days |
+| `tokens` | object | tokens in the last 90 days |
+| `usage` | object | input plus output tokens in each period |
+| `providers` | list of strings | the tools that used the folder, most tokens first; only in the report's `projects` |
+| `last_active_at` | time | the newest session activity in the folder |
+
+The report's list is sorted by `usage` in `7d`, then `90d`, then by path.
 
 ### team
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `pulled_at` | time | when the team was read from the relay; `null` if it has not been, in which case the lists hold this device only |
+| `latest_version` | string | the newest collector release any device in the team runs, or the newest this device's update check saw, whichever is newer |
 | `devices` | list | one entry per device; see below |
 | `providers` | list | `{provider, accounts}` with each account summed across devices; see below |
+| `matrix` | object | every device against every subscription; see [matrix](#matrix) |
 
 A device:
 
@@ -131,19 +207,88 @@ A device:
 | `last_success_at` | time | its last run without an error |
 | `last_error` | string | its last error |
 | `sources` | list | `{provider, status, error}` for each tool on that device |
+| `error` | string | what fails on the device now: a tool's error, named after its provider, else the last run's error when it is newer than the last success; `null` when nothing does |
+| `silent` | bool | it has not reported for a day |
+| `old` | bool | it runs an older release than `latest_version` |
+| `usage` | object | its input plus output tokens in each period, over every account. A device's days count from the UTC day it collected on, so one that last reported three days ago adds nothing to `today` |
 
-A team account:
+A team account. Each provider's accounts are in the order the report lists them: the worst `state` first (`out`, `over`, `tight`, `ok`, `under`, then `unknown`), ties to the one with less left of its main window, then by label.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `label` | string | the account label |
+| `name` | string | its short name, as for a device's account |
+| `alias` | string | the name the team gave it with `ai-usage alias`: the newest one any device set, `null` when there is none or it was cleared |
+| `subscription` | bool | an account with a quota of its own: every Claude, Codex, and Grok account. Hermes is a tool, not a subscription: what it spends through a login is that login's use, and its other accounts, such as API keys, have no quota |
+| `current` | bool | the account is logged in on this device |
 | `devices` | list of strings | the devices that saw it, as `host (user)` |
 | `plan` | string | the plan from the newest snapshot, by `collected_at`, that has one; `null` when none has |
-| `headline_percent`, `level`, `quota` | | as for a device's account, from the newest reading any device has; percentages are never added. `quota.from` is set when that reading is the linked account's. Snapshots do not say where a reading came from, so another device's refusal is `stale` after 6 hours |
+| `state`, `quota` | | as for a device's account, from the newest reading of each window any device has; percentages are never added. `quota.from` is set when that reading is the linked account's. Snapshots do not say where a reading came from, so another device's refusal is an ordinary reading here |
 | `link` | object | `{provider, label}`, as for a device's account; `null` when there is none. This device's accounts use their own link. For another device's account, whose snapshot carries no link, it is the one account on that snapshot of the tool in `quota.from` with the same reading: the same observation time and windows. When none or several match, `label` is `""` |
-| `sessions`, `tokens` | | summed across devices |
-| `per_device` | list | `{device, device_id, current, sessions, tokens, last_active_at}` for each device that has the account, `device` as `host (user)`; most tokens first, then by `device` |
+| `sessions`, `tokens`, `usage` | | summed across devices; the account's own, without what linked accounts spent through it |
+| `users` | number | how many devices have tokens on the account since its main window began, or in the last 7 days when it has none, what linked accounts spent through it included |
+| `busiest` | string | the name of the one of those devices with the most tokens; `null` when there is none |
+| `last_active_at` | time | the newest activity on the account on any device |
+| `per_device` | list | `{device, device_id, current, sessions, tokens, usage, last_active_at}` for each device that has the account, `device` as `host (user)`; most tokens first, then by `device` |
 | `linked_usage` | list | `{provider, label, devices, sessions, tokens}` for each account of another tool that spent through this one on any device, as each device counted it session by session, summed across devices, with the devices it ran on; `[]` when none. These tokens are that account's and are not in `tokens` |
+
+### matrix
+
+Who spends what: each device against each subscription, and the tokens that have no subscription.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `columns` | list | the subscriptions, grouped by provider in the order of `team.providers` and their accounts, then one column per provider for the tokens with no quota; see below |
+| `rows` | list | the devices, the most tokens in the last 7 days first, then by name; see below |
+
+A column:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `provider` | string | the provider |
+| `label` | string | the subscription's account label; absent in a no-quota column |
+| `name` | string | the account's short name, as in the team account's `name`; the provider in a no-quota column |
+| `no_quota` | bool | the column holds the provider's tokens that have no subscription, such as Hermes on an API key |
+| `state` | string | the subscription's `state`; `unknown` in a no-quota column |
+| `percent` | number | how full the subscription's main window is, when that is known and it has not reset since; `null` otherwise |
+| `usage` | object | the team's input plus output tokens on it in each period, what Hermes spent through the login included |
+| `window_tokens` | number | the team's input plus output tokens since the main window began, what Hermes spent through the login included |
+
+A row:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `device` | string | the device's name, as its `label` |
+| `device_id` | string | its id |
+| `cells` | list | one per column, in the order of `columns` |
+| `usage` | object | the device's tokens over every column, in each period |
+
+A cell:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `usage` | object | the device's input plus output tokens on the column in each period |
+| `window_tokens` | number | the device's input plus output tokens since the column's main window began |
+| `share` | number | an estimate of how much of the column's window the device used, in percent: its `window_tokens` over the column's, times the column's `percent`. A column's shares add up to its `percent`. `null` when the column has no `percent`, or the team spent nothing on it since the window began |
+
+## Changes from version 2
+
+Added:
+
+- `attention` and `projects` in the report, and `team.latest_version` and `team.matrix`.
+- On an account: `name`, `state`, `usage`, and `days`. On a project: `usage`, `last_active_at`, and in the report's list `providers`.
+- On a window: `main`, `observed_at`, `stale`, `reset`, `unread`, `state`, and `forecast`.
+- On a team device: `error`, `silent`, `old`, and `usage`.
+- On a team account: `name`, `alias`, `subscription`, `current`, `state`, `usage`, `users`, `busiest`, and `last_active_at`; on its `per_device` entries, `usage`.
+
+Removed:
+
+- `headline_percent` and `level` on accounts and team accounts, and `level` and `pace` on windows. The levels `ok`, `warning`, and `critical`, at 75% and 90%, and the pace over the last 6 hours are gone. A window's `state` and `forecast` take their place: how full the window will be at its reset, from its average pace since it began.
+
+Changed:
+
+- `quota.stale` says a window's reading is stale, and a full window's reading no longer goes stale.
+- A team account's `quota` takes the newest reading of each window, so `quota.device` is the device whose reading is newest.
 
 ## Example
 
@@ -151,28 +296,40 @@ A shortened report from a team of two:
 
 ```json
 {
-  "schema_version": 2,
-  "generated_at": "2026-09-01T12:00:00Z",
+  "schema_version": 3,
+  "generated_at": "2026-09-01T12:04:00Z",
   "collector": {
-    "version": "v1.2.3",
+    "version": "v1.3.0",
     "device": "d-3f9c2a51b7e04d18a6c90e12",
     "device_label": "ann-mbp",
     "os_user": "ann",
     "team": "472ghuwcctyuxbtc6zu2ht2mbmnz4pqe",
-    "last_run_at": "2026-09-01T11:58:00Z",
-    "last_success_at": "2026-09-01T11:58:00Z",
+    "last_run_at": "2026-09-01T12:02:00Z",
+    "last_success_at": "2026-09-01T12:02:00Z",
     "last_error": null,
     "last_error_at": null,
     "relay": {
       "url": "https://relay.example.com",
-      "last_push_at": "2026-09-01T11:58:00Z",
-      "last_pull_at": "2026-09-01T11:58:00Z",
+      "last_push_at": "2026-09-01T12:02:00Z",
+      "last_pull_at": "2026-09-01T12:02:00Z",
       "pending": false,
       "last_error": null
     },
     "schedule": { "registered": true, "foreground": false, "error": null },
-    "update": { "checked_at": "2026-09-01T09:13:00Z", "latest": "v1.2.3", "staged": null, "error": null }
+    "update": { "checked_at": "2026-09-01T09:13:00Z", "latest": "v1.3.0", "staged": null, "error": null }
   },
+  "attention": [
+    {
+      "kind": "over",
+      "provider": "claude",
+      "account": "ann@example.com",
+      "name": "ann",
+      "at": "2026-09-02T12:00:00Z",
+      "resets_at": "2026-09-04T12:00:00Z",
+      "percent": 140
+    },
+    { "kind": "old", "devices": ["bo-laptop"], "message": "v1.3.0" }
+  ],
   "providers": [
     {
       "provider": "claude",
@@ -182,13 +339,13 @@ A shortened report from a team of two:
       "accounts": [
         {
           "label": "ann@example.com",
+          "name": "ann",
           "current": true,
           "home": "/Users/ann/.claude",
           "plan": "max",
-          "headline_percent": 78,
-          "level": "warning",
+          "state": "over",
           "quota": {
-            "observed_at": "2026-09-01T11:56:00Z",
+            "observed_at": "2026-09-01T12:00:00Z",
             "age_seconds": 240,
             "stale": false,
             "source": "cache",
@@ -196,31 +353,43 @@ A shortened report from a team of two:
               {
                 "name": "5h",
                 "percent": 42,
-                "level": "ok",
-                "resets_at": "2026-09-01T14:10:00Z",
+                "resets_at": "2026-09-01T14:00:00Z",
                 "minutes": 300,
-                "pace": { "percent_per_hour": 12, "fills_at": null }
+                "main": false,
+                "observed_at": "2026-09-01T12:00:00Z",
+                "stale": false,
+                "reset": false,
+                "state": "ok",
+                "forecast": { "percent": 70, "elapsed": 0.6, "runs_out_at": null }
               },
               {
                 "name": "7d",
-                "percent": 78,
-                "level": "warning",
-                "resets_at": "2026-09-04T16:00:00Z",
+                "percent": 80,
+                "resets_at": "2026-09-04T12:00:00Z",
                 "minutes": 10080,
-                "pace": { "percent_per_hour": 2, "fills_at": "2026-09-01T22:56:00Z" }
+                "main": true,
+                "observed_at": "2026-09-01T12:00:00Z",
+                "stale": false,
+                "reset": false,
+                "state": "over",
+                "forecast": { "percent": 140, "elapsed": 0.5714285714285714, "runs_out_at": "2026-09-02T12:00:00Z" }
               }
             ]
           },
           "link": null,
-          "sessions": 2,
-          "tokens": { "input": 1600000, "output": 405000, "cache_read": 60000000, "cache_write": 2900000 },
+          "sessions": 12,
+          "tokens": { "input": 21000000, "output": 6800000, "cache_read": 610000000, "cache_write": 29000000 },
+          "usage": { "today": 2100000, "7d": 25000000, "30d": 27800000, "90d": 27800000 },
+          "days": [2100000, 5400000, 3900000, 0, 4200000, 6100000, 3300000, 2800000],
           "linked_usage": [],
           "last_active_at": "2026-09-01T11:40:00Z",
           "projects": [
             {
               "path": "/Users/ann/src/api",
-              "sessions": 1,
-              "tokens": { "input": 1200000, "output": 310000, "cache_read": 48000000, "cache_write": 2100000 }
+              "sessions": 3,
+              "tokens": { "input": 14000000, "output": 4200000, "cache_read": 480000000, "cache_write": 21000000 },
+              "usage": { "today": 1500000, "7d": 16500000, "30d": 18200000, "90d": 18200000 },
+              "last_active_at": "2026-09-01T11:40:00Z"
             }
           ]
         }
@@ -230,8 +399,19 @@ A shortened report from a team of two:
     { "provider": "grok", "status": "skipped", "error": null, "homes": [], "accounts": [] },
     { "provider": "hermes", "status": "skipped", "error": null, "homes": [], "accounts": [] }
   ],
+  "projects": [
+    {
+      "path": "/Users/ann/src/api",
+      "sessions": 5,
+      "tokens": { "input": 17000000, "output": 5100000, "cache_read": 530000000, "cache_write": 21000000 },
+      "usage": { "today": 1500000, "7d": 19800000, "30d": 22100000, "90d": 22100000 },
+      "providers": ["claude", "codex"],
+      "last_active_at": "2026-09-01T11:40:00Z"
+    }
+  ],
   "team": {
-    "pulled_at": "2026-09-01T11:58:00Z",
+    "pulled_at": "2026-09-01T12:02:00Z",
+    "latest_version": "v1.3.0",
     "devices": [
       {
         "device": "d-8e41d07c5a2b93f6e1d4c7a0",
@@ -240,13 +420,17 @@ A shortened report from a team of two:
         "this_device": false,
         "collector_version": "v1.2.3",
         "collected_at": "2026-09-01T11:51:00Z",
-        "age_seconds": 540,
+        "age_seconds": 780,
         "last_success_at": "2026-09-01T11:51:00Z",
         "last_error": null,
         "sources": [
           { "provider": "claude", "status": "ok", "error": null },
           { "provider": "codex", "status": "ok", "error": null }
-        ]
+        ],
+        "error": null,
+        "silent": false,
+        "old": true,
+        "usage": { "today": 900000, "7d": 6100000, "30d": 21000000, "90d": 48000000 }
       }
     ],
     "providers": [
@@ -255,29 +439,48 @@ A shortened report from a team of two:
         "accounts": [
           {
             "label": "bo@example.com",
+            "name": "bo",
+            "alias": null,
+            "subscription": true,
+            "current": false,
             "devices": ["bo-laptop (bo)"],
             "plan": "pro",
-            "headline_percent": 91,
-            "level": "critical",
+            "state": "ok",
             "quota": {
               "observed_at": "2026-09-01T11:51:00Z",
-              "age_seconds": 540,
+              "age_seconds": 780,
               "stale": false,
               "device": "bo-laptop (bo)",
               "windows": [
-                { "name": "5h", "percent": 91, "level": "critical", "resets_at": "2026-09-01T12:40:00Z", "minutes": 300, "pace": null }
+                {
+                  "name": "7d",
+                  "percent": 40,
+                  "resets_at": "2026-09-04T12:00:00Z",
+                  "minutes": 10080,
+                  "main": true,
+                  "observed_at": "2026-09-01T11:51:00Z",
+                  "stale": false,
+                  "reset": false,
+                  "state": "ok",
+                  "forecast": { "percent": 70, "elapsed": 0.5705357142857143, "runs_out_at": null }
+                }
               ]
             },
             "link": null,
-            "sessions": 1,
-            "tokens": { "input": 800000, "output": 150000, "cache_read": 20000000, "cache_write": 900000 },
+            "sessions": 4,
+            "tokens": { "input": 3800000, "output": 1100000, "cache_read": 90000000, "cache_write": 4000000 },
+            "usage": { "today": 900000, "7d": 4200000, "30d": 4900000, "90d": 4900000 },
+            "users": 1,
+            "busiest": "bo-laptop",
+            "last_active_at": "2026-09-01T11:50:00Z",
             "per_device": [
               {
                 "device": "bo-laptop (bo)",
                 "device_id": "d-8e41d07c5a2b93f6e1d4c7a0",
                 "current": true,
-                "sessions": 1,
-                "tokens": { "input": 800000, "output": 150000, "cache_read": 20000000, "cache_write": 900000 },
+                "sessions": 4,
+                "tokens": { "input": 3800000, "output": 1100000, "cache_read": 90000000, "cache_write": 4000000 },
+                "usage": { "today": 900000, "7d": 4200000, "30d": 4900000, "90d": 4900000 },
                 "last_active_at": "2026-09-01T11:50:00Z"
               }
             ],
@@ -285,7 +488,51 @@ A shortened report from a team of two:
           }
         ]
       }
-    ]
+    ],
+    "matrix": {
+      "columns": [
+        {
+          "provider": "claude",
+          "label": "ann@example.com",
+          "name": "ann",
+          "no_quota": false,
+          "state": "over",
+          "percent": 80,
+          "usage": { "today": 2100000, "7d": 25000000, "30d": 27800000, "90d": 27800000 },
+          "window_tokens": 13500000
+        },
+        {
+          "provider": "claude",
+          "label": "bo@example.com",
+          "name": "bo",
+          "no_quota": false,
+          "state": "ok",
+          "percent": 40,
+          "usage": { "today": 900000, "7d": 4200000, "30d": 4900000, "90d": 4900000 },
+          "window_tokens": 3600000
+        }
+      ],
+      "rows": [
+        {
+          "device": "ann-mbp",
+          "device_id": "d-3f9c2a51b7e04d18a6c90e12",
+          "cells": [
+            { "usage": { "today": 2100000, "7d": 25000000, "30d": 27800000, "90d": 27800000 }, "window_tokens": 13500000, "share": 80 },
+            { "usage": { "today": 0, "7d": 0, "30d": 0, "90d": 0 }, "window_tokens": 0, "share": 0 }
+          ],
+          "usage": { "today": 2100000, "7d": 25000000, "30d": 27800000, "90d": 27800000 }
+        },
+        {
+          "device": "bo-laptop",
+          "device_id": "d-8e41d07c5a2b93f6e1d4c7a0",
+          "cells": [
+            { "usage": { "today": 0, "7d": 0, "30d": 0, "90d": 0 }, "window_tokens": 0, "share": 0 },
+            { "usage": { "today": 900000, "7d": 4200000, "30d": 4900000, "90d": 4900000 }, "window_tokens": 3600000, "share": 40 }
+          ],
+          "usage": { "today": 900000, "7d": 4200000, "30d": 4900000, "90d": 4900000 }
+        }
+      ]
+    }
   }
 }
 ```
@@ -296,6 +543,6 @@ A shortened report from a team of two:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `schema_version` | number | `2` |
+| `schema_version` | number | `3` |
 | `collector` | object | as in the report |
 | `sources` | list | `{provider, status, error, homes}` for each tool, as in the report's `providers` without the accounts |

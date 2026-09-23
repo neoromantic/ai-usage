@@ -5,58 +5,63 @@ ai-usage shows how much of your Claude Code, Codex, Grok, and Hermes quota you h
 It is one small binary for macOS, Linux, and Windows. The system scheduler runs it every 15 minutes. Each run reads what those tools already record on disk, asks the installed tools for your account and quota, and exits. A run can also publish an encrypted summary for this machine to a small relay, and read the summaries of the other machines in your team.
 
 ```
-ai-usage v1.4.2 · sam-air (sam) · team q7dm3xk2…               Wed 23 Sep 09:40
-✓ collected 1m ago  · no relay  ✓ scheduled  ✓ up to date
+ai-usage · annbook · team qmvrtzpa                     ● collected 7m ago  ● relay 7m ago  ● up to date
 
-ACCOUNTS  5 · 1 critical · 1 warning · 1 fills early · 2 stale · 1 unknown
-  ACCOUNT              QUOTA             5h  reset   7d  reset  READ
-  claude ──────────────────────────────────────────────────────────── 1 account
-● sam@example.com      ██████ 100% !!     ?  reset  67%  3d14h   9h~
-  └ also 7d Opus 100% !!, resets in 3d14h
-  └ ~ Claude Code updates its usage cache only while it runs
-  codex ──────────────────────────────────────────────────────────── 2 accounts
-● sam@example.com      ████▋░  78% !    41%  2h10m  78%▲  2d6h    1m
-  └ ▲ 7d full in 14h (Thu 00:20) at this pace, 1d15h before it resets
-  └ also used by hermes openai-codex on sam-air, assumed the same account
-○ sam.old@example.com  ······ unknown     —           —            —
-  └ no reading yet
-  grok ────────────────────────────────────────────────────────────── 1 account
-● 3f6c2a1e…            ██░░░░  35%        —         35%  4d23h  15h~
-  └ ~ grok writes its usage log only while it runs
-  hermes ──────────────────────────────────────────────────────────── 1 account
-● openai-codex         ████▋░  78% !    41%  2h10m  78%▲  2d6h    1m
-  └ quota of codex sam@example.com, assumed the same account
+ATTENTION
+ OUT    codex ann@acme.dev          back Fri 17:09, in 1d 23h
+ OUT    claude ann · Fable          back Sun 01:00, in 3d 7h
+ OVER   codex sam@mail.test         runs out ~Sat 06:54 at this week's pace, 2d 13h before reset
+ OVER   claude ann@acme.dev         runs out ~Thu 01:17 at this week's pace · reading 1d old
+ ERROR  Mac.localdomain             codex: app-server exited without answering
+ OLD    2 devices on v0.1.1         Mac.localdomain, MacBook-Pro-Kim · latest v0.1.3
 
-THIS DEVICE  sam-air (sam) · tokens in the last 90 days
-                                         SESS   INPUT  OUTPUT  CACHE R  CACHE W
-claude ● sam@example.com                   20    4.5M   10.1M     603M    48.1M
-    ~/src/garden/app                        9    2.1M    5.2M     310M    22.0M
-    ~/Notes                                 5    1.2M    2.4M     140M    12.0M
-    ~/src/garden/infra                      3    700K    1.5M    90.0M     8.0M
-    + 2 more projects · ai-usage --projects
-codex  ● sam@example.com                  369    552M   51.1M    16.8G        0
-    ~/src/garden/app                      212    301M   28.0M     9.6G        0
-    ~/src/garden/api                       88    140M   13.0M     4.3G        0
-    ~/.codex/worktrees/5e0b/app            41   70.0M    6.6M     2.1G        0
-    + 1 more project · ai-usage --projects
-codex  ○ sam.old@example.com                6    9.4M    820K     210M        0
-    ~/src/old-job/site                      6    9.4M    820K     210M        0
-grok   ● 3f6c2a1e…                          3    3.2M    224K    14.3M        0
-    ~/src/garden/app                        2    2.9M    200K    13.0M        0
-    ~/Notes                                 1    260K   23.8K     1.3M        0
-hermes ● openai-codex  via codex            4    2.1M    180K    31.0M        0
-    ~/src/garden/app                        4    2.1M    180K    31.0M        0
+SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
 
-● logged in here  ○ used here before  !! ≥90%  ! ≥75%  ▲ fills before reset
-~ old: reading 6h+  ? reset since reading  — no window
-more: ai-usage --projects  --json · ai-usage status
+  CLAUDE                 PLAN        THIS WEEK                  LEFT  RESETS               AT RESET  USERS                LAST
+● ann@acme.dev           max         ━━━━━━━━━╋━━━━━━────────   ~33%  3d 7h  Sun 01:00   ~174% over   2  annbook             7m
+    Fable                            ━━━━━━━━━╋━━━━━━━━━━━━━━     0%  3d 7h  Sun 01:00          out
+  kim@corp.test          max         ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈      ?                              —   1  Mac.localdomain     1h
+
+  CODEX
+● ann@acme.dev           pro         ━━━━━━━━━━━━━━━━━╋━━━━━━     0%  1d 23h Fri 17:09          out   2  annbook             1h
+  sam@mail.test          prolite     ━━━━━━╋━━━──────────────    58%  5d 2h  Mon 20:12    157% over   1  MacBook-Pro-Kim     3h
+● lee@corp.test          pro         ━━━─┃───────────────────    88%  5d 22h Tue 16:30       81% ok  10  srv1               34m
+  unknown                            ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈      ?                              —   1  Mac.localdomain    16m
+
+  GROK
+● a4c2e917               SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈      ?                              —   1  annbook            11h
+
+DEVICES × SUBSCRIPTIONS  13 · 7d · M tokens in+out
+                      CLAUDE ─────────  CODEX ────────────────────────────  GROK     NO QUOTA
+                          ann      kim      ann      sam      lee  unknown a4c2e917   hermes   TOTAL
+● annbook                  19        ·      180        ·        ·        ·        3        ·     202
+  srv1                      2        ·       12        ·      240        ·        ·        8     262
+× Mac.localdomain           ·       10        ·        ·        ·       95        ·        ·     105
+↓ MacBook-Pro-Kim           ·        ·        ·       60        ·        ·        ·        ·      60
+  bot-a                     ·        ·        ·        ·       30        ·        ·        ·      30
+  bot-b                     ·        ·        ·        ·       25        ·        ·        1      26
+  ⋮
+  TOTAL                    21       10      192       60      345       95        3       10     736
+
+PROJECTS  annbook · by 7d · M tokens in+out
+  PROJECT                             7D   90D  SESS  VIA            LAST
+  ~/src/acme/app                      60   162    43  codex, claude    1h
+  ~/Vault                             22    52    56  codex            3h
+  ~/src/site                           9    30     6  codex            2d
+  ~/src/ai-usage                       8     8     3  claude, grok     7m
+  ~/src/acme/os                        3    10     3  claude, grok    11h
+  + 237 more
 ```
 
-The header says whether collection, the relay, the schedule, and self-update are healthy; anything wrong gets a line of its own under it. ACCOUNTS has one row per account, with the fullest window that has not reset as a bar, the 5-hour and weekly windows with their reset countdowns, and how old the reading is. `!` marks 75% or more and `!!` 90% or more; `▲` says a window fills before it resets at the pace of the last few hours; `~` marks a reading over 6 hours old, and `?` a window that has reset since the reading, or that a reading taken from a refused request does not cover. A Hermes account shows the quota of the Codex or Grok login it bills through, drawn in gray and assumed to be the same account; its tokens stay its own. Hermes accounts no harness reports a quota for, such as an API key, share one line. THIS DEVICE lists this machine's tokens over the last 90 days, by account and top projects; a Hermes session with no working directory, such as a Telegram chat, is listed under its Hermes folder, so each agent shows up on its own. The legend under the report explains only the marks on screen.
+The header names this machine and the team, and says whether collection, the relay, and self-update are healthy. ATTENTION appears only when something is wrong: a subscription that is out, or will run out before it resets at its pace so far; a machine whose collector or one of its tools fails, or that has not reported for a day; machines on an older release; and a subscription past half its window that will be left mostly unused.
 
-With a relay and more than one machine in the team, ACCOUNTS adds a USED BY column, and a DEVICES section lists every machine with its version, when it last reported, and each tool's state. Past 12 machines, the healthy ones fold into one line.
+SUBSCRIPTIONS has one row per Claude, Codex, and Grok account, grouped by tool, the worst first. The bar is the weekly window: the heavy line is what has been used, and the tick how much would be used by now if the window were spent evenly. LEFT is what is left, RESETS when it resets, and AT RESET how full it will be then at its average pace since the window began: `over` at 100% or more, which means it runs out first, `tight` from 85%, `ok` from 50%, and `under` below that. A window that limits the account more than the weekly one, such as a model's window or a full 5-hour window, gets an indented row of its own. `~` marks a reading over 6 hours old, and `?` an account with no reading or a window that has reset since it was read. USERS counts the machines that used the account in this window and names the busiest. Hermes is a tool, not a subscription: what it spends through a Codex or Grok login counts as that login's use.
 
-A terminal 100 columns or wider also gets a PLAN column in ACCOUNTS and a LAST column, each account's last activity, in THIS DEVICE. When one tool has several data folders on the machine that someone logs in to, such as the per-account Codex homes Orca keeps, each account in THIS DEVICE names the folder it is logged in to, such as `~/.codex` or `orca 5b21e0c4`.
+DEVICES × SUBSCRIPTIONS is every machine against every subscription, in millions of input plus output tokens over the last 7 days, cache left out. NO QUOTA holds the tokens no subscription covers, such as Hermes on an API key. With only this machine, the section is USAGE instead: a row per subscription, with today, 7 days, 30 days, and 90 days. PROJECTS lists this machine's top projects over every account; `--projects` lists all of them. A dim legend at the bottom explains only the marks on screen.
+
+The matrix shows accounts by short names: the part of an email before the `@`, or the first 8 characters of an id. `ai-usage alias` gives an account a name for the whole team; see [Teams](#teams).
+
+When standard input and output are both terminals, `ai-usage` opens the same page as an interactive view. It scrolls, and the matrix scrolls sideways; `p` picks the period (today, 7, 30, or 90 days), `%` shows each machine's estimated share of each subscription's window, `r` collects now, `?` lists every key, and `q` quits. Piped output, `--json`, `--plain`, and `TERM=dumb` print the page instead, and so does the installer's first run. The page is at its best at 120 to 160 columns; narrower, it drops columns in a fixed order, down to 80.
 
 ## Install
 
@@ -188,6 +193,17 @@ In the team view, token counts add up across machines. Quota percentages do not:
 
 A machine goes by its host name; a Mac goes by the local host name in Sharing settings, which does not change with the network. `ai-usage name set NAME` gives it another, and the team sees it after the machine's next run.
 
+An account goes by a short name in the report: the part of an email before the `@`, or the first 8 characters of an id. To give one a name of your choosing for the whole team:
+
+```sh
+ai-usage alias                                  # the names the team gave accounts
+ai-usage alias ann@example.com ann              # name an account
+ai-usage alias codex:ann@example.com ann-cx     # name it on one tool only
+ai-usage alias ann --clear                      # go back to the default name
+```
+
+The account is its label, its current name, or `PROVIDER:LABEL`; an email matches in any case. The same label on several tools is one person, so a name without a provider goes to each of them. A name is at most 12 columns wide, with no spaces. It travels sealed in this machine's snapshot, so the team sees it after this machine's next run, and the newest name any machine set for an account wins.
+
 ## Relay
 
 The relay is a small HTTP API that keeps one snapshot per machine. It is needed only for the team view; without one, ai-usage reports on this machine alone.
@@ -200,7 +216,7 @@ ai-usage relay clear
 
 A release build may carry a default relay, chosen when the release was built. `relay set` overrides it and `relay clear` goes back to it. `AI_USAGE_RELAY` overrides both for one run.
 
-The relay accepts only a small, fixed-shape usage snapshot signed by the team key. It checks the signature and the shape and stores nothing else. It limits requests per IP address, writes per team, and machines per team (100). Each IP address can also add only 5 new teams and 100 new machines a day.
+The relay accepts only a small, fixed-shape usage snapshot signed by the team key. It checks the signature and the shape and stores nothing else. It limits requests per IP address, writes per team, and machines per team (50). Each IP address can also add only 5 new teams and 100 new machines a day.
 
 To run your own relay on Vercel with Upstash for Redis (formerly Vercel KV), use the button, which copies this repository into your Git account and deploys it with a new database:
 
@@ -230,6 +246,9 @@ Or, from a clone with the Vercel CLI logged in, run `sh scripts/deploy-relay.sh`
 | `ai-usage name show` | print this machine's name in the team |
 | `ai-usage name set NAME` | name this machine in the team, instead of its host name; at most 64 characters |
 | `ai-usage name clear` | go by the host name again |
+| `ai-usage alias` | list the names the team gave accounts |
+| `ai-usage alias ACCOUNT NAME` | name an account for the whole team, in at most 12 columns; `ACCOUNT` is a label, a name, or `PROVIDER:LABEL` |
+| `ai-usage alias ACCOUNT --clear` | go back to the account's default name |
 | `ai-usage schedule install` | register with the scheduler, and let later runs keep it registered |
 | `ai-usage schedule remove` | unregister, and stop later runs from registering again |
 | `ai-usage schedule status` | whether the scheduler runs this binary with this state folder, or was disabled by hand |
@@ -238,13 +257,7 @@ Or, from a clone with the Vercel CLI logged in, run `sh scripts/deploy-relay.sh`
 | `ai-usage version` | print the version |
 | `ai-usage help` | print usage |
 
-`VIEW` is at most one of these:
-
-| Flag | View |
-| --- | --- |
-| `--projects` | every project on this machine, with its tokens |
-| `--tokens` | every team account's tokens, machine by machine |
-| `--devices` | every machine in the team, with none folded away |
+`VIEW` is `--projects`: every project on this machine in PROJECTS, not only the top ones.
 
 `DISPLAY` flags change how the console looks. `--json` ignores them.
 
@@ -253,6 +266,7 @@ Or, from a clone with the Vercel CLI logged in, run `sh scripts/deploy-relay.sh`
 | `--color=auto\|always\|never` | `auto`, the default, colors a terminal unless `NO_COLOR` is set or `TERM` is `dumb` |
 | `--ascii` | draw with ASCII only; the default when the locale (`LC_ALL`, `LC_CTYPE`, `LANG`) is not UTF-8, except in Windows Terminal |
 | `--width N` | lay out for N columns, 80 to 160; the default is the terminal's width, else `COLUMNS`, else 80 |
+| `--plain` | print the report; on a terminal, the default is the interactive view |
 
 | Variable | Meaning |
 | --- | --- |
@@ -303,25 +317,31 @@ Then start `ai-usage schedule run` in it as that user. The first run's report an
 
 ## JSON for agents
 
-`ai-usage --json` and `ai-usage report --json` print the report as JSON with `"schema_version": 2`. A field changes meaning only with a new schema version.
+`ai-usage --json` and `ai-usage report --json` print the report as JSON with `"schema_version": 3`. A field changes meaning only with a new schema version.
 
 ```
 schema_version, generated_at
 collector   version, device, team, last run, last success, last error,
             relay, schedule, and update state
+attention[] out, over, error, silent, old, under: the account or devices, when, and why
 providers[] claude, codex, grok, hermes: status (ok, partial, error, skipped), error, homes,
-            accounts[]: label, home, plan, headline_percent, level (ok, warning, critical, unknown),
-                        quota with from and windows[] (percent, level, resets_at, pace), link,
-                        sessions, tokens, linked_usage[], last_active_at, projects[]
-team        pulled_at, devices[], and providers[] with accounts summed across devices:
-            plan, quota, link, tokens, per_device[], linked_usage[]
+            accounts[]: label, name, home, plan, state (out, over, tight, ok, under, unknown),
+                        quota with from and windows[] (percent, resets_at, main, stale, reset,
+                        state, forecast), link, sessions, tokens, usage (today, 7d, 30d, 90d),
+                        days[], linked_usage[], last_active_at, projects[]
+projects[]  this machine's projects over every account, with usage and providers
+team        pulled_at, latest_version, devices[] (error, silent, old, usage), providers[] with
+            accounts summed across devices (name, alias, state, quota, usage, users, busiest,
+            per_device[], linked_usage[]), and matrix (columns[], rows[] of cells with share)
 ```
+
+Version 3 replaced `headline_percent`, `level`, and `pace`, with their 75% and 90% marks, by each window's `state` and `forecast`.
 
 `ai-usage status --json` prints `schema_version`, `collector`, and `sources[]`. Every field is described in [docs/json-schema.md](docs/json-schema.md).
 
 ## Privacy
 
-A snapshot is what leaves the machine. It is at most 32 KB, and the relay rejects any field it does not know.
+A snapshot is what leaves the machine. It is at most 64 KB, and the relay rejects any field it does not know.
 
 Sealed with the team key, so only the team can read them:
 
@@ -329,13 +349,14 @@ Sealed with the team key, so only the team can read them:
 - account labels, such as an email address
 - project folder paths
 - error messages
+- the names `ai-usage alias` gave accounts
 
 In plain text, so the relay can check the shape:
 
 - the team fingerprint, the device id (random), and the collector version
 - provider names, plan names, and whether an account is logged in
 - quota window names, percentages, and reset times
-- session and token counts, and timestamps
+- session and token counts, tokens per day and since each quota window began, and timestamps
 - each tool's status: ok, partial, error, or skipped
 
 So the relay's operator can see how many machines a team has, which tools and plans they use, how much, and when, but not who, on which machine, or in which project. The operator also sees the IP addresses that connect, which the relay keeps in rate-limit counters for up to a day.

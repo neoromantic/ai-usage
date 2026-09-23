@@ -23,7 +23,7 @@ Source notes are from [PitStop](https://github.com/Livin21/pitstop). Account swi
 - Discover Codex, Claude, Grok, and Hermes, including non-default data directories. Skip a tool that is not installed. One missing tool does not fail the others.
 - Do not open credential files and do not read account emails out of them. Account identity is whatever stable id the installed harness reports when asked. If that report contains an email, store the string only as the harness's label.
 - Ask the installed harness, not the provider. A one-shot command that prints quota and account identity is allowed, including through tmux when the tool has no other interface. A command that starts a session, sends a prompt, or spends quota is not allowed. `codex exec` and `claude -p` are examples of commands that are not allowed.
-- Record each quota window the harness or the local files already contain: how full it is, and when it resets. The headline number is the fullest of the main windows, the 5-hour and the weekly one. A window for one model is shown on its own. If this account has no reading, say unknown. Do not invent a percent or a reset time.
+- Record each quota window the harness or the local files already contain: how full it is, and when it resets. Each account has a main window, the weekly one where it has one. A window that limits the account more, such as a model's window or a full 5-hour window, is shown on its own. If this account has no reading, say unknown. Do not invent a percent or a reset time.
 - When the logged-in account changes, keep the previous account. New token growth is attributed to the account that was logged in for that sample. The previous account keeps the quota last reported for it and the tokens attributed while it was active. A switch in the middle of a 15-minute gap can attach that gap to the wrong account. That inaccuracy is accepted.
 - Do not add quota percentages across devices. Add token counts. One account has one quota reading, taken from the newest sample for that account.
 - Keep the last good reading and show how old it is.
@@ -33,7 +33,7 @@ Source notes are from [PitStop](https://github.com/Livin21/pitstop). Account swi
 - A reading is identified by team, device, OS user, provider, and account label. The team is the public key fingerprint. It is not the only identity of a row.
 - Each team has one keypair, in the style of a public and private key, not a GnuPG installation. Every collector in the team stores both halves. The first run generates the keypair. Joining a team means copying the private key. The public fingerprint is the folder name and is not secret. The private key is the only secret.
 - One small HTTP API stores every install. The backing store is a key-value store that overwrites one document per device, such as Vercel KV. It is not a git history.
-- The API accepts only a usage snapshot. The body is JSON with a fixed set of fields: counts, percents, timestamps, and short labels. Unknown fields, nested files, and free-form text are rejected. The whole document must stay small, on the order of 32 KB. A store that accepts an opaque encrypted blob cannot tell a usage report from something else, so version 1 does not accept one.
+- The API accepts only a usage snapshot. The body is JSON with a fixed set of fields: counts, percents, timestamps, and short labels. Unknown fields, nested files, and free-form text are rejected. The whole document must stay small, at most 64 KB. A store that accepts an opaque encrypted blob cannot tell a usage report from something else, so version 1 does not accept one.
 - A write is accepted only when that JSON is signed by the team private key for that public fingerprint. The server checks the signature, checks the shape, and stores the document. A holder of the private key can publish and can read that team back. They cannot overwrite another team.
 - A second keypair hidden in the official binary is not used. The program is open source, so any key shipped inside it can be copied. After that, the server cannot tell the official build from any other client. The shape check is what remains: a copied client can submit only the same small usage record, which is not a useful place to keep other material.
 - Someone can still generate their own key and store their own usage-shaped team. The API limits request rate and how many devices one team may have, so junk teams cannot run away with the store.
@@ -81,7 +81,7 @@ These PitStop behaviors are out, even though the project does them:
 
 - A separate unencrypted feed of anonymous totals, with no team, device, or account label. The team file stays encrypted.
 - Opt-out telemetry back to the project.
-- A notifier when a window crosses a threshold. Version 1 only marks 75% and 90% in the console output.
+- A notifier when a window runs out or will run out. The report only lists such windows under ATTENTION.
 - Account switching, after monitoring works.
 - A web report on the relay's site. The page gets the team key from the URL fragment or from what the person pastes, never from the server. It verifies and unseals the snapshots in the browser. The relay keeps serving only sealed, signed snapshots.
 - What changed since the last look, next to each number the report shows.
@@ -102,7 +102,7 @@ Decided on 2026-09-23 with the owner:
 
 Sketch:
 
-- The snapshot gains day buckets: tokens per day per account, for up to 90 days. The team view adds them up per device and per account. The 32 KB snapshot cap and the relay's read cap grow to hold them. Sessions already keep when each account's share last grew; per-day growth needs the samples, which are already written every run and kept 90 days.
+- The snapshot gains day buckets: tokens per day per account, for up to 90 days. The team view adds them up per device and per account. The snapshot cap grows from 32 KB to 64 KB to hold them, and the device cap falls from 100 to 50, so that a team read still fits in one response. Sessions already keep when each account's share last grew; per-day growth needs the samples, which are already written every run and kept 90 days.
 - The snapshot gains quota cycles per account: each window's reset time and the fullest percentage seen before it. Readings come from every device, so the team view takes the fullest per cycle.
 - New views: `--days` and `--weeks` tables, and a utilization view per account. JSON carries the same data.
 - An account switch is placed at the run that first saw the new login, which is within 15 minutes. Placing it more exactly, from the quota jump in Codex's rollout, is not worth it.
@@ -114,7 +114,7 @@ Decided on 2026-09-23 with the owner. The design is in [design.md](design.md): w
 What the collector and the relay must add for it:
 
 - The collector splits tokens by day, per account and per project, using the timestamps in the harness logs. The 90 days are there from the first run of the new release, as far back as the logs go.
-- The snapshot carries each account's tokens per day, and its tokens since the start of each of its quota windows. The relay's size caps grow to fit.
+- The snapshot carries each account's tokens per day, and its tokens since the start of each of its quota windows. The snapshot cap grows to 64 KB, and the device cap falls to 50 so that a team read still fits in one response.
 - A short name for an account, set with `ai-usage alias`, travels sealed in the snapshot of the device that set it.
 - JSON gets the same data, and the forecast of each window, under a new schema version.
 - `--tokens` and `--devices` go, because the matrix replaces both. `--projects` stays and lists every project.
@@ -136,7 +136,7 @@ Recorded on 2026-09-23 with the owner. Not started.
   - dead code;
   - comments that restate the code.
 
-  The CLI, the snapshot (`schema_version` 2), and the relay protocol stay compatible, and behavior does not change.
+  The CLI, the snapshot, the JSON (`schema_version` 3), and the relay protocol stay compatible, and behavior does not change.
 - **Find why an account has no name or no reading.** One Mac in the team (`Mac.localdomain`, on v0.1.1) shows both. The cause comes first; the fix follows from it.
   - Its Codex usage is filed under `unknown`: 2,875 sessions and 1.2G input tokens, the most of any account. The same device reports `codex initialize: app-server exited without answering`, so the harness never said who is logged in. Find why the app server does not answer there, and whether that history is claimed by the right account once it does.
   - Its Claude Max account has 90 days of usage but has never had a quota reading. Find where the reading is lost: the harness, its usage cache, or the collector.

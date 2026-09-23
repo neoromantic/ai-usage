@@ -2,7 +2,7 @@
 
 The relay is the one shared piece of a team's setup. It is a small HTTP API that keeps the latest snapshot of each device, and it is the same code whether it runs as a Vercel function or as `ai-usage relay serve`.
 
-It stores only what it can check: a snapshot of a fixed shape, at most 32 KB, signed by the key whose fingerprint names the team. Names, paths, and errors inside it are sealed with the team key, so the relay cannot read them. See [Privacy](../README.md#privacy) for what it can see.
+It stores only what it can check: a snapshot of a fixed shape, at most 64 KB, signed by the key whose fingerprint names the team. Names, paths, and errors inside it are sealed with the team key, so the relay cannot read them. See [Privacy](../README.md#privacy) for what it can see.
 
 Collectors find the relay by its base URL, without `/v1`; see [Connect collectors to your relay](#connect-collectors-to-your-relay). The protocol itself, enough to write a relay or a client in another language, is specified with test vectors in [relay-protocol.md](relay-protocol.md).
 
@@ -57,7 +57,7 @@ What the relay keeps in KV:
 
 A device runs 96 times a day. Each run writes its snapshot; a run you start also reads the team, and a scheduled run reads it once an hour. The write costs 9 store commands and the read 4, so a device on its schedule costs about 29,000 commands a month.
 
-Every read returns the whole team, so traffic grows with the square of the team size. At about 10 KB a snapshot, a team of N devices reads about N² × 10 MB a month, once out of the store and once more out of the function. Upstash's free plan allows 500,000 commands a month, enough for about 17 devices, and 10 GB of bandwidth, enough for a team of about 30. Vercel's Hobby plan includes 10 GB a month of Fast Origin Transfer, which function responses count against. A larger team needs a paid plan, or a relay of your own with `ai-usage relay serve`. Bots that one collector reads are part of its device's snapshot, so a server running many bots costs as much as one device; a bot with a collector of its own in its container is a device of its own.
+Every read returns the whole team, so traffic grows with the square of the team size. At about 15 KB a snapshot with its daily counts, a team of N devices reads about N² × 15 MB a month, once out of the store and once more out of the function. Upstash's free plan allows 500,000 commands a month, enough for about 17 devices, and 10 GB of bandwidth, enough for a team of about 25. Vercel's Hobby plan includes 10 GB a month of Fast Origin Transfer, which function responses count against. A larger team needs a paid plan, or a relay of your own with `ai-usage relay serve`. Bots that one collector reads are part of its device's snapshot, so a server running many bots costs as much as one device; a bot with a collector of its own in its container is a device of its own.
 
 A request to a path the relay does not serve costs no KV command. Once a function instance has seen a client go over a limit, it answers that client's further requests with `429` without a KV command until the window ends. Every request still costs a function invocation, and a signed team read returns up to about 4.4 MB. On a public deployment, also add a rate-limit rule for `/v1/` in the project's Vercel Firewall, so a flood is dropped before it reaches the function.
 
@@ -149,20 +149,20 @@ These are fixed in the code, in `DefaultLimits` in `relay/server.go`.
 
 | Limit | Value |
 | --- | --- |
-| devices per team | 100 |
+| devices per team | 50 |
 | writes per team | 1000 an hour |
 | requests per IP address | 2000 an hour; IPv6 addresses count per /64 |
 | new teams per IP address | 5 a day; IPv6 addresses count per /48 |
 | new devices per IP address | 100 a day, in any teams; IPv6 addresses count per /48 |
-| snapshot size | 32 KB |
+| snapshot size | 64 KB |
 | snapshot lifetime | after its last write, as long as the device has been writing: at least 7 days, at most 90 |
 | clock difference for signed reads and deletes | 5 minutes |
 
-A device is one collector: one machine, one user account on it, or one container. A team has at most 100 devices because every run reads the whole team in one response, up to about 44 KB a device, and a Vercel Function may return at most 4.5 MB.
+A device is one collector: one machine, one user account on it, or one container. A team has at most 50 devices because every run reads the whole team in one response, up to about 88 KB a device, and a Vercel Function may return at most 4.5 MB.
 
-A device writes 4 times an hour and reads the team once an hour when only the scheduler runs it, so a team of 100 behind one address makes about 500 requests an hour. Day windows follow UTC days.
+A device writes 4 times an hour and reads the team once an hour when only the scheduler runs it, so a team of 50 behind one address makes about 250 requests an hour. Day windows follow UTC days.
 
-The new-device and new-team limits bound what one address can add to the store: one full team's worth of snapshots a day, about 4.4 MB as stored (3.2 MB of snapshots and the rest base64 and JSON). What an address writes once and drops expires within a week, so a script that only makes keys keeps about 31 MB. The limits do not bound one that also writes its devices again: it keeps them, and adds about 4.4 MB a day for as long as it runs. The store's own size limit is the backstop, so watch the store's size on a public relay. A device is new when the relay holds no snapshot for it, so its first write, and the first after its snapshot expired, count. Writes from devices the relay already holds do not. Rolling out more than 100 devices from one address in a day, such as an office behind one NAT, leaves the rest waiting: their writes answer `429` until the next UTC day, and each collector keeps its newest snapshot to send then.
+The new-device and new-team limits bound what one address can add to the store: two full teams' worth of snapshots a day, about 8.8 MB as stored (6.4 MB of snapshots and the rest base64 and JSON). What an address writes once and drops expires within a week, so a script that only makes keys keeps about 62 MB. The limits do not bound one that also writes its devices again: it keeps them, and adds about 8.8 MB a day for as long as it runs. The store's own size limit is the backstop, so watch the store's size on a public relay. A device is new when the relay holds no snapshot for it, so its first write, and the first after its snapshot expired, count. Writes from devices the relay already holds do not. Rolling out more than 100 devices from one address in a day, such as an office behind one NAT, leaves the rest waiting: their writes answer `429` until the next UTC day, and each collector keeps its newest snapshot to send then.
 
 The lifetime rule means a key made only to fill the store leaves its snapshots for a week, not 90 days. A device that has reported for a month and then goes quiet is kept for a month.
 
@@ -189,16 +189,20 @@ An account in a snapshot may carry `quota_from`, a provider name in plain text. 
 
 An account may also carry `linked`, at most 4 entries of `{provider, label, sessions, tokens}`: what an account of another provider on the same device spent through this one, such as Hermes on this Codex login. `label` is sealed like every label, `provider` must be another known provider, and the counts have the same limits as the account's own. Readers add these up for the team's "also used by" lines. A snapshot without it is valid as before.
 
-A relay older than `quota_from` or `linked` answers `422` to a snapshot that carries it. The collector then keeps that snapshot pending and does not read the team either, so the device sees only itself until the relay is updated. An older collector reading the team counts such a snapshot as unreadable and leaves that device out. Deploy the relay first, then update the collectors.
+An account may also carry `days` and `recent`, plain counts the report's periods and device matrix are built from. `days` is at most 90 token counts, the account's input plus output tokens on the device per UTC day, newest first, starting with the UTC day of `collected_at`, with trailing zeros left out. `recent` is at most 8 entries of `{window, start, tokens}`: the account's input plus output tokens since each window of its reading began, for the windows whose start is known and which had not reset. `window` is a window name in plain text and `start` a time.
+
+A snapshot may carry `aliases`, at most 48 entries of `{provider, label, name, at}`: the short names `ai-usage alias` gave accounts on that device. `label` and `name` are sealed, `name` is left out when the entry clears a name, and `at` is when it was set. The newest entry for an account, from any device in the team, names it everywhere.
+
+A relay older than `quota_from`, `linked`, `days`, `recent`, or `aliases` answers `422` to a snapshot that carries one, and a relay older than the 64 KB limit answers `413` to a snapshot over 32 KB. The collector then keeps that snapshot pending and does not read the team either, so the device sees only itself until the relay is updated. An older collector reading the team counts such a snapshot as unreadable and leaves that device out. Deploy the relay first, then update the collectors.
 
 | Status | Meaning |
 | --- | --- |
 | `400` | the `PUT` body could not be read within 30 seconds |
 | `401` | missing or bad signature, or a request time too far from the server's |
-| `403` | the key is missing or does not match the team, or the team already has 100 devices without this one |
+| `403` | the key is missing or does not match the team, or the team already has 50 devices without this one |
 | `404` | not a valid team or device id |
 | `409` | a newer snapshot for this device is already stored |
-| `413` | the body is larger than 32 KB |
+| `413` | the body is larger than 64 KB |
 | `422` | the body is not a valid snapshot |
 | `429` | a rate limit; `Retry-After` says in seconds when the window ends |
 | `503` | the store is unavailable or not configured |

@@ -87,7 +87,7 @@ The service waits until the collector is installed, so the image can ship before
 docker exec -u app mybot /home/app/.local/bin/ai-usage status
 ```
 
-`schedule` should say `every 15 minutes by ai-usage schedule run`, and `relay` when it last pushed. On any machine in the team, `ai-usage --devices` lists the container under its name.
+`schedule` should say `every 15 minutes by ai-usage schedule run`, and `relay` when it last pushed. On any machine in the team, `ai-usage team` lists the container under its name, and the report gives it a row in DEVICES × SUBSCRIPTIONS.
 
 ## Moving a folder from another collector
 

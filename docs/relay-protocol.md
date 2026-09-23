@@ -159,12 +159,12 @@ Unsigned. Answers `200`:
 
 ### 6.5 `PUT /v1/teams/{team}/devices/{device}`
 
-Stores the device's snapshot. The body is a snapshot document (§7) of at most 32768 bytes, signed as in §5. The reference relay checks in this order and answers the first failure:
+Stores the device's snapshot. The body is a snapshot document (§7) of at most 65536 bytes, signed as in §5. The reference relay checks in this order and answers the first failure:
 
 1. the per-IP request limit (`429`), counted for every request the relay routes;
 2. the shapes of `{team}` and `{device}` (`404`);
 3. `X-Aiu-Key`: present, 32 bytes, and its fingerprint equal to `{team}` (`403`);
-4. the body: read within 30 seconds (`400`) and at most 32768 bytes (`413`);
+4. the body: read within 30 seconds (`400`) and at most 65536 bytes (`413`);
 5. the signature over `ai-usage snapshot v1\n` and the body (`401`);
 6. the document: strict decoding, every rule of §7, and `collected_at` at most 10 minutes ahead of the relay's clock (`422`);
 7. `team` and `device` in the document equal to `{team}` and `{device}` (`422`);
@@ -194,7 +194,7 @@ Reads every live snapshot of the team. Signed as in §5, with an empty device. A
 | `body` | the stored snapshot, byte for byte as it was sent, in base64url |
 | `sig` | the signature it was sent with, in base64url |
 
-Every entry is 4/3 the size of its snapshot plus about 200 bytes, so a full team of 100 devices with 32 KB snapshots is about 4.4 MB. Clients MUST accept a response of at least 5 MB; the reference client reads up to 8 MiB.
+Every entry is 4/3 the size of its snapshot plus about 200 bytes, about 88 KB for a full 64 KB snapshot, so a full team of 50 devices is about 4.4 MB. Clients MUST accept a response of at least 5 MB; the reference client reads up to 8 MiB.
 
 ### 6.7 `DELETE /v1/teams/{team}/devices/{device}`
 
@@ -215,7 +215,7 @@ Removes one device's snapshot. Signed as in §5. Answers `200` whether or not a 
 | `404` | all | `{team}` or `{device}` is not a valid id, or the relay does not serve the path |
 | `405` | all | the relay serves the path, but not with this method |
 | `409` | `PUT` | the stored snapshot for this device has a later `collected_at` |
-| `413` | `PUT` | the body is larger than 32768 bytes |
+| `413` | `PUT` | the body is larger than 65536 bytes |
 | `422` | `PUT` | the body is not a valid snapshot in canonical form, or it names another team or device |
 | `429` | all | a rate limit; `Retry-After` gives the seconds until the window ends |
 | `503` | all | the store is unavailable; the reference Vercel function also answers `503` with `{"error":"relay store not configured"}` to every request when it has no store |
@@ -243,7 +243,7 @@ Collectors SHOULD write times in UTC with `Z`. The reference relay also accepts 
 
 The rule exists because the relay stores the signed bytes, not what it parsed. Go's decoder matches member names without regard to case and lets a repeated member overwrite an earlier one, so any other body could carry text the validator never saw.
 
-A relay implementation MAY skip the canonical-form check. It MUST still verify the signature, check that the document names the team and device of the path, enforce the 32768-byte limit, reject members it does not know, and check every rule in §7.2 to §7.4, so that nothing but snapshots reaches its store.
+A relay implementation MAY skip the canonical-form check. It MUST still verify the signature, check that the document names the team and device of the path, enforce the 65536-byte limit, reject members it does not know, and check every rule in §7.2 to §7.4, so that nothing but snapshots reaches its store.
 
 ### 7.2 Value types
 
@@ -273,8 +273,9 @@ Every integer the document allows fits exactly in an IEEE 754 double, so readers
 | `last_error` | sealed | omitted when empty | the error of the last collection that failed |
 | `accounts` | array of Account | required | at most 24 |
 | `sources` | array of Source | required | at most 12 |
+| `aliases` | array of Alias | omitted when empty | at most 48: the short names this device gave accounts, newest first. The newest one for an account, from any device in the team, names it everywhere |
 
-The body as a whole MUST be at most 32768 bytes. The reference collector drops projects, then accounts until it fits.
+The body as a whole MUST be at most 65536 bytes. The reference collector drops projects, then the oldest `days` down to 7 per account, then accounts until it fits.
 
 ### 7.4 Nested objects
 
@@ -294,6 +295,8 @@ The body as a whole MUST be at most 32768 bytes. The reference collector drops p
 | `last_active_at` | time | omitted when empty | the account's last activity on this device |
 | `projects` | array of Project | required | at most 12, the largest first |
 | `linked` | array of Linked | omitted when empty | at most 4 |
+| `days` | array of token count | omitted when empty | at most 90: the account's input plus output tokens on this device per UTC day, cache left out, newest first. The first entry is the UTC day of `collected_at`, the next the day before, and so on. Trailing zeros are left out; zeros between days are written as `0` |
+| `recent` | array of Recent | omitted when empty | at most 8: the account's input plus output tokens on this device since each window of its reading began, for the windows whose start is known and which had not reset when the snapshot was taken |
 
 **Window**: one quota window as the tool reported it.
 
@@ -320,6 +323,25 @@ The body as a whole MUST be at most 32768 bytes. The reference collector drops p
 | `label` | sealed | required | the other account's name |
 | `sessions` | session count | required | |
 | `tokens` | Tokens | required | |
+
+**Recent**: an account's tokens on this device since one quota window began.
+
+| Member | Type | Presence | Rule and meaning |
+| --- | --- | --- | --- |
+| `window` | plain | required, not empty | the window's `name` |
+| `start` | time | required | when the window's current period began: its `resets_at` minus its length. MUST NOT be `0001-01-01T00:00:00Z` |
+| `tokens` | token count | required | input plus output tokens since `start`, cache left out |
+
+**Alias**: a short name for an account, set on one device for the whole team.
+
+| Member | Type | Presence | Rule and meaning |
+| --- | --- | --- | --- |
+| `provider` | provider | required | the account's provider |
+| `label` | sealed | required | the account's label |
+| `name` | sealed | omitted when empty | the name. Without it the entry clears the name: a clearing newer than a name set on another device outranks it |
+| `at` | time | required | when the name was set or cleared. MUST NOT be `0001-01-01T00:00:00Z` |
+
+The relay cannot see a sealed name, so it cannot check it. The reference collector sets names of at most 12 display columns, with no spaces or invisible characters. Any member of the team can seal anything, so a reader SHOULD check an opened name the same way.
 
 **Source**: the health of one tool's reader on this device.
 
@@ -465,13 +487,13 @@ A relay SHOULD limit requests, and SHOULD answer `429` with `Retry-After` in sec
 
 | Limit | Value | Counted |
 | --- | --- | --- |
-| devices per team | 100 | live records, checked on a new device's first write, and on every write while the team is over the cap |
+| devices per team | 50 | live records, checked on a new device's first write, and on every write while the team is over the cap |
 | requests per IP address | 2000 an hour | every request the relay routes, before any other check; IPv6 per /64 |
 | writes per team | 1000 an hour | `PUT`s that pass the signature and document checks |
 | new teams per IP address | 5 a day | first writes to a team with no live record; IPv6 per /48 |
 | new devices per IP address | 100 a day | first writes of a device, in any team; IPv6 per /48 |
 
-Windows are fixed and aligned to Unix time: an hour starts on the hour, and a day at 00:00 UTC. The reference collector writes 4 times an hour on schedule and reads the team once an hour, so a team of 100 behind one address makes 500 requests an hour. The device cap follows from the team read: at 44 KB per device, 100 fill most of the 4.5 MB a Vercel Function may return. [relay.md](relay.md#limits) explains the reasoning for operators.
+Windows are fixed and aligned to Unix time: an hour starts on the hour, and a day at 00:00 UTC. The reference collector writes 4 times an hour on schedule and reads the team once an hour, so a team of 50 behind one address makes 250 requests an hour. The device cap follows from the team read: at about 88 KB per device for a full 64 KB snapshot, 50 fill most of the 4.5 MB a Vercel Function may return. [relay.md](relay.md#limits) explains the reasoning for operators.
 
 ## 10. Readers
 
@@ -503,6 +525,11 @@ Optional members added to version 1 so far:
 | --- | --- | --- |
 | `quota_from` | Account | whose account the windows belong to |
 | `linked` | Account | what accounts of other providers spent through this one |
+| `days` | Account | tokens per UTC day, newest first, up to 90 days |
+| `recent` | Account | tokens since each unreset window with a known start began, up to 8 |
+| `aliases` | Document | the short names this device gave accounts, sealed, up to 48 |
+
+The same relay build also raised the body limit from 32768 to 65536 bytes and lowered the device cap from 100 to 50. A relay older than that answers `413` to a body over 32768 bytes, and `422` to a document with `days`, `recent`, or `aliases`.
 
 ## 12. Security notes
 
