@@ -12,7 +12,8 @@
 #
 # The script downloads the release file for this OS and CPU, checks it against
 # the release's checksums.txt, installs it, and runs it once. That first run
-# registers the collector with cron. Running the script again upgrades in place.
+# registers the collector with the system scheduler (cron on Linux, launchd
+# on macOS). Running the script again upgrades in place.
 
 # Everything is inside main so a partly downloaded script does nothing.
 main() {
@@ -64,7 +65,7 @@ main() {
 		printf '%s\n' "$AI_USAGE_TEAM_KEY" | "$bin" team join
 	fi
 
-	say "first run: collecting and registering with cron"
+	say "first run: collecting and registering with the system scheduler"
 	if ! "$bin"; then
 		fail "the first run failed; the binary is installed, run $bin to retry"
 	fi
