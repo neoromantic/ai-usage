@@ -302,6 +302,7 @@ func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) (e
 		return err
 	}
 	endpoint := relayURL(cfg)
+	guide := false
 	opts := collect.Options{
 		Dir:      d,
 		Version:  version,
@@ -312,6 +313,11 @@ func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) (e
 		After: func(ctx context.Context, cfg *state.Config, st *state.State) {
 			housekeeping(ctx, d, cfg, st)
 			housekept = true
+			// The guide waits for a report a person reads, even when the
+			// scheduler collected first.
+			if st.GuideDue && !*quiet && !*jsonOut {
+				st.GuideDue, guide = false, true
+			}
 		},
 	}
 	if endpoint != "" && !*offline {
@@ -336,7 +342,7 @@ func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) (e
 	if *quiet {
 		return nil
 	}
-	return printReport(stdout, d, res, endpoint, *jsonOut, disp)
+	return printReport(stdout, d, res, endpoint, *jsonOut, guide, disp)
 }
 
 // panicError is a collection that panicked.
@@ -523,7 +529,7 @@ func executable() (string, error) {
 	return exe, nil
 }
 
-func printReport(stdout io.Writer, d state.Dir, res *collect.Result, endpoint string, jsonOut bool, disp *display) error {
+func printReport(stdout io.Writer, d state.Dir, res *collect.Result, endpoint string, jsonOut, guide bool, disp *display) error {
 	now := clock().UTC()
 	samples, _ := d.LoadSamples(now.Add(-7 * 24 * time.Hour))
 	r := view.Build(view.Input{
@@ -544,7 +550,12 @@ func printReport(stdout io.Writer, d state.Dir, res *collect.Result, endpoint st
 		enc.SetIndent("", "  ")
 		return enc.Encode(r)
 	}
-	_, err := io.WriteString(stdout, view.Text(r, disp.options(stdout)))
+	o := disp.options(stdout)
+	text := view.Text(r, o)
+	if guide {
+		text += "\n" + view.Guide(r, newScheduler().Name(), o)
+	}
+	_, err := io.WriteString(stdout, text)
 	return err
 }
 
@@ -591,7 +602,7 @@ func cmdReport(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return printReport(stdout, d, res, relayURL(res.Config), *jsonOut, disp)
+	return printReport(stdout, d, res, relayURL(res.Config), *jsonOut, false, disp)
 }
 
 func cmdStatus(args []string, stdout io.Writer) error {

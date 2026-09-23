@@ -335,16 +335,7 @@ func (u *ui) healthItems() []health {
 	default:
 		out = append(out, health{g.ok, "relay synced " + since(rl.LastPushAt), green, "", ""})
 	}
-	switch {
-	case c.Schedule.Registered:
-		out = append(out, health{g.ok, "scheduled", green, "", ""})
-	case c.Schedule.Error != nil:
-		out = append(out, health{g.fail, "not scheduled", red, "schedule: " + *c.Schedule.Error, "not scheduled"})
-	case dev:
-		out = append(out, health{g.fail, "not scheduled", red, "schedule: dev builds do not register themselves" + g.sep + "ai-usage schedule install", "not scheduled"})
-	default:
-		out = append(out, health{g.fail, "not scheduled", red, "schedule: not registered" + g.sep + "ai-usage schedule install", "not scheduled"})
-	}
+	out = append(out, u.scheduleHealth())
 	up := c.Update
 	switch {
 	case dev:
@@ -361,6 +352,23 @@ func (u *ui) healthItems() []health {
 		out = append(out, health{g.ok, "up to date", green, "", ""})
 	}
 	return out
+}
+
+// scheduleHealth is the schedule's item in the header strip. When nothing
+// is registered, its detail says what to do.
+func (u *ui) scheduleHealth() health {
+	c := u.r.Collector
+	g := u.g
+	switch {
+	case c.Schedule.Registered:
+		return health{g.ok, "scheduled", green, "", ""}
+	case c.Schedule.Error != nil:
+		return health{g.fail, "not scheduled", red, "schedule: " + *c.Schedule.Error, "not scheduled"}
+	case selfupdate.Dev(c.Version):
+		return health{g.fail, "not scheduled", red, "schedule: dev builds do not register themselves" + g.sep + "ai-usage schedule install", "not scheduled"}
+	default:
+		return health{g.fail, "not scheduled", red, "schedule: not registered" + g.sep + "ai-usage schedule install", "not scheduled"}
+	}
 }
 
 func (u *ui) footer(more bool) {

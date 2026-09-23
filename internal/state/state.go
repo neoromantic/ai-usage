@@ -148,6 +148,12 @@ type State struct {
 	Update   Update   `json:"update"`
 	Schedule Schedule `json:"schedule"`
 
+	// GuideDue says the short guide a new device prints once, under the
+	// first report a person sees, is still to come. Only a state that did
+	// not exist loads with it set, so a device that ran before the guide
+	// existed never prints it.
+	GuideDue bool `json:"guide_due,omitempty"`
+
 	// Damage says why LoadState started from an empty state. It is not saved.
 	Damage string `json:"-"`
 }
@@ -251,6 +257,8 @@ func (d Dir) LoadState() (*State, error) {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
+	// No state yet is a new device.
+	s.GuideDue = err != nil
 	if err == nil {
 		if jerr := json.Unmarshal(b, s); jerr != nil {
 			s = &State{Damage: "state.json did not parse (" + jerr.Error() + "); started again from an empty state"}

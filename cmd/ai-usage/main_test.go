@@ -1088,7 +1088,11 @@ func TestScheduleRun(t *testing.T) {
 
 	d := newDevice(t)
 	d.claude("aaaa", "/work/app", 1)
-	d.ok("collect", "--quiet", "--offline")
+	// The installer's first run. Its guide offers no scheduler command,
+	// since there is no scheduler here to pause.
+	if out := d.ok("--offline"); !strings.Contains(out, "\nHOW IT WORKS") || strings.Contains(out, "schedule remove") {
+		t.Fatalf("the first run's guide without a crontab:\n%s", out)
+	}
 	if st := d.state(); st.Schedule.Registered || !strings.Contains(st.Schedule.Error, "keep `ai-usage schedule run` running") {
 		t.Fatalf("schedule without crontab = %+v", st.Schedule)
 	}
@@ -1521,6 +1525,58 @@ func TestCommentedOutScheduleIsLeftAlone(t *testing.T) {
 	d.ok("schedule", "install")
 	if cron.tab != schedule.Line(exe, d.dir, os.Getenv("PATH"))+"\n" {
 		t.Fatalf("crontab after install = %q", cron.tab)
+	}
+}
+
+// A new device prints a short guide under the first report a person reads,
+// and never again. It names the scheduler it registered with, and never the
+// team key. The scheduler's runs leave it to the first run a person starts.
+func TestGuideAfterInstall(t *testing.T) {
+	hermetic(t)
+	t.Setenv("AI_USAGE_NO_SCHEDULE", "")
+	releaseBuild(t, "v1.3.0")
+	newScheduler = (&fakeCrontab{}).scheduler
+	srv := httptest.NewServer(relay.NewServer(relay.NewMemory(), relay.Limits{}))
+	defer srv.Close()
+	t.Setenv("AI_USAGE_RELAY", srv.URL)
+
+	d := newDevice(t)
+	d.claude("aaaa", "/work/app", 1)
+	first := d.ok()
+	_, guide, ok := strings.Cut(first, "\nHOW IT WORKS")
+	if !ok {
+		t.Fatalf("the first run printed no guide:\n%s", first)
+	}
+	for _, want := range []string{"started by cron", "as test-host", "ai-usage status", "ai-usage name set NAME", "AI_USAGE_TEAM_KEY", "ai-usage schedule remove"} {
+		if !strings.Contains(guide, want) {
+			t.Fatalf("the guide lacks %q:\n%s", want, guide)
+		}
+	}
+	if key := strings.TrimSpace(d.ok("team", "key")); strings.Contains(first, key) {
+		t.Fatal("the guide printed the team key")
+	}
+	if out := d.ok(); strings.Contains(out, "HOW IT WORKS") {
+		t.Fatalf("the second run printed the guide again:\n%s", out)
+	}
+
+	s := newDevice(t)
+	if out := s.ok("collect", "--quiet"); out != "" {
+		t.Fatalf("a scheduled run printed %q", out)
+	}
+	if out := s.ok("--json"); !json.Valid([]byte(out)) {
+		t.Fatalf("--json printed more than JSON:\n%s", out)
+	}
+	if out := s.ok(); !strings.Contains(out, "\nHOW IT WORKS") {
+		t.Fatalf("the first report after scheduled runs printed no guide:\n%s", out)
+	}
+
+	// A device that collected before the guide existed has a state without it.
+	old := newDevice(t)
+	if err := state.Dir(old.dir).SaveState(&state.State{}); err != nil {
+		t.Fatal(err)
+	}
+	if out := old.ok(); strings.Contains(out, "HOW IT WORKS") {
+		t.Fatalf("a device that collected before the guide printed it:\n%s", out)
 	}
 }
 

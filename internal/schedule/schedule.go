@@ -76,6 +76,17 @@ func Default() Scheduler {
 	return s
 }
 
+// Name is the system scheduler Install registers with, as a person knows it.
+func (s Scheduler) Name() string {
+	switch s.GOOS {
+	case "darwin":
+		return "launchd"
+	case "windows":
+		return "Task Scheduler"
+	}
+	return "cron"
+}
+
 func execRunner(ctx context.Context, name string, args []string, stdin []byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()

@@ -27,7 +27,7 @@ ai-usage team key | docker exec -i -u app mybot sh -c 'key=$(cat)
 
 The installer needs `curl` or `wget`, and `sha256sum`, `shasum`, or `openssl`; the script is fetched in full first, so a container with neither tool fails instead of installing nothing. `docker exec -u` takes `HOME` from the image when it sets one, so add `-e HOME=/home/app` if the image's `HOME` is another user's. Add `AI_USAGE_RELAY` if the team uses its own relay. `AI_USAGE_NAME` in the container's environment names the machine too, and overrides the name saved at install.
 
-Its first run collects and prints the report. The report says the collector is not scheduled, because there is no crontab. That is expected until `ai-usage schedule run` runs.
+Its first run collects and prints the report, with a short guide under it. Both say the collector is not scheduled, because there is no crontab. That is expected until `ai-usage schedule run` runs.
 
 ## Keep it running
 

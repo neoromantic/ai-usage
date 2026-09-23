@@ -78,7 +78,7 @@ Releases are built for amd64 and arm64 on each OS. The installer:
 2. checks the SHA-256 checksum
 3. installs the binary into a folder on your `PATH` (see below), or to `%LOCALAPPDATA%\Programs\ai-usage\ai-usage.exe` on Windows, where it also adds that folder to your user `PATH`
 4. saves the relay and joins the team, if you gave them
-5. runs `ai-usage` once, which registers it with the scheduler
+5. runs `ai-usage` once, which registers it with the scheduler and prints the report with a short guide under it
 
 On macOS and Linux, an upgrade replaces the binary where it is: `~/.local/bin/ai-usage`, or the `ai-usage` found on `PATH`, so there is never a second copy. A new install goes into the first of `~/.local/bin`, `~/bin`, `/opt/homebrew/bin`, and `/usr/local/bin` that is on your `PATH` and that you can write to, and never into a folder that belongs to another tool, such as `~/.cargo/bin`.
 
@@ -133,6 +133,9 @@ The first run:
 - generates a new team key, unless the installer joined a team, so an install starts as a team of one
 - registers with the scheduler: a line in your crontab on Linux, a launch agent on macOS, a task named `ai-usage` in Task Scheduler on Windows
 - collects and prints the report
+- prints a short guide under the report: which scheduler now collects every 15 minutes, or what to do when none could be registered; what the team sees; and the commands worth knowing, with how to invite a colleague, how to pause the system scheduler's runs, and how to uninstall
+
+The guide is printed once. When the scheduler collected first, or the first run you started used `--json`, the guide comes with the next `ai-usage` that prints text; `ai-usage report` never prints it. A machine that collected with a version before the guide never prints it.
 
 The crontab line looks like this. It keeps the `PATH` of the shell that installed it, so that scheduled runs find the tools, and it names the state folder, so that scheduled runs use the same device, team key, and history as your own runs:
 
@@ -159,7 +162,7 @@ The state folder is `~/Library/Application Support/ai-usage` on macOS, `$XDG_CON
 | --- | --- |
 | `config.json` | this device's id, the relay, remembered and added homes, the `CLAUDE_CONFIG_DIR` value seen for them, which login each added Hermes home bills through, whether the schedule is off |
 | `team.key` | the team's private key; this is the secret |
-| `state.json` | the last good readings, sessions, and health |
+| `state.json` | the last good readings, sessions, and health, and whether the guide is still to be printed |
 | `team-cache.json` | the team's snapshots from the last read |
 | `samples/` | one file per day of samples, kept for 90 days |
 | `run.lock`, `config.lock` | keep two runs from overlapping, and two commands from changing `config.json` at once; held with the system's file lock, which ends with its process |
@@ -291,7 +294,7 @@ ai-usage team key | docker exec -i -u app mybot sh -c 'key=$(cat)
 
 Add `AI_USAGE_RELAY` if the team uses its own relay.
 
-Then start `ai-usage schedule run` in it as that user. The first run's report says the schedule is not registered, since there is no crontab; after `schedule run` starts, `ai-usage status` says it collects every 15 minutes. [docs/containers.md](docs/containers.md) has an entrypoint, a Dockerfile, and a service for s6-overlay.
+Then start `ai-usage schedule run` in it as that user. The first run's report and guide say the schedule is not registered, since there is no crontab; after `schedule run` starts, `ai-usage status` says it collects every 15 minutes. [docs/containers.md](docs/containers.md) has an entrypoint, a Dockerfile, and a service for s6-overlay.
 
 ## JSON for agents
 
