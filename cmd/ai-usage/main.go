@@ -91,12 +91,8 @@ Usage:
   ai-usage update                        check for a release now
   ai-usage version
 
-Views, one at a time (the default is accounts, devices, and this device):
-  --projects             every project on this device
-  --tokens               every team account's tokens, device by device
-  --devices              every team device, none folded away
-
 Display:
+  --projects             every project on this device, not only the busiest
   --color=auto|always|never
                          auto colors a terminal, unless NO_COLOR is set or TERM=dumb
   --ascii                ASCII glyphs; the default without a UTF-8 locale
