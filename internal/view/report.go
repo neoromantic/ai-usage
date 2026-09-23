@@ -58,6 +58,7 @@ type Relay struct {
 
 type Schedule struct {
 	Registered bool    `json:"registered"`
+	Foreground bool    `json:"foreground"`
 	Error      *string `json:"error"`
 }
 
@@ -233,7 +234,7 @@ func Build(in Input) Report {
 				Pending:    st.Relay.Pending,
 				LastError:  strPtr(st.Relay.LastError),
 			},
-			Schedule: Schedule{Registered: st.Schedule.Registered, Error: strPtr(st.Schedule.Error)},
+			Schedule: Schedule{Registered: st.Schedule.Registered, Foreground: st.Schedule.Registered && st.Schedule.Foreground, Error: strPtr(st.Schedule.Error)},
 			Update: Update{
 				CheckedAt: timePtr(st.Update.CheckedAt),
 				Latest:    strPtr(st.Update.Latest),
@@ -397,7 +398,7 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 		if err != nil {
 			return "(unreadable)"
 		}
-		return v
+		return snapshot.Printable(v)
 	}
 	// This device knows its links even when the linked account has no
 	// reading to match on the wire.

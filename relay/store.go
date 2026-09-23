@@ -53,6 +53,7 @@ type Memory struct {
 	count map[string]memCount
 	now   func() time.Time
 	hits  int
+	swept time.Time
 }
 
 // sweepEvery is how many Count calls pass between sweeps of expired entries.
@@ -124,6 +125,10 @@ func (m *Memory) Count(_ context.Context, key string, window time.Duration) (int
 	if m.hits++; m.hits%sweepEvery == 0 {
 		m.sweep(now)
 	}
+	// Hourly too, so a quiet relay keeps no address past its window for long.
+	if now.Sub(m.swept) > time.Hour {
+		m.sweep(now)
+	}
 	c := m.count[key]
 	if now.After(c.expires) {
 		c = memCount{expires: now.Add(window)}
@@ -137,6 +142,7 @@ func (m *Memory) Count(_ context.Context, key string, window time.Duration) (int
 // keys and abandoned teams are never listed again, so a long-running process
 // would otherwise keep both forever.
 func (m *Memory) sweep(now time.Time) {
+	m.swept = now
 	for k, c := range m.count {
 		if now.After(c.expires) {
 			delete(m.count, k)
@@ -184,10 +190,14 @@ func (kv *KV) Put(ctx context.Context, teamFP, device string, rec Record, ttl ti
 		return err
 	}
 	secs := strconv.Itoa(int(ttl.Seconds()))
+	// The set lasts as long as its longest-lived record: a device's write
+	// never shortens it, or a team's newest device, writing last, would
+	// unlist the older ones before their records expire.
 	_, err = kv.pipeline(ctx,
 		[]any{"SET", docKey(teamFP, device), string(b), "EX", secs},
 		[]any{"SADD", setKey(teamFP), device},
-		[]any{"EXPIRE", setKey(teamFP), secs},
+		[]any{"EXPIRE", setKey(teamFP), secs, "NX"},
+		[]any{"EXPIRE", setKey(teamFP), secs, "GT"},
 	)
 	return err
 }
@@ -276,6 +286,12 @@ func decodeRecord(raw json.RawMessage) (*Record, error) {
 	return &rec, nil
 }
 
+// maxKVResponse bounds what one pipeline call reads back. The largest is the
+// team read's MGET: every record in one response, up to about 44 KB each for a
+// full 32 KB snapshot, so 4.4 MB at DefaultLimits' 100 devices. 6 MiB also
+// fits the few devices that racing first writes can add past that cap.
+const maxKVResponse = 6 << 20
+
 // pipeline runs commands and returns each result, failing on any command error.
 func (kv *KV) pipeline(ctx context.Context, cmds ...[]any) ([]json.RawMessage, error) {
 	body, err := json.Marshal(cmds)
@@ -297,7 +313,7 @@ func (kv *KV) pipeline(ctx context.Context, cmds ...[]any) ([]json.RawMessage, e
 		return nil, fmt.Errorf("kv: %w", err)
 	}
 	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxKVResponse))
 	if err != nil {
 		return nil, err
 	}

@@ -204,6 +204,15 @@ func TestRelayConflictIsReported(t *testing.T) {
 	if !rs.LastPushAt.IsZero() {
 		t.Fatalf("a rejected push counted as pushed: %v", rs.LastPushAt)
 	}
+
+	// Once this device's snapshot is the newer one, a run that skips the
+	// team read clears the conflict the last read's run met.
+	w.now = t0.Add(time.Hour + 5*time.Minute)
+	o.PullEvery = 2 * time.Hour
+	res = run(t, o)
+	if rs := res.State.Relay; rs.Pending || rs.LastError != "" || !rs.LastPullAt.Equal(t0.Add(15*time.Minute)) {
+		t.Fatalf("relay state after the conflict passed = %+v", rs)
+	}
 }
 
 func TestRelayDocsThatDoNotVerifyAreReported(t *testing.T) {
@@ -225,6 +234,14 @@ func TestRelayDocsThatDoNotVerifyAreReported(t *testing.T) {
 	}
 	if len(res.Team.Docs) != 1 {
 		t.Fatalf("team = %v", deviceIDs(res.Team.Docs))
+	}
+
+	// A run that skips the read still says what was wrong with it.
+	w.now = t0.Add(15 * time.Minute)
+	o.PullEvery = time.Hour
+	res = run(t, o)
+	if rs := res.State.Relay; !strings.Contains(rs.LastError, "do not verify") || !rs.LastPushAt.Equal(w.now) {
+		t.Fatalf("relay state after a skipped read = %+v", rs)
 	}
 }
 

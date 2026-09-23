@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -135,6 +137,12 @@ func TestCodexAnswers(t *testing.T) {
 			wantErr:   "codex initialize: app-server exited without answering",
 			wantCalls: []string{"initialize"},
 		},
+		{
+			// What it said last on its way out says why.
+			mode:      "codex-exit-says",
+			wantErr:   "codex initialize: app-server exited without answering: error: unrecognized subcommand 'app-server'",
+			wantCalls: []string{"initialize"},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.mode, func(t *testing.T) {
@@ -185,6 +193,162 @@ func TestCodexBinaryMissing(t *testing.T) {
 	r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
 	if errText(err) != "codex binary not found; account unknown" || r != (Reading{}) {
 		t.Errorf("reading = %+v, %v", r, err)
+	}
+}
+
+// withRan makes env's harness commands pass their whole path to the fake,
+// and lists the paths run.
+func withRan(env *Env) *[]string {
+	var ran []string
+	env.Command = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		ran = append(ran, name)
+		argv := append([]string{"-test.run=^TestHelperProcess$", "--", name}, args...)
+		return exec.CommandContext(ctx, os.Args[0], argv...)
+	}
+	return &ran
+}
+
+// bundle puts an executable at home/rel, modified at mod.
+func bundle(t *testing.T, home, rel string, mod time.Time) string {
+	t.Helper()
+	p := filepath.Join(home, rel)
+	writeExe(t, p)
+	if err := os.Chtimes(p, mod, mod); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+var (
+	chatGPTApp = filepath.Join("Applications", "ChatGPT.app", "Contents", "Resources", exeName("codex"))
+	vscodeExt  = filepath.Join(".vscode", "extensions", "openai.chatgpt-26.5.1-darwin-arm64", "bin", "macos-aarch64", exeName("codex"))
+)
+
+func TestCodexFallsBackToBundled(t *testing.T) {
+	// A codex installed long ago cannot serve; the one the user's apps
+	// bundle, the newest first, answers for the same home.
+	env, _ := fakeEnv(t, "codex-old-on-path")
+	ran := withRan(&env)
+	bundle(t, env.HomeDir, chatGPTApp, testNow.Add(-48*time.Hour))
+	ext := bundle(t, env.HomeDir, vscodeExt, testNow.Add(-time.Hour))
+	r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
+	if err != nil || r.Account != "dev@example.com" || r.Plan != "pro" || r.Quota == nil {
+		t.Errorf("reading = %+v, %v", r, err)
+	}
+	if want := []string{filepath.Join("fake", "bin", "codex"), ext}; !slices.Equal(*ran, want) {
+		t.Errorf("ran %q, want %q", *ran, want)
+	}
+}
+
+func TestCodexWithoutAccountReadGivesWay(t *testing.T) {
+	// A codex with app-server but older than account/read turns it down
+	// as unknown; a bundled copy that has it answers.
+	env, _ := fakeEnv(t, "codex-no-account-read-on-path")
+	ran := withRan(&env)
+	app := bundle(t, env.HomeDir, chatGPTApp, testNow)
+	r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
+	if err != nil || r.Account != "dev@example.com" {
+		t.Errorf("reading = %+v, %v", r, err)
+	}
+	if want := []string{filepath.Join("fake", "bin", "codex"), app}; !slices.Equal(*ran, want) {
+		t.Errorf("ran %q, want %q", *ran, want)
+	}
+}
+
+func TestCodexKeepsTheAccountWhenItExitsAfter(t *testing.T) {
+	// A codex that named the account and then died has served: the account
+	// stands, with the reason its quota is missing.
+	for _, bundled := range []bool{false, true} {
+		env, _ := fakeEnv(t, "codex-exit-after-account")
+		ran := withRan(&env)
+		if bundled {
+			bundle(t, env.HomeDir, chatGPTApp, testNow)
+		}
+		r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
+		if r.Account != "dev@example.com" || r.Plan != "pro" || r.Quota != nil {
+			t.Errorf("bundled %v: reading = %+v", bundled, r)
+		}
+		if want := "codex account/rateLimits/read: app-server exited without answering: no backend"; errText(err) != want {
+			t.Errorf("bundled %v: error %q, want %q", bundled, errText(err), want)
+		}
+		if len(*ran) != 1 {
+			t.Errorf("bundled %v: ran %q", bundled, *ran)
+		}
+	}
+}
+
+func TestCodexNoneServes(t *testing.T) {
+	// When none can, the one on PATH says why.
+	env, _ := fakeEnv(t, "codex-exit-says")
+	ran := withRan(&env)
+	app := bundle(t, env.HomeDir, chatGPTApp, testNow)
+	r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
+	if errText(err) != "codex initialize: app-server exited without answering: error: unrecognized subcommand 'app-server'" || r != (Reading{}) {
+		t.Errorf("reading = %+v, %v", r, err)
+	}
+	if want := []string{filepath.Join("fake", "bin", "codex"), app}; !slices.Equal(*ran, want) {
+		t.Errorf("ran %q, want %q", *ran, want)
+	}
+}
+
+func TestCodexAnswerEndsTheSearch(t *testing.T) {
+	// A codex that answered, even that nobody is logged in, is the answer:
+	// another binary reads the same home.
+	env, _ := fakeEnv(t, "codex-logged-out")
+	ran := withRan(&env)
+	bundle(t, env.HomeDir, chatGPTApp, testNow)
+	_, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
+	if !saysLoggedOut(err) || len(*ran) != 1 {
+		t.Errorf("ran %q, error %v", *ran, err)
+	}
+}
+
+func TestCodexOnlyBundled(t *testing.T) {
+	// Someone who uses only the app has no codex on PATH.
+	env, _ := fakeEnv(t, "codex-ok")
+	env.LookPath = notOnPath
+	ran := withRan(&env)
+	apps := t.TempDir()
+	env.AppDirs = []string{filepath.Join(apps, "missing"), apps}
+	app := bundle(t, apps, filepath.Join("ChatGPT.app", "Contents", "Resources", exeName("codex")), testNow)
+	if !env.Find("codex") || env.Find("claude") {
+		t.Error("Find disagrees with the bundled codex")
+	}
+	r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
+	if err != nil || r.Account != "dev@example.com" || !slices.Equal(*ran, []string{app}) {
+		t.Errorf("ran %q: %+v, %v", *ran, r, err)
+	}
+}
+
+func TestBins(t *testing.T) {
+	home := t.TempDir()
+	onPath := filepath.Join(home, ".local", "bin", exeName("codex"))
+	writeExe(t, onPath)
+	env := Env{HomeDir: home, LookPath: notOnPath}
+	old := bundle(t, home, filepath.Join(".cursor", "extensions", "openai.chatgpt-0.4.1", "bin", "linux-x86_64", exeName("codex")), testNow.Add(-72*time.Hour))
+	newer := bundle(t, home, filepath.Join(".cursor", "extensions", "openai.chatgpt-0.5.0", "bin", "linux-x86_64", exeName("codex")), testNow)
+	app := bundle(t, home, chatGPTApp, testNow.Add(-24*time.Hour))
+	want := []string{onPath, newer, app, old}
+	if runtime.GOOS != "windows" {
+		// A link to a binary already listed, and a file that cannot run,
+		// are left out.
+		link := filepath.Join(home, "Applications", "Codex.app", "Contents", "Resources", "codex")
+		if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(onPath, link); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(bundle(t, home, vscodeExt, testNow), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := env.bins("codex"); !slices.Equal(got, want) {
+		t.Errorf("bins = %q, want %q", got, want)
+	}
+	writeExe(t, filepath.Join(home, ".vscode", "extensions", "openai.chatgpt-26.5.1", "bin", "x", exeName("claude")))
+	if got := env.bins("claude"); got != nil {
+		t.Errorf("claude bins = %q", got)
 	}
 }
 
@@ -396,4 +560,24 @@ func TestCodexRPCCloseReleasesReader(t *testing.T) {
 	rpc.close()
 	waitNoGoroutine(t, "probe.(*codexRPC).read")
 	_ = sw.Close()
+}
+
+func TestLastLineSaysTheError(t *testing.T) {
+	for in, want := range map[string]string{
+		"node:internal/modules/cjs/loader:1228\n  throw err;\n  ^\n\nError: Cannot find module '/x'\n    at Module._resolveFilename (node:internal)\n\nNode.js v22.1.0\n": "Error: Cannot find module '/x'",
+		"it broke\n\nFor more information, try '--help'.\n": "it broke",
+		"\x1b[2mlast words\x1b[0m\r\n\n":                    "last words",
+		"":                                                  "",
+		"thread 'main' panicked at src/main.rs:5:5:\nfailed to load config\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n":             "failed to load config",
+		"thread 'main' panicked at 'old style', src/main.rs:5:5\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n":                        "thread 'main' panicked at 'old style', src/main.rs:5:5",
+		"file:///x/codex.js:1\nimport x from 'y';\n^^^^^^\n\nSyntaxError: Cannot use import statement outside a module\n    at internal/main/run_main_module.js:17:47\n": "SyntaxError: Cannot use import statement outside a module",
+		"TypeError: foo is not a function\n    at ModuleJob.run (node:internal/modules/esm/module_job:195:25)\n\nNode.js v20.11.0\n":                                     "TypeError: foo is not a function",
+		"'node' is not recognized as an internal or external command,\r\noperable program or batch file.\r\n":                                                            "'node' is not recognized as an internal or external command, operable program or batch file.",
+	} {
+		var l lastLine
+		_, _ = l.Write([]byte(in))
+		if got := l.String(); got != want {
+			t.Errorf("lastLine(%q) = %q, want %q", in, got, want)
+		}
+	}
 }

@@ -28,7 +28,7 @@ Conventions:
 | --- | --- | --- |
 | `version` | string | the collector version, such as `v1.2.3`, or `dev` for a build from source |
 | `device` | string | this device's id, `d-` and 24 hex digits, made on the first run |
-| `device_label` | string | the host name |
+| `device_label` | string | the name this device goes by in the team: one set with `ai-usage name set` or `AI_USAGE_NAME`, else the host name |
 | `os_user` | string | the OS user name |
 | `team` | string | the team fingerprint |
 | `last_run_at` | time | when the last run happened |
@@ -40,7 +40,8 @@ Conventions:
 | `relay.last_pull_at` | time | when the team was last read from the relay |
 | `relay.pending` | bool | the newest snapshot has not reached the relay yet, because the relay could not be reached or it holds a newer snapshot for this device id |
 | `relay.last_error` | string | the last relay error |
-| `schedule.registered` | bool | the system scheduler runs this binary |
+| `schedule.registered` | bool | the system scheduler, or `ai-usage schedule run`, runs this binary |
+| `schedule.foreground` | bool | the last scheduled run came from `ai-usage schedule run`, not the system scheduler |
 | `schedule.error` | string | why it is not registered |
 | `update.checked_at` | time | the last release check |
 | `update.latest` | string | the newest release that check saw |
@@ -119,7 +120,7 @@ A device:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `device` | string | its id |
-| `label` | string | its host name, or `(unreadable)` if it does not decrypt with this team's key |
+| `label` | string | its name, the host name unless one was set, or `(unreadable)` if it does not decrypt with this team's key |
 | `os_user` | string | its OS user, or `(unreadable)` |
 | `this_device` | bool | this is the device making the report |
 | `collector_version` | string | its collector version |
@@ -167,7 +168,7 @@ A shortened report from a team of two:
       "pending": false,
       "last_error": null
     },
-    "schedule": { "registered": true, "error": null },
+    "schedule": { "registered": true, "foreground": false, "error": null },
     "update": { "checked_at": "2026-09-01T09:13:00Z", "latest": "v1.2.3", "staged": null, "error": null }
   },
   "providers": [

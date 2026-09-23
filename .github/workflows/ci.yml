@@ -34,8 +34,8 @@ jobs:
       - run: go vet ./...
       - name: Shell scripts
         run: |
-          for f in install.sh .github/scripts/*.sh; do sh -n "$f"; done
-          shellcheck -s sh install.sh .github/scripts/*.sh
+          for f in install.sh scripts/*.sh .github/scripts/*.sh; do sh -n "$f"; done
+          shellcheck -s sh install.sh scripts/*.sh .github/scripts/*.sh
       - name: PowerShell script
         shell: pwsh
         run: |

@@ -85,9 +85,28 @@ These PitStop behaviors are out, even though the project does them:
 - Account switching, after monitoring works.
 - A web report on the relay's site. The page gets the team key from the URL fragment or from what the person pastes, never from the server. It verifies and unseals the snapshots in the browser. The relay keeps serving only sealed, signed snapshots.
 - A better console report, where it is quick to see which accounts are near their limits, who is spending them, and what changed since the last look.
-- Names for consumers chosen at install time, such as `AI_USAGE_NAME=build-box` or `ai-usage name set`, in place of the host name and OS user. They should be renamable later, and the team should see the new name.
-- Documentation for running the collector inside a Docker container: the image, the team key as a secret, the state folder on a volume, and a scheduler with no cron in the container.
-- A matrix view of who uses what: consumers (devices, and bots on them) against accounts, with tokens in the cells, in the console and in JSON.
+- A matrix view of who uses what: devices (hosts and bot containers) against accounts, with tokens in the cells, in the console and in JSON.
+- An interactive console view, in the manner of btop: pick an account, a host, or a bot and a period, and drill down.
+- Managing subscriptions on the relay: price, renewal date, and owner per account, so that cost per consumer and idle subscriptions show. It needs more thought: this is data people enter, not what collectors see, and the relay stores only sealed, signed snapshots today.
+
+## Next: usage over time
+
+Decided on 2026-09-23 with the owner:
+
+- A consumer is a host: a person and their machine are the same thing here. A bot in its own container runs its own collector, so it is a host too. There is no separate "person".
+- 90 days of history is enough.
+- The report needs periods: today, 7 days, and 30 days. It also needs a breakdown by day and by quota week.
+- Utilization is how much of the quota the team uses: for each account and window cycle, the fullest reading before the window reset. For example, "the weekly window was used 100%, 100%, and 60% in the last three weeks".
+- Subscriptions are the accounts the collectors see. A subscription registry is later (see above).
+- The console is enough for now. The web report is a later version.
+- Different use cases may need different views; that is decided when building them.
+
+Sketch:
+
+- The snapshot gains day buckets: tokens per day per account, for up to 90 days. The team view adds them up per device and per account. The 32 KB snapshot cap and the relay's read cap grow to hold them. Sessions already keep when each account's share last grew; per-day growth needs the samples, which are already written every run and kept 90 days.
+- The snapshot gains quota cycles per account: each window's reset time and the fullest percentage seen before it. Readings come from every device, so the team view takes the fullest per cycle.
+- New views: `--days` and `--weeks` tables, and a utilization view per account. JSON carries the same data.
+- An account switch is placed at the run that first saw the new login, which is within 15 minutes. Placing it more exactly, from the quota jump in Codex's rollout, is not worth it.
 
 ## Implementation status
 
@@ -101,7 +120,7 @@ Done, in short:
   - macOS uses launchd because writing the crontab there waits on a prompt to let the terminal administer the computer: an install that nobody answered was killed after 30 seconds and left no schedule. The launch agent runs in the login session, so the collector can read the keychain. It is loaded with `launchctl bootstrap gui/<uid>`; a Mac with no one logged in at the screen gets no schedule until someone logs in, and `status` says so. A run the agent itself started never boots the agent out, since that would stop the run before it loaded the agent again; it only writes the plist back. A crontab line an earlier version wrote is removed by the next run the person starts, since writing the crontab can prompt; until then `status` reports it, so cron and launchd never both run the collector unnoticed. `launchctl disable` alone does not unload a loaded agent, so the README pauses with `disable` and `bootout`.
   - The scheduler entry names this device's state folder (`collect --quiet --home DIR`), so scheduled runs never fork the device, the key, or the ledger.
   - A collection holds the run lock from start to end, because it reads and rewrites the state, samples, team cache, and, when it updates itself, the binary. Two collections at once would each redo the probes and log scans, and the one that saved last would drop the other's result. The lock is the system's file lock (`flock`, `LockFileEx` on Windows) on `run.lock`. The system releases it when its process ends, however that happens, so a run that was killed never holds the others off, and two runs can never both take over a lock left behind. A run that hangs holds the lock until it is killed. A release from before the file lock held `run.lock` by creating it. A lock in that format is honored while its process runs, for up to 10 minutes, so upgrading during a scheduled run does not start a second collection.
-  - Reading never waits: `report` and `status` read the saved files, which are replaced atomically. `ai-usage` started while another run is collecting waits for that run and shows its result instead of collecting twice. It collects itself after the wait when that run saved nothing new, as when it was `update`, or collected with other inputs: another release, another relay, or other homes, such as a folder added in the meantime or named by this run's environment. The scheduler's `collect --quiet` skips. `config.json` has a short lock of its own, so `home add/remove` and `relay set/clear` never wait for a collection. A run records only the folders it found beyond the remembered ones, so it never brings back one removed meanwhile. `team join`, `team forget-device`, `update`, and `schedule install/remove` change what a collection also writes or acts on: the team key, the team cache, the binary, and the scheduler entry that a run registers again. So they wait up to 3 minutes for it.
+  - Reading never waits: `report` and `status` read the saved files, which are replaced atomically. `ai-usage` started while another run is collecting waits for that run and shows its result instead of collecting twice. It collects itself after the wait when that run saved nothing new, as when it was `update`, or collected with other inputs: another release, another relay, or other homes, such as a folder added in the meantime or named by this run's environment. The scheduler's `collect --quiet` skips. `config.json` has a short lock of its own, so `home add/remove` and `relay set/clear` never wait for a collection, except `home remove --forget`, which changes the ledger. A run records only the folders it found beyond the remembered ones, so it never brings back one removed meanwhile. `team join`, `team forget-device`, `update`, and `schedule install/remove` change what a collection also writes or acts on: the team key, the team cache, the binary, and the scheduler entry that a run registers again. So they wait up to 3 minutes for it.
 - **Self-update**
   - Updates come from GitHub releases, with SHA-256 checksums, inside the run lock. The downloaded binary must start and report the release's version before it replaces the old one.
   - The new binary replaces the old one after the run has read everything, so the next run is the update.
@@ -113,7 +132,8 @@ Done, in short:
   - `ai-usage home add PROVIDER DIR...` adds homes nothing names, such as bots running under other users on a server. `--quota-from codex:DIR` names the Codex or Grok home whose login a Hermes home bills through; that home is read too.
 - **Probes** only ask the harnesses, from the user's home directory:
   - Claude: `claude auth status --json`, and Claude Code's own config and cached usage. Never the keychain or `.credentials.json`.
-  - Codex: `codex app-server`, with only `initialize`, `account/read` (no refresh), and `account/rateLimits/read`.
+  - Codex: `codex app-server`, with only `initialize`, `account/read` (no refresh), and `account/rateLimits/read`. When a `codex` cannot start app-server or exits without answering, as one too old to have it does, the probe tries the copies the ChatGPT app (and the older Codex app) on macOS and OpenAI's extension for VS Code, Cursor, and Windsurf bundle, newest first; someone who uses only the app has no `codex` on `PATH` at all. When none answers, the error ends with the last line the first one printed, so the report says why the account is `unknown`. A teammate's Mac had 2,854 sessions under `codex unknown` because its `codex` exited without answering.
+  - Usage counted in a home whose harness never answered goes to the account that home first names, as the first run's history does. Each session read that run is claimed through the home it was read from, so a home that still fails keeps its own history `unknown`. The state records every home that has answered, even to say nobody is logged in, and never prunes that record. So usage from a logged-out spell is not claimed by a later login, even after the earlier account ages out of the ledger. A ledger from before that record claims nothing once any account of the harness is named.
   - Grok: its local files.
   - An explicit "not logged in" clears the logged-in mark.
   - One source that panics becomes that source's error, and the others still run.
@@ -126,6 +146,10 @@ Done, in short:
   - Accounts are tracked across switches. Token growth goes to the account logged in at that sample. Each account keeps its last good quota and shows how old it is.
   - Samples are taken every 15 minutes and kept for 90 days. Pace predicts when a window fills before its reset.
   - The headline is the fullest window that has not reset since the reading. If every window has reset, or there is no reading, it shows "unknown". Marks appear at 75% and 90%.
+- **Names and containers**
+  - A machine goes by its host name unless it is named: `ai-usage name set NAME` (at most 64 characters), `AI_USAGE_NAME` at install, or `AI_USAGE_NAME` in the environment, which overrides the saved name in the runs that see it. A container's `schedule run` sees the container's environment. launchd and cron do not see a shell's, so a variable set only in a shell profile names the device in the runs started by hand but not in the scheduled ones, and `ai-usage name` says so. The name is the sealed device label, so the team sees a rename after the machine's next run.
+  - `ai-usage schedule run` is the scheduler where there is none, as in a container: it collects at once and then at every quarter hour, each time in a new process of the binary on disk, so a self-update takes effect at the next collection. It holds a lock file (`schedule.lock`) while it runs. A run that finds it held records the schedule as foreground and never registers with cron or launchd, and `status` and the report call the schedule stopped once the lock is free. A missing `crontab` now says to use `schedule run`.
+  - `docs/containers.md` covers the rest: keep the user's home on a volume, so the device, key, ledger, and binary last; install as the bot's user; run `schedule run` from the entrypoint or as an s6-overlay service.
 - **Hermes on a subscription** (`openai-codex`, `xai-oauth`) is linked to the Codex or Grok account it is assumed to bill through: the one logged in to the home `--quota-from` names for that Hermes home (one per harness, paths matched after resolving symlinks), else to `~/.codex` or `~/.grok`. The Hermes row shows that account's own reading, marked as borrowed, and the snapshot says so in `quota_from`. The linked account shows what Hermes spent on it, session by session, without adding it to its own tokens; the snapshot carries that in `linked`, so the team view credits each login with what went through it.
 - **Views**: console text and versioned JSON (`schema_version` 2). Both include the other devices in the team. The console was redesigned for teams of a dozen accounts and a couple of dozen machines: accounts grouped by provider with a bar, both windows and the reading's age, a USED BY column, a DEVICES section that folds healthy machines past 12, and a legend that lists only the marks on screen. It fits 80 columns and uses more from 100. Golden files cover 80, 100, 120, and 140 columns, with and without color.
 - **Team key**: Ed25519, and its fingerprint names the team. Joining means `ai-usage team join` with the exported private key.
@@ -137,7 +161,9 @@ Done, in short:
   - It checks the signature and the exact shape, and rejects stale writes.
   - Rate limits apply per IP, and per day to new teams and new devices from one IP (IPv6 per /48). A forwarding header is trusted only when the operator names it and the request comes through their proxy.
   - Snapshots expire 7 to 90 days after their last update.
-  - Clients verify every document they pull and keep one per device.
+  - Clients verify every document they pull and keep one per device. Text opened from a snapshot is shown without control characters.
+  - A team read lists at most the device cap, the devices stored first, so racing first writes cannot make it too large to answer. The team's device set lives as long as its longest-lived record.
+  - A scheduled run publishes every time and reads the team once an hour; a run someone starts reads it every time. Reads carry the whole team, so this cuts the square term of the traffic by four.
 - **Resilience**
   - An unreachable relay, or one that holds a newer snapshot for this device id, leaves the newest snapshot pending and is shown. The next run that reaches the relay sends it.
   - A damaged `state.json` is set aside as `state.json.bad` rather than stopping every run.
@@ -155,10 +181,11 @@ Deferred or not done. These are cumbersome, or they need an action outside this 
 - **Orca and past sessions.** Orca hard-links every rollout into every account home, so a session is attributed by the weekly reset its rollout recorded: the account whose current weekly window resets within a minute of it. A session from before the current week cannot be matched and goes to the first home's login. An Orca account can show quota used and no sessions. `ORCA_USER_DATA_PATH` is not honored.
 - **Deploy order for `quota_from` and `linked`.** The relay accepts each from the build that added it. Collectors built from this tree get HTTP 422 from an older relay and keep the snapshot pending, and after a 4xx other than 409 a run does not read the team either. The relay deploys on push to `main`, so it is always deployed before a release is tagged.
 - **Account identity is the harness's label,** usually an email. One email in two workspaces or organizations is one account.
-- **The first run attributes all local history to the account logged in at that moment.** Older logs do not say which account wrote them. A forward clock jump of more than 90 days prunes the ledger, and history is attributed again after it.
+- **The first run attributes all local history to the account logged in at that moment.** Older logs do not say which account wrote them. The same goes for usage counted while the harness named nobody, until it first names an account. A forward clock jump of more than 90 days prunes the ledger, and history is attributed again after it. Samples written while the account was unknown keep it unknown; only pace reads them.
 - **The device cap can be exceeded briefly when two new devices write at once.** Counting and then writing is not atomic on the REST store. A Lua script or `SET NX` per slot would fix it.
 - **Pace uses only this device's samples,** not the team's.
 - **Two collectors that read the same harness home count it twice in the team view.** Examples are two OS users sharing a home, or a `CODEX_HOME` inherited by a second collector. Each device publishes its own totals.
+- **Moving a home to another collector needs `--forget`, while the home can still be read.** The container's first run counts the home's last 90 days again. `ai-usage home remove PROVIDER DIR --forget` reads the home's sessions and drops them from the host's ledger. It needs the home to be there, since the ledger does not record which home each session came from. A session that the removed home and a home still read both hold is then counted again from nothing at the next run. Without `--forget`, the host keeps the sessions until they are 90 days old.
 - **The Claude desktop app's agent-mode sessions (`local-agent-mode-sessions`) are not discovered.**
 - **Panics in probe goroutines.** A panic inside a goroutine a probe starts still ends the process. The command-level rescue records it and still runs the release check.
 - **Rare miscounts in logs:**

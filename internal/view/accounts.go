@@ -143,10 +143,19 @@ func (u *ui) consumerNames(a TeamAccount) []string {
 	return names
 }
 
+// splitHostUser undoes hostUser. The OS user is the last parenthesis, since a
+// name given with `ai-usage name set` may have one of its own.
+func splitHostUser(s string) (host, user string) {
+	i := strings.LastIndex(s, " (")
+	if i < 0 || !strings.HasSuffix(s, ")") {
+		return s, ""
+	}
+	return s[:i], s[i+2 : len(s)-1]
+}
+
 // shortDevice is the host, or host/user when the team has two users on it.
 func (u *ui) shortDevice(hostUser string) string {
-	host, user, _ := strings.Cut(hostUser, " (")
-	user = strings.TrimSuffix(user, ")")
+	host, user := splitHostUser(hostUser)
 	n := 0
 	for _, d := range u.r.Team.Devices {
 		if d.Label == host {
@@ -515,7 +524,7 @@ func (u *ui) notes(a arow, extra []Window) []line {
 		emit(line{{g.stale + " ", yellow}, {staleWhy[a.q.Source], gray}})
 	case a.q.Stale && a.q.Device != "":
 		u.legend["oldReading"] = true
-		host, _, _ := strings.Cut(a.q.Device, " (")
+		host, _ := splitHostUser(a.q.Device)
 		emit(line{{g.stale + " ", yellow}, {"last read on " + host + " " + ago(u.now.Sub(a.q.ObservedAt)), gray}})
 	}
 	if a.mirror() {

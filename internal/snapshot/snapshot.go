@@ -13,7 +13,9 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strings"
 	"time"
+	"unicode"
 )
 
 // Version is the wire format. The relay rejects any other value.
@@ -357,6 +359,35 @@ func PlainLabel(s string) string {
 		}
 	}
 	return string(out)
+}
+
+// Printable is s with control characters as spaces and the invisible
+// characters that change text direction or hide text left out, so that text
+// from a snapshot or an error cannot move the cursor, clear the screen, break
+// a line of the report, or read as something else. Joiners, which names and
+// emoji need, stay.
+func Printable(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case unicode.IsControl(r):
+			return ' '
+		case hidden(r):
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// hidden reports whether r is a direction mark, embedding, override, or
+// isolate, or an invisible character that joins nothing.
+func hidden(r rune) bool {
+	switch {
+	case r == 0x061c, r == 0x200b, r == 0x200e, r == 0x200f, r == 0xfeff:
+		return true
+	case r >= 0x202a && r <= 0x202e, r >= 0x2060 && r <= 0x2064, r >= 0x2066 && r <= 0x2069, r >= 0xfff9 && r <= 0xfffb:
+		return true
+	}
+	return false
 }
 
 // DurationName is the short window name for a length in minutes: 5h, 7d, 90m.

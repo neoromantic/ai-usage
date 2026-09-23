@@ -4,6 +4,7 @@
 #
 # Environment, all optional:
 #   AI_USAGE_BIN_DIR       where ai-usage.exe goes (default: %LOCALAPPDATA%\Programs\ai-usage)
+#   AI_USAGE_NAME          this device's name in the team (default: the host name)
 #   AI_USAGE_RELAY         relay URL to save before the first run
 #   AI_USAGE_TEAM_KEY      team key to join before the first run
 #   AI_USAGE_DOWNLOAD_URL  where release files are fetched from (mirrors, tests)
@@ -108,6 +109,11 @@
     }
     if (($env:Path -split ';') -notcontains $binDir) { $env:Path = "$env:Path;$binDir" }
 
+    $deviceName = Setting 'AI_USAGE_NAME'
+    if ($deviceName) {
+        & $exe name set $deviceName
+        if ($LASTEXITCODE -ne 0) { throw 'ai-usage install: name set failed' }
+    }
     $relay = Setting 'AI_USAGE_RELAY'
     if ($relay) {
         & $exe relay set $relay

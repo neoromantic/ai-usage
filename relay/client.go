@@ -155,6 +155,8 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 		return nil, fmt.Errorf("relay unreachable: %w", err)
 	}
 	defer resp.Body.Close()
+	// A full team read at DefaultLimits is about 4.4 MB. A self-hosted relay
+	// with higher limits may send more; past 8 MiB the read fails as not JSON.
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
 		return nil, fmt.Errorf("relay: %w", err)

@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,17 +35,28 @@ type Limits struct {
 	MinRecordTTL time.Duration
 }
 
-// DefaultLimits fit a team of a few dozen devices sampling every 15 minutes.
+// DefaultLimits fit a team of 100 devices sampling every 15 minutes.
+//
+// The team read returns every device's snapshot in one response, up to about
+// 44 KB each once base64 and JSON are added to 32 KB. A Vercel Function may
+// return at most 4.5 MB, so 100 devices is as many as fit without paging the
+// read. A device writes 4 times an hour on schedule, so 10 writes an hour per
+// device leaves room for runs started by hand. A scheduled run reads the team
+// once an hour, so a full team behind one NAT makes 500 requests an hour.
+//
 // Every new device is a new document to keep, so one address may add one full
-// team's worth a day. A script that keeps making keys then stores about 1 MB a
-// day, and what it drops expires within a week.
+// team's worth a day: about 4.4 MB (3.2 MB of snapshots, the rest base64 and
+// JSON). What it writes once expires within a week, so a script that only
+// makes keys keeps about 31 MB. One that also writes its devices again keeps
+// them, and adds 4.4 MB a day for as long as it runs; the store's own size
+// limit bounds that.
 func DefaultLimits() Limits {
 	return Limits{
-		DevicesPerTeam:  32,
-		WritesPerTeam:   400,
-		RequestsPerIP:   600,
+		DevicesPerTeam:  100,
+		WritesPerTeam:   1000,
+		RequestsPerIP:   2000,
 		NewTeamsPerIP:   5,
-		NewDevicesPerIP: 32,
+		NewDevicesPerIP: 100,
 		Window:          time.Hour,
 		NewWindow:       24 * time.Hour,
 		RecordTTL:       90 * 24 * time.Hour,
@@ -167,34 +180,46 @@ func (s *Server) allow(w http.ResponseWriter, r *http.Request, key string, limit
 type overLimit struct {
 	mu    sync.Mutex
 	until map[string]int64
+	// swept is when keys whose windows had ended were last dropped.
+	swept int64
 }
 
 // maxOverLimit bounds overLimit. Past it, keys are simply counted in the store.
 const maxOverLimit = 4096
 
+// has reports whether key is over its limit. Keys whose windows have ended
+// are dropped at most a minute after, at the next request, so no address is
+// kept past its window for long.
 func (o *overLimit) has(key string, now int64) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	if len(o.until) > 0 && now-o.swept >= 60 {
+		o.sweep(now)
+	}
 	return o.until[key] > now
 }
 
+// add remembers key until its window ends.
 func (o *overLimit) add(key string, until, now int64) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.until == nil {
 		o.until = map[string]int64{}
 	}
+	o.sweep(now)
 	if len(o.until) >= maxOverLimit {
-		for k, u := range o.until {
-			if u <= now {
-				delete(o.until, k)
-			}
-		}
-		if len(o.until) >= maxOverLimit {
-			return
-		}
+		return
 	}
 	o.until[key] = until
+}
+
+func (o *overLimit) sweep(now int64) {
+	for k, u := range o.until {
+		if u <= now {
+			delete(o.until, k)
+		}
+	}
+	o.swept = now
 }
 
 func (s *Server) put(w http.ResponseWriter, r *http.Request) {
@@ -268,8 +293,7 @@ func (s *Server) put(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// List then Put is not atomic, so first writes from new devices racing
-		// each other can pass the cap by a few. Only the team's own key can do
-		// that, and the rate limits still bound it.
+		// each other can pass the cap. Each looks again once it is stored, below.
 		if len(devices) >= s.Limits.DevicesPerTeam {
 			fail(w, http.StatusForbidden, "team has the most devices allowed")
 			return
@@ -289,7 +313,33 @@ func (s *Server) put(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusServiceUnavailable, "store unavailable")
 		return
 	}
+	if prev == nil {
+		// A new device that raced others past the cap would be left out of
+		// every team read while its writes succeed. The read lists the
+		// devices that joined first, so one past them gives way and is told.
+		recs, err := s.Store.List(ctx, teamFP)
+		if err == nil && len(recs) > s.Limits.DevicesPerTeam && !slices.Contains(firstDevices(recs, s.Limits.DevicesPerTeam), device) {
+			_ = s.Store.Delete(ctx, teamFP, device)
+			fail(w, http.StatusForbidden, "team has the most devices allowed")
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"stored": true})
+}
+
+// firstDevices lists up to n of a team's devices, the ones that joined first.
+func firstDevices(recs map[string]Record, n int) []string {
+	devs := slices.Collect(maps.Keys(recs))
+	slices.SortFunc(devs, func(a, b string) int {
+		if c := recs[a].Since.Compare(recs[b].Since); c != 0 {
+			return c
+		}
+		return strings.Compare(a, b)
+	})
+	if len(devs) > n {
+		devs = devs[:n]
+	}
+	return devs
 }
 
 // recordTTL keeps a snapshot for as long as its device has been writing,
@@ -326,8 +376,13 @@ func (s *Server) signedRequest(w http.ResponseWriter, r *http.Request, teamFP, d
 		fail(w, http.StatusUnauthorized, "request time is too far from server time")
 		return false
 	}
+	// HEAD is a GET without the body, and is signed as one.
+	method := r.Method
+	if method == http.MethodHead {
+		method = http.MethodGet
+	}
 	sig, err := decode(r.Header.Get(HeaderSig))
-	if err != nil || !team.Verify(pub, RequestMessage(r.Method, teamFP, device, at), sig) {
+	if err != nil || !team.Verify(pub, RequestMessage(method, teamFP, device, at), sig) {
 		fail(w, http.StatusUnauthorized, "signature does not verify")
 		return false
 	}
@@ -348,8 +403,13 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusServiceUnavailable, "store unavailable")
 		return
 	}
+	// A write that raced past the cap may not have given way yet, and the
+	// read must still fit in one response: the devices that joined first are
+	// listed.
+	devs := firstDevices(recs, s.Limits.DevicesPerTeam)
 	out := ListResponse{Devices: []ListedDevice{}}
-	for dev, rec := range recs {
+	for _, dev := range devs {
+		rec := recs[dev]
 		out.Devices = append(out.Devices, ListedDevice{Device: dev, Body: encode(rec.Body), Sig: encode(rec.Sig)})
 	}
 	writeJSON(w, http.StatusOK, out)

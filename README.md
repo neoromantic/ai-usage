@@ -58,6 +58,58 @@ With a relay and more than one machine in the team, ACCOUNTS adds a USED BY colu
 
 A terminal 100 columns or wider also gets a PLAN column in ACCOUNTS and a LAST column, each account's last activity, in THIS DEVICE. When one tool has several data folders on the machine, such as the per-account Codex homes Orca keeps, each account in THIS DEVICE names the folder it is logged in to, such as `~/.codex` or `orca 7527b7a4`.
 
+## Install
+
+macOS and Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.sh | sh
+```
+
+Windows, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.ps1 | iex
+```
+
+Releases are built for amd64 and arm64 on each OS. The installer:
+
+1. downloads the release file for your OS and CPU, and `checksums.txt` from the same release
+2. checks the SHA-256 checksum
+3. installs the binary to `~/.local/bin/ai-usage`, or `%LOCALAPPDATA%\Programs\ai-usage\ai-usage.exe` on Windows, where it also adds that folder to your user `PATH`
+4. saves the relay and joins the team, if you gave them
+5. runs `ai-usage` once, which registers it with the scheduler
+
+The installer asks no questions. Run it again to upgrade in place. It reads these variables:
+
+| Variable | Meaning |
+| --- | --- |
+| `AI_USAGE_BIN_DIR` | where the binary goes |
+| `AI_USAGE_NAME` | this machine's name in the team, instead of its host name |
+| `AI_USAGE_RELAY` | relay URL to save before the first run |
+| `AI_USAGE_TEAM_KEY` | team key to join before the first run |
+| `AI_USAGE_DOWNLOAD_URL` | where to download release files from, instead of the latest GitHub release |
+| `AI_USAGE_ALLOW_ROOT` | install for root even though the installer runs under `sudo` |
+
+To join a team while installing, which is how a teammate's machine joins yours (`ai-usage team key` prints the key and `ai-usage relay show` the relay):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.sh |
+  AI_USAGE_RELAY=https://relay.example.com AI_USAGE_TEAM_KEY='aiu-team-1:…' sh
+```
+
+```powershell
+$env:AI_USAGE_RELAY = 'https://relay.example.com'
+$env:AI_USAGE_TEAM_KEY = 'aiu-team-1:…'
+irm https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.ps1 | iex
+```
+
+A key typed on the command line stays in your shell history. To avoid that, install first, then run `ai-usage team join` and paste the key.
+
+Run the installer as the person whose usage you want to collect. Under `sudo` it stops, because the collector would register root's schedule and read root's tools, and could leave root-owned files in your home. On a server whose bots run as root, install it as root itself, with `AI_USAGE_ALLOW_ROOT=1` if you got there through `sudo`. For a container, see [In a container](#in-a-container).
+
+On Linux the schedule needs `crontab`, which containers and some minimal systems lack; `ai-usage schedule run` takes its place there. The installer needs `curl` or `wget`, and `sha256sum`, `shasum`, or `openssl`.
+
 ## First run
 
 The first run:
@@ -113,6 +165,8 @@ A key cannot be revoked. To shut someone out, start a new team and join the rema
 
 In the team view, token counts add up across machines. Quota percentages do not: an account's quota is the newest reading any machine has for it.
 
+A machine goes by its host name. `ai-usage name set NAME` gives it another, and the team sees it after the machine's next run.
+
 ## Relay
 
 The relay is a small HTTP API that keeps one snapshot per machine. It is needed only for the team view; without one, ai-usage reports on this machine alone.
@@ -125,9 +179,13 @@ ai-usage relay clear
 
 A release build may carry a default relay, chosen when the release was built. `relay set` overrides it and `relay clear` goes back to it. `AI_USAGE_RELAY` overrides both for one run.
 
-The relay accepts only a small, fixed-shape usage snapshot signed by the team key. It checks the signature and the shape and stores nothing else. It limits requests per IP address, writes per team, and machines per team (32). Each IP address can also add only 5 new teams and 32 new machines a day.
+The relay accepts only a small, fixed-shape usage snapshot signed by the team key. It checks the signature and the shape and stores nothing else. It limits requests per IP address, writes per team, and machines per team (100). Each IP address can also add only 5 new teams and 100 new machines a day.
 
-To run your own relay on Vercel with Upstash for Redis (formerly Vercel KV), or with `ai-usage relay serve`, see [docs/relay.md](docs/relay.md).
+To run your own relay on Vercel with Upstash for Redis (formerly Vercel KV), use the button, which copies this repository into your Git account and deploys it with a new database:
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fneoromantic%2Fai-usage&project-name=ai-usage-relay&repository-name=ai-usage-relay&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22upstash%22%2C%22productSlug%22%3A%22upstash-kv%22%2C%22protocol%22%3A%22storage%22%7D%5D)
+
+Or, from a clone with the Vercel CLI logged in, run `sh scripts/deploy-relay.sh`. On any other machine, `ai-usage relay serve` runs the same relay, and so does the official Go image in Docker. Then point every machine in the team at it with `ai-usage relay set URL`. [docs/relay.md](docs/relay.md) covers each way, the limits, and updates; [docs/relay-protocol.md](docs/relay-protocol.md) specifies the protocol for other clients and relays.
 
 ## Commands
 
@@ -143,14 +201,18 @@ To run your own relay on Vercel with Upstash for Redis (formerly Vercel KV), or 
 | `ai-usage team forget-device ID` | remove a machine's snapshot from the relay |
 | `ai-usage home` | list every data folder this machine reads, per tool |
 | `ai-usage home add PROVIDER DIR... [--quota-from PROVIDER:DIR]` | read more data folders; see [Other data folders](#other-data-folders) |
-| `ai-usage home remove PROVIDER DIR...` | stop reading folders added before |
+| `ai-usage home remove PROVIDER DIR... [--forget]` | stop reading folders added before; `--forget` also drops the sessions counted from them, for folders another collector reads now |
 | `ai-usage relay show` | print the relay in use |
 | `ai-usage relay set URL` | save a relay URL, `http://` or `https://` |
 | `ai-usage relay clear` | forget the saved relay |
 | `ai-usage relay serve [--addr :8080] [--client-ip-header NAME]` | run a relay; behind a reverse proxy, name the header it sets to the client's address |
+| `ai-usage name show` | print this machine's name in the team |
+| `ai-usage name set NAME` | name this machine in the team, instead of its host name; at most 64 characters |
+| `ai-usage name clear` | go by the host name again |
 | `ai-usage schedule install` | register with the scheduler, and let later runs keep it registered |
 | `ai-usage schedule remove` | unregister, and stop later runs from registering again |
 | `ai-usage schedule status` | whether the scheduler runs this binary with this state folder, or was disabled by hand |
+| `ai-usage schedule run` | be the scheduler where there is none, as in a container: collect now and every 15 minutes until stopped |
 | `ai-usage update` | check for a release now |
 | `ai-usage version` | print the version |
 | `ai-usage help` | print usage |
@@ -175,6 +237,7 @@ To run your own relay on Vercel with Upstash for Redis (formerly Vercel KV), or 
 | --- | --- |
 | `AI_USAGE_HOME` | the state folder |
 | `AI_USAGE_RELAY` | the relay URL, overriding the saved one |
+| `AI_USAGE_NAME` | this machine's name in the team, overriding the saved one in the runs that see it; launchd and cron do not pass on a shell's variables, so name a computer with `ai-usage name set` |
 | `AI_USAGE_NO_SCHEDULE` | when set, this run does not register with the scheduler |
 | `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GROK_HOME`, `HERMES_HOME` | another data folder for that tool |
 
@@ -186,11 +249,34 @@ Each tool's default folder (`~/.claude`, `~/.codex`, `~/.grok`, `~/.hermes`) is 
 ai-usage home add hermes /srv/bots/alpha/.hermes /srv/bots/beta/.hermes --quota-from codex:/srv/bots/.codex
 ```
 
-Hermes keeps its own login for a Codex or Grok subscription, so the collector cannot read which account it uses. By default a Hermes folder is taken to use the account logged in to `~/.codex` or `~/.grok`. `--quota-from` names the folder whose login it uses instead, one per tool, which is then read too; it covers the profiles inside each Hermes folder. `ai-usage home` shows every folder a run reads and what each bills through, and marks one that is gone as missing. `ai-usage home remove` will not remove a folder Hermes folders take their quota from until they are removed or named another.
+Hermes keeps its own login for a Codex or Grok subscription, so the collector cannot read which account it uses. By default a Hermes folder is taken to use the account logged in to `~/.codex` or `~/.grok`. `--quota-from` names the folder whose login it uses instead, one per tool, which is then read too; it covers the profiles inside each Hermes folder. `ai-usage home` shows every folder a run reads and what each bills through, and marks one that is gone as missing. `ai-usage home remove` will not remove a folder Hermes folders take their quota from until they are removed or named another. Name a folder whose login is kept fresh, by Codex itself or by whatever refreshes it for the bots. A copy that only seeded another login store goes stale: it still says whose it is, but its quota reads fail with HTTP 401.
 
 Each Hermes session's tokens go to the login of the folder it was read from. When Hermes folders bill one route through different logins, as bots on a shared login beside your own Hermes, the Hermes account shows the quota of the login most of its tokens in the last 90 days went through.
 
+Accounts and quota come from the tools themselves. Codex is asked through the `codex` on `PATH`; when that one is missing or too old to answer, through the copy the ChatGPT app on macOS or OpenAI's extension for VS Code, Cursor, or Windsurf bundles. Usage counted in a folder while its tool never answered goes to the first account it names there. Usage counted while it said nobody is logged in stays unknown.
+
 On a server, run the collector as a user that can read those folders. Hermes databases are read in place, read-only; a database Hermes has open is read the way any SQLite reader reads it, and one nobody has open is read without taking a lock.
+
+## In a container
+
+The collector runs in a container as on any Linux machine: install it inside, as the user whose tools it should read, and each container, such as each bot, is a machine in the team. Three things differ.
+
+- The state folder holds the device id and the team key, so it must outlive the container. Keep that user's home, or `AI_USAGE_HOME`, on a volume or a bind mount. A binary installed there, in `~/.local/bin`, keeps its updates too.
+- A container's host name is random. Name the machine when installing with `AI_USAGE_NAME`, later with `ai-usage name set`, or with `AI_USAGE_NAME` in the container's environment.
+- Containers rarely have cron. `ai-usage schedule run` is the scheduler there: it collects at once and then every 15 minutes, until it is stopped. Run it beside the container's main process, under its service manager if it has one, or from its entrypoint.
+
+To install into a running container, with the team key on standard input rather than in the command:
+
+```sh
+ai-usage team key | docker exec -i -u app mybot sh -c 'key=$(cat)
+  url=https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.sh
+  script=$(curl -fsSL "$url" || wget -qO- "$url") &&
+    printf "%s\n" "$script" | AI_USAGE_NAME=mybot AI_USAGE_TEAM_KEY="$key" sh'
+```
+
+Add `AI_USAGE_RELAY` if the team uses its own relay.
+
+Then start `ai-usage schedule run` in it as that user. The first run's report says the schedule is not registered, since there is no crontab; after `schedule run` starts, `ai-usage status` says it collects every 15 minutes. [docs/containers.md](docs/containers.md) has an entrypoint, a Dockerfile, and a service for s6-overlay.
 
 ## JSON for agents
 
@@ -216,7 +302,7 @@ A snapshot is what leaves the machine. It is at most 32 KB, and the relay reject
 
 Sealed with the team key, so only the team can read them:
 
-- the machine's host name and OS user name
+- the machine's name (its host name, unless `ai-usage name set` gave it another) and OS user name
 - account labels, such as an email address
 - project folder paths
 - error messages

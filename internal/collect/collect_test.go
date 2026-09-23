@@ -348,6 +348,193 @@ func TestProbeWithoutAnswerOnFirstRunUsesUnknown(t *testing.T) {
 	}
 }
 
+func TestFirstNamedAccountClaimsUnknownHistory(t *testing.T) {
+	// A codex too old to answer names nobody; once one that answers is
+	// found, what was counted meanwhile is its account's, as the first
+	// run's history is.
+	w, o := newWorld(t)
+	h := w.home(t, "codex")
+	k := state.Key("codex", h)
+	w.askErr[k] = errors.New("codex initialize: app-server exited without answering")
+	w.sessions("codex", h, sess("s1", "/p", 1000, t0))
+	res := run(t, o)
+	if u := totalsFor(t, res.State, "codex", UnknownAccount); u.Tokens != tok(1000) {
+		t.Fatalf("unknown = %+v", u)
+	}
+
+	w.now = t0.Add(15 * time.Minute)
+	delete(w.askErr, k)
+	w.login("codex", h, "ops@x", quota(w.now, 20))
+	w.sessions("codex", h, sess("s1", "/p", 1200, w.now), sess("s2", "/q", 50, w.now))
+	res = run(t, o)
+	a := totalsFor(t, res.State, "codex", "ops@x")
+	if !a.Current || a.Tokens != tok(1200).Add(tok(50)) || a.Sessions != 2 || !a.LastActive.Equal(w.now) {
+		t.Fatalf("claimed = %+v", a)
+	}
+	if hasTotals(res.State, "codex", UnknownAccount) {
+		t.Fatal("unknown account kept its history")
+	}
+
+	// Later unknown usage has an account to compare with, and stays unknown.
+	w.now = t0.Add(30 * time.Minute)
+	w.askErr[k] = notLoggedIn("codex")
+	w.readings[k] = probe.Reading{}
+	w.sessions("codex", h, sess("s1", "/p", 1300, w.now), sess("s2", "/q", 50, w.now))
+	run(t, o)
+	w.now = t0.Add(45 * time.Minute)
+	delete(w.askErr, k)
+	w.login("codex", h, "dev@x", nil)
+	res = run(t, o)
+	if u := totalsFor(t, res.State, "codex", UnknownAccount); u.Tokens != tok(100) {
+		t.Fatalf("unknown after a named account = %+v", u)
+	}
+	if d := totalsFor(t, res.State, "codex", "dev@x"); !d.Tokens.Zero() {
+		t.Fatalf("a later account claimed usage from before it: %+v", d)
+	}
+}
+
+func TestEachHomeClaimsItsOwnUnknownHistory(t *testing.T) {
+	w, o := newWorld(t)
+	h := w.home(t, "codex")
+	x := w.extraHome(t, "codex", "work-codex")
+	hk, xk := state.Key("codex", h), state.Key("codex", x)
+	w.askErr[hk] = errors.New("no answer")
+	w.askErr[xk] = errors.New("no answer")
+	w.sessions("codex", h, sess("s1", "/p", 1000, t0))
+	w.sessions("codex", x, sess("s2", "/q", 500, t0))
+	run(t, o)
+
+	// One home answers and the other still does not: only the one that
+	// answered claims, and only what was read from it.
+	w.now = t0.Add(15 * time.Minute)
+	delete(w.askErr, hk)
+	w.login("codex", h, "ann@x", nil)
+	w.askErr[xk] = errors.New("codex account/rateLimits/read: 401 Unauthorized")
+	res := run(t, o)
+	if a := totalsFor(t, res.State, "codex", "ann@x"); a.Tokens != tok(1000) {
+		t.Fatalf("ann = %+v", a)
+	}
+	if u := totalsFor(t, res.State, "codex", UnknownAccount); u.Tokens != tok(500) {
+		t.Fatalf("unknown = %+v", u)
+	}
+
+	// The other home answers later, with another account, and claims its own.
+	w.now = t0.Add(30 * time.Minute)
+	delete(w.askErr, xk)
+	w.login("codex", x, "bob@x", nil)
+	res = run(t, o)
+	if a, b := totalsFor(t, res.State, "codex", "ann@x"), totalsFor(t, res.State, "codex", "bob@x"); a.Tokens != tok(1000) || b.Tokens != tok(500) {
+		t.Fatalf("ann = %+v, bob = %+v", a, b)
+	}
+	if hasTotals(res.State, "codex", UnknownAccount) {
+		t.Fatal("unknown account kept history")
+	}
+}
+
+func TestLoggedOutHomeDoesNotClaimLater(t *testing.T) {
+	// A home that said nobody is logged in has answered; the usage counted
+	// then is no one's, whoever logs in afterwards.
+	w, o := newWorld(t)
+	h := w.home(t, "codex")
+	k := state.Key("codex", h)
+	w.askErr[k] = notLoggedIn("codex")
+	w.readings[k] = probe.Reading{}
+	w.sessions("codex", h, sess("s1", "/p", 1000, t0))
+	run(t, o)
+	w.now = t0.Add(15 * time.Minute)
+	delete(w.askErr, k)
+	w.login("codex", h, "ann@x", nil)
+	res := run(t, o)
+	if u := totalsFor(t, res.State, "codex", UnknownAccount); u.Tokens != tok(1000) {
+		t.Fatalf("unknown = %+v", u)
+	}
+}
+
+func TestClaimOnceAfterTheAccountAgesOut(t *testing.T) {
+	// The ledger forgets an idle account after the retention window; the
+	// home still answered before, so unknown usage since is not claimed.
+	w, o := newWorld(t)
+	h := w.home(t, "codex")
+	k := state.Key("codex", h)
+	w.login("codex", h, "ann@x", nil)
+	w.sessions("codex", h, sess("s1", "/p", 500, t0))
+	run(t, o)
+	w.askErr[k] = notLoggedIn("codex")
+	w.readings[k] = probe.Reading{}
+	for day := 1; day <= 95; day += 2 {
+		w.now = t0.Add(time.Duration(day) * 24 * time.Hour)
+		w.sessions("codex", h, sess(fmt.Sprintf("u%d", day), "/p", 100, w.now))
+		run(t, o)
+	}
+	delete(w.askErr, k)
+	w.login("codex", h, "bea@x", nil)
+	w.now = w.now.Add(time.Hour)
+	res := run(t, o)
+	if b := totalsFor(t, res.State, "codex", "bea@x"); !b.Tokens.Zero() {
+		t.Fatalf("a later account claimed usage from before it: %+v", b)
+	}
+}
+
+// A ledger from before homes were recorded, whose harness named an account,
+// claims nothing.
+func TestLegacyLedgerWithANamedAccountDoesNotClaim(t *testing.T) {
+	w, o := newWorld(t)
+	h := w.home(t, "codex")
+	k := state.Key("codex", h)
+	w.login("codex", h, "ann@x", nil)
+	w.sessions("codex", h, sess("s1", "/p", 500, t0))
+	run(t, o)
+	w.askErr[k] = errors.New("no answer")
+	w.now = t0.Add(15 * time.Minute)
+	w.sessions("codex", h, sess("s1", "/p", 500, t0), sess("s2", "/q", 300, w.now))
+	delete(w.readings, k)
+	run(t, o)
+	st, err := o.Dir.LoadState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Answered = nil
+	if err := o.Dir.SaveState(st); err != nil {
+		t.Fatal(err)
+	}
+	w.now = t0.Add(30 * time.Minute)
+	delete(w.askErr, k)
+	w.login("codex", h, "bea@x", nil)
+	res := run(t, o)
+	if b := totalsFor(t, res.State, "codex", "bea@x"); !b.Tokens.Zero() {
+		t.Fatalf("bea = %+v", b)
+	}
+}
+
+func TestProbeErrorsNameTheirHome(t *testing.T) {
+	w, o := newWorld(t)
+	h := w.home(t, "codex")
+	x := w.extraHome(t, "codex", "work-codex")
+	w.login("codex", h, "ann@x", nil)
+	w.login("codex", x, "ann@x", nil)
+	w.askErr[state.Key("codex", x)] = errors.New("codex account/rateLimits/read: 401 Unauthorized")
+	res := run(t, o)
+	if got, want := res.State.Sources["codex"].Error, x+": codex account/rateLimits/read: 401 Unauthorized"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+
+	// The same error from every home is said once.
+	w.now = t0.Add(15 * time.Minute)
+	w.askErr[state.Key("codex", h)] = w.askErr[state.Key("codex", x)]
+	res = run(t, o)
+	if got := res.State.Sources["codex"].Error; got != "codex account/rateLimits/read: 401 Unauthorized" {
+		t.Fatalf("error = %q", got)
+	}
+}
+
+func TestHomeErrorsShortenTheUserHome(t *testing.T) {
+	home := filepath.Join(string(filepath.Separator)+"home", "ann")
+	got := homeErrors([][2]string{{filepath.Join(home, ".codex"), "boom"}}, 2, home)
+	if want := []string{filepath.Join("~", ".codex") + ": boom"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("errors = %q, want %q", got, want)
+	}
+}
+
 // notLoggedIn is how a probe says the harness answered and nobody is logged in.
 type notLoggedIn string
 
@@ -1115,6 +1302,58 @@ func TestStatePersistsAcrossRuns(t *testing.T) {
 	}
 	if !reflect.DeepEqual(Totals(st), Totals(first.State)) {
 		t.Fatalf("saved totals differ:\n%+v\n%+v", Totals(st), Totals(first.State))
+	}
+}
+
+// A run someone started reads the team, so it does not reuse the result of a
+// scheduled run that skipped the read.
+func TestWaitedRunThatSkippedTheTeamRead(t *testing.T) {
+	for _, readToo := range []bool{false, true} {
+		w, o := newWorld(t)
+		h := w.home(t, "claude")
+		w.sessions("claude", h, sess("s1", "/p", 100, t0))
+		r := newRelay(t, w)
+		o.Relay = r.client(w)
+		run(t, o)
+		held, err := o.Dir.Lock()
+		if err != nil {
+			t.Fatal(err)
+		}
+		reads := 0
+		read := o.ReadLogs
+		o.ReadLogs = func(p string, homes []string, since time.Time) logs.Result {
+			reads++
+			return read(p, homes, since)
+		}
+		w.now = t0.Add(30 * time.Minute)
+		o.Wait = 10 * time.Second
+		o.Waiting = func() {
+			go func() {
+				// A scheduled run at t0+15m collected; it read the team only
+				// when readToo.
+				at := t0.Add(15 * time.Minute)
+				st, _ := o.Dir.LoadState()
+				st.LastRunAt = at
+				if err := o.Dir.SaveState(st); err != nil {
+					t.Error(err)
+				}
+				if readToo {
+					c, _ := LoadTeamCache(o.Dir)
+					c.PulledAt = at
+					if err := saveTeamCache(o.Dir, c); err != nil {
+						t.Error(err)
+					}
+				}
+				held()
+			}()
+		}
+		res := run(t, o)
+		if res.Waited != readToo || (reads == 0) != readToo {
+			t.Fatalf("read too %v: waited %v, %d reads", readToo, res.Waited, reads)
+		}
+		if want := map[bool]time.Time{false: w.now, true: t0.Add(15 * time.Minute)}[readToo]; !res.Team.PulledAt.Equal(want) {
+			t.Fatalf("read too %v: team read at %s, want %s", readToo, res.Team.PulledAt, want)
+		}
 	}
 }
 

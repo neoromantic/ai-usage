@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -376,6 +377,46 @@ func TestCheckWindowsMovesRunningBinaryAside(t *testing.T) {
 	onlyFiles(t, filepath.Dir(exe), "ai-usage.exe")
 }
 
+// An old binary that still runs, as a long `schedule run` does, cannot be
+// removed; it is moved aside again, and removed once it can be.
+func TestCheckWindowsMovesAStillRunningOldBinaryAgain(t *testing.T) {
+	bin := runnable(t, "v1.3.0")
+	assets := map[string][]byte{"ai-usage_windows_amd64.exe": bin}
+	assets["checksums.txt"] = []byte(sumsFor(assets))
+	srv := (&fakeGitHub{tag: "v1.3.0", assets: assets}).start(t)
+	exe := installed(t, "ai-usage.exe")
+	// A folder that is not empty stands in for a binary that is running:
+	// os.Remove fails on both.
+	running := filepath.Join(exe+".old", "image")
+	if err := os.MkdirAll(running, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	u := updater(srv, exe, "v1.2.9")
+	u.GOOS = "windows"
+	if res, err := u.Check(context.Background()); err != nil || !res.Installed {
+		t.Fatalf("Check = %+v, %v", res, err)
+	}
+	if read(t, exe) != string(bin) || read(t, exe+".old") != "old binary" {
+		t.Fatalf("binary replaced %v, old = %q", read(t, exe) == string(bin), read(t, exe+".old"))
+	}
+	aside, _ := filepath.Glob(exe + ".old-*")
+	if len(aside) != 1 {
+		t.Fatalf("moved aside: %q", aside)
+	}
+
+	// Once it has stopped, the next check removes both.
+	if err := os.Remove(filepath.Join(aside[0], "image")); err != nil {
+		t.Fatal(err)
+	}
+	next := updater(srv, exe, "v1.3.0")
+	next.GOOS = "windows"
+	if _, err := next.Check(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	onlyFiles(t, filepath.Dir(exe), "ai-usage.exe")
+}
+
 // A slow link finishes a download that takes longer than the stall limit, as
 // long as bytes keep arriving.
 func TestCheckSlowDownload(t *testing.T) {
@@ -492,5 +533,32 @@ func TestChecksum(t *testing.T) {
 	}
 	if _, ok := checksum([]byte(sums), "ai-usage_darwin_arm64"); ok {
 		t.Fatal("found a checksum for an absent file")
+	}
+}
+
+// A binary under a folder whose name has brackets still has its old copies
+// removed.
+func TestCleanupOldUnderBrackets(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "John [Work]")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	exe := filepath.Join(dir, "ai-usage.exe")
+	for _, name := range []string{"ai-usage.exe", "ai-usage.exe.old", "ai-usage.exe.old-123", "ai-usage.exe.old-456", "other.old-1"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cleanupOld(exe)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var left []string
+	for _, e := range entries {
+		left = append(left, e.Name())
+	}
+	if want := []string{"ai-usage.exe", "other.old-1"}; !reflect.DeepEqual(left, want) {
+		t.Fatalf("left %v, want %v", left, want)
 	}
 }

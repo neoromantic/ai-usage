@@ -51,7 +51,10 @@ func (d Dir) SamplesDir() string      { return d.Path("samples") }
 // Config is set once and changed only by the person.
 type Config struct {
 	Device string `json:"device"`
-	Relay  string `json:"relay,omitempty"`
+	// Name is what this device is called in the team instead of its host
+	// name, set with `ai-usage name set`. A container's host name is random.
+	Name  string `json:"name,omitempty"`
+	Relay string `json:"relay,omitempty"`
 	// Homes are harness homes seen through environment variables in an
 	// interactive run. The scheduler's environment does not have them.
 	Homes map[string][]string `json:"homes,omitempty"`
@@ -130,7 +133,12 @@ type State struct {
 
 	Sources map[string]Source `json:"sources"`
 	// Current maps provider and home to the account logged in there at the last run.
-	Current  map[string]string   `json:"current"`
+	Current map[string]string `json:"current"`
+	// Answered keys, by provider and home, the homes whose harness has
+	// answered who is logged in there, or that nobody is, at some run. It is
+	// never pruned: usage counted before a home first answers is given to
+	// the account it names then, and only then.
+	Answered map[string]bool     `json:"answered,omitempty"`
 	Accounts map[string]*Account `json:"accounts"`
 	Sessions map[string]*Session `json:"sessions"`
 
@@ -219,6 +227,9 @@ type Schedule struct {
 	Registered bool      `json:"registered"`
 	CheckedAt  time.Time `json:"checked_at"`
 	Error      string    `json:"error,omitempty"`
+	// Foreground says `ai-usage schedule run` started the last scheduled
+	// run, in place of the system scheduler.
+	Foreground bool `json:"foreground,omitempty"`
 }
 
 // Key joins parts of a map key.
@@ -272,6 +283,28 @@ var ErrBusy = errors.New("another ai-usage run is in progress")
 // system's lock on run.lock, which ends with the process that holds it
 // however that process ends, so a run that was killed never leaves it behind.
 func (d Dir) Lock() (func(), error) { return d.lock("run.lock") }
+
+// ScheduleLock is held by `ai-usage schedule run` for as long as it runs, so
+// other runs can tell that it schedules this folder. A check holds a shared
+// lock on the same file for a moment, so a second is allowed for that to end.
+func (d Dir) ScheduleLock() (func(), error) {
+	return d.lockWait(context.Background(), "schedule.lock", checkWait, nil)
+}
+
+// Foreground reports whether `ai-usage schedule run` runs for this folder now.
+// It takes a shared lock, which only the exclusive one `schedule run` holds
+// keeps out, so it answers at once, and checks never wait for each other.
+func (d Dir) Foreground() bool {
+	f, err := os.OpenFile(d.Path("schedule.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	return errors.Is(sharedLockFile(f), ErrBusy)
+}
+
+// checkWait is how long ScheduleLock waits for a check's shared lock to end.
+var checkWait = time.Second
 
 func (d Dir) lock(name string) (func(), error) {
 	if err := os.MkdirAll(string(d), 0o700); err != nil {

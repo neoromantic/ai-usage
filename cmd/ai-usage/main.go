@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"os/user"
 	"path/filepath"
@@ -20,6 +21,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
 	"github.com/neoromantic/ai-usage/internal/probe"
@@ -72,11 +74,16 @@ Usage:
   ai-usage home add PROVIDER DIR... [--quota-from PROVIDER:DIR]
                                          read more homes; --quota-from names the Codex or
                                          Grok home whose login these Hermes homes bill through
-  ai-usage home remove PROVIDER DIR...   stop reading homes added before
+  ai-usage home remove PROVIDER DIR... [--forget]
+                                         stop reading homes added before; --forget also drops
+                                         their sessions, for homes another collector reads now
   ai-usage relay show|set URL|clear      choose the relay this device publishes to
+  ai-usage name show|set NAME|clear      what the team calls this device, instead of its host name
   ai-usage relay serve [--addr :8080] [--client-ip-header NAME]
                                          run a relay (Vercel KV from env, else memory)
   ai-usage schedule install|remove|status
+  ai-usage schedule run                  collect every 15 minutes in the foreground, where there is
+                                         no system scheduler, as in a container
   ai-usage update                        check for a release now
   ai-usage version
 
@@ -94,6 +101,7 @@ Display:
 Environment:
   AI_USAGE_HOME          collector directory (default: OS config dir/ai-usage)
   AI_USAGE_RELAY         relay URL, overrides the configured one
+  AI_USAGE_NAME          this device's name in the team, over the configured one, in runs that see it
   AI_USAGE_NO_SCHEDULE   set to skip scheduler registration on this run
   CLAUDE_CONFIG_DIR, CODEX_HOME, GROK_HOME, HERMES_HOME   extra harness homes
 `
@@ -125,9 +133,11 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	case "team":
 		err = cmdTeam(ctx, args, stdin, stdout, stderr)
 	case "home":
-		err = cmdHome(args, stdout)
+		err = cmdHome(ctx, args, stdout, stderr)
 	case "relay":
 		err = cmdRelay(ctx, args, stdout, stderr)
+	case "name":
+		err = cmdName(args, stdout)
 	case "schedule":
 		err = cmdSchedule(ctx, args, stdout, stderr)
 	case "update":
@@ -191,6 +201,43 @@ func relayURL(cfg state.Config) string {
 	return defaultRelay
 }
 
+// deviceName is what the team calls this device: AI_USAGE_NAME, else the
+// name set with `ai-usage name set`, else the host name.
+func deviceName(cfg state.Config) string {
+	if v, ok := envName(); ok {
+		return v
+	}
+	if cfg.Name != "" {
+		return cfg.Name
+	}
+	return hostname()
+}
+
+// envName is AI_USAGE_NAME when it is set and a name `ai-usage name set`
+// would take.
+func envName() (string, bool) {
+	v := strings.TrimSpace(os.Getenv("AI_USAGE_NAME"))
+	return v, v != "" && validName(v) == nil
+}
+
+// maxName keeps a device name short enough for the report's columns.
+const maxName = 64
+
+// validName says what is wrong with a device name, if anything.
+func validName(n string) error {
+	switch {
+	case n == "":
+		return errors.New("a name cannot be empty")
+	case len([]rune(n)) > maxName:
+		return fmt.Errorf("a name is at most %d characters", maxName)
+	case strings.ContainsFunc(n, unicode.IsControl):
+		return errors.New("a name cannot contain control characters")
+	case snapshot.Printable(n) != n:
+		return errors.New("a name cannot contain invisible characters that change the text's direction")
+	}
+	return nil
+}
+
 // hostname and osUser name this device in reports. Tests pin them.
 var hostname = func() string {
 	h, err := os.Hostname()
@@ -248,7 +295,7 @@ func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) (e
 		Dir:      d,
 		Version:  version,
 		Probe:    probeEnv(),
-		Hostname: hostname(),
+		Hostname: deviceName(cfg),
 		OSUser:   osUser(),
 		Now:      clock,
 		After: func(ctx context.Context, cfg *state.Config, st *state.State) {
@@ -260,7 +307,9 @@ func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) (e
 		// Run signs with the key it loads under the run lock.
 		opts.Relay = &relay.Client{BaseURL: endpoint}
 	}
-	if !*quiet {
+	if *quiet {
+		opts.PullEvery = time.Hour
+	} else {
 		// A run the person started while another, usually the scheduled
 		// one, collects waits for it and shows its result rather than
 		// collect twice. The scheduler runs with --quiet and just skips.
@@ -346,10 +395,15 @@ func housekeeping(ctx context.Context, d state.Dir, cfg *state.Config, st *state
 	if st.Update.Installed != "" && !selfupdate.Newer(st.Update.Installed, version) {
 		st.Update.Installed = ""
 	}
-	if !selfupdate.Dev(version) && !cfg.ScheduleOff && os.Getenv("AI_USAGE_NO_SCHEDULE") == "" {
+	switch {
+	case d.Foreground():
+		// `ai-usage schedule run` is the scheduler, so the system's is not
+		// needed; a run never registers there while it runs.
+		st.Schedule = state.Schedule{Registered: true, CheckedAt: now, Foreground: true}
+	case !selfupdate.Dev(version) && !cfg.ScheduleOff && os.Getenv("AI_USAGE_NO_SCHEDULE") == "":
 		ensureSchedule(ctx, d, st, now)
-	} else if cfg.ScheduleOff {
-		st.Schedule.Registered = false
+	case cfg.ScheduleOff:
+		st.Schedule.Registered, st.Schedule.Foreground = false, false
 		st.Schedule.Error = "removed by `ai-usage schedule remove`"
 	}
 	updateIfDue(ctx, st, now)
@@ -409,6 +463,7 @@ const disabledByHand = "disabled by hand in the system scheduler; `ai-usage sche
 // already runs them. An entry the person commented out or disabled stays so.
 func ensureSchedule(ctx context.Context, d state.Dir, st *state.State, now time.Time) {
 	st.Schedule.CheckedAt = now
+	st.Schedule.Foreground = false
 	exe, home, err := job(d)
 	if err != nil {
 		st.Schedule.Registered, st.Schedule.Error = false, err.Error()
@@ -425,7 +480,11 @@ func ensureSchedule(ctx context.Context, d state.Dir, st *state.State, now time.
 	}
 	st.Schedule.Registered = err == nil
 	st.Schedule.Error = ""
-	if err != nil {
+	switch {
+	case errors.Is(err, exec.ErrNotFound):
+		// Containers and minimal systems often have no crontab.
+		st.Schedule.Error = err.Error() + "; keep `ai-usage schedule run` running instead, such as beside a container's other services"
+	case err != nil:
 		st.Schedule.Error = err.Error()
 	}
 }
@@ -460,12 +519,12 @@ func printReport(stdout io.Writer, d state.Dir, res *collect.Result, endpoint st
 		Version:  version,
 		RelayURL: endpoint,
 		Config:   res.Config,
-		State:    res.State,
+		State:    liveSchedule(d, res.State),
 		Key:      res.Key,
 		Doc:      res.Doc,
 		Team:     res.Team,
 		Samples:  samples,
-		Hostname: hostname(),
+		Hostname: deviceName(res.Config),
 		OSUser:   osUser(),
 		Now:      now,
 	})
@@ -493,7 +552,7 @@ func loadResult(d state.Dir) (*collect.Result, error) {
 		return nil, err
 	}
 	cache, _ := collect.LoadTeamCache(d)
-	doc := collect.BuildDoc(st, key, cfg.Device, hostname(), osUser(), version, st.LastRunAt)
+	doc := collect.BuildDoc(st, key, cfg.Device, deviceName(cfg), osUser(), version, st.LastRunAt)
 	return &collect.Result{Config: cfg, State: st, Key: key, Doc: doc, Team: cache}, nil
 }
 
@@ -543,8 +602,8 @@ func cmdStatus(args []string, stdout io.Writer) error {
 		return err
 	}
 	r := view.Build(view.Input{
-		Version: version, RelayURL: relayURL(res.Config), Config: res.Config, State: res.State,
-		Key: res.Key, Doc: res.Doc, Team: res.Team, Hostname: hostname(), OSUser: osUser(), Now: clock().UTC(),
+		Version: version, RelayURL: relayURL(res.Config), Config: res.Config, State: liveSchedule(d, res.State),
+		Key: res.Key, Doc: res.Doc, Team: res.Team, Hostname: deviceName(res.Config), OSUser: osUser(), Now: clock().UTC(),
 	})
 	type source struct {
 		Provider string   `json:"provider"`
@@ -594,7 +653,7 @@ func cmdTeam(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 		for _, doc := range res.Team.Docs {
 			label, _ := res.Key.Open(doc.DeviceLabel)
 			who, _ := res.Key.Open(doc.OSUser)
-			fmt.Fprintf(stdout, "  %s  %s (%s)  collected %s  %s\n", doc.Device, label, who, doc.CollectedAt.Local().Format("2006-01-02 15:04"), doc.CollectorVersion)
+			fmt.Fprintf(stdout, "  %s  %s (%s)  collected %s  %s\n", doc.Device, snapshot.Printable(label), snapshot.Printable(who), doc.CollectedAt.Local().Format("2006-01-02 15:04"), doc.CollectorVersion)
 		}
 		return nil
 	case "key":
@@ -800,7 +859,7 @@ func cmdRelay(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 
 func cmdSchedule(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) != 1 {
-		return usageError("schedule takes install, remove, or status")
+		return usageError("schedule takes install, remove, status, or run")
 	}
 	d, err := dir()
 	if err != nil {
@@ -824,6 +883,8 @@ func cmdSchedule(ctx context.Context, args []string, stdout, stderr io.Writer) e
 		defer unlock()
 	}
 	switch args[0] {
+	case "run":
+		return scheduleRun(ctx, d, exe, home, stderr)
 	case "install":
 		if err := s.Install(ctx, exe, home, os.Getenv("PATH")); err != nil {
 			return err
@@ -841,6 +902,10 @@ func cmdSchedule(ctx context.Context, args []string, stdout, stderr io.Writer) e
 		}
 		fmt.Fprintln(stdout, "removed from the system scheduler; later runs will not register again until `ai-usage schedule install`")
 	case "status":
+		if d.Foreground() {
+			fmt.Fprintf(stdout, "`ai-usage schedule run` collects every %s with state folder %s\n", schedule.Interval, home)
+			return nil
+		}
 		got, err := s.Lookup(ctx, exe, home)
 		if err != nil {
 			return err
@@ -858,9 +923,153 @@ func cmdSchedule(ctx context.Context, args []string, stdout, stderr io.Writer) e
 			fmt.Fprintln(stdout, "not registered")
 		}
 	default:
-		return usageError("schedule takes install, remove, or status")
+		return usageError("schedule takes install, remove, status, or run")
 	}
 	return nil
+}
+
+// scheduleRun collects now and then at every quarter hour, as the system
+// schedulers do, until it is stopped. Each collection is a new process of the
+// binary on disk, so a release one collection installs runs from the next.
+// It holds the schedule lock throughout, which tells runs it is there.
+func scheduleRun(ctx context.Context, d state.Dir, exe, home string, stderr io.Writer) error {
+	unlock, err := d.ScheduleLock()
+	if errors.Is(err, state.ErrBusy) {
+		return errors.New("another `ai-usage schedule run` already collects into " + home)
+	}
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	fmt.Fprintf(stderr, "ai-usage: collecting every %s with state folder %s\n", schedule.Interval, home)
+	for {
+		if err := collectOnce(ctx, exe, home, stderr); err != nil && ctx.Err() == nil {
+			fmt.Fprintf(stderr, "ai-usage: %s\n", err)
+		}
+		now := clock()
+		if !sleepCtx(ctx, now.Truncate(schedule.Interval).Add(schedule.Interval).Sub(now)) {
+			return nil
+		}
+	}
+}
+
+// liveSchedule shows a schedule that `ai-usage schedule run` kept as gone
+// once it no longer runs.
+func liveSchedule(d state.Dir, st *state.State) *state.State {
+	if st == nil || !st.Schedule.Foreground || d.Foreground() {
+		return st
+	}
+	c := *st
+	c.Schedule = state.Schedule{CheckedAt: st.Schedule.CheckedAt, Error: "`ai-usage schedule run` has stopped; start it again, or use `ai-usage schedule install` where there is a system scheduler"}
+	return &c
+}
+
+// collectOnce and sleepCtx are replaced in tests.
+var (
+	collectOnce = func(ctx context.Context, exe, home string, stderr io.Writer) error {
+		cmd := exec.CommandContext(ctx, exe, "collect", "--quiet", "--home", home)
+		cmd.Stdout, cmd.Stderr = stderr, stderr
+		// A stopped schedule lets the collection release its lock and save;
+		// Windows cannot send the signal, so it waits and then kills.
+		cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+		cmd.WaitDelay = 30 * time.Second
+		err := cmd.Run()
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && exit.Exited() {
+			// The collection printed its own error.
+			return nil
+		}
+		if exit != nil {
+			// Killed, as by a container's memory limit: it said nothing.
+			return fmt.Errorf("the collection was stopped: %s", exit)
+		}
+		return err
+	}
+	sleepCtx = func(ctx context.Context, d time.Duration) bool {
+		t := time.NewTimer(d)
+		defer t.Stop()
+		select {
+		case <-ctx.Done():
+			return false
+		case <-t.C:
+			return true
+		}
+	}
+)
+
+func cmdName(args []string, stdout io.Writer) error {
+	sub := ""
+	if len(args) > 0 {
+		sub, args = args[0], args[1:]
+	}
+	d, err := dir()
+	if err != nil {
+		return err
+	}
+	cfg, err := d.LoadConfig()
+	if err != nil {
+		return err
+	}
+	switch sub {
+	case "", "show":
+		if len(args) != 0 {
+			return usageError("name show takes no arguments")
+		}
+		v, ok := envName()
+		if v != "" && !ok {
+			fmt.Fprintf(stdout, "AI_USAGE_NAME is ignored: %s\n", validName(v))
+		}
+		switch {
+		case ok:
+			saved := cfg.Name
+			if saved == "" {
+				saved = hostname()
+			}
+			if saved == v {
+				fmt.Fprintf(stdout, "%s (from AI_USAGE_NAME)\n", v)
+				break
+			}
+			// launchd and cron start runs without the shell's variables.
+			fmt.Fprintf(stdout, "%s (from AI_USAGE_NAME, in runs that see it; runs without it, such as the system scheduler's, use %s)\n", v, saved)
+		case cfg.Name != "":
+			fmt.Fprintln(stdout, cfg.Name)
+		default:
+			fmt.Fprintf(stdout, "%s (the host name; `ai-usage name set NAME` names this device)\n", hostname())
+		}
+		return nil
+	case "set":
+		if len(args) != 1 {
+			return usageError("name set takes one name; quote a name with spaces")
+		}
+		n := strings.TrimSpace(args[0])
+		if err := validName(n); err != nil {
+			return usageError(err.Error())
+		}
+		if _, err := d.EditConfig(func(c *state.Config) error { c.Name = n; return nil }); err != nil {
+			return err
+		}
+		if v, ok := envName(); ok {
+			fmt.Fprintf(stdout, "saved %s; while AI_USAGE_NAME is set, this device is %s\n", n, v)
+			return nil
+		}
+		fmt.Fprintf(stdout, "this device is now %s; the team sees the name after the next run\n", n)
+		return nil
+	case "clear":
+		if len(args) != 0 {
+			return usageError("name clear takes no arguments")
+		}
+		if _, err := d.EditConfig(func(c *state.Config) error { c.Name = ""; return nil }); err != nil {
+			return err
+		}
+		if v, ok := envName(); ok {
+			fmt.Fprintf(stdout, "cleared; while AI_USAGE_NAME is set, this device is %s\n", v)
+			return nil
+		}
+		fmt.Fprintf(stdout, "this device goes by its host name, %s, again\n", hostname())
+		return nil
+	default:
+		return usageError("unknown name command " + sub)
+	}
 }
 
 func cmdUpdate(ctx context.Context, stdout, stderr io.Writer) error {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -17,7 +18,7 @@ import (
 
 // cmdHome lists, adds, and removes the harness homes this device reads
 // besides the ones it finds itself.
-func cmdHome(args []string, stdout io.Writer) error {
+func cmdHome(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	sub := ""
 	if len(args) > 0 {
 		sub, args = args[0], args[1:]
@@ -44,9 +45,15 @@ func cmdHome(args []string, stdout io.Writer) error {
 
 	var quotaFrom []string
 	var rest []string
+	forget := false
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
+		case a == "--forget" || a == "-forget":
+			if sub != "remove" {
+				return usageError("--forget is for home remove")
+			}
+			forget = true
 		case a == "--quota-from" || a == "-quota-from":
 			if i+1 == len(args) {
 				return usageError("--quota-from takes PROVIDER:DIR")
@@ -98,6 +105,15 @@ func cmdHome(args []string, stdout io.Writer) error {
 		refs = append(refs, homeRef{provider: qp, home: abs})
 	}
 
+	// Sessions to forget are read first, so a home that cannot be read
+	// changes nothing.
+	var forgotten []string
+	if forget {
+		if forgotten, err = collect.SessionsIn(p, homes, clock()); err != nil {
+			return err
+		}
+	}
+
 	// The config has a lock of its own, so this never waits for a
 	// collection, and it is released before anything is printed: a process
 	// killed while writing to a closed pipe would leave it held.
@@ -106,10 +122,23 @@ func cmdHome(args []string, stdout io.Writer) error {
 			addHomes(cfg, userHome, p, homes, refs)
 			return nil
 		}
-		return removeHomes(cfg, userHome, p, homes)
+		return removeHomes(cfg, userHome, p, homes, forget)
 	})
 	if err != nil {
 		return err
+	}
+	if forget {
+		n, err := collect.Forget(ctx, d, forgotten, func() (func(), error) {
+			return waitLock(ctx, d, stderr)
+		})
+		if err != nil {
+			return fmt.Errorf("the homes were removed, but their sessions were not forgotten, which the same command can try again: %w", err)
+		}
+		word := "sessions"
+		if n == 1 {
+			word = "session"
+		}
+		fmt.Fprintf(stdout, "forgot %d %s counted from these homes; the team sees the change after the next collection\n\n", n, word)
 	}
 	return listHomes(cfg, userHome, stdout)
 }
@@ -183,13 +212,15 @@ func addHomes(cfg *state.Config, userHome, p string, homes []string, refs []home
 	}
 }
 
-func removeHomes(cfg *state.Config, userHome, p string, homes []string) error {
+// removeHomes takes homes out of the config. With forget, a home no longer
+// in it is let be, so that forgetting its sessions can be tried again.
+func removeHomes(cfg *state.Config, userHome, p string, homes []string, forget bool) error {
 	for _, h := range homes {
 		named := p == "hermes" && cfg.QuotaFrom[h] != nil
-		if h == filepath.Join(userHome, "."+p) && !named {
+		if h == filepath.Join(userHome, "."+p) && (!named || forget) {
 			return errors.New(h + " is the default " + p + " home, which is always read")
 		}
-		if !contains(cfg.Homes[p], h) && !named {
+		if !contains(cfg.Homes[p], h) && !named && !forget {
 			return errors.New(h + " is not an added " + p + " home")
 		}
 		// Hermes homes would quietly fall back to the default login.

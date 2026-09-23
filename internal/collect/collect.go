@@ -48,6 +48,11 @@ type Options struct {
 	Now      func() time.Time
 	// Relay is nil when no relay is configured or the run is offline.
 	Relay *relay.Client
+	// PullEvery, when set, skips the team read while the cached one is
+	// younger. Every read returns the whole team, so a team's reads grow
+	// with the square of its size; a scheduled run has no one to show the
+	// team to, and a report is fine with a read from the last hour.
+	PullEvery time.Duration
 	// Readers and prober are replaced in tests. ReadLogs reads all homes of
 	// one provider together and tags each session with its home.
 	ReadLogs func(provider string, homes []string, since time.Time) logs.Result
@@ -206,10 +211,14 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	inputs := runInputs(o, cfg, homes)
 	if waited && st.LastRunAt.After(lastRun) && st.LastRunInputs == inputs {
 		// The run waited for has just collected what this one would: the
-		// same release, relay, and homes.
+		// same release, relay, and homes. A scheduled run may have skipped
+		// the team read this one would make.
 		cache, _ := LoadTeamCache(o.Dir)
-		doc := BuildDoc(st, key, cfg.Device, o.Hostname, o.OSUser, o.Version, st.LastRunAt)
-		return &Result{Config: cfg, State: st, Key: key, Doc: doc, Team: cache, Waited: true}, nil
+		read := !cache.PulledAt.Before(st.LastRunAt) || (o.PullEvery > 0 && st.LastRunAt.Sub(cache.PulledAt) < o.PullEvery)
+		if o.Relay == nil || read {
+			doc := BuildDoc(st, key, cfg.Device, o.Hostname, o.OSUser, o.Version, st.LastRunAt)
+			return &Result{Config: cfg, State: st, Key: key, Doc: doc, Team: cache, Waited: true}, nil
+		}
 	}
 	if o.Ask == nil {
 		o.Ask = askHarness(o.Probe, cfg.HomeEnv)
@@ -363,6 +372,8 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 	// partial means some home's read was incomplete, so a lower count than
 	// last time is a missing file rather than a real drop.
 	partial := false
+	legacy := legacyNamed(st, p)
+	var probeErrs [][2]string
 	for i, home := range homes {
 		hr := res.Homes[home]
 		if hr.Err != nil {
@@ -383,10 +394,14 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 			// An app's per-account home with nobody logged in is an account
 			// removed or not added yet, not a problem.
 			if a.err != nil && !(isLoggedOut(a.err) && isManaged(p, home)) {
-				errs = append(errs, shortErr(a.err))
+				probeErrs = append(probeErrs, [2]string{home, shortErr(a.err)})
 			}
 			labels[home] = applyReading(st, p, home, a.reading, isLoggedOut(a.err), hr.Limits, now, prevRun)
 		}
+	}
+	errs = append(errs, homeErrors(probeErrs, len(homes), o.UserHome)...)
+	if p != "hermes" {
+		claimUnknown(st, p, homes, answers, res.Sessions, legacy)
 	}
 	var read []readSession
 	for _, s := range res.Sessions {
@@ -430,7 +445,9 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 		home := filepath.Join(o.UserHome, "."+p)
 		probed = []string{home}
 		reading, perr := o.Ask(ctx, p, home)
-		if perr != nil {
+		// A tool that is installed but was never used, such as one in a
+		// bot's image, has nobody logged in: not a problem.
+		if perr != nil && !isLoggedOut(perr) {
 			errs = append(errs, shortErr(perr))
 		}
 		if strings.TrimSpace(reading.Account) != "" || isLoggedOut(perr) {
@@ -578,6 +595,95 @@ func clampWindows(ws []snapshot.Window, now time.Time) []snapshot.Window {
 		out = append(out, w)
 	}
 	return out
+}
+
+// homeErrors are the probe errors of a provider's homes, each after the home
+// it came from, unless every home had the same one.
+func homeErrors(errs [][2]string, homes int, userHome string) []string {
+	var out []string
+	same := len(errs) == homes
+	for _, e := range errs {
+		same = same && e[1] == errs[0][1]
+	}
+	for _, e := range errs {
+		if same || homes == 1 {
+			out = append(out, e[1])
+			continue
+		}
+		home := e[0]
+		if userHome != "" && strings.HasPrefix(home, userHome+string(filepath.Separator)) {
+			home = "~" + home[len(userHome):]
+		}
+		out = append(out, home+": "+e[1])
+	}
+	return out
+}
+
+// legacyNamed reports whether the ledger is from before the homes that
+// answered were recorded, and has an account of p that a harness named. Such
+// a ledger does not know which homes answered, and none of them claims.
+func legacyNamed(st *state.State, p string) bool {
+	for k := range st.Answered {
+		if state.SplitKey(k)[0] == p {
+			return false
+		}
+	}
+	for _, a := range st.Accounts {
+		if a.Provider == p && a.Label != UnknownAccount {
+			return true
+		}
+	}
+	return false
+}
+
+// claimUnknown gives the account a home first names the usage counted there
+// while that home had never answered, as the first run gives an account the
+// history before it. Until then, as when an old binary cannot answer, that
+// usage is unknown rather than someone else's. A home that said nobody is
+// logged in has answered: what grew there then is no one's, and stays so.
+// Each session read this run is claimed by the home it was read from.
+// legacy is legacyNamed from before this run's readings.
+func claimUnknown(st *state.State, p string, homes []string, answers []answer, sessions []logs.Session, legacy bool) {
+	claim := map[string]string{}
+	for i, home := range homes {
+		label := strings.TrimSpace(answers[i].reading.Account)
+		if label == "" && !isLoggedOut(answers[i].err) {
+			continue
+		}
+		k := state.Key(p, home)
+		if !st.Answered[k] && !legacy && label != "" && label != UnknownAccount {
+			claim[home] = label
+		}
+		if st.Answered == nil {
+			st.Answered = map[string]bool{}
+		}
+		st.Answered[k] = true
+	}
+	if len(claim) == 0 {
+		return
+	}
+	for _, rs := range sessions {
+		label, ok := claim[rs.Home]
+		if !ok {
+			continue
+		}
+		s := st.Sessions[state.Key(p, rs.ID)]
+		if s == nil {
+			continue
+		}
+		t, ok := s.By[UnknownAccount]
+		if !ok {
+			continue
+		}
+		s.By[label] = s.By[label].Add(t)
+		delete(s.By, UnknownAccount)
+		if last, ok := s.Last[UnknownAccount]; ok {
+			if last.After(s.Last[label]) {
+				s.Last[label] = last
+			}
+			delete(s.Last, UnknownAccount)
+		}
+	}
 }
 
 func touchAccount(st *state.State, p, label string) *state.Account {
@@ -1089,7 +1195,11 @@ func IsCurrent(st *state.State, provider, label string) bool {
 	return false
 }
 
-func shortErr(err error) string { return truncate(err.Error(), 200) }
+// shortErr is an error on one line, cut short. Errors can quote a server's
+// reply, line breaks and all.
+func shortErr(err error) string {
+	return truncate(strings.Join(strings.Fields(snapshot.Printable(err.Error())), " "), 200)
+}
 
 // truncate keeps the start of s in at most n bytes, cut on a rune boundary.
 func truncate(s string, n int) string {

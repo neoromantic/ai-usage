@@ -475,3 +475,19 @@ func FuzzDecode(f *testing.F) {
 		}
 	})
 }
+
+func TestPrintable(t *testing.T) {
+	for in, want := range map[string]string{
+		"evil\nFAKE LINE\x1b[2J": "evil FAKE LINE [2J",
+		"a​b‮c":                  "abc",
+		"Mita bot · ℹ":           "Mita bot · ℹ",
+		// Joiners are part of names and emoji.
+		"\u0644\u067e\u200c\u062a\u0627\u067e":    "\u0644\u067e\u200c\u062a\u0627\u067e",
+		"Acme\u200dCo \U0001f469\u200d\U0001f4bb": "Acme\u200dCo \U0001f469\u200d\U0001f4bb",
+		"\u2066isolated\u2069 \u200fmark\ufeff":   "isolated mark",
+	} {
+		if got := Printable(in); got != want {
+			t.Errorf("Printable(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

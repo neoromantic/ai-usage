@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -591,6 +592,76 @@ func TestDeviceCap(t *testing.T) {
 	}
 }
 
+// First writes racing each other can pass the cap; the team read still lists
+// only as many devices as the cap, those that joined first.
+func TestTeamReadListsNoMoreThanTheCap(t *testing.T) {
+	e := newRelay(t, Limits{DevicesPerTeam: 3})
+	k := newKey(t)
+	c := e.client(k)
+	ctx := context.Background()
+	for _, dev := range []string{"device-c", "device-a", "device-b"} {
+		e.clock.Add(time.Minute)
+		if err := c.Publish(ctx, dev, marshal(t, docFor(k, dev, e.clock.Now()))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.srv.Limits.DevicesPerTeam = 2
+	devices, _, err := c.Pull(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, d := range devices {
+		got = append(got, d.Doc.Device)
+	}
+	slices.Sort(got)
+	if want := []string{"device-a", "device-c"}; !slices.Equal(got, want) {
+		t.Fatalf("listed %q, want %q", got, want)
+	}
+}
+
+// racing hides the team from the first List, as a first write racing other
+// devices' first writes sees it.
+type racing struct {
+	Store
+	lists int
+}
+
+func (r *racing) List(ctx context.Context, teamFP string) (map[string]Record, error) {
+	r.lists++
+	if r.lists == 1 {
+		return map[string]Record{}, nil
+	}
+	return r.Store.List(ctx, teamFP)
+}
+
+func TestFirstWritePastTheCapGivesWay(t *testing.T) {
+	e := newRelay(t, Limits{DevicesPerTeam: 2})
+	k := newKey(t)
+	c := e.client(k)
+	ctx := context.Background()
+	for _, dev := range []string{"device-a", "device-b"} {
+		e.clock.Add(time.Minute)
+		if err := c.Publish(ctx, dev, marshal(t, docFor(k, dev, e.clock.Now()))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.srv.Store = &racing{Store: e.mem}
+	e.clock.Add(time.Minute)
+	err := c.Publish(ctx, "device-z", marshal(t, docFor(k, "device-z", e.clock.Now())))
+	if statusOf(err) != http.StatusForbidden || !strings.Contains(err.Error(), "most devices") {
+		t.Fatalf("write past the cap: %v", err)
+	}
+	if rec, _ := e.mem.Get(ctx, k.Fingerprint(), "device-z"); rec != nil {
+		t.Fatal("the device past the cap is still stored")
+	}
+	// The devices already in the team keep writing.
+	e.clock.Add(time.Minute)
+	if err := c.Publish(ctx, "device-a", marshal(t, docFor(k, "device-a", e.clock.Now()))); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTeamWriteLimit(t *testing.T) {
 	e := newRelay(t, Limits{WritesPerTeam: 2})
 	k, other := newKey(t), newKey(t)
@@ -729,10 +800,32 @@ func TestNewDevicesPerIP(t *testing.T) {
 	if err := e.client(k).Publish(ctx, "device-00", marshal(t, docFor(k, "device-00", e.clock.Now()))); err != nil {
 		t.Fatalf("a known device: %v", err)
 	}
+	// The last key stored nothing today; the next day it may.
 	e.clock.Add(23 * time.Hour)
-	k = keys[1]
+	k = keys[len(keys)-1]
 	if err := e.client(k).Publish(ctx, "device-00", marshal(t, docFor(k, "device-00", e.clock.Now()))); err != nil {
 		t.Fatalf("next day: %v", err)
+	}
+}
+
+// The team read returns every snapshot in one response, and a Vercel Function
+// may return at most 4.5 MB. A full team of the largest snapshots, with the
+// longest device ids, must fit.
+func TestFullTeamReadFitsVercel(t *testing.T) {
+	out := ListResponse{}
+	for i := range DefaultLimits().DevicesPerTeam {
+		out.Devices = append(out.Devices, ListedDevice{
+			Device: fmt.Sprintf("%064d", i),
+			Body:   encode(make([]byte, snapshot.MaxBytes)),
+			Sig:    encode(make([]byte, ed25519.SignatureSize)),
+		})
+	}
+	var b bytes.Buffer
+	if err := json.NewEncoder(&b).Encode(out); err != nil {
+		t.Fatal(err)
+	}
+	if b.Len() > 4_500_000 {
+		t.Fatalf("a full team read is %d bytes, over 4.5 MB", b.Len())
 	}
 }
 
@@ -924,6 +1017,16 @@ func TestOverLimitIsBounded(t *testing.T) {
 	if len(o.until) != 1 || !o.has("late", 150) {
 		t.Fatalf("%d keys held after expiry", len(o.until))
 	}
+	// A client that comes back later, under another window's key, still has
+	// the ended key dropped within a minute.
+	o.has("next-window", 205)
+	if _, ok := o.until["late"]; !ok {
+		t.Fatal("dropped before a minute had passed since the last sweep")
+	}
+	o.has("next-window", 210)
+	if len(o.until) != 0 {
+		t.Fatalf("%d keys held a minute after their windows ended", len(o.until))
+	}
 }
 
 func TestSignedRead(t *testing.T) {
@@ -981,6 +1084,13 @@ func TestSignedRead(t *testing.T) {
 				t.Fatalf("status = %d (%s), want %d", resp.StatusCode, strings.TrimSpace(msg), c.code)
 			}
 		})
+	}
+	// HEAD is signed as the GET it stands for.
+	if resp, _ := send(t, signedRequest(t, e.ts.URL, http.MethodHead, path, k, http.MethodGet, fp, "", t0)); resp.StatusCode != http.StatusOK {
+		t.Fatalf("HEAD signed as GET: status = %d", resp.StatusCode)
+	}
+	if resp, _ := send(t, signedRequest(t, e.ts.URL, http.MethodHead, path, k, http.MethodHead, fp, "", t0)); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("HEAD signed as HEAD: status = %d", resp.StatusCode)
 	}
 	req, _ := http.NewRequest(http.MethodGet, e.ts.URL+"/v1/teams/NOT-A-TEAM", nil)
 	if resp, _ := send(t, req); resp.StatusCode != http.StatusNotFound {

@@ -526,3 +526,34 @@ func TestPruneSamplesKeepsRetention(t *testing.T) {
 		t.Fatalf("prune without a samples dir: %v", err)
 	}
 }
+
+// A check answers at once while `schedule run` holds its lock, and checks do
+// not keep each other or `schedule run` out for long.
+func TestForegroundAnswersAtOnce(t *testing.T) {
+	d := Dir(t.TempDir())
+	if d.Foreground() {
+		t.Fatal("foreground with no schedule run")
+	}
+	unlock, err := d.ScheduleLock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	for range 3 {
+		if !d.Foreground() {
+			t.Fatal("not foreground while schedule run holds the lock")
+		}
+	}
+	if took := time.Since(start); took > 500*time.Millisecond {
+		t.Fatalf("three checks took %s", took)
+	}
+	unlock()
+	if d.Foreground() {
+		t.Fatal("foreground after schedule run stopped")
+	}
+	if unlock, err := d.ScheduleLock(); err != nil {
+		t.Fatalf("schedule lock after checks: %v", err)
+	} else {
+		unlock()
+	}
+}

@@ -13,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
 func TestMemoryTTL(t *testing.T) {
@@ -85,6 +87,16 @@ func TestMemoryCountAndSweep(t *testing.T) {
 	}
 	if teams != 1 {
 		t.Fatalf("%d teams kept, want only the live one", teams)
+	}
+
+	// A quiet relay forgets an address within an hour of its window.
+	c.Add(2 * time.Hour)
+	_, _ = m.Count(ctx, "ip:quiet", time.Minute)
+	m.mu.Lock()
+	counters = len(m.count)
+	m.mu.Unlock()
+	if counters != 1 {
+		t.Fatalf("%d counters kept after an hour, want 1", counters)
 	}
 }
 
@@ -297,20 +309,27 @@ func (f *fakeKV) run(cmd []string) (any, error) {
 		if err != nil {
 			return nil, errors.New("ERR value is not an integer or out of range")
 		}
-		nx := false
+		nx, gt := false, false
 		for _, opt := range args[2:] {
-			if !strings.EqualFold(opt, "NX") {
+			switch strings.ToUpper(opt) {
+			case "NX":
+				nx = true
+			case "GT":
+				gt = true
+			default:
 				return nil, errors.New("ERR Unsupported option " + opt)
 			}
-			nx = true
 		}
 		if !f.exists(k) {
 			return 0, nil
 		}
-		if _, has := f.exp[k]; has && nx {
+		at := f.now().Add(time.Duration(secs) * time.Second)
+		cur, has := f.exp[k]
+		// GT takes a key with no expiry as one that never expires.
+		if has && nx || gt && (!has || !at.After(cur)) {
 			return 0, nil
 		}
-		f.exp[k] = f.now().Add(time.Duration(secs) * time.Second)
+		f.exp[k] = at
 		return 1, nil
 	}
 	return nil, errors.New("ERR unknown command '" + cmd[0] + "'")
@@ -391,6 +410,38 @@ func TestKVListPrunesExpired(t *testing.T) {
 	}
 	if _, err := kv.Get(ctx, "team", "device-two"); err == nil {
 		t.Fatal("Get of a broken record did not fail")
+	}
+}
+
+// A device that joined last, with the shortest lifetime, writing last does not
+// unlist the others while their records live.
+func TestKVSetOutlivesTheLastWrite(t *testing.T) {
+	kv, _, c := newKV(t)
+	ctx := context.Background()
+	_ = kv.Put(ctx, "team", "device-old", Record{Body: []byte("old")}, 30*24*time.Hour)
+	_ = kv.Put(ctx, "team", "device-new", Record{Body: []byte("new")}, 7*24*time.Hour)
+	c.Add(8 * 24 * time.Hour)
+	recs, err := kv.List(ctx, "team")
+	if err != nil || len(recs) != 1 || string(recs["device-old"].Body) != "old" {
+		t.Fatalf("List = %v, %v", recs, err)
+	}
+}
+
+// A full team of the largest snapshots comes back in one MGET, which must fit
+// under maxKVResponse.
+func TestKVListFullTeam(t *testing.T) {
+	kv, _, _ := newKV(t)
+	ctx := context.Background()
+	n := DefaultLimits().DevicesPerTeam
+	rec := Record{Body: []byte(strings.Repeat("\xff", snapshot.MaxBytes)), Sig: make([]byte, 64), Since: t0}
+	for i := range n {
+		if err := kv.Put(ctx, "team", "device-"+strconv.Itoa(1000+i), rec, time.Hour); err != nil {
+			t.Fatal(err)
+		}
+	}
+	recs, err := kv.List(ctx, "team")
+	if err != nil || len(recs) != n {
+		t.Fatalf("List = %d records, %v; want %d", len(recs), err, n)
 	}
 }
 

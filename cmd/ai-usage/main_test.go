@@ -34,11 +34,19 @@ import (
 )
 
 // TestMain lets this test binary stand in for a release binary: run as
-// "<binary> version" with AIU_FAKE_RELEASE set, it prints that version.
+// "<binary> version" with AIU_FAKE_RELEASE set, it prints that version. With
+// AIU_AS_CLI set, it is the command itself.
 func TestMain(m *testing.M) {
 	if v := os.Getenv("AIU_FAKE_RELEASE"); v != "" && len(os.Args) == 2 && os.Args[1] == "version" {
 		fmt.Println(v)
 		os.Exit(0)
+	}
+	if os.Getenv("AIU_AS_CLI") == "1" {
+		// As hermetic has it in the test that started this one.
+		probeEnv = fakeProbeEnv
+		hostname = func() string { return "test-host" }
+		osUser = func() string { return "tester" }
+		os.Exit(run(context.Background(), os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 	}
 	os.Exit(m.Run())
 }
@@ -696,7 +704,14 @@ func TestTwoDevicesShareATeam(t *testing.T) {
 	a.ok("collect", "--quiet")
 	b.ok("team", "join", strings.TrimSpace(a.ok("team", "key")))
 	b.ok("collect", "--quiet")
+	// A scheduled run reads the team at most hourly: it publishes, and a
+	// report shows the last read.
 	a.ok("collect", "--quiet")
+	if r := a.report(); len(r.Team.Devices) != 1 || r.Collector.Relay.LastPushAt == nil || r.Collector.Relay.LastPushAt.Before(*r.Collector.Relay.LastPullAt) {
+		t.Fatalf("a scheduled run read the team again: %d devices, relay %+v", len(r.Team.Devices), r.Collector.Relay)
+	}
+	// A run someone started reads it every time.
+	a.ok("collect", "--json")
 
 	r := a.report()
 	if r.Collector.Relay.LastError != nil || r.Collector.Relay.Pending || r.Team.PulledAt == nil {
@@ -877,6 +892,57 @@ func TestHomeCommands(t *testing.T) {
 	}
 }
 
+// A home another collector reads now, such as a bot's in its own container,
+// is removed with the sessions counted from it, so the team does not count
+// them twice.
+func TestHomeRemoveForgetsItsSessions(t *testing.T) {
+	hermetic(t)
+	d := newDevice(t)
+	d.codex("c-own", "/work/api")
+	bot := filepath.Join(d.home, "bot", ".codex")
+	d.write("bot/.codex/sessions/2026/09/23/rollout-c-bot.jsonl",
+		`{"timestamp":"2026-09-23T10:00:00Z","type":"session_meta","payload":{"id":"c-bot","cwd":"/work/bot"}}`+"\n"+
+			`{"timestamp":"2026-09-23T10:01:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":900,"output_tokens":90}}}}`+"\n")
+	d.ok("home", "add", "codex", bot)
+	d.ok("collect", "--quiet", "--offline")
+	own, botKey := state.Key("codex", "c-own"), state.Key("codex", "c-bot")
+	if st := d.state(); st.Sessions[own] == nil || st.Sessions[botKey] == nil {
+		t.Fatalf("sessions before = %v", st.Sessions)
+	}
+
+	if out := d.ok("home", "remove", "codex", bot, "--forget"); !strings.Contains(out, "forgot 1 session counted") {
+		t.Fatalf("home remove --forget printed:\n%s", out)
+	}
+	if st := d.state(); st.Sessions[botKey] != nil || st.Sessions[own] == nil {
+		t.Fatalf("sessions after = %v", st.Sessions)
+	}
+	if cfg := d.config(); len(cfg.Homes) != 0 {
+		t.Fatalf("homes after = %v", cfg.Homes)
+	}
+	d.ok("collect", "--quiet", "--offline")
+	if d.state().Sessions[botKey] != nil {
+		t.Fatal("the next run read the removed home again")
+	}
+	// Forgetting can be tried again once the home is out of the config.
+	if out := d.ok("home", "remove", "codex", bot, "--forget"); !strings.Contains(out, "forgot 0 sessions") {
+		t.Fatalf("second --forget printed:\n%s", out)
+	}
+
+	// The default home is always read, so its sessions would only be counted
+	// again from nothing.
+	if r := d.run("", "home", "remove", "codex", filepath.Join(d.home, ".codex"), "--forget"); r.code != 1 || d.state().Sessions[own] == nil {
+		t.Fatalf("forgetting the default home: exit %d, %s", r.code, r.stderr)
+	}
+	if r := d.run("", "home", "add", "codex", bot, "--forget"); r.code != 2 {
+		t.Fatalf("home add --forget: exit %d, %s", r.code, r.stderr)
+	}
+	// A home that cannot be read changes nothing.
+	gone := filepath.Join(d.home, "gone")
+	if r := d.run("", "home", "remove", "codex", gone, "--forget"); r.code != 1 || !strings.Contains(r.stderr, "cannot read") {
+		t.Fatalf("forgetting a missing home: exit %d, %s", r.code, r.stderr)
+	}
+}
+
 // A device keeps collecting while the relay is down and says so.
 func TestUnreachableRelay(t *testing.T) {
 	hermetic(t)
@@ -959,6 +1025,206 @@ func TestScheduleCommands(t *testing.T) {
 	d.ok("schedule", "install")
 	if d.config().ScheduleOff {
 		t.Fatal("install left schedule_off set")
+	}
+}
+
+// Where there is no crontab, as in most containers, `schedule run` is the
+// scheduler: it collects at once and then at each quarter hour, in a process
+// of the binary on disk, until it is stopped. Runs meanwhile see that it is
+// there and never reach for the system scheduler.
+func TestScheduleRun(t *testing.T) {
+	hermetic(t)
+	t.Setenv("AI_USAGE_NO_SCHEDULE", "")
+	releaseBuild(t, "v1.3.0")
+	reached := 0
+	newScheduler = func() schedule.Scheduler {
+		return schedule.Scheduler{GOOS: "linux", Run: func(_ context.Context, name string, _ []string, _ []byte) ([]byte, error) {
+			reached++
+			return nil, fmt.Errorf("%s: %w", name, exec.ErrNotFound)
+		}}
+	}
+	savedCollect, savedSleep, savedClock := collectOnce, sleepCtx, clock
+	t.Cleanup(func() { collectOnce, sleepCtx, clock = savedCollect, savedSleep, savedClock })
+	clock = func() time.Time { return time.Date(2026, 9, 23, 10, 7, 30, 0, time.UTC) }
+
+	d := newDevice(t)
+	d.claude("aaaa", "/work/app", 1)
+	d.ok("collect", "--quiet", "--offline")
+	if st := d.state(); st.Schedule.Registered || !strings.Contains(st.Schedule.Error, "keep `ai-usage schedule run` running") {
+		t.Fatalf("schedule without crontab = %+v", st.Schedule)
+	}
+
+	exe, err := executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var collected []string
+	var statuses []string
+	collectOnce = func(ctx context.Context, gotExe, home string, stderr io.Writer) error {
+		collected = append(collected, gotExe+" "+home)
+		reached = 0
+		var out bytes.Buffer
+		if code := run(ctx, []string{"collect", "--quiet", "--offline", "--home", home}, strings.NewReader(""), &out, stderr); code != 0 {
+			t.Errorf("collection: exit %d", code)
+		}
+		if reached != 0 {
+			t.Errorf("a run under schedule run reached the system scheduler %d times", reached)
+		}
+		statuses = append(statuses, d.ok("status"))
+		return nil
+	}
+	var slept []time.Duration
+	sleepCtx = func(_ context.Context, dur time.Duration) bool {
+		slept = append(slept, dur)
+		return len(slept) < 2
+	}
+	r := d.run("", "schedule", "run")
+	if r.code != 0 || !strings.Contains(r.stderr, "collecting every 15m0s with state folder "+d.dir) {
+		t.Fatalf("schedule run: exit %d, stderr %q", r.code, r.stderr)
+	}
+	if want := []string{exe + " " + d.dir, exe + " " + d.dir}; !reflect.DeepEqual(collected, want) {
+		t.Fatalf("collected %q, want %q", collected, want)
+	}
+	// The next run is at the next quarter hour, as the system schedulers run it.
+	if want := []time.Duration{7*time.Minute + 30*time.Second, 7*time.Minute + 30*time.Second}; !reflect.DeepEqual(slept, want) {
+		t.Fatalf("slept %v, want %v", slept, want)
+	}
+	for _, out := range statuses {
+		if !strings.Contains(out, "every 15 minutes by `ai-usage schedule run`") {
+			t.Fatalf("status while schedule run runs:\n%s", out)
+		}
+	}
+	if st := d.state(); !st.Schedule.Registered || !st.Schedule.Foreground || st.Schedule.Error != "" {
+		t.Fatalf("schedule after schedule run = %+v", st.Schedule)
+	}
+
+	// Once it stops, the report says so instead of claiming a schedule.
+	if r := d.report(); r.Collector.Schedule.Registered || r.Collector.Schedule.Error == nil || !strings.Contains(*r.Collector.Schedule.Error, "has stopped") {
+		t.Fatalf("schedule in the report after it stopped = %+v", r.Collector.Schedule)
+	}
+	if out := d.ok("status"); !strings.Contains(out, "`ai-usage schedule run` has stopped") {
+		t.Fatalf("status after schedule run stopped:\n%s", out)
+	}
+
+	// One folder has one schedule run.
+	unlock, err := state.Dir(d.dir).ScheduleLock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	if r := d.run("", "schedule", "run"); r.code != 1 || !strings.Contains(r.stderr, "another `ai-usage schedule run` already collects into") {
+		t.Fatalf("a second schedule run: exit %d, stderr %q", r.code, r.stderr)
+	}
+}
+
+// A collection schedule run starts is a process of its own, which sees the
+// schedule lock the runner holds.
+func TestScheduleRunStartsACollection(t *testing.T) {
+	hermetic(t)
+	d := newDevice(t)
+	d.claude("aaaa", "/work/app", 1)
+	t.Setenv("AIU_AS_CLI", "1")
+	t.Setenv("HOME", d.home)
+	t.Setenv("USERPROFILE", d.home)
+	unlock, err := state.Dir(d.dir).ScheduleLock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	if err := collectOnce(context.Background(), exe, d.dir, &stderr); err != nil {
+		t.Fatalf("collectOnce: %v, %s", err, stderr.String())
+	}
+	st := d.state()
+	if st.LastRunAt.IsZero() || !st.Schedule.Registered || !st.Schedule.Foreground {
+		t.Fatalf("after the child's collection: last run %v, schedule %+v, stderr %s", st.LastRunAt, st.Schedule, stderr.String())
+	}
+	// It read this device's fake home, and asked the fake claude.
+	if a := st.Accounts[state.Key("claude", "dev@example.com")]; a == nil || st.Sources["claude"].Status != "ok" {
+		t.Fatalf("claude: %+v, accounts %v", st.Sources["claude"], st.Accounts)
+	}
+}
+
+// A device goes by the name it is given instead of its host name, in its own
+// report and in the team's, and AI_USAGE_NAME overrides both.
+func TestDeviceName(t *testing.T) {
+	hermetic(t)
+	srv := httptest.NewServer(relay.NewServer(relay.NewMemory(), relay.Limits{}))
+	defer srv.Close()
+	t.Setenv("AI_USAGE_RELAY", srv.URL)
+	t.Setenv("AI_USAGE_NAME", "")
+
+	a, b := newDevice(t), newDevice(t)
+	a.claude("aaaa", "/work/app", 1)
+	if out := a.ok("name"); !strings.HasPrefix(out, "test-host (the host name;") {
+		t.Fatalf("name = %q", out)
+	}
+	for _, bad := range []string{"", "  ", "a\tb", strings.Repeat("я", maxName+1)} {
+		if r := a.run("", "name", "set", bad); r.code != 2 {
+			t.Fatalf("name set %q: exit %d, %s", bad, r.code, r.stderr)
+		}
+	}
+	a.ok("name", "set", "  Mita bot  ")
+	if got := a.config().Name; got != "Mita bot" {
+		t.Fatalf("config name = %q", got)
+	}
+	if out := a.ok("name"); out != "Mita bot\n" {
+		t.Fatalf("name = %q", out)
+	}
+	a.ok("collect", "--quiet")
+	b.ok("team", "join", strings.TrimSpace(a.ok("team", "key")))
+	b.ok("collect", "--json")
+
+	label := func(r view.Report, device string) string {
+		for _, dev := range r.Team.Devices {
+			if dev.Device == device {
+				return dev.Label
+			}
+		}
+		return ""
+	}
+	if r := a.report(); r.Collector.DeviceLabel != "Mita bot" || label(r, a.config().Device) != "Mita bot" {
+		t.Fatalf("own label = %q, in the team %q", r.Collector.DeviceLabel, label(r, a.config().Device))
+	}
+	if got := label(b.report(), a.config().Device); got != "Mita bot" {
+		t.Fatalf("the team sees %q", got)
+	}
+
+	t.Setenv("AI_USAGE_NAME", "from-env")
+	if out := a.ok("name"); out != "from-env (from AI_USAGE_NAME, in runs that see it; runs without it, such as the system scheduler's, use Mita bot)\n" {
+		t.Fatalf("name with AI_USAGE_NAME = %q", out)
+	}
+	if out := a.ok("name", "set", "Mita bot"); out != "saved Mita bot; while AI_USAGE_NAME is set, this device is from-env\n" {
+		t.Fatalf("name set with AI_USAGE_NAME = %q", out)
+	}
+	a.ok("collect", "--quiet")
+	t.Setenv("AI_USAGE_NAME", "")
+	b.ok("collect", "--json")
+	if got := label(b.report(), a.config().Device); got != "from-env" {
+		t.Fatalf("the team sees %q after AI_USAGE_NAME", got)
+	}
+
+	// A name set would refuse is not used from the environment either.
+	t.Setenv("AI_USAGE_NAME", "evil\nFAKE LINE\x1b[2J")
+	if out := a.ok("name"); out != "AI_USAGE_NAME is ignored: a name cannot contain control characters\nMita bot\n" {
+		t.Fatalf("name with a bad AI_USAGE_NAME = %q", out)
+	}
+	if r := a.report(); r.Collector.DeviceLabel != "Mita bot" {
+		t.Fatalf("own label with a bad AI_USAGE_NAME = %q", r.Collector.DeviceLabel)
+	}
+	t.Setenv("AI_USAGE_NAME", "")
+
+	if out := a.ok("name", "clear"); !strings.Contains(out, "test-host") {
+		t.Fatalf("name clear = %q", out)
+	}
+	a.ok("collect", "--quiet")
+	b.ok("collect", "--json")
+	if got := label(b.report(), a.config().Device); got != "test-host" {
+		t.Fatalf("the team sees %q after name clear", got)
 	}
 }
 

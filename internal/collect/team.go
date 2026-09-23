@@ -15,10 +15,13 @@ import (
 // TeamCache is the last verified team read, kept so the console can show the
 // other devices while the relay is unreachable.
 type TeamCache struct {
-	PulledAt time.Time      `json:"pulled_at"`
-	Team     string         `json:"team"`
-	Bodies   [][]byte       `json:"bodies"`
-	Docs     []snapshot.Doc `json:"-"`
+	PulledAt time.Time `json:"pulled_at"`
+	Team     string    `json:"team"`
+	// ReadError is what was wrong with the read itself, such as documents
+	// that did not verify. It stands until the next read.
+	ReadError string         `json:"read_error,omitempty"`
+	Bodies    [][]byte       `json:"bodies"`
+	Docs      []snapshot.Doc `json:"-"`
 }
 
 const teamCacheFile = "team-cache.json"
@@ -120,6 +123,18 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 		return
 	}
 
+	if fresh := now.Sub(cache.PulledAt); o.PullEvery > 0 && cache.Team == o.Relay.Key.Fingerprint() && fresh >= 0 && fresh < o.PullEvery {
+		// The write's own error is this run's; the cached read's stands
+		// until the next read.
+		st.Relay.LastError = cache.ReadError
+		if cache.ReadError != "" {
+			st.Relay.LastErrorAt = cache.PulledAt
+		}
+		if conflict != nil {
+			fail(conflict)
+		}
+		return
+	}
 	pullCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	devices, bad, err := o.Relay.Pull(pullCtx)
 	cancel()
@@ -133,13 +148,16 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 		next.Bodies = append(next.Bodies, d.Body)
 		next.Docs = append(next.Docs, d.Doc)
 	}
+	if bad > 0 {
+		next.ReadError = "relay returned documents that do not verify with the team key"
+	}
 	*cache = next
 	if err := saveTeamCache(o.Dir, next); err != nil {
 		fail(err)
 		return
 	}
-	if bad > 0 {
-		fail(errors.New("relay returned documents that do not verify with the team key"))
+	if next.ReadError != "" {
+		fail(errors.New(next.ReadError))
 		return
 	}
 	if conflict != nil {

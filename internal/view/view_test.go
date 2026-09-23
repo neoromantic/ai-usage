@@ -596,6 +596,14 @@ func TestCollectorSection(t *testing.T) {
 		}
 	}
 
+	// After `schedule remove`, status still says how to register again.
+	saved := f.in.State.Schedule.Error
+	f.in.State.Schedule.Error = "removed by `ai-usage schedule remove`"
+	if status := StatusText(Build(f.in), "", Options{Width: 80, Loc: time.UTC}); !strings.Contains(status, "register: ai-usage schedule install") {
+		t.Fatalf("status after schedule remove lacks the register hint:\n%s", status)
+	}
+	f.in.State.Schedule.Error = saved
+
 	// Once the new version runs, the staged note goes away.
 	f.in.Version = "v1.3.0"
 	if r := Build(f.in); r.Collector.Update.Staged != nil || strings.Contains(text(r), "runs next time") {
@@ -684,7 +692,7 @@ func TestJSONFieldNamesAreStable(t *testing.T) {
 		"collector", "collector.device", "collector.device_label", "collector.last_error", "collector.last_error_at",
 		"collector.last_run_at", "collector.last_success_at", "collector.os_user", "collector.relay",
 		"collector.relay.last_error", "collector.relay.last_pull_at", "collector.relay.last_push_at", "collector.relay.pending",
-		"collector.relay.url", "collector.schedule", "collector.schedule.error", "collector.schedule.registered",
+		"collector.relay.url", "collector.schedule", "collector.schedule.error", "collector.schedule.foreground", "collector.schedule.registered",
 		"collector.team", "collector.update", "collector.update.checked_at", "collector.update.error",
 		"collector.update.latest", "collector.update.staged", "collector.version",
 		"generated_at",
@@ -767,5 +775,18 @@ func TestHeaderKeepsTheClockPastAOneDevicePage(t *testing.T) {
 	head, _, _ := strings.Cut(Text(Build(f.in), Options{Width: 120, Loc: time.UTC}), "\n")
 	if !strings.HasSuffix(head, now.In(time.UTC).Format("Mon 2 Jan 15:04")) || width(head) > 119 {
 		t.Fatalf("header lost its clock or overran the terminal: %q", head)
+	}
+}
+
+func TestSplitHostUser(t *testing.T) {
+	for in, want := range map[string][2]string{
+		"box (sam)":          {"box", "sam"},
+		"ci (staging) (kim)": {"ci (staging)", "kim"},
+		"box":                {"box", ""},
+		"box (sam":           {"box (sam", ""},
+	} {
+		if h, u := splitHostUser(in); h != want[0] || u != want[1] {
+			t.Errorf("splitHostUser(%q) = %q, %q", in, h, u)
+		}
 	}
 }

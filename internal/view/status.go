@@ -105,6 +105,8 @@ func (u *ui) status(dir string) {
 	}
 	dev := selfupdate.Dev(c.Version)
 	switch {
+	case c.Schedule.Foreground:
+		u.kv("schedule", ok, "every 15 minutes by `ai-usage schedule run`", plain)
 	case c.Schedule.Registered:
 		u.kv("schedule", ok, "registered with the system scheduler, every 15 minutes", plain)
 	case c.Schedule.Error != nil:
@@ -114,8 +116,8 @@ func (u *ui) status(dir string) {
 	default:
 		u.kv("schedule", fail, "not registered", red)
 	}
-	// An error that already says how to register needs no second line.
-	if !c.Schedule.Registered && (c.Schedule.Error == nil || !strings.Contains(*c.Schedule.Error, "ai-usage schedule install")) {
+	// An error that already says what to run needs no second line.
+	if !c.Schedule.Registered && (c.Schedule.Error == nil || !strings.Contains(*c.Schedule.Error, "ai-usage schedule install") && !strings.Contains(*c.Schedule.Error, "ai-usage schedule run")) {
 		u.kv("", info, "register: ai-usage schedule install", gray)
 	}
 	up := c.Update

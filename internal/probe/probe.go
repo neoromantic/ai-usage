@@ -13,6 +13,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -82,8 +84,12 @@ type Env struct {
 	// DefaultEnv fills them; a test's Env leaves them empty so a harness
 	// installed on the machine running it stays out of reach.
 	SystemBinDirs []string
-	Now           func() time.Time
-	Timeout       time.Duration
+	// AppDirs are where desktop apps are installed, such as /Applications
+	// on macOS, for a harness an app bundles. DefaultEnv fills them; a
+	// test's Env leaves them empty.
+	AppDirs []string
+	Now     func() time.Time
+	Timeout time.Duration
 }
 
 // DefaultEnv is the real environment.
@@ -95,6 +101,7 @@ func DefaultEnv() Env {
 		Environ:       os.Environ(),
 		HomeDir:       home,
 		SystemBinDirs: systemBinDirs(),
+		AppDirs:       appDirs(),
 		Now:           time.Now,
 		Timeout:       20 * time.Second,
 	}
@@ -260,8 +267,84 @@ func isExecutable(path string) bool {
 	return runtime.GOOS == "windows" || info.Mode()&0o111 != 0
 }
 
+// appDirs are the shared places desktop apps are installed.
+func appDirs() []string {
+	if runtime.GOOS == "darwin" {
+		return []string{"/Applications"}
+	}
+	return nil
+}
+
+// bins are the binaries of a harness to try in turn: the one find locates,
+// then the copies desktop apps and editor extensions bundle, newest first.
+// A bundled copy is often all a user of the app has, and newer than a
+// command line installed long ago.
+func (e Env) bins(name string) []string {
+	var out []string
+	if p, ok := e.find(name); ok {
+		out = append(out, p)
+	}
+	type bundled struct {
+		path string
+		mod  time.Time
+	}
+	var found []bundled
+	for _, p := range e.bundled(name) {
+		if info, err := os.Stat(p); err == nil && isExecutable(p) {
+			found = append(found, bundled{p, info.ModTime()})
+		}
+	}
+	sort.SliceStable(found, func(i, j int) bool { return found[i].mod.After(found[j].mod) })
+	seen := map[string]bool{}
+	for _, p := range out {
+		seen[realPath(p)] = true
+	}
+	for _, b := range found {
+		if r := realPath(b.path); !seen[r] {
+			seen[r] = true
+			out = append(out, b.path)
+		}
+	}
+	return out
+}
+
+// bundled are the places an app or an editor extension keeps its own copy
+// of a harness. Only Codex is bundled so: the ChatGPT app and the Codex app
+// on macOS, and OpenAI's extension for VS Code and the editors built on it.
+func (e Env) bundled(name string) []string {
+	if name != "codex" {
+		return nil
+	}
+	file := binNames(name)[0]
+	var out []string
+	apps := slices.Clone(e.AppDirs)
+	if e.HomeDir != "" {
+		apps = append(apps, filepath.Join(e.HomeDir, "Applications"))
+	}
+	for _, dir := range apps {
+		for _, app := range []string{"ChatGPT.app", "Codex.app"} {
+			out = append(out, filepath.Join(dir, app, "Contents", "Resources", file))
+		}
+	}
+	if e.HomeDir != "" {
+		for _, editor := range []string{".vscode", ".vscode-insiders", ".vscode-server", ".cursor", ".cursor-server", ".windsurf"} {
+			// The extension keeps one binary per platform it supports.
+			matches, _ := filepath.Glob(filepath.Join(e.HomeDir, editor, "extensions", "openai.chatgpt-*", "bin", "*", file))
+			out = append(out, matches...)
+		}
+	}
+	return out
+}
+
+// realPath is path with its links resolved, or path itself when that fails.
+func realPath(path string) string {
+	if r, err := filepath.EvalSymlinks(path); err == nil {
+		return r
+	}
+	return path
+}
+
 // Find reports whether a harness binary is installed.
 func (e Env) Find(name string) bool {
-	_, ok := e.find(name)
-	return ok
+	return len(e.bins(name)) > 0
 }

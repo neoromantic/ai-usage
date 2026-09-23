@@ -132,6 +132,14 @@ func fakeHarness(mode string, args []string) int {
 	_, _ = rec.Write(append(head, '\n'))
 
 	if strings.HasPrefix(mode, "codex-") {
+		// The codex on PATH is too old for app-server, or for account/read;
+		// any other serves.
+		if old, ok := map[string]string{"codex-old-on-path": "codex-exit-says", "codex-no-account-read-on-path": "codex-no-account-read"}[mode]; ok {
+			mode = "codex-ok"
+			if filepath.Dir(args[0]) == filepath.Join("fake", "bin") {
+				mode = old
+			}
+		}
 		return fakeCodex(mode, rec)
 	}
 	switch mode {
@@ -205,6 +213,12 @@ func fakeCodex(mode string, rec *os.File) int {
 			if mode == "codex-exit" {
 				return 3
 			}
+			if mode == "codex-exit-says" {
+				// As clap prints it: the error, then usage and a hint.
+				fmt.Fprint(os.Stderr, "starting\n\x1b[31merror:\x1b[0m unrecognized subcommand 'app-server'\n\n"+
+					"Usage: codex [OPTIONS] [PROMPT]\n\nFor more information, try '--help'.\n")
+				return 2
+			}
 			var p struct {
 				ClientInfo *struct{ Name, Version string } `json:"clientInfo"`
 			}
@@ -235,6 +249,8 @@ func fakeCodex(mode string, rec *os.File) int {
 				continue
 			case "codex-account-error":
 				fail("boom")
+			case "codex-no-account-read":
+				write(fmt.Sprintf(`{"id":%d,"error":{"code":-32600,"message":"Invalid request: unknown variant `+"`account/read`"+`, expected one of `+"`initialize`"+`"}}`, *m.ID))
 			case "codex-logged-out":
 				reply(`{"account":null,"requiresOpenaiAuth":true}`)
 			case "codex-apikey":
@@ -249,6 +265,10 @@ func fakeCodex(mode string, rec *os.File) int {
 				_, _ = os.Stdout.WriteString(msg[20:] + "\n" + `{"method":"account/updated","params":{}}` + "\n")
 			}
 		case "account/rateLimits/read":
+			if mode == "codex-exit-after-account" {
+				fmt.Fprint(os.Stderr, "thread 'tokio-runtime-worker' panicked at src/rate_limits.rs:9:5:\nno backend\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n")
+				return 101
+			}
 			if mode == "codex-apikey" {
 				fail("rate limits need a ChatGPT login")
 				continue

@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -226,11 +227,15 @@ func starts(ctx context.Context, bin, tag string) error {
 
 // swap puts the staged binary in place of exe. Windows cannot overwrite a
 // running executable, so the old one is moved aside first and removed by a
-// later run.
+// later run. One moved aside before can still be running, as a long
+// `ai-usage schedule run` is; it cannot be removed or replaced, but it can
+// be moved again.
 func swap(exe, tmp, goos string) error {
 	if goos == "windows" {
 		old := exe + ".old"
-		_ = os.Remove(old)
+		if err := os.Remove(old); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			_ = os.Rename(old, fmt.Sprintf("%s.old-%d", exe, time.Now().UnixNano()))
+		}
 		if err := os.Rename(exe, old); err != nil {
 			return err
 		}
@@ -243,7 +248,18 @@ func swap(exe, tmp, goos string) error {
 	return os.Rename(tmp, exe)
 }
 
-func cleanupOld(exe string) { _ = os.Remove(exe + ".old") }
+// cleanupOld removes the binaries earlier updates moved aside. The folder is
+// listed rather than globbed, since its path may hold [ or ].
+func cleanupOld(exe string) {
+	_ = os.Remove(exe + ".old")
+	entries, _ := os.ReadDir(filepath.Dir(exe))
+	prefix := filepath.Base(exe) + ".old-"
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), prefix) {
+			_ = os.Remove(filepath.Join(filepath.Dir(exe), e.Name()))
+		}
+	}
+}
 
 func writable(dir string) error {
 	f, err := os.CreateTemp(dir, ".ai-usage-check-*")

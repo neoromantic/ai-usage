@@ -5,6 +5,7 @@
 #
 # Environment, all optional:
 #   AI_USAGE_BIN_DIR       where the binary goes (default: $HOME/.local/bin)
+#   AI_USAGE_NAME          this device's name in the team (default: the host name)
 #   AI_USAGE_RELAY         relay URL to save before the first run
 #   AI_USAGE_TEAM_KEY      team key to join before the first run
 #   AI_USAGE_DOWNLOAD_URL  where release files are fetched from (mirrors, tests)
@@ -57,6 +58,9 @@ main() {
 	version=$("$bin" version) || fail "$bin is installed but does not run"
 	say "installed $version to $bin"
 
+	if [ -n "${AI_USAGE_NAME:-}" ]; then
+		"$bin" name set "$AI_USAGE_NAME"
+	fi
 	if [ -n "${AI_USAGE_RELAY:-}" ]; then
 		"$bin" relay set "$AI_USAGE_RELAY"
 	fi
