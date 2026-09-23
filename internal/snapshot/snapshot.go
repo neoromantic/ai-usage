@@ -54,11 +54,15 @@ type Doc struct {
 
 // Account is one login on one provider, as seen from this device and OS user.
 type Account struct {
-	Provider     string     `json:"provider"`
-	Label        string     `json:"label"`
-	Current      bool       `json:"current"`
-	Plan         string     `json:"plan,omitempty"`
-	QuotaAt      *time.Time `json:"quota_at,omitempty"`
+	Provider string     `json:"provider"`
+	Label    string     `json:"label"`
+	Current  bool       `json:"current"`
+	Plan     string     `json:"plan,omitempty"`
+	QuotaAt  *time.Time `json:"quota_at,omitempty"`
+	// QuotaFrom names the provider whose account the windows belong to, when
+	// this account bills through it (Hermes on a Codex subscription). The
+	// collector infers the link, so it is an assumption, not a reading.
+	QuotaFrom    string     `json:"quota_from,omitempty"`
 	Windows      []Window   `json:"windows"`
 	Sessions     int        `json:"sessions"`
 	Tokens       Tokens     `json:"tokens"`
@@ -232,6 +236,9 @@ func (a Account) validate() error {
 	}
 	if len(a.Windows) > 0 && a.QuotaAt == nil {
 		return errors.New("windows without quota_at")
+	}
+	if a.QuotaFrom != "" && (!knownProvider(a.QuotaFrom) || a.QuotaFrom == a.Provider || len(a.Windows) == 0) {
+		return errors.New("quota_from must name another provider and come with its windows")
 	}
 	for i, w := range a.Windows {
 		if err := checkPlain("window name", w.Name, true); err != nil {

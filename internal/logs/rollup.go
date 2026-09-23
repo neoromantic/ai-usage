@@ -3,6 +3,11 @@ package logs
 // UnknownProject is the project of a session whose log names no directory.
 const UnknownProject = "unknown"
 
+// UnknownAccount is the account of a part of a session that the log bills to
+// no account and marks as not the session's own (Hermes: an auxiliary call
+// on a fallback route).
+const UnknownAccount = "unknown"
+
 // dedupeSessions keeps one row per session id, the one with the most tokens.
 // The same session can appear twice when two homes share a directory.
 func dedupeSessions(in []Session) []Session {
@@ -42,6 +47,36 @@ func fillFrom(dst *Session, src Session) {
 	if src.Updated.After(dst.Updated) {
 		dst.Updated = src.Updated
 	}
+	for _, h := range src.Homes {
+		if !containsString(dst.Homes, h) {
+			dst.Homes = append(dst.Homes, h)
+		}
+	}
+	if src.Limits != nil && (dst.Limits == nil || src.Limits.ObservedAt.After(dst.Limits.ObservedAt)) {
+		dst.Limits = src.Limits
+	}
+}
+
+// addParts adds src's parts onto dst's.
+func addParts(dst *Session, src Session) {
+	if src.Parts == nil {
+		return
+	}
+	if dst.Parts == nil {
+		dst.Parts = map[string]Tokens{}
+	}
+	for a, t := range src.Parts {
+		dst.Parts[a] = dst.Parts[a].Add(t)
+	}
+}
+
+func containsString(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 // rollup adds each sub-agent's tokens onto its root session.
@@ -77,12 +112,14 @@ func rollup(in []Session) []Session {
 		if !ok {
 			cp := in[r]
 			cp.Tokens = Tokens{}
+			cp.Parts = nil
 			cp.ParentID = ""
 			dst = &cp
 			acc[r] = dst
 			order = append(order, r)
 		}
 		dst.Tokens = dst.Tokens.Add(in[i].Tokens)
+		addParts(dst, in[i])
 		if i != r {
 			fillFrom(dst, in[i])
 			dst.ParentID = ""

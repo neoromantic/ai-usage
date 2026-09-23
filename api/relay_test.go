@@ -25,7 +25,7 @@ var now = time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 // decides which store Handler finds.
 func fresh(t *testing.T) {
 	t.Helper()
-	for _, k := range []string{"KV_REST_API_URL", "KV_REST_API_TOKEN", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "VERCEL", "VERCEL_ENV"} {
+	for _, k := range []string{"KV_REST_API_URL", "KV_REST_API_TOKEN", "VERCEL", "VERCEL_ENV"} {
 		t.Setenv(k, "")
 	}
 	reset := func() {
@@ -131,9 +131,9 @@ func TestStoreChoice(t *testing.T) {
 	}
 }
 
-// fakeUpstash answers every pipeline command with 1, which is all a health
+// fakeKV answers every pipeline command with 1, which is all a health
 // check needs, and refuses any other token.
-func fakeUpstash(t *testing.T, calls *atomic.Int32) *httptest.Server {
+func fakeKV(t *testing.T, calls *atomic.Int32) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
@@ -158,25 +158,18 @@ func fakeUpstash(t *testing.T, calls *atomic.Int32) *httptest.Server {
 }
 
 func TestKVOnVercel(t *testing.T) {
-	for _, names := range [][2]string{
-		{"KV_REST_API_URL", "KV_REST_API_TOKEN"},
-		{"UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"},
-	} {
-		t.Run(names[0], func(t *testing.T) {
-			fresh(t)
-			var calls atomic.Int32
-			kv := fakeUpstash(t, &calls)
-			t.Setenv("VERCEL", "1")
-			t.Setenv(names[0], kv.URL)
-			t.Setenv(names[1], "tok")
-			code, body := get(t, vercel(), "/v1/health")
-			if code != http.StatusOK || body["ok"] != true {
-				t.Fatalf("status %d body %v", code, body)
-			}
-			if calls.Load() == 0 {
-				t.Fatal("the relay did not use the KV store")
-			}
-		})
+	fresh(t)
+	var calls atomic.Int32
+	kv := fakeKV(t, &calls)
+	t.Setenv("VERCEL", "1")
+	t.Setenv("KV_REST_API_URL", kv.URL)
+	t.Setenv("KV_REST_API_TOKEN", "tok")
+	code, body := get(t, vercel(), "/v1/health")
+	if code != http.StatusOK || body["ok"] != true {
+		t.Fatalf("status %d body %v", code, body)
+	}
+	if calls.Load() == 0 {
+		t.Fatal("the relay did not use the KV store")
 	}
 }
 

@@ -7,10 +7,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/bits"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -23,7 +25,7 @@ import (
 )
 
 // UnknownAccount labels usage the harness did not attribute to anyone.
-const UnknownAccount = "unknown"
+const UnknownAccount = logs.UnknownAccount
 
 // Bounds of a believable reset time: none before 2000, and none further
 // ahead than the longest window plus a day of clock skew.
@@ -50,6 +52,9 @@ type Options struct {
 	// After runs under the run lock before the state is saved. The command
 	// layer uses it for scheduler registration and self-update bookkeeping.
 	After func(ctx context.Context, cfg *state.Config, st *state.State)
+
+	// quotaFrom is Config.QuotaFrom, set by Run.
+	quotaFrom map[string]state.HomeRef
 }
 
 // Result is what a run leaves behind for the views.
@@ -171,6 +176,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	if o.Ask == nil {
 		o.Ask = askHarness(o.Probe, cfg.HomeEnv)
 	}
+	o.quotaFrom = cfg.QuotaFrom
 
 	sample := state.Sample{At: now}
 	growth := map[string]snapshot.Tokens{}
@@ -292,10 +298,14 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 		res = o.ReadLogs(p, homes, since)
 	}
 	labels := map[string]string{}
+	var answers []answer
+	if p != "hermes" {
+		answers = askAll(ctx, o.Ask, p, homes)
+	}
 	// partial means some home's read was incomplete, so a lower count than
 	// last time is a missing file rather than a real drop.
 	partial := false
-	for _, home := range homes {
+	for i, home := range homes {
 		hr := res.Homes[home]
 		if hr.Err != nil {
 			errs = append(errs, "read "+home+": "+shortErr(hr.Err))
@@ -311,16 +321,21 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 			partial = true
 		}
 		if p != "hermes" {
-			reading, perr := o.Ask(ctx, p, home)
-			if perr != nil {
-				errs = append(errs, shortErr(perr))
+			a := answers[i]
+			// An app's per-account home with nobody logged in is an account
+			// removed or not added yet, not a problem.
+			if a.err != nil && !(isLoggedOut(a.err) && isManaged(p, home)) {
+				errs = append(errs, shortErr(a.err))
 			}
-			labels[home] = applyReading(st, p, home, reading, isLoggedOut(perr), hr.Limits, now, prevRun)
+			labels[home] = applyReading(st, p, home, a.reading, isLoggedOut(a.err), hr.Limits, now, prevRun)
 		}
 	}
 	var read []readSession
 	for _, s := range res.Sessions {
 		label, ok := labels[s.Home]
+		if l := servedBy(st, p, s, labels); l != "" {
+			label, ok = l, true
+		}
 		if p == "hermes" {
 			label = s.Account
 		} else if !ok {
@@ -336,11 +351,18 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 		if p == "hermes" {
 			touchAccount(st, p, r.label)
 		}
-		attribute(st, p, r.s, r.label, partial, now, growth)
+		grown := attribute(st, p, r.s, r.label, partial, now, growth)
+		if p == "hermes" {
+			for l := range grown {
+				touchAccount(st, p, l)
+			}
+			linkGrowth(st, o, r.s, grown)
+		}
 	}
 	probed := homes
 	if p == "hermes" {
 		markHermesCurrent(st, read)
+		linkHermes(st, o, read)
 		probed = nil
 		if len(homes) > 0 {
 			probed = []string{""}
@@ -368,6 +390,37 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 	}
 	src.Error = truncate(strings.Join(dedupe(errs), "; "), 300)
 	return src
+}
+
+// answer is one home's reply to a probe.
+type answer struct {
+	reading probe.Reading
+	err     error
+	// panicked is what the probe panicked with, if it did.
+	panicked any
+}
+
+// askAll asks about every home of p at once, so that a harness that does not
+// answer in one home costs its timeout once, not once per home. A probe that
+// panics panics here, where the source's own recovery handles it.
+func askAll(ctx context.Context, ask func(context.Context, string, string) (probe.Reading, error), p string, homes []string) []answer {
+	out := make([]answer, len(homes))
+	var wg sync.WaitGroup
+	for i, home := range homes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { out[i].panicked = recover() }()
+			out[i].reading, out[i].err = ask(ctx, p, home)
+		}()
+	}
+	wg.Wait()
+	for _, a := range out {
+		if a.panicked != nil {
+			panic(a.panicked)
+		}
+	}
+	return out
 }
 
 // isLoggedOut reports whether a probe error is the harness answering that
@@ -479,8 +532,10 @@ func touchAccount(st *state.State, p, label string) *state.Account {
 	return acct
 }
 
-// attribute moves a session's growth since the last run onto label.
-func attribute(st *state.State, p string, s logs.Session, label string, partial bool, now time.Time, growth map[string]snapshot.Tokens) {
+// attribute moves a session's growth since the last run onto label, or onto
+// each part's account when the log splits the session by account. It returns
+// the growth by account.
+func attribute(st *state.State, p string, s logs.Session, label string, partial bool, now time.Time, growth map[string]snapshot.Tokens) map[string]snapshot.Tokens {
 	k := state.Key(p, s.ID)
 	e := st.Sessions[k]
 	if e == nil {
@@ -490,13 +545,45 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 	if e.By == nil {
 		e.By = map[string]snapshot.Tokens{}
 	}
-	g := s.Tokens.Growth(e.Seen)
-	if partial {
-		// Keep the higher count, or the part that could not be read would be
-		// counted again when it reads next time.
-		e.Seen = e.Seen.Add(g)
+	grown := map[string]snapshot.Tokens{}
+	if s.Parts == nil {
+		g := s.Tokens.Growth(e.Seen)
+		e.Seen = seenNow(e.Seen, s.Tokens, g, partial)
+		grown[label] = g
 	} else {
-		e.Seen = s.Tokens
+		parts := map[string]snapshot.Tokens{}
+		for acct, t := range s.Parts {
+			// A part that names no account, as a row from before Hermes
+			// recorded billing, is the session's.
+			l := strings.TrimSpace(acct)
+			if l == "" {
+				l = label
+			}
+			parts[l] = parts[l].Add(t)
+		}
+		// A ledger from before parts were kept has each account's share, but
+		// split by when it grew rather than by route: a sub-agent on another
+		// route was counted under its parent's. Its first read with parts
+		// counts only what the session grew in all.
+		migrating := e.Parts == nil
+		if migrating {
+			e.Parts = map[string]snapshot.Tokens{}
+			for l, t := range e.By {
+				e.Parts[l] = t
+			}
+		}
+		for l, t := range parts {
+			g := t.Growth(e.Parts[l])
+			e.Parts[l] = seenNow(e.Parts[l], t, g, partial)
+			grown[l] = g
+		}
+		if migrating {
+			fitGrowth(grown, s.Tokens.Growth(e.Seen))
+		}
+		e.Seen = snapshot.Tokens{}
+		for _, t := range e.Parts {
+			e.Seen = e.Seen.Add(t)
+		}
 	}
 	e.Project = s.Project
 	updated := s.Updated
@@ -506,28 +593,278 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 	if updated.After(e.Updated) {
 		e.Updated = updated.UTC()
 	}
-	if g.Zero() {
-		return
+	for l, g := range grown {
+		if g.Zero() {
+			delete(grown, l)
+			continue
+		}
+		e.By[l] = e.By[l].Add(g)
+		if e.Last == nil {
+			e.Last = map[string]time.Time{}
+		}
+		if updated.After(e.Last[l]) {
+			e.Last[l] = updated.UTC()
+		}
+		ak := state.Key(p, l)
+		growth[ak] = growth[ak].Add(g)
 	}
-	e.By[label] = e.By[label].Add(g)
-	if e.Last == nil {
-		e.Last = map[string]time.Time{}
+	return grown
+}
+
+// fitGrowth scales grown down, field by field and in proportion, so that it
+// adds up to no more than total. What rounding leaves goes to the largest.
+func fitGrowth(grown map[string]snapshot.Tokens, total snapshot.Tokens) {
+	labels := make([]string, 0, len(grown))
+	for l := range grown {
+		labels = append(labels, l)
 	}
-	if updated.After(e.Last[label]) {
-		e.Last[label] = updated.UTC()
+	sort.Strings(labels)
+	shares := make([]snapshot.Tokens, len(labels))
+	for i, l := range labels {
+		shares[i] = grown[l]
 	}
-	ak := state.Key(p, label)
-	growth[ak] = growth[ak].Add(g)
+	for f, limit := range tokenFields(&total) {
+		var sum int64
+		largest := 0
+		for i := range shares {
+			v := *tokenFields(&shares[i])[f]
+			sum += v
+			if v > *tokenFields(&shares[largest])[f] {
+				largest = i
+			}
+		}
+		if sum <= *limit {
+			continue
+		}
+		left := *limit
+		for i := range shares {
+			v := tokenFields(&shares[i])[f]
+			hi, lo := bits.Mul64(uint64(*v), uint64(*limit))
+			q, _ := bits.Div64(hi, lo, uint64(sum))
+			*v = int64(q)
+			left -= *v
+		}
+		*tokenFields(&shares[largest])[f] += left
+	}
+	for i, l := range labels {
+		grown[l] = shares[i]
+	}
+}
+
+func tokenFields(t *snapshot.Tokens) [4]*int64 {
+	return [4]*int64{&t.Input, &t.Output, &t.CacheRead, &t.CacheWrite}
+}
+
+// seenNow is the count to remember after a read that found cur, g past prev.
+// A partial read keeps the higher count, or the part that could not be read
+// would be counted again when it reads next time.
+func seenNow(prev, cur, g snapshot.Tokens, partial bool) snapshot.Tokens {
+	if partial {
+		return prev.Add(g)
+	}
+	return cur
+}
+
+// servedBy is the account that served a session whose log file several homes
+// hold, as Orca links each Codex rollout into every account's home. The
+// file's newest rate-limit reading is the serving account's: a weekly window
+// resets at a time fixed per account, so the one account logged in at those
+// homes whose quota resets at the same time served it. With none or more
+// than one such account, it returns "" and the session stays with its first
+// home, the default home when it holds the file.
+func servedBy(st *state.State, p string, s logs.Session, labels map[string]string) string {
+	if len(s.Homes) < 2 || s.Limits == nil {
+		return ""
+	}
+	found := ""
+	for _, h := range s.Homes {
+		l := labels[h]
+		if l == "" || l == UnknownAccount || l == found {
+			continue
+		}
+		acct := st.Accounts[state.Key(p, l)]
+		if acct == nil || acct.Quota == nil || !sameReset(acct.Quota.Windows, s.Limits.Windows) {
+			continue
+		}
+		if found != "" {
+			return ""
+		}
+		found = l
+	}
+	return found
+}
+
+// resetSkew is how far apart two readings of one window's reset time may be.
+const resetSkew = time.Minute
+
+// sameReset reports whether the longest window of the log reading resets when
+// the window of the same length in the quota does.
+func sameReset(quota, log []snapshot.Window) bool {
+	var longest *snapshot.Window
+	for i, w := range log {
+		if w.ResetsAt != nil && w.Minutes > 0 && (longest == nil || w.Minutes > longest.Minutes) {
+			longest = &log[i]
+		}
+	}
+	if longest == nil {
+		return false
+	}
+	for _, w := range quota {
+		if w.Minutes == longest.Minutes && w.ResetsAt != nil {
+			d := w.ResetsAt.Sub(*longest.ResetsAt)
+			return d <= resetSkew && d >= -resetSkew
+		}
+	}
+	return false
+}
+
+// hermesLinks are the Hermes billing providers that log in to the same
+// subscription as another harness, and that harness. Hermes keeps its own
+// login for them, so the account is assumed, not read: the one logged in to
+// the home Config.QuotaFrom names for the Hermes home, else to the harness's
+// default home. Hermes never marks Anthropic usage as billed to a
+// subscription, so it is not linked.
+var hermesLinks = map[string]string{
+	"openai-codex": "codex",
+	"xai-oauth":    "grok",
+}
+
+// linkedAccount is the account a Hermes billing provider in the Hermes home
+// is assumed to bill through: the one logged in now to the home the person
+// named for it, or to the linked harness's default home.
+func linkedAccount(st *state.State, o Options, hermesHome, billing string) *state.Link {
+	p, ok := hermesLinks[billing]
+	if !ok {
+		return nil
+	}
+	at := quotaHome(o.quotaFrom, hermesHome, p)
+	if at == "" && o.UserHome != "" {
+		at = filepath.Join(o.UserHome, "."+p)
+	}
+	label := st.Current[state.Key(p, at)]
+	if at == "" || label == "" {
+		return nil
+	}
+	return &state.Link{Provider: p, Label: label}
+}
+
+// quotaHome is the home of p named for a Hermes home, or for the home a
+// profile is kept in. With no Hermes home to go by, as for an account with no
+// session read this run, it is the home of p every entry names, if they agree.
+func quotaHome(named map[string]state.HomeRef, hermesHome, p string) string {
+	if hermesHome == "" {
+		one := ""
+		for _, ref := range named {
+			if ref.Provider != p {
+				continue
+			}
+			if one != "" && ref.Home != one {
+				return ""
+			}
+			one = ref.Home
+		}
+		return one
+	}
+	ref, ok := named[hermesHome]
+	if parent := filepath.Dir(hermesHome); !ok && filepath.Base(parent) == profiles["hermes"].dir {
+		ref, ok = named[filepath.Dir(parent)]
+	}
+	if !ok || ref.Provider != p {
+		return ""
+	}
+	return ref.Home
+}
+
+// BillsThrough reports whether Hermes can bill a subscription through the
+// login of harness p.
+func BillsThrough(p string) bool {
+	for _, v := range hermesLinks {
+		if v == p {
+			return true
+		}
+	}
+	return false
+}
+
+// QuotaHomeOf is the home of another harness the person named for a Hermes
+// home, or for the home a profile is kept in.
+func QuotaHomeOf(named map[string]state.HomeRef, hermesHome string) (state.HomeRef, bool) {
+	if hermesHome == "" {
+		return state.HomeRef{}, false
+	}
+	for _, p := range Providers {
+		if h := quotaHome(named, hermesHome, p); h != "" {
+			return state.HomeRef{Provider: p, Home: h}, true
+		}
+	}
+	return state.HomeRef{}, false
+}
+
+// linkHermes points each Hermes account billed through a subscription at the
+// account it is assumed to use, or at none when nobody is logged in there.
+// Where Hermes homes bill through different logins, the account follows the
+// home of its newest session read this run.
+func linkHermes(st *state.State, o Options, read []readSession) {
+	newest := map[string]logs.Session{}
+	for _, r := range read {
+		for _, billing := range billedBy(r.s) {
+			if n, ok := newest[billing]; !ok || r.s.Updated.After(n.Updated) ||
+				(r.s.Updated.Equal(n.Updated) && r.s.ID > n.ID) {
+				newest[billing] = r.s
+			}
+		}
+	}
+	for _, acct := range st.Accounts {
+		if acct.Provider == "hermes" {
+			acct.Link = linkedAccount(st, o, newest[acct.Label].Home, acct.Label)
+		}
+	}
+}
+
+// billedBy lists the billing providers a Hermes session holds tokens under.
+func billedBy(s logs.Session) []string {
+	if s.Parts == nil {
+		return []string{s.Account}
+	}
+	var out []string
+	for b, t := range s.Parts {
+		if !t.Zero() {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+// linkGrowth records a Hermes session's growth on each subscription against
+// the account it is assumed to have used, so that account can show what
+// Hermes spent on it.
+func linkGrowth(st *state.State, o Options, s logs.Session, grown map[string]snapshot.Tokens) {
+	for billing, g := range grown {
+		link := linkedAccount(st, o, s.Home, billing)
+		if link == nil {
+			continue
+		}
+		e := st.Sessions[state.Key("hermes", s.ID)]
+		if e.Via == nil {
+			e.Via = map[string]snapshot.Tokens{}
+		}
+		k := state.Key(link.Provider, link.Label)
+		e.Via[k] = e.Via[k].Add(g)
+	}
 }
 
 // markHermesCurrent marks the billing provider of the newest Hermes session
 // read this run as current. It is the account the session bills now, not
-// whichever account earlier growth went to. With no sessions read, the last
-// known one stays.
+// whichever account earlier growth went to. A session whose row names no
+// provider and holds no tokens of its own, as one Hermes made for auxiliary
+// calls alone, does not say. With no sessions read, the last known one stays.
 func markHermesCurrent(st *state.State, read []readSession) {
 	var newest *readSession
 	for i := range read {
 		r := &read[i]
+		if strings.TrimSpace(r.s.Account) == "" && r.s.Parts != nil && r.s.Parts[r.s.Account].Zero() {
+			continue
+		}
 		if newest == nil || r.s.Updated.After(newest.s.Updated) ||
 			(r.s.Updated.Equal(newest.s.Updated) && r.s.ID > newest.s.ID) {
 			newest = r
@@ -570,6 +907,9 @@ func prune(st *state.State, now time.Time) {
 				continue
 			}
 			used[state.Key(s.Provider, l)] = true
+		}
+		for via := range s.Via {
+			used[via] = true
 		}
 	}
 	current := map[string]bool{}

@@ -1,270 +1,426 @@
 package view
 
 import (
-	"fmt"
-	"math"
-	"strconv"
+	"regexp"
 	"strings"
 	"time"
 
-	"github.com/neoromantic/ai-usage/internal/snapshot"
+	"github.com/neoromantic/ai-usage/internal/selfupdate"
 )
 
-// ConsoleProjects is how many projects each account lists in the console.
-const ConsoleProjects = 8
+// Mode is which console view to draw.
+type Mode int
+
+const (
+	Default Mode = iota
+	Projects
+	Tokens
+	Devices
+)
+
+// Options say how the console looks: the terminal width, color, the glyph
+// set, the view, and the time zone clocks are shown in.
+type Options struct {
+	Width int
+	Color bool
+	ASCII bool
+	Mode  Mode
+	Loc   *time.Location
+}
+
+const (
+	minWidth     = 80
+	maxWidth     = 160
+	wideFrom     = 100
+	silentDevice = 24 * time.Hour
+	topProjects  = 3
+	foldDevices  = 12
+)
+
+type ui struct {
+	w          int  // layout width: the terminal width minus one
+	page       int  // where the header, rules and legend end: w, or less on one device
+	wide       bool // terminal width 100 or more
+	multi      bool // the team view holds more than this device
+	allDevices bool
+	g          glyphs
+	color      bool
+	loc        *time.Location
+	now        time.Time
+	home       string
+	legend     map[string]bool
+	lines      []line
+	r          *Report
+}
+
+func newUI(r *Report, o Options) *ui {
+	t := o.Width
+	if t == 0 {
+		t = minWidth
+	}
+	t = clamp(t, minWidth, maxWidth)
+	u := &ui{w: t - 1, wide: t >= wideFrom, g: utf8Glyphs, color: o.Color, loc: o.Loc,
+		now: r.GeneratedAt, legend: map[string]bool{}, r: r, multi: len(r.Team.Devices) > 1}
+	if o.ASCII {
+		u.g = asciiGlyphs
+	}
+	if u.loc == nil {
+		u.loc = time.Local
+	}
+	u.home = homeOf(r)
+	u.page = u.w
+	if !u.multi {
+		// One device has no USED BY or NOTE column to fill a wide
+		// terminal, so the page ends where its widest table does.
+		u.page = min(u.w, maxLocalLabel+u.localNums())
+	}
+	return u
+}
 
 // Text renders the report for a person.
-func Text(r Report) string {
-	var b strings.Builder
-	now := r.GeneratedAt
-	c := r.Collector
-	fmt.Fprintf(&b, "ai-usage %s · %s (%s) · team %s\n", c.Version, c.DeviceLabel, c.OSUser, shortFP(c.Team))
-	fmt.Fprintf(&b, "last run %s · last success %s\n", ago(c.LastRunAt, now), ago(c.LastSuccessAt, now))
-	b.WriteString(relayLine(c.Relay, now))
-	if c.LastError != nil {
-		fmt.Fprintf(&b, "last error (%s): %s\n", ago(c.LastErrorAt, now), *c.LastError)
-	}
-	if !c.Schedule.Registered {
-		msg := "not registered with the system scheduler"
-		if c.Schedule.Error != nil {
-			msg += ": " + *c.Schedule.Error
+func Text(r Report, o Options) string {
+	u := newUI(&r, o)
+	switch o.Mode {
+	case Tokens:
+		u.header()
+		u.blank()
+		u.teamTokens()
+	case Projects:
+		u.header()
+		u.blank()
+		u.thisDevice(true)
+		u.footer(false)
+	case Devices:
+		u.allDevices = true
+		u.header()
+		u.blank()
+		u.devices()
+		u.footer(false)
+	default:
+		u.header()
+		u.blank()
+		u.accounts()
+		if u.multi {
+			u.blank()
+			u.devices()
 		}
-		fmt.Fprintf(&b, "schedule: %s\n", msg)
+		u.blank()
+		u.thisDevice(false)
+		u.footer(true)
 	}
-	if c.Update.Staged != nil {
-		fmt.Fprintf(&b, "update: %s is installed and runs next time\n", *c.Update.Staged)
-	} else if c.Update.Error != nil {
-		fmt.Fprintf(&b, "update: %s\n", *c.Update.Error)
-	}
+	return u.String()
+}
 
+// defaultHomes are the harness homes that sit directly in the user's home.
+var defaultHomes = []string{".claude", ".codex", ".grok", ".hermes"}
+
+// homeOf is the user's home folder, taken from a default harness home, so
+// paths print with ~ without the renderer asking the OS.
+func homeOf(r *Report) string {
 	for _, p := range r.Providers {
-		b.WriteByte('\n')
-		writeProvider(&b, p, now)
+		for _, h := range p.Homes {
+			for _, d := range defaultHomes {
+				for _, sep := range []string{"/", `\`} {
+					if strings.HasSuffix(h, sep+d) {
+						return strings.TrimSuffix(h, sep+d)
+					}
+				}
+			}
+		}
 	}
-	writeTeam(&b, r.Team, now)
+	return ""
+}
+
+func (u *ui) emit(l line) { u.lines = append(u.lines, l) }
+func (u *ui) blank()      { u.emit(nil) }
+
+func (u *ui) String() string {
+	var b strings.Builder
+	for _, l := range u.lines {
+		for _, s := range trimRight(l) {
+			if u.color && s.st != plain && strings.TrimSpace(s.text) != "" {
+				b.WriteString("\x1b[" + string(s.st) + "m" + s.text + "\x1b[0m")
+			} else {
+				b.WriteString(s.text)
+			}
+		}
+		b.WriteByte('\n')
+	}
 	return b.String()
 }
 
-func relayLine(rl Relay, now time.Time) string {
-	if rl.URL == nil {
-		return "relay: not configured (set one with `ai-usage relay set <url>`)\n"
+func trimRight(l line) line {
+	out := append(line(nil), l...)
+	for len(out) > 0 {
+		last := &out[len(out)-1]
+		last.text = strings.TrimRight(last.text, " ")
+		if last.text != "" {
+			break
+		}
+		out = out[:len(out)-1]
 	}
-	parts := []string{"pushed " + ago(rl.LastPushAt, now), "pulled " + ago(rl.LastPullAt, now)}
-	if rl.Pending {
-		parts = append(parts, "newest snapshot not sent yet")
-	}
-	line := "relay: " + strings.Join(parts, " · ") + "\n"
-	if rl.LastError != nil {
-		line += "relay error: " + *rl.LastError + "\n"
-	}
-	return line
+	return out
 }
 
-func writeProvider(b *strings.Builder, p Provider, now time.Time) {
-	fmt.Fprintf(b, "%s  %s\n", strings.ToUpper(p.Provider), p.Status)
-	if p.Status == "skipped" {
-		b.WriteString("  not installed\n")
-		return
+// path prints a path under the user's home with ~.
+func (u *ui) path(p string) string {
+	if u.home == "" {
+		return p
 	}
-	if p.Error != nil {
-		fmt.Fprintf(b, "  problem: %s\n", *p.Error)
+	if p == u.home {
+		return "~"
 	}
-	if len(p.Accounts) == 0 {
-		b.WriteString("  no accounts and no usage yet\n")
-	}
-	for _, a := range p.Accounts {
-		head := "  " + a.Label
-		if a.Plan != nil {
-			head += "  " + *a.Plan
-		}
-		if a.Current {
-			head += "  (logged in)"
-		}
-		b.WriteString(head + "\n")
-		writeQuota(b, "    ", a.Quota, a.HeadlinePercent, a.Level, now)
-		fmt.Fprintf(b, "    90 days: %s · %s\n", plural(a.Sessions, "session"), tokens(a.Tokens))
-		if a.LastActiveAt != nil {
-			fmt.Fprintf(b, "    last active %s\n", ago(a.LastActiveAt, now))
-		}
-		for i, pr := range a.Projects {
-			if i == ConsoleProjects {
-				more := len(a.Projects) - ConsoleProjects
-				word := "projects"
-				if more == 1 {
-					word = "project"
-				}
-				fmt.Fprintf(b, "      %d more %s\n", more, word)
-				break
-			}
-			fmt.Fprintf(b, "      %s  %s · %s\n", pr.Path, plural(pr.Sessions, "session"), tokens(pr.Tokens))
+	for _, sep := range []string{"/", `\`} {
+		if strings.HasPrefix(p, u.home+sep) {
+			return "~" + strings.TrimPrefix(p, u.home)
 		}
 	}
+	return p
 }
 
-func writeQuota(b *strings.Builder, indent string, q *Quota, head *float64, lvl string, now time.Time) {
-	if q == nil || len(q.Windows) == 0 {
-		b.WriteString(indent + "quota unknown\n")
-		return
-	}
-	fmt.Fprintf(b, "%s%s\n", indent, quotaLine(q, head, lvl, now))
-	for _, w := range q.Windows {
-		line := fmt.Sprintf("%s  %-12s %5s%s", indent, w.Name, pct(w.Percent), mark(w.Level))
-		if w.ResetsAt != nil {
-			if w.ResetsAt.After(now) {
-				line += "  resets in " + dur(w.ResetsAt.Sub(now))
-			} else {
-				line += "  reset " + dur(now.Sub(*w.ResetsAt)) + " ago"
-			}
+var managedHome = regexp.MustCompile(`[/\\](orca)[/\\]codex-accounts[/\\]([^/\\]+)[/\\]home$`)
+
+// homeName is how a harness home is printed: an app's per-account home by
+// the app and the account id, anything else as a path. An id that is a UUID
+// is known by its first 8 hex digits.
+func (u *ui) homeName(p string) string {
+	if m := managedHome.FindStringSubmatch(p); m != nil {
+		id := m[2]
+		if uuidRe.MatchString(id) {
+			id = id[:8]
 		}
-		if w.Pace != nil && w.Pace.FillsAt != nil {
-			if w.Pace.FillsAt.After(now) {
-				line += "  · at this pace full in " + dur(w.Pace.FillsAt.Sub(now)) + ", before reset"
-			} else {
-				line += "  · at this pace already full"
-			}
+		return m[1] + " " + id
+	}
+	return u.path(p)
+}
+
+func (u *ui) clock(t time.Time, layout string) string { return t.In(u.loc).Format(layout) }
+
+// spread puts right at the page's right edge after left, when both fit.
+func (u *ui) spread(left, right line) line {
+	left = left.cut(u.w, u.g.ell)
+	gap := u.page - left.width() - right.width()
+	if gap < 2 {
+		return left
+	}
+	return append(append(left, seg{strings.Repeat(" ", gap), plain}), right...)
+}
+
+// flow joins items with sep and wraps them at the page width, indenting
+// the continuation lines.
+func (u *ui) flow(first line, items []line, sep string, indent int) {
+	for _, l := range u.wrap(first, items, sep, indent, u.page) {
+		u.emit(l)
+	}
+}
+
+// flowEven is flow with lines of even length: it wraps at the narrowest
+// width that needs no more lines, so the last line is not a lone item.
+func (u *ui) flowEven(items []line, sep string) {
+	n := len(u.wrap(nil, items, sep, 0, u.page))
+	lim := 0
+	for _, it := range items {
+		lim = max(lim, it.width())
+	}
+	for lim < u.page && len(u.wrap(nil, items, sep, 0, lim)) > n {
+		lim++
+	}
+	for _, l := range u.wrap(nil, items, sep, 0, lim) {
+		u.emit(l)
+	}
+}
+
+func (u *ui) wrap(first line, items []line, sep string, indent, limit int) []line {
+	var out []line
+	cur := first
+	fresh := true
+	for _, it := range items {
+		add := it.width()
+		if !fresh {
+			add += width(sep)
 		}
-		b.WriteString(line + "\n")
-	}
-}
-
-func writeTeam(b *strings.Builder, t Team, now time.Time) {
-	b.WriteString("\nTEAM")
-	if t.PulledAt == nil {
-		b.WriteString("  not read from the relay yet; this device only\n")
-	} else {
-		fmt.Fprintf(b, "  read %s\n", ago(t.PulledAt, now))
-	}
-	for _, d := range t.Devices {
-		this := ""
-		if d.This {
-			this = "  (this device)"
+		if cur.width()+add > limit && !fresh {
+			out = append(out, cur.cut(u.w, u.g.ell))
+			cur = line{{strings.Repeat(" ", indent), plain}}
+			fresh = true
 		}
-		health := []string{}
-		for _, s := range d.Sources {
-			if s.Status != "ok" && s.Status != "skipped" {
-				health = append(health, s.Provider+" "+s.Status)
-			}
+		if !fresh {
+			cur = append(cur, seg{sep, plain})
 		}
-		h := "ok"
-		if len(health) > 0 {
-			h = strings.Join(health, ", ")
+		cur = append(cur, it...)
+		fresh = false
+	}
+	return append(out, cur.cut(u.w, u.g.ell))
+}
+
+// titleWrap emits a section title and its counts, wrapping before a count
+// that does not fit, under the first one.
+func (u *ui) titleWrap(title line, indent int) {
+	cur := append(line(nil), title[:2]...)
+	for i := 2; i+1 < len(title); i += 2 {
+		if cur.width()+width(title[i].text)+width(title[i+1].text) > u.w {
+			u.emit(cur)
+			cur = line{{strings.Repeat(" ", indent), plain}, title[i+1]}
+			continue
 		}
-		fmt.Fprintf(b, "  %s (%s)%s  collected %s · %s · %s\n", d.Label, d.OSUser, this, ago(&d.CollectedAt, now), d.CollectorVersion, h)
+		cur = append(cur, title[i], title[i+1])
 	}
-	for _, p := range t.Providers {
-		fmt.Fprintf(b, "  %s\n", p.Provider)
-		for _, a := range p.Accounts {
-			quota := "quota unknown"
-			if a.Quota != nil && len(a.Quota.Windows) > 0 {
-				quota = quotaLine(a.Quota, a.HeadlinePercent, a.Level, now)
-			}
-			fmt.Fprintf(b, "    %s  %s · %s on %s\n", a.Label, quota, tokens(a.Tokens), plural(len(a.Devices), "device"))
-		}
-	}
+	u.emit(cur.cut(u.w, u.g.ell))
 }
 
-// quotaLine is the headline of a reading, with where it came from and its age.
-func quotaLine(q *Quota, head *float64, lvl string, now time.Time) string {
-	src := ago(&q.ObservedAt, now)
-	if q.Device != "" {
-		src = "from " + q.Device + ", " + src
-	} else if q.Source != "" {
-		src = q.Source + ", " + src
-	}
-	if q.Stale {
-		src += " · stale"
-	}
-	if head == nil {
-		return "quota unknown, every window reset since the reading (" + src + ")"
-	}
-	return fmt.Sprintf("quota %s%s (%s)", pct(*head), mark(lvl), src)
+// health is one item of the header strip. short names it in the status
+// verdict; detail is a full error or a fix for a line of its own.
+type health struct {
+	glyph, text string
+	st          style
+	detail      string
+	short       string
 }
 
-func mark(lvl string) string {
-	switch lvl {
-	case "critical":
-		return " !!"
-	case "warning":
-		return " !"
-	default:
-		return ""
-	}
-}
+func (u *ui) header() {
+	c := u.r.Collector
+	g := u.g
+	left := line{{"ai-usage", bold}, {" " + c.Version + g.sep + c.DeviceLabel + " (" + c.OSUser + ")" + g.sep + "team " + shortFP(c.Team, 8, g.ell), plain}}
+	u.emit(u.spread(left, line{{u.clock(u.now, "Mon 2 Jan 15:04"), gray}}))
 
-func shortFP(fp string) string {
-	if len(fp) <= 12 {
-		return fp
-	}
-	return fp[:12] + "…"
-}
-
-func pct(p float64) string {
-	if p == math.Trunc(p) {
-		return strconv.FormatFloat(p, 'f', 0, 64) + "%"
-	}
-	return strconv.FormatFloat(p, 'f', 1, 64) + "%"
-}
-
-func tokens(t snapshot.Tokens) string {
-	return fmt.Sprintf("in %s out %s cache read %s write %s", human(t.Input), human(t.Output), human(t.CacheRead), human(t.CacheWrite))
-}
-
-// human prints 1234567 as 1.2M.
-func human(n int64) string {
-	f := float64(n)
-	for _, u := range []struct {
-		v float64
-		s string
-	}{{1e12, "T"}, {1e9, "G"}, {1e6, "M"}, {1e3, "K"}} {
-		if f >= u.v {
-			x := f / u.v
-			if x >= 100 {
-				return strconv.FormatFloat(x, 'f', 0, 64) + u.s
-			}
-			return strconv.FormatFloat(x, 'f', 1, 64) + u.s
+	var items []line
+	var details []health
+	for _, h := range u.healthItems() {
+		items = append(items, line{{h.glyph + " ", h.st}, {h.text, plain}})
+		if h.detail != "" {
+			details = append(details, h)
 		}
 	}
-	return strconv.FormatInt(n, 10)
+	u.flow(nil, items, "  ", 0)
+	for _, d := range details {
+		u.emit(line{{"  " + d.glyph + " ", d.st}, {truncEnd(d.detail, u.w-4, g.ell), d.st}})
+	}
 }
 
-func plural(n int, word string) string {
-	if n == 1 {
-		return "1 " + word
-	}
-	return strconv.Itoa(n) + " " + word + "s"
+// failed is whether the last run ended in an error: the error is newer than
+// the last success.
+func failed(c Collector) bool {
+	return c.LastError != nil && c.LastErrorAt != nil && (c.LastSuccessAt == nil || c.LastErrorAt.After(*c.LastSuccessAt))
 }
 
-func ago(t *time.Time, now time.Time) string {
-	if t == nil || t.IsZero() {
-		return "never"
+func (u *ui) healthItems() []health {
+	c := u.r.Collector
+	g := u.g
+	dev := selfupdate.Dev(c.Version)
+	var out []health
+	since := func(t *time.Time) string {
+		if t == nil {
+			return "never"
+		}
+		return ago(u.now.Sub(*t))
 	}
-	d := now.Sub(*t)
-	if d < 0 {
-		return "just now"
-	}
-	if d < time.Minute {
-		return "just now"
-	}
-	return dur(d) + " ago"
-}
-
-// dur prints a duration in the two largest units: 3d 4h, 2h 5m, 12m.
-func dur(d time.Duration) string {
-	if d < time.Minute {
-		return "<1m"
-	}
-	m := int(d.Minutes())
-	days, hours, mins := m/(60*24), (m/60)%24, m%60
 	switch {
-	case days > 0 && hours > 0:
-		return fmt.Sprintf("%dd %dh", days, hours)
-	case days > 0:
-		return fmt.Sprintf("%dd", days)
-	case hours > 0 && mins > 0:
-		return fmt.Sprintf("%dh %dm", hours, mins)
-	case hours > 0:
-		return fmt.Sprintf("%dh", hours)
+	case c.LastRunAt == nil:
+		out = append(out, health{g.fail, "never collected", red, "", "never collected"})
+	case failed(c):
+		out = append(out, health{g.fail, "last run failed " + since(c.LastErrorAt) + g.sep + "last success " + since(c.LastSuccessAt), red, "error: " + *c.LastError, "last run failed"})
 	default:
-		return fmt.Sprintf("%dm", mins)
+		out = append(out, health{g.ok, "collected " + since(c.LastSuccessAt), green, "", ""})
 	}
+	rl := c.Relay
+	switch {
+	case rl.URL == nil:
+		out = append(out, health{g.skip, "no relay", gray, "", ""})
+	case rl.LastError != nil:
+		out = append(out, health{g.fail, "relay failing" + g.sep + "last push " + since(rl.LastPushAt), red, "relay: " + *rl.LastError, "relay failing"})
+	case rl.Pending:
+		out = append(out, health{g.warn, "relay pending" + g.sep + "last push " + since(rl.LastPushAt), yellow, "", "relay pending"})
+	default:
+		out = append(out, health{g.ok, "relay synced " + since(rl.LastPushAt), green, "", ""})
+	}
+	switch {
+	case c.Schedule.Registered:
+		out = append(out, health{g.ok, "scheduled", green, "", ""})
+	case c.Schedule.Error != nil:
+		out = append(out, health{g.fail, "not scheduled", red, "schedule: " + *c.Schedule.Error, "not scheduled"})
+	case dev:
+		out = append(out, health{g.fail, "not scheduled", red, "schedule: dev builds do not register themselves" + g.sep + "ai-usage schedule install", "not scheduled"})
+	default:
+		out = append(out, health{g.fail, "not scheduled", red, "schedule: not registered" + g.sep + "ai-usage schedule install", "not scheduled"})
+	}
+	up := c.Update
+	switch {
+	case dev:
+		out = append(out, health{g.skip, "dev build, no self-update", gray, "", ""})
+	case up.Staged != nil:
+		out = append(out, health{g.staged, *up.Staged + " runs next time", cyan, "", ""})
+	case up.Error != nil:
+		out = append(out, health{g.warn, "update check failed", yellow, "update: " + *up.Error, "update check failed"})
+	case up.CheckedAt == nil:
+		out = append(out, health{g.skip, "update not checked yet", gray, "", ""})
+	case up.Latest != nil && selfupdate.Newer(*up.Latest, c.Version):
+		out = append(out, health{g.warn, *up.Latest + " available", yellow, "", ""})
+	default:
+		out = append(out, health{g.ok, "up to date", green, "", ""})
+	}
+	return out
+}
+
+func (u *ui) footer(more bool) {
+	g := u.g
+	entries := []struct{ key, text string }{
+		{"here", g.here + " logged in here"},
+		{"seen", g.seen + " used here before"},
+		{"crit", g.crit + " " + g.ge + "90%"},
+		{"warn", g.warnMark + " " + g.ge + "75%"},
+		{"pace", g.pace + " fills before reset"},
+		{"old", g.stale + " old: " + u.oldLegend()},
+		{"reset", g.question + " reset since reading"},
+		{"dash", g.dash + " no window"},
+		{"outdated", g.old + " outdated"},
+	}
+	u.legend["old"] = u.legend["oldReading"] || u.legend["oldDevice"]
+	var items []line
+	for _, e := range entries {
+		if u.legend[e.key] {
+			items = append(items, line{{e.text, gray}})
+		}
+	}
+	grid := u.legend["grid"]
+	if len(items) == 0 && !grid && !more {
+		return
+	}
+	u.blank()
+	if len(items) > 0 {
+		u.flowEven(items, "  ")
+	}
+	// The grid key has glyphs of its own, so it keeps a line to itself.
+	if grid {
+		u.emit(line{{"cl cx gk hm = claude codex grok hermes: " + g.ok + " ok " + g.partial + " partial " + g.fail + " error " + g.skip + " not installed", gray}}.cut(u.page, g.ell))
+	}
+	if more {
+		flags := "--projects  "
+		if u.multi {
+			flags += "--tokens  --devices  "
+		}
+		u.emit(line{{"more: ai-usage " + flags + "--json" + g.sep + "ai-usage status", gray}})
+	}
+}
+
+// oldLegend explains ~ for what it marks on screen: an old reading, a
+// silent device, or both.
+func (u *ui) oldLegend() string {
+	var parts []string
+	if u.legend["oldReading"] {
+		parts = append(parts, "reading 6h+")
+	}
+	if u.legend["oldDevice"] {
+		parts = append(parts, "device 1d+")
+	}
+	return strings.Join(parts, ", ")
+}
+
+// provider is this device's source for p.
+func (u *ui) provider(p string) *Provider {
+	for i := range u.r.Providers {
+		if u.r.Providers[i].Provider == p {
+			return &u.r.Providers[i]
+		}
+	}
+	return nil
 }

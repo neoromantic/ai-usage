@@ -59,9 +59,21 @@ type Config struct {
 	// the string itself. Claude Code names its login after the exact
 	// CLAUDE_CONFIG_DIR, even when it names the default ~/.claude.
 	HomeEnv map[string]map[string]string `json:"home_env,omitempty"`
+	// QuotaFrom names, by Hermes home, the home of another harness whose
+	// login that Hermes home bills its subscription through. It is set with
+	// `ai-usage home add hermes DIR --quota-from codex:DIR`. A Hermes home
+	// without an entry is taken to use the login in the harness's default
+	// home. An entry covers the profiles inside its home too.
+	QuotaFrom map[string]HomeRef `json:"quota_from,omitempty"`
 	// ScheduleOff is set by `ai-usage schedule remove` so a later run does not
 	// register again.
 	ScheduleOff bool `json:"schedule_off,omitempty"`
+}
+
+// HomeRef is one harness home.
+type HomeRef struct {
+	Provider string `json:"provider"`
+	Home     string `json:"home"`
 }
 
 // LoadConfig reads config.json, creating a device id on first use.
@@ -121,6 +133,17 @@ type Account struct {
 	// Quota is the last good reading. It survives failed runs.
 	Quota      *Quota    `json:"quota,omitempty"`
 	LastSeenAt time.Time `json:"last_seen_at"`
+	// Link is the account of another harness this one bills through, as
+	// far as the collector can tell: Hermes on a Codex or Grok subscription
+	// is taken to use the account logged in to that harness's default home,
+	// or to the home Config.QuotaFrom names for the Hermes home.
+	Link *Link `json:"link,omitempty"`
+}
+
+// Link names an account of another provider.
+type Link struct {
+	Provider string `json:"provider"`
+	Label    string `json:"label"`
 }
 
 // Quota is a reading and where it came from.
@@ -141,6 +164,12 @@ type Session struct {
 	// Last is when each account's share last grew. A session continued
 	// after a switch is newer than the earlier account's use of it.
 	Last map[string]time.Time `json:"last,omitempty"`
+	// Parts is the last count seen per account, for a session whose log
+	// splits it by account (Hermes). Seen is their sum.
+	Parts map[string]snapshot.Tokens `json:"parts,omitempty"`
+	// Via is the growth spent through each linked account of another
+	// provider, keyed by Key(provider, label). It is also in By.
+	Via map[string]snapshot.Tokens `json:"via,omitempty"`
 }
 
 // Relay is the last exchange with the team store.

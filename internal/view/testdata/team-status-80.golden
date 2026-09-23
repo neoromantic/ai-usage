@@ -1,0 +1,21 @@
+ai-usage status                                                Wed 23 Sep 11:40
+✓ healthy
+
+version         v1.4.2
+device          ann-mbp (ann) · d-4b1e0c7a9f3d2e615a08c4b2
+team            472ghuwcctyu4b6n2lh76ryt3oxzpgkq · 20 devices
+directory       ~/Library/Application Support/ai-usage
+
+last run      ✓ 11:39 (1m ago)
+last success  ✓ 11:39 (1m ago)
+last error      none
+relay         ✓ https://ai-usage-relay.vercel.app
+                pushed 11:39 (1m ago) · pulled 11:39 (1m ago)
+schedule      ✓ registered with the system scheduler, every 15 minutes
+update        ✓ v1.4.2 is the newest release
+                checked 09:26 (2h 14m ago)
+
+sources       ✓ claude  ~/.claude · 1 account
+              ✓ codex   ~/.codex, orca 7527 · 3 accounts
+              · grok    not installed
+              ✓ hermes  ~/.hermes · 1 account

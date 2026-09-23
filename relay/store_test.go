@@ -88,10 +88,10 @@ func TestMemoryCountAndSweep(t *testing.T) {
 	}
 }
 
-// fakeRedis is the part of the Upstash REST API the store uses: POST
+// fakeKV is the part of the Vercel KV REST API the store uses: POST
 // /pipeline with a JSON array of commands, answered by a JSON array of
 // {"result"} or {"error"}.
-type fakeRedis struct {
+type fakeKV struct {
 	mu    sync.Mutex
 	now   func() time.Time
 	token string
@@ -103,11 +103,11 @@ type fakeRedis struct {
 	reply func(w http.ResponseWriter)
 }
 
-func newFakeRedis(now func() time.Time) *fakeRedis {
-	return &fakeRedis{now: now, token: "test-token", str: map[string]string{}, sets: map[string]map[string]bool{}, exp: map[string]time.Time{}}
+func newFakeKV(now func() time.Time) *fakeKV {
+	return &fakeKV{now: now, token: "test-token", str: map[string]string{}, sets: map[string]map[string]bool{}, exp: map[string]time.Time{}}
 }
 
-func (f *fakeRedis) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (f *fakeKV) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if reply := f.reply; reply != nil {
@@ -142,7 +142,7 @@ func (f *fakeRedis) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(out)
 }
 
-func (f *fakeRedis) expire(k string) {
+func (f *fakeKV) expire(k string) {
 	if at, ok := f.exp[k]; ok && !f.now().Before(at) {
 		delete(f.str, k)
 		delete(f.sets, k)
@@ -150,7 +150,7 @@ func (f *fakeRedis) expire(k string) {
 	}
 }
 
-func (f *fakeRedis) exists(k string) bool {
+func (f *fakeKV) exists(k string) bool {
 	_, s := f.str[k]
 	_, set := f.sets[k]
 	return s || set
@@ -158,7 +158,7 @@ func (f *fakeRedis) exists(k string) bool {
 
 var errWrongType = errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 
-func (f *fakeRedis) run(cmd []string) (any, error) {
+func (f *fakeKV) run(cmd []string) (any, error) {
 	if len(cmd) == 0 {
 		return nil, errors.New("ERR empty command")
 	}
@@ -316,26 +316,26 @@ func (f *fakeRedis) run(cmd []string) (any, error) {
 	return nil, errors.New("ERR unknown command '" + cmd[0] + "'")
 }
 
-func newUpstash(t *testing.T) (*Upstash, *fakeRedis, *clock) {
+func newKV(t *testing.T) (*KV, *fakeKV, *clock) {
 	t.Helper()
 	c := &clock{t: t0}
-	f := newFakeRedis(c.Now)
+	f := newFakeKV(c.Now)
 	ts := httptest.NewServer(f)
 	t.Cleanup(ts.Close)
-	return &Upstash{URL: ts.URL, Token: f.token, HTTP: ts.Client()}, f, c
+	return &KV{URL: ts.URL, Token: f.token, HTTP: ts.Client()}, f, c
 }
 
-func TestUpstashPutGetDelete(t *testing.T) {
-	u, f, _ := newUpstash(t)
+func TestKVPutGetDelete(t *testing.T) {
+	kv, f, _ := newKV(t)
 	ctx := context.Background()
-	if got, err := u.Get(ctx, "team", "device-one"); got != nil || err != nil {
+	if got, err := kv.Get(ctx, "team", "device-one"); got != nil || err != nil {
 		t.Fatalf("Get(missing) = %+v, %v", got, err)
 	}
 	rec := Record{Body: []byte(`{"v":1}`), Sig: []byte{0, 1, 2, 255}, Since: t0}
-	if err := u.Put(ctx, "team", "device-one", rec, 90*24*time.Hour); err != nil {
+	if err := kv.Put(ctx, "team", "device-one", rec, 90*24*time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	got, err := u.Get(ctx, "team", "device-one")
+	got, err := kv.Get(ctx, "team", "device-one")
 	if err != nil || got == nil || string(got.Body) != `{"v":1}` || string(got.Sig) != string(rec.Sig) || !got.Since.Equal(t0) {
 		t.Fatalf("Get = %+v, %v", got, err)
 	}
@@ -346,32 +346,32 @@ func TestUpstashPutGetDelete(t *testing.T) {
 	if ttl != 90*24*time.Hour || setTTL != ttl {
 		t.Fatalf("record TTL %v, device set TTL %v", ttl, setTTL)
 	}
-	if err := u.Delete(ctx, "team", "device-one"); err != nil {
+	if err := kv.Delete(ctx, "team", "device-one"); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := u.Get(ctx, "team", "device-one"); got != nil || err != nil {
+	if got, err := kv.Get(ctx, "team", "device-one"); got != nil || err != nil {
 		t.Fatalf("Get after Delete = %+v, %v", got, err)
 	}
-	if recs, err := u.List(ctx, "team"); err != nil || len(recs) != 0 {
+	if recs, err := kv.List(ctx, "team"); err != nil || len(recs) != 0 {
 		t.Fatalf("List after Delete = %v, %v", recs, err)
 	}
 }
 
-func TestUpstashListPrunesExpired(t *testing.T) {
-	u, f, c := newUpstash(t)
+func TestKVListPrunesExpired(t *testing.T) {
+	kv, f, c := newKV(t)
 	ctx := context.Background()
-	if recs, err := u.List(ctx, "team"); err != nil || len(recs) != 0 {
+	if recs, err := kv.List(ctx, "team"); err != nil || len(recs) != 0 {
 		t.Fatalf("List(empty) = %v, %v", recs, err)
 	}
-	_ = u.Put(ctx, "team", "device-one", Record{Body: []byte("one")}, time.Hour)
-	_ = u.Put(ctx, "team", "device-two", Record{Body: []byte("two")}, 3*time.Hour)
-	_ = u.Put(ctx, "other", "device-one", Record{Body: []byte("other")}, 3*time.Hour)
-	recs, err := u.List(ctx, "team")
+	_ = kv.Put(ctx, "team", "device-one", Record{Body: []byte("one")}, time.Hour)
+	_ = kv.Put(ctx, "team", "device-two", Record{Body: []byte("two")}, 3*time.Hour)
+	_ = kv.Put(ctx, "other", "device-one", Record{Body: []byte("other")}, 3*time.Hour)
+	recs, err := kv.List(ctx, "team")
 	if err != nil || len(recs) != 2 || string(recs["device-one"].Body) != "one" {
 		t.Fatalf("List = %v, %v", recs, err)
 	}
 	c.Add(2 * time.Hour)
-	recs, err = u.List(ctx, "team")
+	recs, err = kv.List(ctx, "team")
 	if err != nil || len(recs) != 1 || string(recs["device-two"].Body) != "two" {
 		t.Fatalf("List after expiry = %v, %v", recs, err)
 	}
@@ -386,19 +386,19 @@ func TestUpstashListPrunesExpired(t *testing.T) {
 	f.mu.Lock()
 	f.str[docKey("team", "device-two")] = "not json"
 	f.mu.Unlock()
-	if recs, err := u.List(ctx, "team"); err != nil || len(recs) != 0 {
+	if recs, err := kv.List(ctx, "team"); err != nil || len(recs) != 0 {
 		t.Fatalf("List with a broken record = %v, %v", recs, err)
 	}
-	if _, err := u.Get(ctx, "team", "device-two"); err == nil {
+	if _, err := kv.Get(ctx, "team", "device-two"); err == nil {
 		t.Fatal("Get of a broken record did not fail")
 	}
 }
 
-func TestUpstashCount(t *testing.T) {
-	u, f, c := newUpstash(t)
+func TestKVCount(t *testing.T) {
+	kv, f, c := newKV(t)
 	ctx := context.Background()
 	for want := int64(1); want <= 3; want++ {
-		n, err := u.Count(ctx, "ip:1", time.Minute)
+		n, err := kv.Count(ctx, "ip:1", time.Minute)
 		if err != nil || n != want {
 			t.Fatalf("Count = %d, %v; want %d", n, err, want)
 		}
@@ -412,43 +412,43 @@ func TestUpstashCount(t *testing.T) {
 		t.Fatalf("counter expires in %v, want 15s", left)
 	}
 	c.Add(15 * time.Second)
-	if n, err := u.Count(ctx, "ip:1", time.Minute); err != nil || n != 1 {
+	if n, err := kv.Count(ctx, "ip:1", time.Minute); err != nil || n != 1 {
 		t.Fatalf("Count after the window = %d, %v; want 1", n, err)
 	}
 }
 
-func TestUpstashErrors(t *testing.T) {
+func TestKVErrors(t *testing.T) {
 	ctx := context.Background()
 	cases := []struct {
 		name  string
-		setup func(*Upstash, *fakeRedis)
+		setup func(*KV, *fakeKV)
 		want  string
 	}{
-		{"wrong token", func(u *Upstash, _ *fakeRedis) { u.Token = "nope" }, "HTTP 401"},
-		{"server error", func(_ *Upstash, f *fakeRedis) {
+		{"wrong token", func(kv *KV, _ *fakeKV) { kv.Token = "nope" }, "HTTP 401"},
+		{"server error", func(_ *KV, f *fakeKV) {
 			f.reply = func(w http.ResponseWriter) { w.WriteHeader(http.StatusInternalServerError) }
 		}, "HTTP 500"},
-		{"not json", func(_ *Upstash, f *fakeRedis) {
+		{"not json", func(_ *KV, f *fakeKV) {
 			f.reply = func(w http.ResponseWriter) { io.WriteString(w, "<html>") }
-		}, "upstash"},
-		{"too few results", func(_ *Upstash, f *fakeRedis) {
+		}, "kv:"},
+		{"too few results", func(_ *KV, f *fakeKV) {
 			f.reply = func(w http.ResponseWriter) { io.WriteString(w, `[]`) }
 		}, "result count"},
-		{"command error", func(_ *Upstash, f *fakeRedis) {
+		{"command error", func(_ *KV, f *fakeKV) {
 			f.reply = func(w http.ResponseWriter) { io.WriteString(w, `[{"error":"ERR max requests limit exceeded"}]`) }
 		}, "max requests limit exceeded"},
-		{"wrong type", func(_ *Upstash, f *fakeRedis) {
+		{"wrong type", func(_ *KV, f *fakeKV) {
 			f.sets[docKey("team", "device-one")] = map[string]bool{"x": true}
 		}, "WRONGTYPE"},
-		{"unreachable", func(u *Upstash, _ *fakeRedis) { u.URL = "http://127.0.0.1:1" }, "upstash"},
+		{"unreachable", func(kv *KV, _ *fakeKV) { kv.URL = "http://127.0.0.1:1" }, "kv:"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			u, f, _ := newUpstash(t)
+			kv, f, _ := newKV(t)
 			f.mu.Lock()
-			c.setup(u, f)
+			c.setup(kv, f)
 			f.mu.Unlock()
-			_, err := u.Get(ctx, "team", "device-one")
+			_, err := kv.Get(ctx, "team", "device-one")
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("err = %v, want it to mention %q", err, c.want)
 			}
@@ -456,33 +456,33 @@ func TestUpstashErrors(t *testing.T) {
 	}
 
 	// Every operation reports a failing store.
-	u, f, _ := newUpstash(t)
-	u.Token = "nope"
-	if err := u.Put(ctx, "team", "d", Record{}, time.Hour); err == nil {
+	kv, f, _ := newKV(t)
+	kv.Token = "nope"
+	if err := kv.Put(ctx, "team", "d", Record{}, time.Hour); err == nil {
 		t.Error("Put did not fail")
 	}
-	if err := u.Delete(ctx, "team", "d"); err == nil {
+	if err := kv.Delete(ctx, "team", "d"); err == nil {
 		t.Error("Delete did not fail")
 	}
-	if _, err := u.List(ctx, "team"); err == nil {
+	if _, err := kv.List(ctx, "team"); err == nil {
 		t.Error("List did not fail")
 	}
-	if _, err := u.Count(ctx, "k", time.Minute); err == nil {
+	if _, err := kv.Count(ctx, "k", time.Minute); err == nil {
 		t.Error("Count did not fail")
 	}
-	u.Token = f.token
+	kv.Token = f.token
 	f.mu.Lock()
 	f.str[setKey("team")] = "not a set"
 	f.mu.Unlock()
-	if _, err := u.List(ctx, "team"); err == nil {
+	if _, err := kv.List(ctx, "team"); err == nil {
 		t.Error("List of a broken device set did not fail")
 	}
 }
 
-// The relay runs the same over Upstash as over memory.
-func TestRelayOverUpstash(t *testing.T) {
-	u, f, c := newUpstash(t)
-	srv := NewServer(u, Limits{DevicesPerTeam: 2})
+// The relay runs the same over KV as over memory.
+func TestRelayOverKV(t *testing.T) {
+	kv, f, c := newKV(t)
+	srv := NewServer(kv, Limits{DevicesPerTeam: 2})
 	srv.Now = c.Now
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
@@ -517,7 +517,7 @@ func TestRelayOverUpstash(t *testing.T) {
 }
 
 func TestStoreFromEnv(t *testing.T) {
-	vars := []string{"KV_REST_API_URL", "KV_REST_API_TOKEN", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"}
+	vars := []string{"KV_REST_API_URL", "KV_REST_API_TOKEN"}
 	cases := []struct {
 		name     string
 		env      map[string]string
@@ -525,14 +525,9 @@ func TestStoreFromEnv(t *testing.T) {
 		url, tok string
 	}{
 		{"nothing set", nil, "memory", "", ""},
-		{"Vercel KV", map[string]string{"KV_REST_API_URL": "https://kv.example/", "KV_REST_API_TOKEN": "kv"}, "upstash", "https://kv.example", "kv"},
-		{"Upstash", map[string]string{"UPSTASH_REDIS_REST_URL": "https://up.example", "UPSTASH_REDIS_REST_TOKEN": "up"}, "upstash", "https://up.example", "up"},
-		{"Vercel KV wins", map[string]string{
-			"KV_REST_API_URL": "https://kv.example", "KV_REST_API_TOKEN": "kv",
-			"UPSTASH_REDIS_REST_URL": "https://up.example", "UPSTASH_REDIS_REST_TOKEN": "up",
-		}, "upstash", "https://kv.example", "kv"},
+		{"Vercel KV", map[string]string{"KV_REST_API_URL": "https://kv.example/", "KV_REST_API_TOKEN": "kv"}, "kv", "https://kv.example", "kv"},
 		{"URL without token", map[string]string{"KV_REST_API_URL": "https://kv.example"}, "memory", "", ""},
-		{"token without URL", map[string]string{"UPSTASH_REDIS_REST_TOKEN": "up"}, "memory", "", ""},
+		{"token without URL", map[string]string{"KV_REST_API_TOKEN": "kv"}, "memory", "", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -548,9 +543,9 @@ func TestStoreFromEnv(t *testing.T) {
 				if c.kind != "memory" {
 					t.Fatalf("store is %T", store)
 				}
-			case *Upstash:
+			case *KV:
 				if s.URL != c.url || s.Token != c.tok || s.HTTP == nil || s.HTTP.Timeout == 0 {
-					t.Fatalf("Upstash = %+v", s)
+					t.Fatalf("KV = %+v", s)
 				}
 			default:
 				t.Fatalf("store is %T", store)

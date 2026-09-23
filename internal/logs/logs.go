@@ -25,10 +25,21 @@ type Session struct {
 	Updated time.Time
 	// Account is set only when the log itself names the account (Hermes).
 	Account string
+	// Parts splits Tokens by the account the log names for each part, when
+	// it names one per part (Hermes: the billing provider of each model call,
+	// sub-agent, and auxiliary task). The parts add up to Tokens.
+	Parts map[string]Tokens
 	// Home is the home the session was read from. A session kept in more
 	// than one home is in the home of the copy that was written last, or of
 	// the larger copy where the logs cannot say.
 	Home string
+	// Homes lists every home holding the session's log, Home first, when
+	// one file is linked into several homes (Orca links each Codex rollout
+	// into every account's home). The file does not say which of them ran it.
+	Homes []string
+	// Limits is the newest main quota reading the session's log recorded,
+	// which is the quota of the account that served it (Codex).
+	Limits *Limits
 }
 
 // Result is a read. Malformed and Unreadable make a source partial.
@@ -110,6 +121,15 @@ func ReadHomes(provider string, homes []string, since time.Time) Result {
 		}
 	}
 	res.Sessions = rollup(dedupeSessions(raw))
+	if provider == "hermes" {
+		// A gateway session, from Telegram and the like, has no working
+		// directory. Its Hermes home says which agent it was.
+		for i, s := range res.Sessions {
+			if s.Project == UnknownProject && s.Home != "" {
+				res.Sessions[i].Project = s.Home
+			}
+		}
+	}
 	for _, hr := range res.Homes {
 		res.Malformed += hr.Malformed
 		res.Unreadable += hr.Unreadable

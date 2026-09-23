@@ -12,15 +12,26 @@ import (
 
 // AccountTotals is one account's usage on this device over the retention window.
 type AccountTotals struct {
-	Provider   string
-	Label      string
-	Plan       string
-	Current    bool
-	Quota      *state.Quota
+	Provider string
+	Label    string
+	Plan     string
+	Current  bool
+	Quota    *state.Quota
+	// Link is the account of another provider this one is assumed to bill
+	// through (Hermes on a Codex or Grok subscription). When that account has
+	// a quota reading, Quota is that same reading and QuotaFrom names its
+	// provider.
+	Link       *state.Link
+	QuotaFrom  string
 	Sessions   int
 	Tokens     snapshot.Tokens
 	LastActive time.Time
 	Projects   []ProjectTotals
+	// Linked is what other providers spent through this account and are
+	// assumed to have billed to it, over LinkedSessions of their sessions
+	// (Hermes on this Codex login). It is counted in their Tokens, not here.
+	Linked         snapshot.Tokens
+	LinkedSessions int
 }
 
 type ProjectTotals struct {
@@ -40,6 +51,7 @@ func Totals(st *state.State) []AccountTotals {
 			a = &AccountTotals{Provider: provider, Label: label, Current: IsCurrent(st, provider, label)}
 			if acct := st.Accounts[k]; acct != nil {
 				a.Plan, a.Quota = acct.Plan, acct.Quota
+				linkQuota(st, a, acct.Link)
 			}
 			byKey[k] = a
 			projects[k] = map[string]*ProjectTotals{}
@@ -69,6 +81,15 @@ func Totals(st *state.State) []AccountTotals {
 			p.Sessions++
 			p.Tokens = p.Tokens.Add(tok)
 		}
+		for k, tok := range s.Via {
+			parts := state.SplitKey(k)
+			if len(parts) != 2 || tok.Zero() {
+				continue
+			}
+			a := get(parts[0], parts[1])
+			a.LinkedSessions++
+			a.Linked = a.Linked.Add(tok)
+		}
 	}
 	out := make([]AccountTotals, 0, len(byKey))
 	for k, a := range byKey {
@@ -81,13 +102,28 @@ func Totals(st *state.State) []AccountTotals {
 			}
 			return a.Projects[i].Path < a.Projects[j].Path
 		})
-		if a.Sessions == 0 && a.Quota == nil && !a.Current {
+		if a.Sessions == 0 && a.Quota == nil && !a.Current && a.LinkedSessions == 0 {
 			continue
 		}
 		out = append(out, *a)
 	}
 	SortAccounts(out)
 	return out
+}
+
+// linkQuota shows the reading of the account a bills through, unchanged, when
+// a has none of its own. With no reading there, a's quota stays unknown.
+func linkQuota(st *state.State, a *AccountTotals, link *state.Link) {
+	if link == nil {
+		return
+	}
+	a.Link = link
+	if a.Quota != nil {
+		return
+	}
+	if to := st.Accounts[state.Key(link.Provider, link.Label)]; to != nil && to.Quota != nil {
+		a.Quota, a.QuotaFrom = to.Quota, link.Provider
+	}
 }
 
 // lastActive is when label's share of a session last grew. A ledger from
@@ -163,6 +199,7 @@ func BuildDoc(st *state.State, key *team.Key, device, hostname, osUser, version 
 		if a.Quota != nil && len(a.Quota.Windows) > 0 {
 			at := a.Quota.At
 			sa.QuotaAt = &at
+			sa.QuotaFrom = a.QuotaFrom
 			sa.Windows = append(sa.Windows, a.Quota.Windows...)
 		}
 		if !a.LastActive.IsZero() {

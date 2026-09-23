@@ -1,0 +1,29 @@
+ai-usage v1.4.2 · ann-mbp (ann) · team 472ghuwc…               Wed 23 Sep 11:40
+✓ collected 1m ago  ✓ relay synced 1m ago  ✓ scheduled  ✓ up to date
+
+DEVICES  20 · read 1m ago · 1 with errors · 3 silent over 1d · 1 outdated
+  DEVICE               VERSION   SEEN  cl cx gk hm  NOTE
+● ann-mbp (ann)        v1.4.2      1m  ✓  ✓  ·  ✓   ann@acme.io +3
+✕ build-02 (ci)        v1.4.2     14m  ✓  ◐  ·  ·   codex partial
+  └ codex: app-server did not answer within 20s; quota not read
+~ jo-air (jo)          v1.4.2      5d  ✓  ·  ·  ·   silent since Sep 18 11:40
+~ build-01 (ci)        v1.4.2    2d2h  ✓  ·  ·  ·   silent since Sep 21 09:40
+~ greg-win (greg)      v1.4.2    1d6h  ✓  ·  ·  ·   silent since Sep 22 05:40
+↓ eli-thinkpad (eli)   v1.3.0     11m  ·  ·  ✓  ·   outdated; latest v1.4.2
+  ann-mini (ann)       v1.4.2      9m  ✓  ·  ·  ·   ann@acme.io
+  bo-desktop (bo)      v1.4.2     12m  ✓  ·  ✓  ·   bo@acme.io, 7c1e5a90…
+  bo-laptop (bo)       v1.4.2      4m  ✓  ·  ·  ·   bo@acme.io
+  carla-mbp (carla)    v1.4.2      7m  ✓  ·  ·  ·   bo@acme.io
+  dev-vm (ann)         v1.4.2      5m  ✓  ✓  ·  ·   ann@acme.io
+  dev-vm (bo)          v1.4.2      5m  ✓  ·  ·  ·   bo@acme.io
+  fatima-mbp (fatima)  v1.4.2      3m  ·  ·  ✓  ·   7c1e5a90…
+  gpu-box (research)   v1.4.2     21m  ·  ·  ·  ✓   openrouter
+  hana-mbp (hana)      v1.4.2      8m  ·  ·  ✓  ·   7c1e5a90…
+  ivan-linux (ivan)    v1.4.2     16m  ·  ✓  ·  ·   ops@acme.io
+  kai-mbp (kai)        v1.4.2      2m  ·  ✓  ·  ·   ops@acme.io
+  lab-mac (design)     v1.4.2      6m  ✓  ·  ·  ·   design@acme.io
+  lena-mbp (lena)      v1.4.2     10m  ✓  ·  ·  ·   design@acme.io
+  ops-01 (ops)         v1.4.2      3m  ·  ✓  ·  ·   ops@acme.io
+
+● logged in here  ~ old: device 1d+  ↓ outdated
+cl cx gk hm = claude codex grok hermes: ✓ ok ◐ partial ✕ error · not installed

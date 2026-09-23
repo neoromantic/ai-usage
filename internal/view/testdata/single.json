@@ -1,0 +1,780 @@
+{
+  "schema_version": 2,
+  "generated_at": "2026-09-23T09:40:00Z",
+  "collector": {
+    "version": "v1.4.2",
+    "device": "d-5c1f9a0e7b3d2c4a8e6f1b09",
+    "device_label": "sam-air",
+    "os_user": "sam",
+    "team": "q7dm3xk2n5lh76ryt3oxzpgkrswbc4ta",
+    "last_run_at": "2026-09-23T09:39:00Z",
+    "last_success_at": "2026-09-23T09:39:00Z",
+    "last_error": null,
+    "last_error_at": null,
+    "relay": {
+      "url": null,
+      "last_push_at": null,
+      "last_pull_at": null,
+      "pending": false,
+      "last_error": null
+    },
+    "schedule": {
+      "registered": true,
+      "error": null
+    },
+    "update": {
+      "checked_at": "2026-09-23T07:26:00Z",
+      "latest": "v1.4.2",
+      "staged": null,
+      "error": null
+    }
+  },
+  "providers": [
+    {
+      "provider": "claude",
+      "status": "ok",
+      "error": null,
+      "homes": [
+        "/Users/sam/.claude"
+      ],
+      "accounts": [
+        {
+          "label": "sam@example.com",
+          "current": true,
+          "home": "/Users/sam/.claude",
+          "plan": "max",
+          "headline_percent": 100,
+          "level": "critical",
+          "quota": {
+            "observed_at": "2026-09-23T00:33:00Z",
+            "age_seconds": 32820,
+            "stale": true,
+            "source": "cache",
+            "windows": [
+              {
+                "name": "5h",
+                "percent": 24,
+                "level": "unknown",
+                "resets_at": "2026-09-23T03:50:00Z",
+                "minutes": 300,
+                "pace": null
+              },
+              {
+                "name": "7d",
+                "percent": 67,
+                "level": "ok",
+                "resets_at": "2026-09-27T00:00:00Z",
+                "minutes": 10080,
+                "pace": null
+              },
+              {
+                "name": "7d Opus",
+                "percent": 100,
+                "level": "critical",
+                "resets_at": "2026-09-27T00:00:00Z",
+                "minutes": 10080,
+                "pace": null
+              }
+            ]
+          },
+          "link": null,
+          "sessions": 20,
+          "tokens": {
+            "input": 4520817,
+            "output": 10065729,
+            "cache_read": 602628327,
+            "cache_write": 48078610
+          },
+          "linked_usage": [],
+          "last_active_at": "2026-09-23T09:39:00Z",
+          "projects": [
+            {
+              "path": "/Users/sam/src/garden/app",
+              "sessions": 9,
+              "tokens": {
+                "input": 2100000,
+                "output": 5200000,
+                "cache_read": 310000000,
+                "cache_write": 22000000
+              }
+            },
+            {
+              "path": "/Users/sam/Notes",
+              "sessions": 5,
+              "tokens": {
+                "input": 1200000,
+                "output": 2400000,
+                "cache_read": 140000000,
+                "cache_write": 12000000
+              }
+            },
+            {
+              "path": "/Users/sam/src/garden/infra",
+              "sessions": 3,
+              "tokens": {
+                "input": 700000,
+                "output": 1500000,
+                "cache_read": 90000000,
+                "cache_write": 8000000
+              }
+            },
+            {
+              "path": "/Users/sam/src/dotfiles",
+              "sessions": 2,
+              "tokens": {
+                "input": 400000,
+                "output": 800000,
+                "cache_read": 50000000,
+                "cache_write": 5000000
+              }
+            },
+            {
+              "path": "/Users/sam",
+              "sessions": 1,
+              "tokens": {
+                "input": 120817,
+                "output": 165729,
+                "cache_read": 12628327,
+                "cache_write": 1078610
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "status": "ok",
+      "error": null,
+      "homes": [
+        "/Users/sam/.codex"
+      ],
+      "accounts": [
+        {
+          "label": "sam@example.com",
+          "current": true,
+          "home": "/Users/sam/.codex",
+          "plan": "pro",
+          "headline_percent": 78,
+          "level": "warning",
+          "quota": {
+            "observed_at": "2026-09-23T09:39:00Z",
+            "age_seconds": 60,
+            "stale": false,
+            "source": "harness",
+            "windows": [
+              {
+                "name": "5h",
+                "percent": 41,
+                "level": "ok",
+                "resets_at": "2026-09-23T11:50:00Z",
+                "minutes": 300,
+                "pace": {
+                  "percent_per_hour": 6.5,
+                  "fills_at": null
+                }
+              },
+              {
+                "name": "7d",
+                "percent": 78,
+                "level": "warning",
+                "resets_at": "2026-09-25T15:40:00Z",
+                "minutes": 10080,
+                "pace": {
+                  "percent_per_hour": 1.5,
+                  "fills_at": "2026-09-24T00:20:00Z"
+                }
+              }
+            ]
+          },
+          "link": null,
+          "sessions": 369,
+          "tokens": {
+            "input": 552022539,
+            "output": 51102416,
+            "cache_read": 16842296448,
+            "cache_write": 0
+          },
+          "linked_usage": [
+            {
+              "provider": "hermes",
+              "sessions": 4,
+              "tokens": {
+                "input": 2100000,
+                "output": 180000,
+                "cache_read": 31000000,
+                "cache_write": 0
+              }
+            }
+          ],
+          "last_active_at": "2026-09-23T09:04:00Z",
+          "projects": [
+            {
+              "path": "/Users/sam/src/garden/app",
+              "sessions": 212,
+              "tokens": {
+                "input": 301000000,
+                "output": 28000000,
+                "cache_read": 9600000000,
+                "cache_write": 0
+              }
+            },
+            {
+              "path": "/Users/sam/src/garden/api",
+              "sessions": 88,
+              "tokens": {
+                "input": 140000000,
+                "output": 13000000,
+                "cache_read": 4300000000,
+                "cache_write": 0
+              }
+            },
+            {
+              "path": "/Users/sam/.codex/worktrees/4d2c/app",
+              "sessions": 41,
+              "tokens": {
+                "input": 70000000,
+                "output": 6600000,
+                "cache_read": 2100000000,
+                "cache_write": 0
+              }
+            },
+            {
+              "path": "/Users/sam/Notes",
+              "sessions": 28,
+              "tokens": {
+                "input": 41022539,
+                "output": 3502416,
+                "cache_read": 842296448,
+                "cache_write": 0
+              }
+            }
+          ]
+        },
+        {
+          "label": "sam.old@example.com",
+          "current": false,
+          "plan": "plus",
+          "headline_percent": null,
+          "level": "unknown",
+          "quota": null,
+          "link": null,
+          "sessions": 6,
+          "tokens": {
+            "input": 9400000,
+            "output": 820000,
+            "cache_read": 210000000,
+            "cache_write": 0
+          },
+          "linked_usage": [],
+          "last_active_at": "2026-09-11T06:40:00Z",
+          "projects": [
+            {
+              "path": "/Users/sam/src/old-job/site",
+              "sessions": 6,
+              "tokens": {
+                "input": 9400000,
+                "output": 820000,
+                "cache_read": 210000000,
+                "cache_write": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "provider": "grok",
+      "status": "ok",
+      "error": null,
+      "homes": [
+        "/Users/sam/.grok"
+      ],
+      "accounts": [
+        {
+          "label": "3f6c2a1e-8b4d-4c1a-9e2f-5a7b0c9d1e2f",
+          "current": true,
+          "home": "/Users/sam/.grok",
+          "plan": "SuperGrok",
+          "headline_percent": 35,
+          "level": "ok",
+          "quota": {
+            "observed_at": "2026-09-22T18:14:00Z",
+            "age_seconds": 55560,
+            "stale": true,
+            "source": "log",
+            "windows": [
+              {
+                "name": "7d credits",
+                "percent": 35,
+                "level": "ok",
+                "resets_at": "2026-09-28T08:40:00Z",
+                "minutes": 10080,
+                "pace": null
+              }
+            ]
+          },
+          "link": null,
+          "sessions": 3,
+          "tokens": {
+            "input": 3159546,
+            "output": 223767,
+            "cache_read": 14258560,
+            "cache_write": 0
+          },
+          "linked_usage": [],
+          "last_active_at": "2026-09-22T18:20:00Z",
+          "projects": [
+            {
+              "path": "/Users/sam/src/garden/app",
+              "sessions": 2,
+              "tokens": {
+                "input": 2900000,
+                "output": 200000,
+                "cache_read": 13000000,
+                "cache_write": 0
+              }
+            },
+            {
+              "path": "/Users/sam/Notes",
+              "sessions": 1,
+              "tokens": {
+                "input": 259546,
+                "output": 23767,
+                "cache_read": 1258560,
+                "cache_write": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "provider": "hermes",
+      "status": "ok",
+      "error": null,
+      "homes": [
+        "/Users/sam/.hermes"
+      ],
+      "accounts": [
+        {
+          "label": "openai-codex",
+          "current": true,
+          "home": "/Users/sam/.hermes",
+          "plan": null,
+          "headline_percent": 78,
+          "level": "warning",
+          "quota": {
+            "observed_at": "2026-09-23T09:39:00Z",
+            "age_seconds": 60,
+            "stale": false,
+            "source": "harness",
+            "windows": [
+              {
+                "name": "5h",
+                "percent": 41,
+                "level": "ok",
+                "resets_at": "2026-09-23T11:50:00Z",
+                "minutes": 300,
+                "pace": {
+                  "percent_per_hour": 6.5,
+                  "fills_at": null
+                }
+              },
+              {
+                "name": "7d",
+                "percent": 78,
+                "level": "warning",
+                "resets_at": "2026-09-25T15:40:00Z",
+                "minutes": 10080,
+                "pace": {
+                  "percent_per_hour": 1.5,
+                  "fills_at": "2026-09-24T00:20:00Z"
+                }
+              }
+            ],
+            "from": "codex"
+          },
+          "link": {
+            "provider": "codex",
+            "label": "sam@example.com"
+          },
+          "sessions": 4,
+          "tokens": {
+            "input": 2100000,
+            "output": 180000,
+            "cache_read": 31000000,
+            "cache_write": 0
+          },
+          "linked_usage": [],
+          "last_active_at": "2026-09-23T07:35:00Z",
+          "projects": [
+            {
+              "path": "/Users/sam/src/garden/app",
+              "sessions": 4,
+              "tokens": {
+                "input": 2100000,
+                "output": 180000,
+                "cache_read": 31000000,
+                "cache_write": 0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "team": {
+    "pulled_at": null,
+    "devices": [
+      {
+        "device": "d-5c1f9a0e7b3d2c4a8e6f1b09",
+        "label": "sam-air",
+        "os_user": "sam",
+        "this_device": true,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T09:39:00Z",
+        "age_seconds": 60,
+        "last_success_at": "2026-09-23T09:39:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "ok",
+            "error": null
+          }
+        ]
+      }
+    ],
+    "providers": [
+      {
+        "provider": "claude",
+        "accounts": [
+          {
+            "label": "sam@example.com",
+            "devices": [
+              "sam-air (sam)"
+            ],
+            "plan": "max",
+            "headline_percent": 100,
+            "level": "critical",
+            "quota": {
+              "observed_at": "2026-09-23T00:33:00Z",
+              "age_seconds": 32820,
+              "stale": true,
+              "windows": [
+                {
+                  "name": "5h",
+                  "percent": 24,
+                  "level": "unknown",
+                  "resets_at": "2026-09-23T03:50:00Z",
+                  "minutes": 300,
+                  "pace": null
+                },
+                {
+                  "name": "7d",
+                  "percent": 67,
+                  "level": "ok",
+                  "resets_at": "2026-09-27T00:00:00Z",
+                  "minutes": 10080,
+                  "pace": null
+                },
+                {
+                  "name": "7d Opus",
+                  "percent": 100,
+                  "level": "critical",
+                  "resets_at": "2026-09-27T00:00:00Z",
+                  "minutes": 10080,
+                  "pace": null
+                }
+              ],
+              "device": "sam-air (sam)"
+            },
+            "link": null,
+            "sessions": 20,
+            "tokens": {
+              "input": 4520817,
+              "output": 10065729,
+              "cache_read": 602628327,
+              "cache_write": 48078610
+            },
+            "per_device": [
+              {
+                "device": "sam-air (sam)",
+                "device_id": "d-5c1f9a0e7b3d2c4a8e6f1b09",
+                "current": true,
+                "sessions": 20,
+                "tokens": {
+                  "input": 4520817,
+                  "output": 10065729,
+                  "cache_read": 602628327,
+                  "cache_write": 48078610
+                },
+                "last_active_at": "2026-09-23T09:39:00Z"
+              }
+            ],
+            "linked_usage": []
+          }
+        ]
+      },
+      {
+        "provider": "codex",
+        "accounts": [
+          {
+            "label": "sam@example.com",
+            "devices": [
+              "sam-air (sam)"
+            ],
+            "plan": "pro",
+            "headline_percent": 78,
+            "level": "warning",
+            "quota": {
+              "observed_at": "2026-09-23T09:39:00Z",
+              "age_seconds": 60,
+              "stale": false,
+              "windows": [
+                {
+                  "name": "5h",
+                  "percent": 41,
+                  "level": "ok",
+                  "resets_at": "2026-09-23T11:50:00Z",
+                  "minutes": 300,
+                  "pace": {
+                    "percent_per_hour": 6.5,
+                    "fills_at": null
+                  }
+                },
+                {
+                  "name": "7d",
+                  "percent": 78,
+                  "level": "warning",
+                  "resets_at": "2026-09-25T15:40:00Z",
+                  "minutes": 10080,
+                  "pace": {
+                    "percent_per_hour": 1.5,
+                    "fills_at": "2026-09-24T00:20:00Z"
+                  }
+                }
+              ],
+              "device": "sam-air (sam)"
+            },
+            "link": null,
+            "sessions": 369,
+            "tokens": {
+              "input": 552022539,
+              "output": 51102416,
+              "cache_read": 16842296448,
+              "cache_write": 0
+            },
+            "per_device": [
+              {
+                "device": "sam-air (sam)",
+                "device_id": "d-5c1f9a0e7b3d2c4a8e6f1b09",
+                "current": true,
+                "sessions": 369,
+                "tokens": {
+                  "input": 552022539,
+                  "output": 51102416,
+                  "cache_read": 16842296448,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-23T09:04:00Z"
+              }
+            ],
+            "linked_usage": [
+              {
+                "provider": "hermes",
+                "sessions": 4,
+                "tokens": {
+                  "input": 2100000,
+                  "output": 180000,
+                  "cache_read": 31000000,
+                  "cache_write": 0
+                },
+                "label": "openai-codex",
+                "devices": [
+                  "sam-air (sam)"
+                ]
+              }
+            ]
+          },
+          {
+            "label": "sam.old@example.com",
+            "devices": [
+              "sam-air (sam)"
+            ],
+            "plan": "plus",
+            "headline_percent": null,
+            "level": "unknown",
+            "quota": null,
+            "link": null,
+            "sessions": 6,
+            "tokens": {
+              "input": 9400000,
+              "output": 820000,
+              "cache_read": 210000000,
+              "cache_write": 0
+            },
+            "per_device": [
+              {
+                "device": "sam-air (sam)",
+                "device_id": "d-5c1f9a0e7b3d2c4a8e6f1b09",
+                "current": false,
+                "sessions": 6,
+                "tokens": {
+                  "input": 9400000,
+                  "output": 820000,
+                  "cache_read": 210000000,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-11T06:40:00Z"
+              }
+            ],
+            "linked_usage": []
+          }
+        ]
+      },
+      {
+        "provider": "grok",
+        "accounts": [
+          {
+            "label": "3f6c2a1e-8b4d-4c1a-9e2f-5a7b0c9d1e2f",
+            "devices": [
+              "sam-air (sam)"
+            ],
+            "plan": "SuperGrok",
+            "headline_percent": 35,
+            "level": "ok",
+            "quota": {
+              "observed_at": "2026-09-22T18:14:00Z",
+              "age_seconds": 55560,
+              "stale": true,
+              "windows": [
+                {
+                  "name": "7d credits",
+                  "percent": 35,
+                  "level": "ok",
+                  "resets_at": "2026-09-28T08:40:00Z",
+                  "minutes": 10080,
+                  "pace": null
+                }
+              ],
+              "device": "sam-air (sam)"
+            },
+            "link": null,
+            "sessions": 3,
+            "tokens": {
+              "input": 3159546,
+              "output": 223767,
+              "cache_read": 14258560,
+              "cache_write": 0
+            },
+            "per_device": [
+              {
+                "device": "sam-air (sam)",
+                "device_id": "d-5c1f9a0e7b3d2c4a8e6f1b09",
+                "current": true,
+                "sessions": 3,
+                "tokens": {
+                  "input": 3159546,
+                  "output": 223767,
+                  "cache_read": 14258560,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-22T18:20:00Z"
+              }
+            ],
+            "linked_usage": []
+          }
+        ]
+      },
+      {
+        "provider": "hermes",
+        "accounts": [
+          {
+            "label": "openai-codex",
+            "devices": [
+              "sam-air (sam)"
+            ],
+            "plan": null,
+            "headline_percent": 78,
+            "level": "warning",
+            "quota": {
+              "observed_at": "2026-09-23T09:39:00Z",
+              "age_seconds": 60,
+              "stale": false,
+              "windows": [
+                {
+                  "name": "5h",
+                  "percent": 41,
+                  "level": "ok",
+                  "resets_at": "2026-09-23T11:50:00Z",
+                  "minutes": 300,
+                  "pace": {
+                    "percent_per_hour": 6.5,
+                    "fills_at": null
+                  }
+                },
+                {
+                  "name": "7d",
+                  "percent": 78,
+                  "level": "warning",
+                  "resets_at": "2026-09-25T15:40:00Z",
+                  "minutes": 10080,
+                  "pace": {
+                    "percent_per_hour": 1.5,
+                    "fills_at": "2026-09-24T00:20:00Z"
+                  }
+                }
+              ],
+              "from": "codex",
+              "device": "sam-air (sam)"
+            },
+            "link": {
+              "provider": "codex",
+              "label": "sam@example.com"
+            },
+            "sessions": 4,
+            "tokens": {
+              "input": 2100000,
+              "output": 180000,
+              "cache_read": 31000000,
+              "cache_write": 0
+            },
+            "per_device": [
+              {
+                "device": "sam-air (sam)",
+                "device_id": "d-5c1f9a0e7b3d2c4a8e6f1b09",
+                "current": true,
+                "sessions": 4,
+                "tokens": {
+                  "input": 2100000,
+                  "output": 180000,
+                  "cache_read": 31000000,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-23T07:35:00Z"
+              }
+            ],
+            "linked_usage": []
+          }
+        ]
+      }
+    ]
+  }
+}

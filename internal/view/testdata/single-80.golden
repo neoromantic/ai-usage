@@ -1,0 +1,45 @@
+ai-usage v1.4.2 · sam-air (sam) · team q7dm3xk2…               Wed 23 Sep 09:40
+✓ collected 1m ago  · no relay  ✓ scheduled  ✓ up to date
+
+ACCOUNTS  5 · 1 critical · 1 warning · 1 fills early · 2 stale · 1 unknown
+  ACCOUNT              QUOTA             5h  reset   7d  reset  READ
+  claude ──────────────────────────────────────────────────────────── 1 account
+● sam@example.com      ██████ 100% !!     ?  reset  67%  3d14h   9h~
+  └ also 7d Opus 100% !!, resets in 3d14h
+  └ ~ Claude Code updates its usage cache only while it runs
+  codex ──────────────────────────────────────────────────────────── 2 accounts
+● sam@example.com      ████▋░  78% !    41%  2h10m  78%▲  2d6h    1m
+  └ ▲ 7d full in 14h (Thu 00:20) at this pace, 1d15h before it resets
+  └ also used by hermes openai-codex on sam-air, assumed the same account
+○ sam.old@example.com  ······ unknown     —           —            —
+  └ no reading yet
+  grok ────────────────────────────────────────────────────────────── 1 account
+● 3f6c2a1e…            ██░░░░  35%        —         35%  4d23h  15h~
+  └ ~ grok writes its usage log only while it runs
+  hermes ──────────────────────────────────────────────────────────── 1 account
+● openai-codex         ████▋░  78% !    41%  2h10m  78%▲  2d6h    1m
+  └ quota of codex sam@example.com, assumed the same account
+
+THIS DEVICE  sam-air (sam) · tokens in the last 90 days
+                                         SESS   INPUT  OUTPUT  CACHE R  CACHE W
+claude ● sam@example.com                   20    4.5M   10.1M     603M    48.1M
+    ~/src/garden/app                        9    2.1M    5.2M     310M    22.0M
+    ~/Notes                                 5    1.2M    2.4M     140M    12.0M
+    ~/src/garden/infra                      3    700K    1.5M    90.0M     8.0M
+    + 2 more projects · ai-usage --projects
+codex  ● sam@example.com                  369    552M   51.1M    16.8G        0
+    ~/src/garden/app                      212    301M   28.0M     9.6G        0
+    ~/src/garden/api                       88    140M   13.0M     4.3G        0
+    ~/.codex/worktrees/4d2c/app            41   70.0M    6.6M     2.1G        0
+    + 1 more project · ai-usage --projects
+codex  ○ sam.old@example.com                6    9.4M    820K     210M        0
+    ~/src/old-job/site                      6    9.4M    820K     210M        0
+grok   ● 3f6c2a1e…                          3    3.2M    224K    14.3M        0
+    ~/src/garden/app                        2    2.9M    200K    13.0M        0
+    ~/Notes                                 1    260K   23.8K     1.3M        0
+hermes ● openai-codex  via codex            4    2.1M    180K    31.0M        0
+    ~/src/garden/app                        4    2.1M    180K    31.0M        0
+
+● logged in here  ○ used here before  !! ≥90%  ! ≥75%  ▲ fills before reset
+~ old: reading 6h+  ? reset since reading  — no window
+more: ai-usage --projects  --json · ai-usage status

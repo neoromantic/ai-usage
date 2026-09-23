@@ -101,6 +101,8 @@ Done, in short:
 - **Discovery**
   - Default homes are found, plus `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GROK_HOME`, `HERMES_HOME`, and Hermes profiles (`<home>/profiles/<name>`).
   - Homes named by the environment are remembered, with the exact variable value, so scheduler runs still find them.
+  - Orca's per-account Codex homes (`<app data>/orca/codex-accounts/<id>/home`, marked `.orca-managed-home`) are found by path and probed in parallel, each with its own `CODEX_HOME`, so every Orca account shows its own quota. Orca hard-links rollouts into every home; one inode is read once.
+  - `ai-usage home add PROVIDER DIR...` adds homes nothing names, such as bots running under other users on a server. `--quota-from codex:DIR` names the Codex or Grok home whose login a Hermes home bills through; that home is read too.
 - **Probes** only ask the harnesses, from the user's home directory:
   - Claude: `claude auth status --json`, and Claude Code's own config and cached usage. Never the keychain or `.credentials.json`.
   - Codex: `codex app-server`, with only `initialize`, `account/read` (no refresh), and `account/rateLimits/read`.
@@ -111,17 +113,19 @@ Done, in short:
   - Sessions, tokens, and cache reads and writes are read per project. That includes Claude side calls recorded in its cost state and Codex compaction records.
   - Sub-agents roll up into their parents. All homes of one provider are read together, so forked, resumed, or duplicated transcripts count once, even across homes.
   - A line too long to read is skipped, not fatal.
+  - Hermes: `state.db` is read in place, read-only (a database Hermes has open through its `-wal` and `-shm`, one nobody has open as immutable), never copied except for an odd leftover. Tokens come from `session_model_usage` split by billing provider, auxiliary calls included. A time stored as an ISO string instead of REAL seconds is read too (one real database had one). A gateway session with no working directory is listed under its Hermes home, so each agent on a server is its own project.
 - **Accounts and quota**
   - Accounts are tracked across switches. Token growth goes to the account logged in at that sample. Each account keeps its last good quota and shows how old it is.
   - Samples are taken every 15 minutes and kept for 90 days. Pace predicts when a window fills before its reset.
   - The headline is the fullest window that has not reset since the reading. If every window has reset, or there is no reading, it shows "unknown". Marks appear at 75% and 90%.
-- **Views**: console text and versioned JSON (`schema_version` 2). Both include the other devices in the team.
+- **Hermes on a subscription** (`openai-codex`, `xai-oauth`) is linked to the Codex or Grok account it is assumed to bill through: the one logged in to the home `--quota-from` names for that Hermes home, else to `~/.codex` or `~/.grok`. The Hermes row shows that account's own reading, marked as borrowed, and the snapshot says so in `quota_from`. The linked account shows what Hermes spent on it without adding it to its own tokens.
+- **Views**: console text and versioned JSON (`schema_version` 2). Both include the other devices in the team. The console was redesigned for teams of a dozen accounts and a couple of dozen machines: accounts grouped by provider with a bar, both windows and the reading's age, a USED BY column, a DEVICES section that folds healthy machines past 12, and a legend that lists only the marks on screen. It fits 80 columns and uses more from 100. Golden files cover 80, 100, 120, and 140 columns, with and without color.
 - **Team key**: Ed25519, and its fingerprint names the team. Joining means `ai-usage team join` with the exported private key.
 - **Snapshot**: fixed-shape, strict JSON of 32 KB or less.
   - Counts, percents, timestamps, and provider and window names are plain.
   - Device label, OS user, account label, project paths, and error text are sealed with the team key.
   - Every write is signed.
-- **Relay**: `ai-usage relay serve`, or the Vercel function in `api/`, backed by Upstash or Vercel KV.
+- **Relay**: `ai-usage relay serve`, or the Vercel function in `api/`, backed by Vercel KV (Upstash for Redis from the Vercel Marketplace, through the `KV_REST_API_*` variables).
   - It checks the signature and the exact shape, and rejects stale writes.
   - Rate limits apply per IP, and per day to new teams and new devices from one IP (IPv6 per /48). A forwarding header is trusted only when the operator names it and the request comes through their proxy.
   - Snapshots expire 7 to 90 days after their last update.
@@ -133,13 +137,15 @@ Done, in short:
 
 Deferred or not done. These are cumbersome, or they need an action outside this repository:
 
-- **The relay is not deployed.** Deploying it needs a Vercel project linked to this repository, an Upstash Redis (Vercel KV) store attached (`KV_REST_API_URL`, `KV_REST_API_TOKEN`), and the repository variable `AI_USAGE_RELAY_URL`, so that release builds carry a default relay. Until then, each device runs `ai-usage relay set URL`. Client-IP detection on Vercel (`RemoteAddr` or `X-Real-Ip`) has not been seen on a real deployment.
-- **CI and releases have never run on GitHub.** The first `v*` tag will be their first real run. See `docs/releasing.md`.
-- **Nothing has run on real Windows.** Task Scheduler registration from XML (the task has no explicit user, so it relies on `schtasks /Create /XML` using the caller), the `.old` rename during self-update, and `install.ps1` are covered only by unit tests and the CI definitions.
+- **Relay deployment (done).** The relay runs at https://ai-usage-relay.vercel.app. It is the Vercel project `acmeworks/ai-usage`, with Vercel KV (Upstash for Redis from the Vercel Marketplace) on Pay-As-You-Go. The project deploys on every push to `main`. The repository variable `AI_USAGE_RELAY_URL` bakes this URL into release builds as the default relay.
+- **CI runs on GitHub.** Tests run on Linux and macOS. Windows only cross-compiles and runs the installer smoke test: Windows is not a supported collector host for now.
+- **Windows is not supported yet. Nothing has run on real Windows.** Task Scheduler registration from XML (the task has no explicit user, so it relies on `schtasks /Create /XML` using the caller), the `.old` rename during self-update, and `install.ps1` are covered only by unit tests and the CI definitions.
   - `schtasks` starts a console program, so a console window can flash every 15 minutes. Fixing that needs a GUI-subsystem launcher, or `conhost --headless`, which only newer Windows builds have.
   - `schtasks /Query` errors are localized, so any query failure is treated as "no task".
 - **Claude quota freshness.** Claude Code writes its usage cache only when it runs, so an idle machine shows an old reading with its age. A fresh reading without a session would mean driving `claude` in tmux and scraping `/usage`. That is fragile and deferred. Claude transcripts also carry `quotaLimits` on rejected requests; they are not used yet.
-- **Hermes has no quota source.** Its tokens are counted per billing provider. Grok labels an account read from its logs by its `user_id` UUID when the harness does not report a better one.
+- **Hermes' quota is borrowed, and its account is assumed.** Hermes keeps its own Codex or Grok login and records no quota, so its row shows the quota of the account it is taken to bill through (see above). Where that is wrong, `home add --quota-from` corrects it per Hermes home. Hermes accounts are keyed by billing provider, so Hermes homes on one machine that bill through different logins share one row, which follows the home of its newest session. Hermes' `codex_app_server` runtime also writes Codex rollouts; if its `CODEX_HOME` is a read home, those tokens show under both Hermes and the Codex account. The team view pairs a Hermes row with a source reading by provider and reading time only. Grok labels an account read from its logs by its `user_id` UUID when the harness does not report a better one.
+- **Orca and past sessions.** Orca hard-links every rollout into every account home, so a session is attributed by the weekly reset its rollout recorded: the account whose current weekly window resets within a minute of it. A session from before the current week cannot be matched and goes to the first home's login. An Orca account can show quota used and no sessions. `ORCA_USER_DATA_PATH` is not honored.
+- **Deploy order for `quota_from`.** The relay accepts `quota_from` from the build that added it. Collectors built from this tree get HTTP 422 from an older relay and keep the snapshot pending, and after a 4xx other than 409 a run does not read the team either. The relay deploys on push to `main`, so it is always deployed before a release is tagged.
 - **Account identity is the harness's label,** usually an email. One email in two workspaces or organizations is one account.
 - **The first run attributes all local history to the account logged in at that moment.** Older logs do not say which account wrote them. A forward clock jump of more than 90 days prunes the ledger, and history is attributed again after it.
 - **The device cap can be exceeded briefly when two new devices write at once.** Counting and then writing is not atomic on the REST store. A Lua script or `SET NX` per slot would fix it.

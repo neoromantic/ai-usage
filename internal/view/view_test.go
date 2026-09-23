@@ -27,6 +27,9 @@ func mustKey(t *testing.T) *team.Key {
 
 func tp(t time.Time) *time.Time { return &t }
 
+// text is the default view at 80 columns, clocks in UTC.
+func text(r Report) string { return Text(r, Options{Width: 80, Loc: time.UTC}) }
+
 func win(name string, pct float64, reset time.Time) snapshot.Window {
 	return snapshot.Window{Name: name, Percent: pct, ResetsAt: &reset}
 }
@@ -116,19 +119,16 @@ func TestHeadlineIsTheFullestWindow(t *testing.T) {
 		t.Fatalf("quota = %+v", a.Quota)
 	}
 
-	text := Text(r)
+	out := text(r)
 	for _, want := range []string{
-		"CLAUDE  ok",
-		"  ann  (logged in)",
-		"    quota 80% ! (cache, 5m ago)",
-		"5h             40%  resets in 2h",
-		"7d             80% !  resets in 3d",
-		"7d Opus      12.5%",
-		"    90 days: 1 session · in 1.0K out 500 cache read 0 write 0",
-		"      /work/ann  1 session",
+		"ACCOUNTS  1 · 1 warning\n",
+		"● ann      ████▊░  80% !    40%     2h  80%     3d    5m\n",
+		"  └ also 7d Opus 12%, resets in 3d\n",
+		"claude ● ann                                1    1.0K     500        0        0\n",
+		"    /work/ann                               1    1.0K     500        0        0\n",
 	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("text lacks %q:\n%s", want, text)
+		if !strings.Contains(out, want) {
+			t.Fatalf("text lacks %q:\n%s", want, out)
 		}
 	}
 }
@@ -145,10 +145,11 @@ func TestLevels(t *testing.T) {
 	if h, lvl := headline(nil, now); h != nil || lvl != "unknown" {
 		t.Fatalf("headline(nil) = %v %q", h, lvl)
 	}
-	if !strings.Contains(Text(Report{Providers: []Provider{{Provider: "codex", Status: "ok", Accounts: []Account{{
+	r := Report{GeneratedAt: now, Team: Team{Providers: []TeamProvider{{Provider: "codex", Accounts: []TeamAccount{{
 		Label: "x", Level: "critical", HeadlinePercent: ptrF(95), Quota: &Quota{ObservedAt: now, Windows: []Window{{Name: "5h", Percent: 95, Level: "critical"}}},
-	}}}}, GeneratedAt: now}), "quota 95% !! (just now)") {
-		t.Fatal("critical mark missing")
+	}}}}}}
+	if out := text(r); !strings.Contains(out, "  x        █████▋  95% !!   95%      —    —          now\n") {
+		t.Fatalf("critical mark missing:\n%s", out)
 	}
 }
 
@@ -169,9 +170,14 @@ func TestUnknownQuota(t *testing.T) {
 	if findAccount(t, r, "codex", "bob").Quota != nil {
 		t.Fatal("quota invented for bob")
 	}
-	text := Text(r)
-	if strings.Count(text, "    quota unknown\n") < 2 {
-		t.Fatalf("text:\n%s", text)
+	out := text(r)
+	for _, want := range []string{
+		"● bob      ······ unknown     —           —            —\n  └ no reading yet\n",
+		"○ eve      ······ unknown     —           —            —\n  └ no reading yet\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("text lacks %q:\n%s", want, out)
+		}
 	}
 }
 
@@ -187,7 +193,7 @@ func TestStaleAfterSixHours(t *testing.T) {
 		if q.Stale != c.stale || q.AgeSeconds != int64(c.age.Seconds()) {
 			t.Fatalf("age %v: stale=%v age=%d", c.age, q.Stale, q.AgeSeconds)
 		}
-		if got := strings.Contains(Text(r), "· stale"); got != c.stale {
+		if got := strings.Contains(text(r), "~\n"); got != c.stale {
 			t.Fatalf("age %v: text stale mark = %v", c.age, got)
 		}
 	}
@@ -211,8 +217,15 @@ func TestPaceFillsBeforeReset(t *testing.T) {
 	if w.Pace == nil || w.Pace.PerHour != 10 || w.Pace.FillsAt == nil || !w.Pace.FillsAt.Equal(now.Add(7*time.Hour)) {
 		t.Fatalf("pace = %+v", w.Pace)
 	}
-	if text := Text(r); !strings.Contains(text, "resets in 10h  · at this pace full in 7h, before reset") {
-		t.Fatalf("text:\n%s", text)
+	out := text(r)
+	for _, want := range []string{
+		"ACCOUNTS  1 · 1 fills before reset\n",
+		"● ann      █▊░░░░  30%      30%▲   10h    —          now\n",
+		"  └ ▲ 5h full in 7h (Tue 19:00) at this pace, 3h before it resets\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("text lacks %q:\n%s", want, out)
+		}
 	}
 }
 
@@ -278,8 +291,8 @@ func TestNoPaceForAWindowThatHasReset(t *testing.T) {
 	if w.Pace != nil {
 		t.Fatalf("pace = %+v", w.Pace)
 	}
-	if !strings.Contains(Text(r), "reset 1h ago") {
-		t.Fatalf("text:\n%s", Text(r))
+	if out := text(r); !strings.Contains(out, "● ann      ······ unknown     ?  reset    —           2h\n  └ every window reset since the reading 2h ago\n") || strings.Contains(out, "▲") {
+		t.Fatalf("text:\n%s", out)
 	}
 }
 
@@ -310,19 +323,20 @@ func TestWindowThatHasResetIsNotTheHeadline(t *testing.T) {
 		t.Fatalf("bob headline = %v %q, quota %+v", bob.HeadlinePercent, bob.Level, bob.Quota)
 	}
 
-	text := Text(r)
+	out := text(r)
 	for _, want := range []string{
-		"    quota 20% (cache, 8h ago · stale)\n",
-		"      5h             96%  reset 3h ago\n",
-		"    quota unknown, every window reset since the reading (harness, 3h ago)\n",
-		"      5h            100%  reset 1h ago\n",
+		"ACCOUNTS  2 · 1 stale · 1 unknown\n",
+		"● ann      █▏░░░░  20%        ?  reset  20%     3d   8h~\n",
+		"  └ ~ Claude Code updates its usage cache only while it runs\n",
+		"○ bob      ······ unknown     ?  reset    ?  reset    3h\n",
+		"  └ every window reset since the reading 3h ago\n",
 	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("text lacks %q:\n%s", want, text)
+		if !strings.Contains(out, want) {
+			t.Fatalf("text lacks %q:\n%s", want, out)
 		}
 	}
-	if strings.Contains(text, "!") {
-		t.Fatalf("a reset window is still marked:\n%s", text)
+	if strings.Contains(out, "!") {
+		t.Fatalf("a reset window is still marked:\n%s", out)
 	}
 }
 
@@ -354,13 +368,15 @@ func TestTeamSkipsWindowsThatHaveResetAndMarksStale(t *testing.T) {
 			}
 		}
 	}
-	text := Text(r)
+	out := text(r)
 	for _, want := range []string{
-		"    ann  quota 40% (from otherbox (kim), 7h ago · stale) · ",
-		"    bob  quota unknown, every window reset since the reading (from otherbox (kim), 3d ago · stale) · ",
+		"  ann      ██▍░░░  40%        ?  reset  40%     2d   7h~  otherbox\n",
+		"  └ ~ last read on otherbox 7h ago\n",
+		"  bob      ······ unknown     ?  reset    —          3d~  otherbox\n",
+		"  └ every window reset since the reading 3d ago\n",
 	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("text lacks %q:\n%s", want, text)
+		if !strings.Contains(out, want) {
+			t.Fatalf("text lacks %q:\n%s", want, out)
 		}
 	}
 }
@@ -445,16 +461,17 @@ func TestTeamAddsTokensAndTakesNewestQuota(t *testing.T) {
 		t.Fatalf("providers = %v", provs)
 	}
 
-	text := Text(r)
+	out := text(r)
 	for _, want := range []string{
-		"TEAM  read 1m ago",
-		"  thisbox (sam)  (this device)  collected just now · v1.2.3 · ok",
-		"  otherbox (kim)  collected 5m ago · v1.2.0 · codex error",
-		"    ann  quota 70% (from otherbox (kim), 10m ago) · in 1.5K out 750 cache read 0 write 0 on 3 devices",
-		"    bob  quota unknown · in 20 out 10 cache read 0 write 0 on 1 device",
+		"● ann      ████▏░  70%      70%     1h    —          10m  thisbox, otherbox +1\n",
+		"  bob      ······ unknown     —           —            —  otherbox\n",
+		"DEVICES  3 · read 1m ago · 1 with errors · 2 outdated\n",
+		"● thisbox (sam)   v1.2.3     <1m  ✓  ✓  ✓  ✓   ann\n",
+		"✕ otherbox (kim)  v1.2.0      5m  ·  ✕  ·  ·   codex error; outdated; latest v…\n",
+		"↓ aaabox (kim)    v1.2.0      1h  ·  ·  ·  ·   outdated; latest v1.2.3\n",
 	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("text lacks %q:\n%s", want, text)
+		if !strings.Contains(out, want) {
+			t.Fatalf("text lacks %q:\n%s", want, out)
 		}
 	}
 }
@@ -471,8 +488,8 @@ func TestTeamCacheOfAnotherTeamIsIgnored(t *testing.T) {
 	if r.Team.PulledAt != nil || len(r.Team.Devices) != 1 || !r.Team.Devices[0].This {
 		t.Fatalf("team = %+v", r.Team)
 	}
-	if !strings.Contains(Text(r), "TEAM  not read from the relay yet; this device only") {
-		t.Fatalf("text:\n%s", Text(r))
+	if out := text(r); strings.Contains(out, "DEVICES") || strings.Contains(out, "--tokens") {
+		t.Fatalf("one device shows team parts:\n%s", out)
 	}
 }
 
@@ -496,6 +513,24 @@ func TestUnreadableLabels(t *testing.T) {
 	}
 }
 
+// A server reads dozens of Hermes homes; the status line names two and
+// counts the rest.
+func TestStatusFoldsManyHomes(t *testing.T) {
+	st := emptyState()
+	st.Sources["hermes"] = state.Source{Status: "ok", Homes: []string{"/srv/a/.hermes", "/srv/b/.hermes", "/srv/c/.hermes", "/srv/d/.hermes", "/srv/e/.hermes"}}
+	st.Sources["codex"] = state.Source{Status: "ok", Homes: []string{"/srv/a/.codex", "/srv/b/.codex", "/srv/c/.codex"}}
+	f := newFixture(t, st)
+	status := StatusText(Build(f.in), "", Options{Width: 100, Loc: time.UTC})
+	for _, want := range []string{
+		"hermes  /srv/a/.hermes, /srv/b/.hermes, +3 more (ai-usage home) · no accounts yet\n",
+		"codex   /srv/a/.codex, /srv/b/.codex, /srv/c/.codex · no accounts yet\n",
+	} {
+		if !strings.Contains(status, want) {
+			t.Fatalf("status lacks %q:\n%s", want, status)
+		}
+	}
+}
+
 func TestCollectorSection(t *testing.T) {
 	st := emptyState()
 	st.LastError, st.LastErrorAt = "claude: 2 malformed lines", now.Add(-time.Hour)
@@ -513,77 +548,73 @@ func TestCollectorSection(t *testing.T) {
 	if c.Update.Staged == nil || *c.Update.Staged != "v1.3.0" {
 		t.Fatalf("staged = %v", c.Update.Staged)
 	}
-	text := Text(r)
+	out := text(r)
 	for _, want := range []string{
-		"ai-usage v1.2.3 · thisbox (sam) · team " + f.key.Fingerprint()[:12] + "…",
-		"last run just now · last success just now",
-		"relay: pushed 20m ago · pulled 20m ago · newest snapshot not sent yet",
-		"relay error: relay unreachable: refused",
-		"last error (1h ago): claude: 2 malformed lines",
-		"schedule: not registered with the system scheduler: crontab: permission denied",
-		"update: v1.3.0 is installed and runs next time",
-		"GROK  skipped\n  not installed",
-		"CLAUDE  partial\n  problem: 2 malformed lines\n  no accounts and no usage yet",
+		"ai-usage v1.2.3 · thisbox (sam) · team " + f.key.Fingerprint()[:8] + "…",
+		"\n✓ collected just now  ✕ relay failing · last push 20m ago  ✕ not scheduled\n↑ v1.3.0 runs next time\n",
+		"\n  ✕ relay: relay unreachable: refused\n  ✕ schedule: crontab: permission denied\n",
+		"\n  claude ───────────────────────────────────────── no accounts · ✕ partial here\n",
+		"\n  grok ─────────────────────────────────────── no accounts · not installed here\n",
+		"\nclaude partial: 2 malformed lines · codex no usage yet · grok not installed · …\n",
 	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("text lacks %q:\n%s", want, text)
+		if !strings.Contains(out, want) {
+			t.Fatalf("text lacks %q:\n%s", want, out)
+		}
+	}
+	status := StatusText(r, "/home/.config/ai-usage", Options{Width: 80, Loc: time.UTC})
+	for _, want := range []string{
+		"\n✕ 3 problems: relay failing, not scheduled, claude partial\n",
+		"\ndirectory       ~/.config/ai-usage\n",
+		"\nlast error      11:00 (1h ago): claude: 2 malformed lines\n",
+		"\nrelay         ✕ https://relay.example\n                pushed 11:40 (20m ago) · pulled 11:40 (20m ago)\n" +
+			"                the newest snapshot is not sent yet\n                relay unreachable: refused\n",
+		"\nschedule      ✕ not registered: crontab: permission denied\n                register: ai-usage schedule install\n",
+		"\nupdate        ↑ v1.3.0 is installed and runs next time\n                checked never\n",
+		"\nsources       ◐ claude  no accounts yet\n                        2 malformed lines\n",
+		"\n              · grok    not installed\n",
+	} {
+		if !strings.Contains(status, want) {
+			t.Fatalf("status lacks %q:\n%s", want, status)
 		}
 	}
 
 	// Once the new version runs, the staged note goes away.
 	f.in.Version = "v1.3.0"
-	if r := Build(f.in); r.Collector.Update.Staged != nil || strings.Contains(Text(r), "runs next time") {
+	if r := Build(f.in); r.Collector.Update.Staged != nil || strings.Contains(text(r), "runs next time") {
 		t.Fatalf("staged after it ran: %v", r.Collector.Update.Staged)
 	}
 
 	f.in.RelayURL = ""
-	if !strings.Contains(Text(Build(f.in)), "relay: not configured") {
-		t.Fatal("unconfigured relay not shown")
+	r = Build(f.in)
+	if !strings.Contains(text(r), "  · no relay  ") {
+		t.Fatalf("unconfigured relay not shown:\n%s", text(r))
+	}
+	if status := StatusText(r, "", Options{Loc: time.UTC}); !strings.Contains(status, "\nrelay         · not configured; the team view shows this device only\n                set one: ai-usage relay set URL\n") {
+		t.Fatalf("unconfigured relay not shown:\n%s", status)
 	}
 }
 
 func TestProjectsListIsCut(t *testing.T) {
 	st := emptyState()
 	addAccount(st, "claude", "ann", true, nil, 0)
-	for i := 0; i < ConsoleProjects+3; i++ {
+	for i := 0; i < topProjects+3; i++ {
 		st.Sessions[state.Key("claude", string(rune('a'+i)))] = &state.Session{
 			Provider: "claude", Project: "/p/" + string(rune('a'+i)), Updated: now,
 			By: map[string]snapshot.Tokens{"ann": {Input: int64(100 + i)}},
 		}
 	}
-	text := Text(Build(newFixture(t, st).in))
-	if !strings.Contains(text, "      3 more projects\n") || strings.Contains(text, "/p/a ") {
-		t.Fatalf("text:\n%s", text)
+	r := Build(newFixture(t, st).in)
+	out := text(r)
+	if !strings.Contains(out, "    /p/d  ") || !strings.Contains(out, "\n    + 3 more projects · ai-usage --projects\n") || strings.Contains(out, "/p/c ") {
+		t.Fatalf("text:\n%s", out)
+	}
+	if all := Text(r, Options{Mode: Projects, Loc: time.UTC}); !strings.Contains(all, "\nPROJECTS  thisbox (sam)") || !strings.Contains(all, "    /p/a  ") || strings.Contains(all, "more project") {
+		t.Fatalf("projects view:\n%s", all)
 	}
 }
 
-func TestFormatting(t *testing.T) {
-	for _, c := range []struct {
-		n    int64
-		want string
-	}{{0, "0"}, {999, "999"}, {1000, "1.0K"}, {1234567, "1.2M"}, {250_000_000, "250M"}, {3e12, "3.0T"}} {
-		if got := human(c.n); got != c.want {
-			t.Errorf("human(%d) = %q, want %q", c.n, got, c.want)
-		}
-	}
-	for _, c := range []struct {
-		d    time.Duration
-		want string
-	}{{30 * time.Second, "<1m"}, {12 * time.Minute, "12m"}, {2*time.Hour + 5*time.Minute, "2h 5m"}, {3 * time.Hour, "3h"}, {76 * time.Hour, "3d 4h"}, {48 * time.Hour, "2d"}} {
-		if got := dur(c.d); got != c.want {
-			t.Errorf("dur(%v) = %q, want %q", c.d, got, c.want)
-		}
-	}
-	if pct(12.5) != "12.5%" || pct(80) != "80%" {
-		t.Fatal("pct")
-	}
-	if ago(nil, now) != "never" || ago(tp(now.Add(time.Hour)), now) != "just now" {
-		t.Fatal("ago")
-	}
-}
-
-// keys lists a JSON object's field names, and those of the first element of
-// each array of objects, as dotted paths.
+// keys lists a JSON object's field names, and those of every element of each
+// array of objects, as dotted paths.
 func keys(prefix string, v any, out map[string]bool) {
 	switch x := v.(type) {
 	case map[string]any:
@@ -592,8 +623,8 @@ func keys(prefix string, v any, out map[string]bool) {
 			keys(prefix+k+".", child, out)
 		}
 	case []any:
-		if len(x) > 0 {
-			keys(prefix, x[0], out)
+		for _, e := range x {
+			keys(prefix, e, out)
 		}
 	}
 }
@@ -607,6 +638,8 @@ func TestJSONFieldNamesAreStable(t *testing.T) {
 	st.Schedule.Error = "w"
 	addAccount(st, "claude", "ann", true, &state.Quota{At: now, Source: "cache", Windows: []snapshot.Window{{Name: "5h", Percent: 30, ResetsAt: &reset, Minutes: 300}}}, 10)
 	st.Accounts[state.Key("claude", "ann")].Plan = "max"
+	addAccount(st, "codex", "bob", true, codexQuota(now, 40), 10)
+	addHermes(st, "openai-codex", "codex", "bob", 5)
 	f := newFixture(t, st)
 	f.in.Samples = []state.Sample{sampleWith(now.Add(-time.Hour), now.Add(-time.Hour), "claude", "ann", win("5h", 20, reset))}
 	f.in.Team = collect.TeamCache{PulledAt: now, Team: f.key.Fingerprint(), Docs: []snapshot.Doc{otherDoc(t, f.key, "d-other-device", "o", now, st)}}
@@ -638,11 +671,15 @@ func TestJSONFieldNamesAreStable(t *testing.T) {
 		"collector.update.latest", "collector.update.staged", "collector.version",
 		"generated_at",
 		"providers", "providers.accounts", "providers.accounts.current", "providers.accounts.headline_percent",
-		"providers.accounts.label", "providers.accounts.last_active_at", "providers.accounts.level", "providers.accounts.plan",
+		"providers.accounts.home", "providers.accounts.label", "providers.accounts.last_active_at", "providers.accounts.level",
+		"providers.accounts.link", "providers.accounts.link.label", "providers.accounts.link.provider",
+		"providers.accounts.linked_usage", "providers.accounts.linked_usage.provider", "providers.accounts.linked_usage.sessions",
+		"providers.accounts.linked_usage.tokens", "providers.accounts.linked_usage.tokens.cache_read", "providers.accounts.linked_usage.tokens.cache_write",
+		"providers.accounts.linked_usage.tokens.input", "providers.accounts.linked_usage.tokens.output", "providers.accounts.plan",
 		"providers.accounts.projects", "providers.accounts.projects.path", "providers.accounts.projects.sessions",
 		"providers.accounts.projects.tokens", "providers.accounts.projects.tokens.cache_read", "providers.accounts.projects.tokens.cache_write",
 		"providers.accounts.projects.tokens.input", "providers.accounts.projects.tokens.output",
-		"providers.accounts.quota", "providers.accounts.quota.age_seconds", "providers.accounts.quota.observed_at",
+		"providers.accounts.quota", "providers.accounts.quota.age_seconds", "providers.accounts.quota.from", "providers.accounts.quota.observed_at",
 		"providers.accounts.quota.source", "providers.accounts.quota.stale", "providers.accounts.quota.windows",
 		"providers.accounts.quota.windows.level", "providers.accounts.quota.windows.minutes", "providers.accounts.quota.windows.name",
 		"providers.accounts.quota.windows.pace", "providers.accounts.quota.windows.pace.fills_at", "providers.accounts.quota.windows.pace.percent_per_hour",
@@ -656,8 +693,18 @@ func TestJSONFieldNamesAreStable(t *testing.T) {
 		"team.devices.os_user", "team.devices.sources", "team.devices.sources.error", "team.devices.sources.provider",
 		"team.devices.sources.status", "team.devices.this_device",
 		"team.providers", "team.providers.accounts", "team.providers.accounts.devices", "team.providers.accounts.headline_percent",
-		"team.providers.accounts.label", "team.providers.accounts.level", "team.providers.accounts.quota",
-		"team.providers.accounts.quota.age_seconds", "team.providers.accounts.quota.device", "team.providers.accounts.quota.observed_at",
+		"team.providers.accounts.label", "team.providers.accounts.level",
+		"team.providers.accounts.link", "team.providers.accounts.link.label", "team.providers.accounts.link.provider",
+		"team.providers.accounts.linked_usage", "team.providers.accounts.linked_usage.devices", "team.providers.accounts.linked_usage.label",
+		"team.providers.accounts.linked_usage.provider", "team.providers.accounts.linked_usage.sessions", "team.providers.accounts.linked_usage.tokens",
+		"team.providers.accounts.linked_usage.tokens.cache_read", "team.providers.accounts.linked_usage.tokens.cache_write",
+		"team.providers.accounts.linked_usage.tokens.input", "team.providers.accounts.linked_usage.tokens.output",
+		"team.providers.accounts.per_device", "team.providers.accounts.per_device.current", "team.providers.accounts.per_device.device",
+		"team.providers.accounts.per_device.device_id", "team.providers.accounts.per_device.last_active_at", "team.providers.accounts.per_device.sessions",
+		"team.providers.accounts.per_device.tokens", "team.providers.accounts.per_device.tokens.cache_read", "team.providers.accounts.per_device.tokens.cache_write",
+		"team.providers.accounts.per_device.tokens.input", "team.providers.accounts.per_device.tokens.output",
+		"team.providers.accounts.plan", "team.providers.accounts.quota",
+		"team.providers.accounts.quota.age_seconds", "team.providers.accounts.quota.device", "team.providers.accounts.quota.from", "team.providers.accounts.quota.observed_at",
 		"team.providers.accounts.quota.stale", "team.providers.accounts.quota.windows", "team.providers.accounts.quota.windows.level",
 		"team.providers.accounts.quota.windows.minutes", "team.providers.accounts.quota.windows.name", "team.providers.accounts.quota.windows.pace",
 		"team.providers.accounts.quota.windows.pace.fills_at", "team.providers.accounts.quota.windows.pace.percent_per_hour",
@@ -681,7 +728,7 @@ func TestJSONFieldNamesAreStable(t *testing.T) {
 		}
 		for _, k := range list {
 			if !wantSet[k] {
-				t.Errorf("new field %s: a new field needs a new schema version", k)
+				t.Errorf("new field %s: add it here and to docs/json-schema.md; renaming or removing a field needs a new schema version", k)
 			}
 		}
 	}

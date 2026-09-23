@@ -1172,7 +1172,7 @@ func TestDiscoverAndRemember(t *testing.T) {
 	}
 	remembered := map[string][]string{"codex": {oldCodex, envCodex, filepath.Join(root, "gone")}}
 	got := Discover(home, func(k string) string { return env[k] }, remembered)
-	want := map[string][]string{"codex": {envCodex, defCodex, oldCodex}}
+	want := map[string][]string{"codex": {defCodex, envCodex, oldCodex}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Discover = %v, want %v", got, want)
 	}
@@ -1213,7 +1213,7 @@ func TestDiscoverFindsHermesProfiles(t *testing.T) {
 
 	env := map[string]string{"HERMES_HOME": other}
 	got := Discover(home, func(k string) string { return env[k] }, nil)
-	if want := []string{other, otherProf, def, work}; !reflect.DeepEqual(got["hermes"], want) {
+	if want := []string{def, other, otherProf, work}; !reflect.DeepEqual(got["hermes"], want) {
 		t.Fatalf("hermes homes = %v, want %v", got["hermes"], want)
 	}
 	// Profiles are found again through their root and are not remembered.
@@ -1224,7 +1224,7 @@ func TestDiscoverFindsHermesProfiles(t *testing.T) {
 	// HERMES_HOME naming the profile itself: found, and not remembered either.
 	env["HERMES_HOME"] = work
 	got = Discover(home, func(k string) string { return env[k] }, nil)
-	if want := []string{work, def}; !reflect.DeepEqual(got["hermes"], want) {
+	if want := []string{def, work}; !reflect.DeepEqual(got["hermes"], want) {
 		t.Fatalf("hermes homes = %v, want %v", got["hermes"], want)
 	}
 	if next, changed := Remember(nil, home, got); changed {

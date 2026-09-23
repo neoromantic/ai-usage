@@ -1,0 +1,64 @@
+[1mai-usage[0m v1.4.2 · ann-mbp (ann) · team 472ghuwc…               [90mWed 23 Sep 11:40[0m
+[32m✓ [0mcollected 1m ago  [32m✓ [0mrelay synced 1m ago  [32m✓ [0mscheduled  [32m✓ [0mup to date
+
+[1mACCOUNTS[0m  10[90m · [0m[31m2 critical[0m[90m · [0m[33m2 warning[0m[90m · [0m[35m1 fills early[0m[90m · [0m[33m1 stale[0m[90m · [0m[90m1 unknown[0m
+[90m  ACCOUNT           QUOTA             5h  reset   7d  reset  READ  USED BY[0m
+  [1mclaude[0m [90m───────────────────────────────────────────────────────────[0m[90m 4 accounts[0m
+  bo@acme.io        [31m█████▊[0m[1;31m  96%[0m[1;31m !![0m  [31m 96%[0m [90m 1h12m[0m  71% [90m  3d4h[0m    4m  bo-laptop +3
+  design@acme.io    [33m████▊[0m[90m░[0m[33m  81%[0m[33m ! [0m  [90m   ?  reset[0m [33m 81%[0m [90m  2d9h[0m  [33m 1d~[0m  lab-mac +3
+[90m  └ [0m[33m~ [0m[90mlast read on greg-win 1d 6h ago[0m
+[36m● [0mann@acme.io       [32m███▊[0m[90m░░[0m  64%      31% [90m 2h10m[0m  64%[35m▲[0m[90m  3d4h[0m    6m  ann-mbp +2
+[90m  └ [0m[90malso [0m[90m7d Opus [0m58%[90m, resets in 3d4h[0m
+[90m  └ [0m[35m▲ 7d full in 17h (Thu 04:48) at this pace, 2d10h before it resets[0m
+  ci-runner-claud…  [90m······ [0m[90munknown[0m  [90m   ?  reset[0m [90m   ?  reset[0m  [33m 2d~[0m  build-01 +1
+[90m  └ [0m[90mevery window reset since the reading 2d 2h ago[0m
+  [1mcodex[0m [90m────────────────────────────────────────────────────────────[0m[90m 3 accounts[0m
+[36m● [0mann@acme.io       [31m█████▌[0m[1;31m  92%[0m[1;31m !![0m   18% [90m 3h22m[0m [31m 92%[0m [90m 2d14h[0m    2m  ann-mbp +1
+[90m  └ [0m[90malso used by hermes openai-codex on ann-mbp, assumed the same account[0m
+[90m○ [0mops@acme.io       [33m████▊[0m[90m░[0m[33m  81%[0m[33m ! [0m  [33m 81%[0m [90m  3h5m[0m  38% [90m    5d[0m   12m  ops-01 +4
+[36m● [0mann+orca@acme.io  [32m█▍[0m[90m░░░░[0m  23%      10% [90m    4h[0m  23% [90m 4d21h[0m    2m  ann-mbp
+  [1mgrok[0m [90m─────────────────────────────────────────[0m[90m 1 account · not installed here[0m
+  7c1e5a90…         [32m██[0m[90m░░░░[0m  35%     [90m   —       [0m  35% [90m  1d7h[0m   25m  fatima-m… +3
+  [1mhermes[0m [90m───────────────────────────────────────────────────────────[0m[90m 2 accounts[0m
+[36m● [0mopenai-codex      [90m█████▌[0m[90m  92%[0m[90m !![0m  [90m 18%[0m [90m 3h22m[0m [90m 92%[0m [90m 2d14h[0m    2m  ann-mbp
+[90m  └ [0m[90mquota of codex ann@acme.io, assumed the same account[0m
+[90m  openrouter · no quota source, tokens only[0m
+
+[1mDEVICES[0m  20[90m · [0m[90mread 1m ago[0m[90m · [0m[31m1 with errors[0m[90m · [0m[33m3 silent over 1d[0m[90m · [0m[33m1 outdated[0m
+[90m  DEVICE              VERSION   SEEN  cl cx gk hm  NOTE[0m
+[36m● [0mann-mbp (ann)       v1.4.2      1m  [32m✓[0m  [32m✓[0m  [90m·[0m  [32m✓[0m   [90mann@acme.io +3[0m
+[31m✕ [0mbuild-02 (ci)       v1.4.2     14m  [32m✓[0m  [33m◐[0m  [90m·[0m  [90m·[0m   [31mcodex partial[0m
+[90m  └ [0m[31mcodex: app-server did not answer within 20s; quota not read[0m
+[33m~ [0mjo-air (jo)         v1.4.2   [33m   5d[0m  [32m✓[0m  [90m·[0m  [90m·[0m  [90m·[0m   [33msilent since Sep 18 11:40[0m
+[33m~ [0mbuild-01 (ci)       v1.4.2   [33m 2d2h[0m  [32m✓[0m  [90m·[0m  [90m·[0m  [90m·[0m   [33msilent since Sep 21 09:40[0m
+[33m~ [0mgreg-win (greg)     v1.4.2   [33m 1d6h[0m  [32m✓[0m  [90m·[0m  [90m·[0m  [90m·[0m   [33msilent since Sep 22 05:40[0m
+[33m↓ [0meli-thinkpad (eli)  [33mv1.3.0 [0m    11m  [90m·[0m  [90m·[0m  [32m✓[0m  [90m·[0m   [33moutdated; latest v1.4.2[0m
+[32m  ✓ [0m14 more ok, seen within 21m: [90mann-mini[0m[90m, bo-desktop[0m[90m, bo-laptop[0m[90m, carla-mbp[0m[90m,[0m
+    [90mdev-vm/ann[0m[90m, dev-vm/bo[0m[90m, fatima-mbp[0m[90m, gpu-box[0m[90m, hana-mbp[0m[90m, ivan-linux[0m[90m, +4 more[0m
+
+[1mTHIS DEVICE[0m[90m  ann-mbp (ann) · tokens in the last 90 days[0m
+[90m                                         SESS   INPUT  OUTPUT  CACHE R  CACHE W[0m
+[1mclaude [0m[36m● [0m[1mann@acme.io[0m                       24    5.1M   11.2M     640M    51.3M
+    ~/src/acme/api                         11    2.6M    5.9M     330M    26.0M
+    ~/src/acme/web                          7    1.4M    3.1M     180M    15.0M
+    ~/.codex/worktrees/2386/api             3    600K    1.3M    70.0M     5.4M
+[90m    + 2 more projects · ai-usage --projects[0m
+[1mcodex  [0m[36m● [0m[1mann@acme.io[0m[90m  ~/.codex[0m            212    301M   28.4M     9.6G[90m        0[0m
+    ~/src/acme/monorepo                    90    150M   14.0M     4.8G[90m        0[0m
+    ~/Vault                                41   52.0M    4.6M     1.5G[90m        0[0m
+    ~/.codex/worktrees/4d2c/monorepo       30   40.0M    3.9M     1.4G[90m        0[0m
+[90m    + 4 more projects · ai-usage --projects[0m
+[1mcodex  [0m[36m● [0m[1mann+orca@acme.io[0m[90m  orca 7527[0m       37   44.0M    3.9M     1.2G[90m        0[0m
+    ~/orca/…/optimize-data-connection      25   30.0M    2.7M     820M[90m        0[0m
+    ~/orca/…/billing/billing-export        12   14.0M    1.2M     380M[90m        0[0m
+[1mcodex  [0m[90m○ [0m[1mops@acme.io[0m                        4    5.5M    400K     140M[90m        0[0m
+    ~/src/acme/deploy-scripts               4    5.5M    400K     140M[90m        0[0m
+[1mhermes [0m[36m● [0m[1mopenai-codex[0m[90m  via codex[0m           18    6.2M    900K     120M[90m        0[0m
+    ~/Vault                                14    5.0M    700K    96.0M[90m        0[0m
+    ~                                       4    1.2M    200K    24.0M[90m        0[0m
+[90mgrok not installed[0m
+
+[90m● logged in here[0m  [90m○ used here before[0m  [90m!! ≥90%[0m  [90m! ≥75%[0m  [90m▲ fills before reset[0m
+[90m~ old: reading 6h+, device 1d+[0m  [90m? reset since reading[0m  [90m— no window[0m  [90m↓ outdated[0m
+[90mcl cx gk hm = claude codex grok hermes: ✓ ok ◐ partial ✕ error · not installed[0m
+[90mmore: ai-usage --projects  --tokens  --devices  --json · ai-usage status[0m

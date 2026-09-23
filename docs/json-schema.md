@@ -2,7 +2,7 @@
 
 `ai-usage --json`, `ai-usage collect --json`, and `ai-usage report --json` print one report object. `ai-usage status --json` prints a smaller object, described at the end.
 
-A field changes meaning only with a new `schema_version`.
+A field changes meaning only with a new `schema_version`. New fields can appear within a version, so ignore the ones you do not know.
 
 Conventions:
 
@@ -63,14 +63,21 @@ An account is one login. After you switch accounts, the previous one stays, with
 | --- | --- | --- |
 | `label` | string | what the tool calls the account, such as an email address or a user id; `unknown` when it did not say |
 | `current` | bool | logged in right now. It turns `false` when the tool answers that nobody is logged in; a tool that does not answer leaves the last account current |
+| `home` | string | the first of `homes` the account is logged in to now; absent when it is not logged in |
 | `plan` | string | the plan the tool reports |
 | `headline_percent` | number | the fullest window's percentage, leaving out windows that have reset since the reading; `null` without a reading, or when every window has reset |
 | `level` | string | the level of `headline_percent` |
 | `quota` | object | the last good quota reading, `null` if there never was one; see below |
+| `link` | object | `{provider, label}`: the account of another tool this one is assumed to bill through, `null` when there is none. Only Hermes has one: its `openai-codex` account is linked to the account logged in to `~/.codex`, and `xai-oauth` to the one in `~/.grok`. Hermes keeps its own login, so the link is an assumption, not a reading |
 | `sessions` | number | sessions in the last 90 days |
 | `tokens` | object | tokens in the last 90 days; see below |
+| `linked_usage` | list | `{provider, sessions, tokens}` for each other tool assumed to bill through this account, such as Hermes on this Codex login; `[]` when none. These tokens are that tool's and are not in `tokens` |
 | `last_active_at` | time | the newest session activity that used this account |
 | `projects` | list | `{path, sessions, tokens}` per working folder, most tokens first |
+
+A Hermes account is named after the billing provider it used, such as `openai-codex`, `xai-oauth`, `anthropic`, or `openrouter`. Its tokens include Hermes' auxiliary calls, such as title generation, compression, and vision, under the provider each call billed. An auxiliary call on a fallback route, which Hermes records with no provider, goes to the `unknown` account.
+
+A session's tokens go to the account logged in to the home it was read from. Codex's `homes` include the per-account homes Orca keeps under its app data folder (`codex-accounts/<id>/home`); one with nobody logged in adds no account. Orca links each rollout file into `~/.codex` and every account's home, so such a file is read once. Its tokens go to the one account, among those logged in to the homes that hold the file, whose current quota reading has its longest window resetting within a minute of the reset time the session last recorded. When no account matches, or several do, they go to the account in the first of those homes, `~/.codex` first. A session from an earlier week cannot be matched this way; a collector running every 15 minutes matches sessions while they run.
 
 `tokens` has four counts: `input`, `output`, `cache_read`, and `cache_write`. `input` does not include cache reads.
 
@@ -82,6 +89,7 @@ An account is one login. After you switch accounts, the previous one stays, with
 | `age_seconds` | number | the reading's age when the report was made |
 | `stale` | bool | the reading is more than 6 hours old |
 | `source` | string | `harness` when the tool answered a command, `cache` when it came from the tool's own cache file, `log` when it came from the tool's logs; only on this device's accounts |
+| `from` | string | the tool whose account took the reading, when it is the reading of the account in `link`, unchanged, observation time included; absent otherwise. With no reading for that account, `quota` is `null` |
 | `device` | string | the device that took the reading, as `host (user)`; only on team accounts |
 | `windows` | list | the windows the tool reported; see below |
 
@@ -127,8 +135,12 @@ A team account:
 | --- | --- | --- |
 | `label` | string | the account label |
 | `devices` | list of strings | the devices that saw it, as `host (user)` |
-| `headline_percent`, `level`, `quota` | | as for a device's account, from the newest reading any device has; percentages are never added |
+| `plan` | string | the plan from the newest snapshot, by `collected_at`, that has one; `null` when none has |
+| `headline_percent`, `level`, `quota` | | as for a device's account, from the newest reading any device has; percentages are never added. `quota.from` is set when that reading is the linked account's |
+| `link` | object | `{provider, label}`, as for a device's account; `null` when there is none. This device's accounts use their own link. For another device's account, whose snapshot carries no link, it is the one account on that snapshot of the tool in `quota.from` with the same reading: the same observation time and windows. When none or several match, `label` is `""` |
 | `sessions`, `tokens` | | summed across devices |
+| `per_device` | list | `{device, device_id, current, sessions, tokens, last_active_at}` for each device that has the account, `device` as `host (user)`; most tokens first, then by `device` |
+| `linked_usage` | list | `{provider, label, devices, sessions, tokens}` for each account of another tool linked to this one on any device, by the rule for `link`, summed across devices, with the devices it ran on; `[]` when none. These tokens are that account's and are not in `tokens` |
 
 ## Example
 
@@ -168,6 +180,7 @@ A shortened report from a team of two:
         {
           "label": "ann@example.com",
           "current": true,
+          "home": "/Users/ann/.claude",
           "plan": "max",
           "headline_percent": 78,
           "level": "warning",
@@ -195,8 +208,10 @@ A shortened report from a team of two:
               }
             ]
           },
+          "link": null,
           "sessions": 2,
           "tokens": { "input": 1600000, "output": 405000, "cache_read": 60000000, "cache_write": 2900000 },
+          "linked_usage": [],
           "last_active_at": "2026-09-01T11:40:00Z",
           "projects": [
             {
@@ -238,6 +253,7 @@ A shortened report from a team of two:
           {
             "label": "bo@example.com",
             "devices": ["bo-laptop (bo)"],
+            "plan": "pro",
             "headline_percent": 91,
             "level": "critical",
             "quota": {
@@ -249,8 +265,20 @@ A shortened report from a team of two:
                 { "name": "5h", "percent": 91, "level": "critical", "resets_at": "2026-09-01T12:40:00Z", "minutes": 300, "pace": null }
               ]
             },
+            "link": null,
             "sessions": 1,
-            "tokens": { "input": 800000, "output": 150000, "cache_read": 20000000, "cache_write": 900000 }
+            "tokens": { "input": 800000, "output": 150000, "cache_read": 20000000, "cache_write": 900000 },
+            "per_device": [
+              {
+                "device": "bo-laptop (bo)",
+                "device_id": "d-8e41d07c5a2b93f6e1d4c7a0",
+                "current": true,
+                "sessions": 1,
+                "tokens": { "input": 800000, "output": 150000, "cache_read": 20000000, "cache_write": 900000 },
+                "last_active_at": "2026-09-01T11:50:00Z"
+              }
+            ],
+            "linked_usage": []
           }
         ]
       }

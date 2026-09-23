@@ -92,6 +92,31 @@ func TestDecodeTrailingAndSize(t *testing.T) {
 	}
 }
 
+// A snapshot from before quota_from, in the exact bytes an older collector
+// signed, still decodes, and one with it encodes it only when set.
+func TestQuotaFromIsOptional(t *testing.T) {
+	old := `{"v":1,"team":"a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2","device":"mac-0123abcd","device_label":"Ab-_","os_user":"Ab-_",` +
+		`"collector_version":"v1.2.3","collected_at":"2026-09-23T12:00:00Z","last_success_at":"2026-09-23T11:45:00Z",` +
+		`"accounts":[{"provider":"codex","label":"Ab-_","current":true,"plan":"pro","quota_at":"2026-09-23T11:59:00Z",` +
+		`"windows":[{"name":"7d","percent":40,"resets_at":"2026-09-25T00:00:00Z","minutes":10080}],"sessions":1,` +
+		`"tokens":{"input":1,"output":2,"cache_read":3,"cache_write":4},"projects":[]}],"sources":[]}`
+	d, err := Decode([]byte(old))
+	if err != nil {
+		t.Fatalf("old snapshot: %v", err)
+	}
+	if b := encode(t, d); string(b) != old {
+		t.Fatalf("old snapshot re-encodes as\n%s", b)
+	}
+	d.Accounts[0].Provider, d.Accounts[0].QuotaFrom = "hermes", "codex"
+	b := encode(t, d)
+	if !bytes.Contains(b, []byte(`"quota_at":"2026-09-23T11:59:00Z","quota_from":"codex","windows"`)) {
+		t.Fatalf("encoded %s", b)
+	}
+	if got, err := Decode(b); err != nil || got.Accounts[0].QuotaFrom != "codex" {
+		t.Fatalf("Decode = %+v, %v", got.Accounts[0], err)
+	}
+}
+
 func TestDecodeRejectsUnknownFields(t *testing.T) {
 	body := string(encode(t, validDoc()))
 	cases := map[string]string{
@@ -221,6 +246,16 @@ func TestValidate(t *testing.T) {
 		{"project path plain", func(d *Doc) { d.Accounts[0].Projects[0].Path = "/Users/me/src" }, false},
 		{"project sessions negative", func(d *Doc) { d.Accounts[0].Projects[0].Sessions = -1 }, false},
 		{"project tokens negative", func(d *Doc) { d.Accounts[0].Projects[0].Tokens.Input = -5 }, false},
+
+		{"quota_from another provider", func(d *Doc) { d.Accounts[0].Provider, d.Accounts[0].QuotaFrom = "hermes", "codex" }, true},
+		{"quota_from grok", func(d *Doc) { d.Accounts[0].Provider, d.Accounts[0].QuotaFrom = "hermes", "grok" }, true},
+		{"quota_from itself", func(d *Doc) { d.Accounts[0].QuotaFrom = "claude" }, false},
+		{"quota_from unknown provider", func(d *Doc) { d.Accounts[0].QuotaFrom = "openai-codex" }, false},
+		{"quota_from label shape", func(d *Doc) { d.Accounts[0].QuotaFrom = sealed(40) }, false},
+		{"quota_from without windows", func(d *Doc) {
+			d.Accounts[0].Provider, d.Accounts[0].QuotaFrom = "hermes", "codex"
+			d.Accounts[0].QuotaAt, d.Accounts[0].Windows = nil, []Window{}
+		}, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

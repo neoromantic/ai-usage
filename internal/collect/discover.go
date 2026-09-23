@@ -3,6 +3,7 @@ package collect
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 )
@@ -25,29 +26,27 @@ var profiles = map[string]struct{ dir, marker string }{
 }
 
 // Discover returns candidate homes per provider: the default home, the one an
-// environment variable names, the ones remembered from earlier runs, and the
-// profiles inside each of them. Only directories that exist are returned.
+// environment variable names, the ones remembered from earlier runs, the ones
+// an app keeps per account, and the profiles inside each of them. Only
+// directories that exist are returned. The default home comes first and the
+// rest follow in path order, so a run with the variables and one without
+// them, like the scheduler's, read the same homes in the same order: where two
+// homes hold the same log, the first one holds the session.
 func Discover(userHome string, getenv func(string) string, remembered map[string][]string) map[string][]string {
 	out := map[string][]string{}
 	for _, p := range Providers {
+		var def string
 		var cands []string
+		if userHome != "" {
+			def = filepath.Join(userHome, "."+p)
+			cands = append(cands, def)
+		}
 		if v := getenv(homeEnv[p]); v != "" {
 			cands = append(cands, v)
 		}
-		if userHome != "" {
-			cands = append(cands, filepath.Join(userHome, "."+p))
-		}
 		cands = append(cands, remembered[p]...)
-		seen := map[string]bool{}
-		add := func(c string) {
-			if seen[c] {
-				return
-			}
-			seen[c] = true
-			if info, err := os.Stat(c); err == nil && info.IsDir() {
-				out[p] = append(out[p], c)
-			}
-		}
+		cands = append(cands, managedHomes(p, userHome, getenv)...)
+		found := map[string]bool{}
 		for _, c := range cands {
 			// A relative CODEX_HOME and the like is remembered for scheduler
 			// runs, which start in another directory.
@@ -55,11 +54,22 @@ func Discover(userHome string, getenv func(string) string, remembered map[string
 				c = abs
 			}
 			c = filepath.Clean(c)
-			add(c)
-			for _, prof := range profileHomes(p, c) {
-				add(prof)
+			for _, h := range append([]string{c}, profileHomes(p, c)...) {
+				if info, err := os.Stat(h); err == nil && info.IsDir() {
+					found[h] = true
+				}
 			}
 		}
+		for h := range found {
+			out[p] = append(out[p], h)
+		}
+		sort.Slice(out[p], func(i, j int) bool {
+			a, b := out[p][i], out[p][j]
+			if (a == def) != (b == def) {
+				return a == def
+			}
+			return a < b
+		})
 	}
 	return out
 }
@@ -90,6 +100,91 @@ func profileHomes(p, home string) []string {
 	return out
 }
 
+// managed is where an app that runs a harness once per account keeps each
+// account's home: <app data>/<dir>/<account id>/home, marked by a file the
+// app writes there. Orca points CODEX_HOME at one while a pane runs, so the
+// scheduler, which never sees that variable, finds them by path.
+var managed = map[string]struct{ app, dir, marker string }{
+	"codex": {"orca", "codex-accounts", ".orca-managed-home"},
+}
+
+// managedHomes lists the per-account homes of p in the app's data
+// directories, each in path order.
+func managedHomes(p, userHome string, getenv func(string) string) []string {
+	m, ok := managed[p]
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, data := range appDataDirs(m.app, userHome, getenv) {
+		root := filepath.Join(data, m.dir)
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if h := filepath.Join(root, e.Name(), "home"); isManaged(p, h) {
+				out = append(out, h)
+			}
+		}
+	}
+	return out
+}
+
+// isManaged reports whether h is a per-account home an app keeps for p.
+func isManaged(p, h string) bool {
+	m, ok := managed[p]
+	if !ok || filepath.Base(h) != "home" || filepath.Base(filepath.Dir(filepath.Dir(h))) != m.dir {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(h, m.marker))
+	return err == nil && info.Mode().IsRegular()
+}
+
+// managedByDefault reports whether h is a per-account home in the app's
+// default data directory, which every run finds again.
+func managedByDefault(p, h, userHome string) bool {
+	m, ok := managed[p]
+	if !ok || userHome == "" || !isManaged(p, h) {
+		return false
+	}
+	return filepath.Dir(filepath.Dir(filepath.Dir(h))) == defaultAppData(m.app, userHome)
+}
+
+// appDataDirs are where an Electron app keeps its data: the default under
+// userHome, and the one the environment moves it to, if it does.
+func appDataDirs(app, userHome string, getenv func(string) string) []string {
+	var out []string
+	if userHome != "" {
+		out = append(out, defaultAppData(app, userHome))
+	}
+	if v := appDataEnv[runtime.GOOS]; v != "" && getenv(v) != "" {
+		out = append(out, filepath.Join(getenv(v), app))
+	}
+	return out
+}
+
+// appDataEnv is the variable that moves Electron's app data directory, by
+// OS. On macOS nothing does.
+var appDataEnv = map[string]string{
+	"windows": "APPDATA",
+	"linux":   "XDG_CONFIG_HOME",
+	"freebsd": "XDG_CONFIG_HOME",
+}
+
+// defaultAppData is an Electron app's data directory when no variable
+// moves it.
+func defaultAppData(app, userHome string) string {
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(userHome, "Library", "Application Support", app)
+	case "windows":
+		return filepath.Join(userHome, "AppData", "Roaming", app)
+	default:
+		return filepath.Join(userHome, ".config", app)
+	}
+}
+
 // isProfile reports whether h is a profile inside one of homes, which finds
 // it again on every run.
 func isProfile(p, h string, homes []string) bool {
@@ -118,7 +213,7 @@ func Remember(remembered map[string][]string, userHome string, found map[string]
 			if userHome != "" && h == filepath.Join(userHome, "."+p) {
 				continue
 			}
-			if isProfile(p, h, homes) {
+			if isProfile(p, h, homes) || managedByDefault(p, h, userHome) {
 				continue
 			}
 			if contains(remembered[p], h) {

@@ -1,0 +1,2008 @@
+{
+  "schema_version": 2,
+  "generated_at": "2026-09-23T11:40:00Z",
+  "collector": {
+    "version": "v1.4.2",
+    "device": "d-4b1e0c7a9f3d2e615a08c4b2",
+    "device_label": "ann-mbp",
+    "os_user": "ann",
+    "team": "472ghuwcctyu4b6n2lh76ryt3oxzpgkq",
+    "last_run_at": "2026-09-23T11:39:00Z",
+    "last_success_at": "2026-09-23T11:39:00Z",
+    "last_error": null,
+    "last_error_at": null,
+    "relay": {
+      "url": "https://ai-usage-relay.vercel.app",
+      "last_push_at": "2026-09-23T11:39:00Z",
+      "last_pull_at": "2026-09-23T11:39:00Z",
+      "pending": false,
+      "last_error": null
+    },
+    "schedule": {
+      "registered": true,
+      "error": null
+    },
+    "update": {
+      "checked_at": "2026-09-23T09:26:00Z",
+      "latest": "v1.4.2",
+      "staged": null,
+      "error": null
+    }
+  },
+  "providers": [
+    {
+      "provider": "claude",
+      "status": "ok",
+      "error": null,
+      "homes": [
+        "/Users/ann/.claude"
+      ],
+      "accounts": [
+        {
+          "label": "ann@acme.io",
+          "current": true,
+          "plan": "max 5x",
+          "headline_percent": 64,
+          "level": "ok",
+          "quota": {
+            "observed_at": "2026-09-23T11:34:00Z",
+            "age_seconds": 360,
+            "stale": false,
+            "source": "cache",
+            "windows": [
+              {
+                "name": "5h",
+                "percent": 31,
+                "level": "ok",
+                "resets_at": "2026-09-23T13:50:00Z",
+                "minutes": 300,
+                "pace": {
+                  "percent_per_hour": 2,
+                  "fills_at": null
+                }
+              },
+              {
+                "name": "7d",
+                "percent": 64,
+                "level": "ok",
+                "resets_at": "2026-09-26T15:40:00Z",
+                "minutes": 10080,
+                "pace": {
+                  "percent_per_hour": 2.1,
+                  "fills_at": "2026-09-24T04:48:00Z"
+                }
+              },
+              {
+                "name": "7d Opus",
+                "percent": 58,
+                "level": "ok",
+                "resets_at": "2026-09-26T15:40:00Z",
+                "minutes": 10080,
+                "pace": {
+                  "percent_per_hour": 1.2,
+                  "fills_at": null
+                }
+              }
+            ]
+          },
+          "sessions": 24,
+          "tokens": {
+            "input": 5100000,
+            "output": 11200000,
+            "cache_read": 640000000,
+            "cache_write": 51300000
+          },
+          "last_active_at": "2026-09-23T11:34:00Z",
+          "projects": [
+            {
+              "path": "/Users/ann/src/acme/api",
+              "sessions": 11,
+              "tokens": {
+                "input": 2600000,
+                "output": 5900000,
+                "cache_read": 330000000,
+                "cache_write": 26000000
+              }
+            },
+            {
+              "path": "/Users/ann/src/acme/web",
+              "sessions": 7,
+              "tokens": {
+                "input": 1400000,
+                "output": 3100000,
+                "cache_read": 180000000,
+                "cache_write": 15000000
+              }
+            },
+            {
+              "path": "/Users/ann/.codex/worktrees/2386/api",
+              "sessions": 3,
+              "tokens": {
+                "input": 600000,
+                "output": 1300000,
+                "cache_read": 70000000,
+                "cache_write": 5400000
+              }
+            },
+            {
+              "path": "/Users/ann/src/acme/infra",
+              "sessions": 2,
+              "tokens": {
+                "input": 400000,
+                "output": 700000,
+                "cache_read": 45000000,
+                "cache_write": 3600000
+              }
+            },
+            {
+              "path": "/Users/ann",
+              "sessions": 1,
+              "tokens": {
+                "input": 100000,
+                "output": 200000,
+                "cache_read": 15000000,
+                "cache_write": 1300000
+              }
+            }
+          ],
+          "home": "/Users/ann/.claude"
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "status": "ok",
+      "error": null,
+      "homes": [
+        "/Users/ann/.codex",
+        "/Users/ann/Library/Application Support/orca/codex-accounts/7527/home"
+      ],
+      "accounts": [
+        {
+          "label": "ann@acme.io",
+          "current": true,
+          "plan": "pro",
+          "headline_percent": 92,
+          "level": "critical",
+          "quota": {
+            "observed_at": "2026-09-23T11:38:00Z",
+            "age_seconds": 120,
+            "stale": false,
+            "source": "harness",
+            "windows": [
+              {
+                "name": "5h",
+                "percent": 18,
+                "level": "ok",
+                "resets_at": "2026-09-23T15:02:00Z",
+                "minutes": 300,
+                "pace": {
+                  "percent_per_hour": 1.5,
+                  "fills_at": null
+                }
+              },
+              {
+                "name": "7d",
+                "percent": 92,
+                "level": "critical",
+                "resets_at": "2026-09-26T01:40:00Z",
+                "minutes": 10080,
+                "pace": {
+                  "percent_per_hour": 0.4,
+                  "fills_at": null
+                }
+              }
+            ]
+          },
+          "sessions": 212,
+          "tokens": {
+            "input": 301000000,
+            "output": 28400000,
+            "cache_read": 9600000000,
+            "cache_write": 0
+          },
+          "last_active_at": "2026-09-23T11:38:00Z",
+          "projects": [
+            {
+              "path": "/Users/ann/src/acme/monorepo",
+              "sessions": 90,
+              "tokens": {
+                "input": 150000000,
+                "output": 14000000,
+                "cache_read": 4800000000,
+                "cache_write": 0
+              }
+            },
+            {
+              "path": "/Users/ann/Vault",
+              "sessions": 41,
+              "tokens": {
+                "input": 52000000,
+                "output": 4600000,
+                "cache_read": 1500000000,
+                "cache_write": 0
+              }
+            },
+            {
+              "path": "/Users/ann/.codex/worktrees/4d2c/monorepo",
+              "sessions": 30,
+              "tokens": {
+                "input": 40000000,
+                "output": 3900000,
+                "cache_read": 1400000000,
+                "cache_write": 0
+              }
+            },
+            {
+              "path": "/Users/ann/src/acme/infra",
+              "sessions": 22,
+              "tokens": {
+                "input": 30000000,
+                "output": 3000000,
+                "cache_read": 900000000,
+                "cache_write": 0
+              }
+            },
+            {
+              "path": "/Users/ann/src/acme/api",
+              "sessions": 15,
+              "tokens": {
+                "input": 18000000,
+                "output": 1800000,
+                "cache_read": 600000000,
+                "cache_write": 0
+              }
+            },
+            {
+              "path": "/Users/ann/src/coliving:chats",
+              "sessions": 9,
+              "tokens": {
+                "input": 8000000,
+                "output": 800000,
+                "cache_read": 300000000,
+                "cache_write": 0
+              }
+            },
+            {
+              "path": "/Users/ann/src/darbiz",
+              "sessions": 5,
+              "tokens": {
+                "input": 3000000,
+                "output": 300000,
+                "cache_read": 100000000,
+                "cache_write": 0
+              }
+            }
+          ],
+          "home": "/Users/ann/.codex",
+          "linked_usage": [
+            {
+              "provider": "hermes",
+              "sessions": 18,
+              "tokens": {
+                "input": 6200000,
+                "output": 900000,
+                "cache_read": 120000000,
+                "cache_write": 0
+              }
+            }
+          ]
+        },
+        {
+          "label": "ann+orca@acme.io",
+          "current": true,
+          "plan": "plus",
+          "headline_percent": 23,
+          "level": "ok",
+          "quota": {
+            "observed_at": "2026-09-23T11:38:00Z",
+            "age_seconds": 120,
+            "stale": false,
+            "source": "harness",
+            "windows": [
+              {
+                "name": "5h",
+                "percent": 10,
+                "level": "ok",
+                "resets_at": "2026-09-23T15:40:00Z",
+                "minutes": 300,
+                "pace": {
+                  "percent_per_hour": 1,
+                  "fills_at": null
+                }
+              },
+              {
+                "name": "7d",
+                "percent": 23,
+                "level": "ok",
+                "resets_at": "2026-09-28T08:40:00Z",
+                "minutes": 10080,
+                "pace": {
+                  "percent_per_hour": 0.2,
+                  "fills_at": null
+                }
+              }
+            ]
+          },
+          "sessions": 37,
+          "tokens": {
+            "input": 44000000,
+            "output": 3900000,
+            "cache_read": 1200000000,
+            "cache_write": 0
+          },
+          "last_active_at": "2026-09-23T10:35:00Z",
+          "projects": [
+            {
+              "path": "/Users/ann/orca/workspaces/monorepo/optimize-data-connection",
+              "sessions": 25,
+              "tokens": {
+                "input": 30000000,
+                "output": 2700000,
+                "cache_read": 820000000,
+                "cache_write": 0
+              }
+            },
+            {
+              "path": "/Users/ann/orca/workspaces/billing/billing-export",
+              "sessions": 12,
+              "tokens": {
+                "input": 14000000,
+                "output": 1200000,
+                "cache_read": 380000000,
+                "cache_write": 0
+              }
+            }
+          ],
+          "home": "/Users/ann/Library/Application Support/orca/codex-accounts/7527/home"
+        },
+        {
+          "label": "ops@acme.io",
+          "current": false,
+          "plan": "plus",
+          "headline_percent": 81,
+          "level": "warning",
+          "quota": {
+            "observed_at": "2026-09-23T11:28:00Z",
+            "age_seconds": 720,
+            "stale": false,
+            "source": "harness",
+            "windows": [
+              {
+                "name": "5h",
+                "percent": 81,
+                "level": "warning",
+                "resets_at": "2026-09-23T14:45:00Z",
+                "minutes": 300,
+                "pace": null
+              },
+              {
+                "name": "7d",
+                "percent": 38,
+                "level": "ok",
+                "resets_at": "2026-09-28T11:40:00Z",
+                "minutes": 10080,
+                "pace": null
+              }
+            ]
+          },
+          "sessions": 4,
+          "tokens": {
+            "input": 5500000,
+            "output": 400000,
+            "cache_read": 140000000,
+            "cache_write": 0
+          },
+          "last_active_at": "2026-09-14T11:40:00Z",
+          "projects": [
+            {
+              "path": "/Users/ann/src/acme/deploy-scripts",
+              "sessions": 4,
+              "tokens": {
+                "input": 5500000,
+                "output": 400000,
+                "cache_read": 140000000,
+                "cache_write": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "provider": "grok",
+      "status": "skipped",
+      "error": null,
+      "homes": [],
+      "accounts": []
+    },
+    {
+      "provider": "hermes",
+      "status": "ok",
+      "error": null,
+      "homes": [
+        "/Users/ann/.hermes"
+      ],
+      "accounts": [
+        {
+          "label": "openai-codex",
+          "current": true,
+          "plan": null,
+          "headline_percent": 92,
+          "level": "critical",
+          "quota": {
+            "observed_at": "2026-09-23T11:38:00Z",
+            "age_seconds": 120,
+            "stale": false,
+            "source": "harness",
+            "windows": [
+              {
+                "name": "5h",
+                "percent": 18,
+                "level": "ok",
+                "resets_at": "2026-09-23T15:02:00Z",
+                "minutes": 300,
+                "pace": {
+                  "percent_per_hour": 1.5,
+                  "fills_at": null
+                }
+              },
+              {
+                "name": "7d",
+                "percent": 92,
+                "level": "critical",
+                "resets_at": "2026-09-26T01:40:00Z",
+                "minutes": 10080,
+                "pace": {
+                  "percent_per_hour": 0.4,
+                  "fills_at": null
+                }
+              }
+            ],
+            "from": "codex"
+          },
+          "sessions": 18,
+          "tokens": {
+            "input": 6200000,
+            "output": 900000,
+            "cache_read": 120000000,
+            "cache_write": 0
+          },
+          "last_active_at": "2026-09-23T08:40:00Z",
+          "projects": [
+            {
+              "path": "/Users/ann/Vault",
+              "sessions": 14,
+              "tokens": {
+                "input": 5000000,
+                "output": 700000,
+                "cache_read": 96000000,
+                "cache_write": 0
+              }
+            },
+            {
+              "path": "/Users/ann",
+              "sessions": 4,
+              "tokens": {
+                "input": 1200000,
+                "output": 200000,
+                "cache_read": 24000000,
+                "cache_write": 0
+              }
+            }
+          ],
+          "home": "/Users/ann/.hermes",
+          "link": {
+            "provider": "codex",
+            "label": "ann@acme.io"
+          }
+        }
+      ]
+    }
+  ],
+  "team": {
+    "pulled_at": "2026-09-23T11:39:00Z",
+    "devices": [
+      {
+        "device": "d-4b1e0c7a9f3d2e615a08c4b2",
+        "label": "ann-mbp",
+        "os_user": "ann",
+        "this_device": true,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T11:39:00Z",
+        "age_seconds": 60,
+        "last_success_at": "2026-09-23T11:39:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "ok",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3d4d8f9755201c",
+        "label": "ann-mini",
+        "os_user": "ann",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T11:31:00Z",
+        "age_seconds": 540,
+        "last_success_at": "2026-09-23T11:31:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3d8bec11edd6f0",
+        "label": "bo-laptop",
+        "os_user": "bo",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T11:36:00Z",
+        "age_seconds": 240,
+        "last_success_at": "2026-09-23T11:36:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3d6cbdd4a17b86",
+        "label": "bo-desktop",
+        "os_user": "bo",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T11:28:00Z",
+        "age_seconds": 720,
+        "last_success_at": "2026-09-23T11:28:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3dab1a4f3a325a",
+        "label": "build-01",
+        "os_user": "ci",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-21T09:40:00Z",
+        "age_seconds": 180000,
+        "last_success_at": "2026-09-21T09:40:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3dca488c868dc4",
+        "label": "build-02",
+        "os_user": "ci",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T11:26:00Z",
+        "age_seconds": 840,
+        "last_success_at": "2026-09-23T11:26:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "partial",
+            "error": "app-server did not answer within 20s; quota not read"
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3de976c9d2e92e",
+        "label": "carla-mbp",
+        "os_user": "carla",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T11:33:00Z",
+        "age_seconds": 420,
+        "last_success_at": "2026-09-23T11:33:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3e08a5071f4498",
+        "label": "dev-vm",
+        "os_user": "ann",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T11:35:00Z",
+        "age_seconds": 300,
+        "last_success_at": "2026-09-23T11:35:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3e27d3446ba002",
+        "label": "dev-vm",
+        "os_user": "bo",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T11:35:00Z",
+        "age_seconds": 300,
+        "last_success_at": "2026-09-23T11:35:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3e470181b7fb6c",
+        "label": "eli-thinkpad",
+        "os_user": "eli",
+        "this_device": false,
+        "collector_version": "v1.3.0",
+        "collected_at": "2026-09-23T11:29:00Z",
+        "age_seconds": 660,
+        "last_success_at": "2026-09-23T11:29:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3e662fbf0456d6",
+        "label": "fatima-mbp",
+        "os_user": "fatima",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T11:37:00Z",
+        "age_seconds": 180,
+        "last_success_at": "2026-09-23T11:37:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3e855dfc50b240",
+        "label": "gpu-box",
+        "os_user": "research",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T11:19:00Z",
+        "age_seconds": 1260,
+        "last_success_at": "2026-09-23T11:19:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "ok",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3ea48c399d0daa",
+        "label": "greg-win",
+        "os_user": "greg",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-22T05:40:00Z",
+        "age_seconds": 108000,
+        "last_success_at": "2026-09-22T05:40:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3ec3ba76e96914",
+        "label": "hana-mbp",
+        "os_user": "hana",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T11:32:00Z",
+        "age_seconds": 480,
+        "last_success_at": "2026-09-23T11:32:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3ee2e8b435c47e",
+        "label": "ivan-linux",
+        "os_user": "ivan",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T11:24:00Z",
+        "age_seconds": 960,
+        "last_success_at": "2026-09-23T11:24:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3f0216f1821fe8",
+        "label": "jo-air",
+        "os_user": "jo",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-18T11:40:00Z",
+        "age_seconds": 432000,
+        "last_success_at": "2026-09-18T11:40:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3f21452ece7b52",
+        "label": "kai-mbp",
+        "os_user": "kai",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T11:38:00Z",
+        "age_seconds": 120,
+        "last_success_at": "2026-09-23T11:38:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3f40736c1ad6bc",
+        "label": "lab-mac",
+        "os_user": "design",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T11:34:00Z",
+        "age_seconds": 360,
+        "last_success_at": "2026-09-23T11:34:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3f5fa1a9673226",
+        "label": "lena-mbp",
+        "os_user": "lena",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T11:30:00Z",
+        "age_seconds": 600,
+        "last_success_at": "2026-09-23T11:30:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      },
+      {
+        "device": "d-4b1e0c7a9f3f7ecfe6b38d90",
+        "label": "ops-01",
+        "os_user": "ops",
+        "this_device": false,
+        "collector_version": "v1.4.2",
+        "collected_at": "2026-09-23T11:37:00Z",
+        "age_seconds": 180,
+        "last_success_at": "2026-09-23T11:37:00Z",
+        "last_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ]
+      }
+    ],
+    "providers": [
+      {
+        "provider": "claude",
+        "accounts": [
+          {
+            "label": "bo@acme.io",
+            "devices": [
+              "bo-laptop (bo)",
+              "bo-desktop (bo)",
+              "carla-mbp (carla)",
+              "dev-vm (bo)"
+            ],
+            "headline_percent": 96,
+            "level": "critical",
+            "quota": {
+              "observed_at": "2026-09-23T11:36:00Z",
+              "age_seconds": 240,
+              "stale": false,
+              "source": "cache",
+              "device": "bo-laptop (bo)",
+              "windows": [
+                {
+                  "name": "5h",
+                  "percent": 96,
+                  "level": "critical",
+                  "resets_at": "2026-09-23T12:52:00Z",
+                  "minutes": 300,
+                  "pace": null
+                },
+                {
+                  "name": "7d",
+                  "percent": 71,
+                  "level": "ok",
+                  "resets_at": "2026-09-26T15:40:00Z",
+                  "minutes": 10080,
+                  "pace": null
+                }
+              ]
+            },
+            "sessions": 72,
+            "tokens": {
+              "input": 18200000,
+              "output": 30400000,
+              "cache_read": 2100000000,
+              "cache_write": 160000000
+            },
+            "plan": "max 20x",
+            "per_device": [
+              {
+                "device": "bo-laptop (bo)",
+                "device_id": "d-4b1e0c7a9f3d8bec11edd6f0",
+                "current": true,
+                "sessions": 30,
+                "tokens": {
+                  "input": 8100000,
+                  "output": 14000000,
+                  "cache_read": 950000000,
+                  "cache_write": 71000000
+                },
+                "last_active_at": "2026-09-23T11:36:00Z"
+              },
+              {
+                "device": "bo-desktop (bo)",
+                "device_id": "d-4b1e0c7a9f3d6cbdd4a17b86",
+                "current": true,
+                "sessions": 22,
+                "tokens": {
+                  "input": 5200000,
+                  "output": 8900000,
+                  "cache_read": 610000000,
+                  "cache_write": 45000000
+                },
+                "last_active_at": "2026-09-23T11:00:00Z"
+              },
+              {
+                "device": "carla-mbp (carla)",
+                "device_id": "d-4b1e0c7a9f3de976c9d2e92e",
+                "current": true,
+                "sessions": 12,
+                "tokens": {
+                  "input": 3000000,
+                  "output": 5100000,
+                  "cache_read": 330000000,
+                  "cache_write": 27000000
+                },
+                "last_active_at": "2026-09-23T10:05:00Z"
+              },
+              {
+                "device": "dev-vm (bo)",
+                "device_id": "d-4b1e0c7a9f3e27d3446ba002",
+                "current": true,
+                "sessions": 8,
+                "tokens": {
+                  "input": 1900000,
+                  "output": 2400000,
+                  "cache_read": 210000000,
+                  "cache_write": 17000000
+                },
+                "last_active_at": "2026-09-23T06:40:00Z"
+              }
+            ]
+          },
+          {
+            "label": "ann@acme.io",
+            "devices": [
+              "ann-mbp (ann)",
+              "ann-mini (ann)",
+              "dev-vm (ann)"
+            ],
+            "headline_percent": 64,
+            "level": "ok",
+            "quota": {
+              "observed_at": "2026-09-23T11:34:00Z",
+              "age_seconds": 360,
+              "stale": false,
+              "source": "cache",
+              "device": "ann-mbp (ann)",
+              "windows": [
+                {
+                  "name": "5h",
+                  "percent": 31,
+                  "level": "ok",
+                  "resets_at": "2026-09-23T13:50:00Z",
+                  "minutes": 300,
+                  "pace": {
+                    "percent_per_hour": 2,
+                    "fills_at": null
+                  }
+                },
+                {
+                  "name": "7d",
+                  "percent": 64,
+                  "level": "ok",
+                  "resets_at": "2026-09-26T15:40:00Z",
+                  "minutes": 10080,
+                  "pace": {
+                    "percent_per_hour": 2.1,
+                    "fills_at": "2026-09-24T04:48:00Z"
+                  }
+                },
+                {
+                  "name": "7d Opus",
+                  "percent": 58,
+                  "level": "ok",
+                  "resets_at": "2026-09-26T15:40:00Z",
+                  "minutes": 10080,
+                  "pace": {
+                    "percent_per_hour": 1.2,
+                    "fills_at": null
+                  }
+                }
+              ]
+            },
+            "sessions": 40,
+            "tokens": {
+              "input": 7900000,
+              "output": 16000000,
+              "cache_read": 910000000,
+              "cache_write": 72000000
+            },
+            "plan": "max 5x",
+            "per_device": [
+              {
+                "device": "ann-mbp (ann)",
+                "device_id": "d-4b1e0c7a9f3d2e615a08c4b2",
+                "current": true,
+                "sessions": 24,
+                "tokens": {
+                  "input": 5100000,
+                  "output": 11200000,
+                  "cache_read": 640000000,
+                  "cache_write": 51300000
+                },
+                "last_active_at": "2026-09-23T11:34:00Z"
+              },
+              {
+                "device": "ann-mini (ann)",
+                "device_id": "d-4b1e0c7a9f3d4d8f9755201c",
+                "current": true,
+                "sessions": 10,
+                "tokens": {
+                  "input": 1900000,
+                  "output": 3600000,
+                  "cache_read": 190000000,
+                  "cache_write": 14100000
+                },
+                "last_active_at": "2026-09-23T08:20:00Z"
+              },
+              {
+                "device": "dev-vm (ann)",
+                "device_id": "d-4b1e0c7a9f3e08a5071f4498",
+                "current": true,
+                "sessions": 6,
+                "tokens": {
+                  "input": 900000,
+                  "output": 1200000,
+                  "cache_read": 80000000,
+                  "cache_write": 6600000
+                },
+                "last_active_at": "2026-09-22T20:40:00Z"
+              }
+            ]
+          },
+          {
+            "label": "design@acme.io",
+            "devices": [
+              "lab-mac (design)",
+              "greg-win (greg)",
+              "jo-air (jo)",
+              "lena-mbp (lena)"
+            ],
+            "headline_percent": 81,
+            "level": "warning",
+            "quota": {
+              "observed_at": "2026-09-22T05:40:00Z",
+              "age_seconds": 108000,
+              "stale": true,
+              "device": "greg-win (greg)",
+              "windows": [
+                {
+                  "name": "5h",
+                  "percent": 30,
+                  "level": "unknown",
+                  "resets_at": "2026-09-22T07:40:00Z",
+                  "minutes": 300,
+                  "pace": null
+                },
+                {
+                  "name": "7d",
+                  "percent": 81,
+                  "level": "warning",
+                  "resets_at": "2026-09-25T20:40:00Z",
+                  "minutes": 10080,
+                  "pace": null
+                }
+              ]
+            },
+            "sessions": 38,
+            "tokens": {
+              "input": 2400000,
+              "output": 4400000,
+              "cache_read": 208000000,
+              "cache_write": 15800000
+            },
+            "plan": "pro",
+            "per_device": [
+              {
+                "device": "lab-mac (design)",
+                "device_id": "d-4b1e0c7a9f3f40736c1ad6bc",
+                "current": true,
+                "sessions": 20,
+                "tokens": {
+                  "input": 1300000,
+                  "output": 2400000,
+                  "cache_read": 120000000,
+                  "cache_write": 9200000
+                },
+                "last_active_at": "2026-09-23T11:34:00Z"
+              },
+              {
+                "device": "greg-win (greg)",
+                "device_id": "d-4b1e0c7a9f3ea48c399d0daa",
+                "current": true,
+                "sessions": 9,
+                "tokens": {
+                  "input": 600000,
+                  "output": 1100000,
+                  "cache_read": 50000000,
+                  "cache_write": 3800000
+                },
+                "last_active_at": "2026-09-22T05:40:00Z"
+              },
+              {
+                "device": "jo-air (jo)",
+                "device_id": "d-4b1e0c7a9f3f0216f1821fe8",
+                "current": true,
+                "sessions": 5,
+                "tokens": {
+                  "input": 300000,
+                  "output": 500000,
+                  "cache_read": 20000000,
+                  "cache_write": 1600000
+                },
+                "last_active_at": "2026-09-18T11:40:00Z"
+              },
+              {
+                "device": "lena-mbp (lena)",
+                "device_id": "d-4b1e0c7a9f3f5fa1a9673226",
+                "current": true,
+                "sessions": 4,
+                "tokens": {
+                  "input": 200000,
+                  "output": 400000,
+                  "cache_read": 18000000,
+                  "cache_write": 1200000
+                },
+                "last_active_at": "2026-09-23T11:30:00Z"
+              }
+            ]
+          },
+          {
+            "label": "ci-runner-claude@build.acme-internal.io",
+            "devices": [
+              "build-01 (ci)",
+              "build-02 (ci)"
+            ],
+            "headline_percent": null,
+            "level": "unknown",
+            "quota": {
+              "observed_at": "2026-09-21T09:40:00Z",
+              "age_seconds": 180000,
+              "stale": true,
+              "device": "build-01 (ci)",
+              "windows": [
+                {
+                  "name": "5h",
+                  "percent": 12,
+                  "level": "unknown",
+                  "resets_at": "2026-09-21T11:40:00Z",
+                  "minutes": 300,
+                  "pace": null
+                },
+                {
+                  "name": "7d",
+                  "percent": 41,
+                  "level": "unknown",
+                  "resets_at": "2026-09-22T15:40:00Z",
+                  "minutes": 10080,
+                  "pace": null
+                }
+              ]
+            },
+            "sessions": 236,
+            "tokens": {
+              "input": 16500000,
+              "output": 6899999,
+              "cache_read": 1860000000,
+              "cache_write": 101000000
+            },
+            "plan": "team",
+            "per_device": [
+              {
+                "device": "build-01 (ci)",
+                "device_id": "d-4b1e0c7a9f3dab1a4f3a325a",
+                "current": true,
+                "sessions": 140,
+                "tokens": {
+                  "input": 9800000,
+                  "output": 4099999,
+                  "cache_read": 1100000000,
+                  "cache_write": 60000000
+                },
+                "last_active_at": "2026-09-21T09:40:00Z"
+              },
+              {
+                "device": "build-02 (ci)",
+                "device_id": "d-4b1e0c7a9f3dca488c868dc4",
+                "current": true,
+                "sessions": 96,
+                "tokens": {
+                  "input": 6700000,
+                  "output": 2800000,
+                  "cache_read": 760000000,
+                  "cache_write": 41000000
+                },
+                "last_active_at": "2026-09-23T11:26:00Z"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "provider": "codex",
+        "accounts": [
+          {
+            "label": "ann@acme.io",
+            "devices": [
+              "ann-mbp (ann)",
+              "dev-vm (ann)"
+            ],
+            "headline_percent": 92,
+            "level": "critical",
+            "quota": {
+              "observed_at": "2026-09-23T11:38:00Z",
+              "age_seconds": 120,
+              "stale": false,
+              "source": "harness",
+              "device": "ann-mbp (ann)",
+              "windows": [
+                {
+                  "name": "5h",
+                  "percent": 18,
+                  "level": "ok",
+                  "resets_at": "2026-09-23T15:02:00Z",
+                  "minutes": 300,
+                  "pace": {
+                    "percent_per_hour": 1.5,
+                    "fills_at": null
+                  }
+                },
+                {
+                  "name": "7d",
+                  "percent": 92,
+                  "level": "critical",
+                  "resets_at": "2026-09-26T01:40:00Z",
+                  "minutes": 10080,
+                  "pace": {
+                    "percent_per_hour": 0.4,
+                    "fills_at": null
+                  }
+                }
+              ]
+            },
+            "sessions": 252,
+            "tokens": {
+              "input": 362000000,
+              "output": 34300000,
+              "cache_read": 11500000000,
+              "cache_write": 0
+            },
+            "plan": "pro",
+            "per_device": [
+              {
+                "device": "ann-mbp (ann)",
+                "device_id": "d-4b1e0c7a9f3d2e615a08c4b2",
+                "current": true,
+                "sessions": 212,
+                "tokens": {
+                  "input": 301000000,
+                  "output": 28400000,
+                  "cache_read": 9600000000,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-23T11:38:00Z"
+              },
+              {
+                "device": "dev-vm (ann)",
+                "device_id": "d-4b1e0c7a9f3e08a5071f4498",
+                "current": true,
+                "sessions": 40,
+                "tokens": {
+                  "input": 61000000,
+                  "output": 5900000,
+                  "cache_read": 1900000000,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-23T10:20:00Z"
+              }
+            ],
+            "linked_usage": [
+              {
+                "provider": "hermes",
+                "label": "openai-codex",
+                "devices": [
+                  "ann-mbp (ann)"
+                ],
+                "sessions": 18,
+                "tokens": {
+                  "input": 6200000,
+                  "output": 900000,
+                  "cache_read": 120000000,
+                  "cache_write": 0
+                }
+              }
+            ]
+          },
+          {
+            "label": "ann+orca@acme.io",
+            "devices": [
+              "ann-mbp (ann)"
+            ],
+            "headline_percent": 23,
+            "level": "ok",
+            "quota": {
+              "observed_at": "2026-09-23T11:38:00Z",
+              "age_seconds": 120,
+              "stale": false,
+              "source": "harness",
+              "device": "ann-mbp (ann)",
+              "windows": [
+                {
+                  "name": "5h",
+                  "percent": 10,
+                  "level": "ok",
+                  "resets_at": "2026-09-23T15:40:00Z",
+                  "minutes": 300,
+                  "pace": {
+                    "percent_per_hour": 1,
+                    "fills_at": null
+                  }
+                },
+                {
+                  "name": "7d",
+                  "percent": 23,
+                  "level": "ok",
+                  "resets_at": "2026-09-28T08:40:00Z",
+                  "minutes": 10080,
+                  "pace": {
+                    "percent_per_hour": 0.2,
+                    "fills_at": null
+                  }
+                }
+              ]
+            },
+            "sessions": 37,
+            "tokens": {
+              "input": 44000000,
+              "output": 3900000,
+              "cache_read": 1200000000,
+              "cache_write": 0
+            },
+            "plan": "plus",
+            "per_device": [
+              {
+                "device": "ann-mbp (ann)",
+                "device_id": "d-4b1e0c7a9f3d2e615a08c4b2",
+                "current": true,
+                "sessions": 37,
+                "tokens": {
+                  "input": 44000000,
+                  "output": 3900000,
+                  "cache_read": 1200000000,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-23T10:35:00Z"
+              }
+            ]
+          },
+          {
+            "label": "ops@acme.io",
+            "devices": [
+              "ops-01 (ops)",
+              "build-02 (ci)",
+              "ivan-linux (ivan)",
+              "kai-mbp (kai)",
+              "ann-mbp (ann)"
+            ],
+            "headline_percent": 81,
+            "level": "warning",
+            "quota": {
+              "observed_at": "2026-09-23T11:28:00Z",
+              "age_seconds": 720,
+              "stale": false,
+              "source": "harness",
+              "device": "ops-01 (ops)",
+              "windows": [
+                {
+                  "name": "5h",
+                  "percent": 81,
+                  "level": "warning",
+                  "resets_at": "2026-09-23T14:45:00Z",
+                  "minutes": 300,
+                  "pace": null
+                },
+                {
+                  "name": "7d",
+                  "percent": 38,
+                  "level": "ok",
+                  "resets_at": "2026-09-28T11:40:00Z",
+                  "minutes": 10080,
+                  "pace": null
+                }
+              ]
+            },
+            "sessions": 250,
+            "tokens": {
+              "input": 348500000,
+              "output": 30500000,
+              "cache_read": 10240000000,
+              "cache_write": 0
+            },
+            "plan": "plus",
+            "per_device": [
+              {
+                "device": "ops-01 (ops)",
+                "device_id": "d-4b1e0c7a9f3f7ecfe6b38d90",
+                "current": true,
+                "sessions": 150,
+                "tokens": {
+                  "input": 210000000,
+                  "output": 19000000,
+                  "cache_read": 6300000000,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-23T11:28:00Z"
+              },
+              {
+                "device": "build-02 (ci)",
+                "device_id": "d-4b1e0c7a9f3dca488c868dc4",
+                "current": true,
+                "sessions": 44,
+                "tokens": {
+                  "input": 62000000,
+                  "output": 5200000,
+                  "cache_read": 1800000000,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-23T11:26:00Z"
+              },
+              {
+                "device": "ivan-linux (ivan)",
+                "device_id": "d-4b1e0c7a9f3ee2e8b435c47e",
+                "current": true,
+                "sessions": 30,
+                "tokens": {
+                  "input": 40000000,
+                  "output": 3300000,
+                  "cache_read": 1100000000,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-23T10:40:00Z"
+              },
+              {
+                "device": "kai-mbp (kai)",
+                "device_id": "d-4b1e0c7a9f3f21452ece7b52",
+                "current": true,
+                "sessions": 22,
+                "tokens": {
+                  "input": 31000000,
+                  "output": 2600000,
+                  "cache_read": 900000000,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-23T11:38:00Z"
+              },
+              {
+                "device": "ann-mbp (ann)",
+                "device_id": "d-4b1e0c7a9f3d2e615a08c4b2",
+                "current": false,
+                "sessions": 4,
+                "tokens": {
+                  "input": 5500000,
+                  "output": 400000,
+                  "cache_read": 140000000,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-14T11:40:00Z"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "provider": "grok",
+        "accounts": [
+          {
+            "label": "7c1e5a90-93d2-4f6b-8a15-2b9d0c7e41f3",
+            "devices": [
+              "fatima-mbp (fatima)",
+              "hana-mbp (hana)",
+              "bo-desktop (bo)",
+              "eli-thinkpad (eli)"
+            ],
+            "headline_percent": 35,
+            "level": "ok",
+            "quota": {
+              "observed_at": "2026-09-23T11:15:00Z",
+              "age_seconds": 1500,
+              "stale": false,
+              "source": "log",
+              "device": "fatima-mbp (fatima)",
+              "windows": [
+                {
+                  "name": "7d credits",
+                  "percent": 35,
+                  "level": "ok",
+                  "resets_at": "2026-09-24T18:40:00Z",
+                  "minutes": 10080,
+                  "pace": null
+                }
+              ]
+            },
+            "sessions": 20,
+            "tokens": {
+              "input": 10500000,
+              "output": 810000,
+              "cache_read": 42300000,
+              "cache_write": 0
+            },
+            "plan": "SuperGrok Plus",
+            "per_device": [
+              {
+                "device": "fatima-mbp (fatima)",
+                "device_id": "d-4b1e0c7a9f3e662fbf0456d6",
+                "current": true,
+                "sessions": 9,
+                "tokens": {
+                  "input": 5300000,
+                  "output": 410000,
+                  "cache_read": 22000000,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-23T11:15:00Z"
+              },
+              {
+                "device": "hana-mbp (hana)",
+                "device_id": "d-4b1e0c7a9f3ec3ba76e96914",
+                "current": true,
+                "sessions": 6,
+                "tokens": {
+                  "input": 3400000,
+                  "output": 260000,
+                  "cache_read": 14000000,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-23T06:40:00Z"
+              },
+              {
+                "device": "bo-desktop (bo)",
+                "device_id": "d-4b1e0c7a9f3d6cbdd4a17b86",
+                "current": true,
+                "sessions": 3,
+                "tokens": {
+                  "input": 1100000,
+                  "output": 90000,
+                  "cache_read": 4200000,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-22T02:20:00Z"
+              },
+              {
+                "device": "eli-thinkpad (eli)",
+                "device_id": "d-4b1e0c7a9f3e470181b7fb6c",
+                "current": true,
+                "sessions": 2,
+                "tokens": {
+                  "input": 700000,
+                  "output": 50000,
+                  "cache_read": 2100000,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-23T00:00:00Z"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "provider": "hermes",
+        "accounts": [
+          {
+            "label": "openai-codex",
+            "devices": [
+              "ann-mbp (ann)"
+            ],
+            "headline_percent": 92,
+            "level": "critical",
+            "quota": {
+              "observed_at": "2026-09-23T11:38:00Z",
+              "age_seconds": 120,
+              "stale": false,
+              "source": "harness",
+              "device": "ann-mbp (ann)",
+              "windows": [
+                {
+                  "name": "5h",
+                  "percent": 18,
+                  "level": "ok",
+                  "resets_at": "2026-09-23T15:02:00Z",
+                  "minutes": 300,
+                  "pace": {
+                    "percent_per_hour": 1.5,
+                    "fills_at": null
+                  }
+                },
+                {
+                  "name": "7d",
+                  "percent": 92,
+                  "level": "critical",
+                  "resets_at": "2026-09-26T01:40:00Z",
+                  "minutes": 10080,
+                  "pace": {
+                    "percent_per_hour": 0.4,
+                    "fills_at": null
+                  }
+                }
+              ],
+              "from": "codex"
+            },
+            "sessions": 18,
+            "tokens": {
+              "input": 6200000,
+              "output": 900000,
+              "cache_read": 120000000,
+              "cache_write": 0
+            },
+            "per_device": [
+              {
+                "device": "ann-mbp (ann)",
+                "device_id": "d-4b1e0c7a9f3d2e615a08c4b2",
+                "current": true,
+                "sessions": 18,
+                "tokens": {
+                  "input": 6200000,
+                  "output": 900000,
+                  "cache_read": 120000000,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-23T08:40:00Z"
+              }
+            ],
+            "link": {
+              "provider": "codex",
+              "label": "ann@acme.io"
+            }
+          },
+          {
+            "label": "openrouter",
+            "devices": [
+              "gpu-box (research)"
+            ],
+            "headline_percent": null,
+            "level": "unknown",
+            "quota": null,
+            "sessions": 60,
+            "tokens": {
+              "input": 40000000,
+              "output": 6000000,
+              "cache_read": 300000000,
+              "cache_write": 0
+            },
+            "per_device": [
+              {
+                "device": "gpu-box (research)",
+                "device_id": "d-4b1e0c7a9f3e855dfc50b240",
+                "current": true,
+                "sessions": 60,
+                "tokens": {
+                  "input": 40000000,
+                  "output": 6000000,
+                  "cache_read": 300000000,
+                  "cache_write": 0
+                },
+                "last_active_at": "2026-09-23T11:19:00Z"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

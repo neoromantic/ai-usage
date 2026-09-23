@@ -226,6 +226,29 @@ func TestPublishPullRoundTrip(t *testing.T) {
 	}
 }
 
+// A Hermes account that shows the quota of the Codex account it bills
+// through names that provider. The relay stores it and hands it back as is.
+func TestPublishLinkedQuota(t *testing.T) {
+	e := newRelay(t, Limits{})
+	k := newKey(t)
+	ctx := context.Background()
+	d := docFor(k, "work-laptop", t0)
+	linked := d.Accounts[0]
+	linked.Provider, linked.Label, linked.QuotaFrom, linked.Plan = "hermes", k.Seal("openai-codex"), "codex", ""
+	d.Accounts = append(d.Accounts, linked)
+	body := marshal(t, d)
+	if err := e.client(k).Publish(ctx, "work-laptop", body); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	devices, bad, err := e.client(k).Pull(ctx)
+	if err != nil || bad != 0 || len(devices) != 1 || !bytes.Equal(devices[0].Body, body) {
+		t.Fatalf("Pull = %+v, %d bad, %v", devices, bad, err)
+	}
+	if got := devices[0].Doc.Accounts[1]; got.QuotaFrom != "codex" || !got.QuotaAt.Equal(*d.Accounts[0].QuotaAt) {
+		t.Fatalf("linked account = %+v", got)
+	}
+}
+
 func TestPullCountsDocumentsThatDoNotVerify(t *testing.T) {
 	e := newRelay(t, Limits{})
 	k, other := newKey(t), newKey(t)
@@ -389,6 +412,14 @@ func TestPutRejects(t *testing.T) {
 		}(), http.StatusUnprocessableEntity},
 		{"plain text label", func() req {
 			p, b, s := signedBy(withDoc(func(d *snapshot.Doc) { d.Accounts[0].Label = "me@example.com" }))
+			return req{fp, dev, p, b, s}
+		}(), http.StatusUnprocessableEntity},
+		{"quota_from its own provider", func() req {
+			p, b, s := signedBy(withDoc(func(d *snapshot.Doc) { d.Accounts[0].QuotaFrom = "codex" }))
+			return req{fp, dev, p, b, s}
+		}(), http.StatusUnprocessableEntity},
+		{"quota_from not a provider", func() req {
+			p, b, s := signedBy(withDoc(func(d *snapshot.Doc) { d.Accounts[0].QuotaFrom = "free text" }))
 			return req{fp, dev, p, b, s}
 		}(), http.StatusUnprocessableEntity},
 		{"collected in the future", func() req {
@@ -833,7 +864,7 @@ func (c *countingStore) Count(ctx context.Context, key string, window time.Durat
 	return c.Memory.Count(ctx, key, window)
 }
 
-// On Upstash every counted request is paid for. A path the relay does not
+// On Vercel KV every counted request is paid for. A path the relay does not
 // serve, and a client that is already over its limit, cost nothing.
 func TestRejectedRequestsSkipTheStore(t *testing.T) {
 	store := &countingStore{Memory: NewMemory()}

@@ -35,24 +35,15 @@ type Store interface {
 	Count(ctx context.Context, key string, window time.Duration) (int64, error)
 }
 
-// StoreFromEnv picks Upstash Redis (Vercel KV) when its REST variables are
-// set, and memory otherwise.
+// StoreFromEnv picks Vercel KV when the variables its Storage tab sets are
+// present, and memory otherwise.
 func StoreFromEnv() (Store, string) {
-	url := firstEnv("KV_REST_API_URL", "UPSTASH_REDIS_REST_URL")
-	token := firstEnv("KV_REST_API_TOKEN", "UPSTASH_REDIS_REST_TOKEN")
+	url := os.Getenv("KV_REST_API_URL")
+	token := os.Getenv("KV_REST_API_TOKEN")
 	if url != "" && token != "" {
-		return &Upstash{URL: strings.TrimRight(url, "/"), Token: token, HTTP: &http.Client{Timeout: 10 * time.Second}}, "upstash"
+		return &KV{URL: strings.TrimRight(url, "/"), Token: token, HTTP: &http.Client{Timeout: 10 * time.Second}}, "kv"
 	}
 	return NewMemory(), "memory"
-}
-
-func firstEnv(keys ...string) string {
-	for _, k := range keys {
-		if v := os.Getenv(k); v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 // Memory is a store for tests and a single self-hosted process.
@@ -163,14 +154,14 @@ func (m *Memory) sweep(now time.Time) {
 	}
 }
 
-// Upstash is Redis over the Upstash REST API, which is what Vercel KV exposes.
+// KV is Vercel KV, spoken over its REST API: one POST of commands per call.
 //
 // Keys:
 //
 //	aiu:t:{team}:d:{device}  one snapshot record, expires after the TTL
 //	aiu:t:{team}:devices     set of device ids, pruned when a record is gone
 //	aiu:rl:{key}             rate-limit counters
-type Upstash struct {
+type KV struct {
 	URL   string
 	Token string
 	HTTP  *http.Client
@@ -179,21 +170,21 @@ type Upstash struct {
 func docKey(teamFP, device string) string { return "aiu:t:" + teamFP + ":d:" + device }
 func setKey(teamFP string) string         { return "aiu:t:" + teamFP + ":devices" }
 
-func (u *Upstash) Get(ctx context.Context, teamFP, device string) (*Record, error) {
-	res, err := u.pipeline(ctx, []any{"GET", docKey(teamFP, device)})
+func (kv *KV) Get(ctx context.Context, teamFP, device string) (*Record, error) {
+	res, err := kv.pipeline(ctx, []any{"GET", docKey(teamFP, device)})
 	if err != nil {
 		return nil, err
 	}
 	return decodeRecord(res[0])
 }
 
-func (u *Upstash) Put(ctx context.Context, teamFP, device string, rec Record, ttl time.Duration) error {
+func (kv *KV) Put(ctx context.Context, teamFP, device string, rec Record, ttl time.Duration) error {
 	b, err := json.Marshal(rec)
 	if err != nil {
 		return err
 	}
 	secs := strconv.Itoa(int(ttl.Seconds()))
-	_, err = u.pipeline(ctx,
+	_, err = kv.pipeline(ctx,
 		[]any{"SET", docKey(teamFP, device), string(b), "EX", secs},
 		[]any{"SADD", setKey(teamFP), device},
 		[]any{"EXPIRE", setKey(teamFP), secs},
@@ -201,22 +192,22 @@ func (u *Upstash) Put(ctx context.Context, teamFP, device string, rec Record, tt
 	return err
 }
 
-func (u *Upstash) Delete(ctx context.Context, teamFP, device string) error {
-	_, err := u.pipeline(ctx,
+func (kv *KV) Delete(ctx context.Context, teamFP, device string) error {
+	_, err := kv.pipeline(ctx,
 		[]any{"DEL", docKey(teamFP, device)},
 		[]any{"SREM", setKey(teamFP), device},
 	)
 	return err
 }
 
-func (u *Upstash) List(ctx context.Context, teamFP string) (map[string]Record, error) {
-	res, err := u.pipeline(ctx, []any{"SMEMBERS", setKey(teamFP)})
+func (kv *KV) List(ctx context.Context, teamFP string) (map[string]Record, error) {
+	res, err := kv.pipeline(ctx, []any{"SMEMBERS", setKey(teamFP)})
 	if err != nil {
 		return nil, err
 	}
 	var devices []string
 	if err := json.Unmarshal(res[0], &devices); err != nil {
-		return nil, fmt.Errorf("upstash: SMEMBERS: %w", err)
+		return nil, fmt.Errorf("kv: SMEMBERS: %w", err)
 	}
 	out := map[string]Record{}
 	if len(devices) == 0 {
@@ -226,13 +217,13 @@ func (u *Upstash) List(ctx context.Context, teamFP string) (map[string]Record, e
 	for _, d := range devices {
 		cmd = append(cmd, docKey(teamFP, d))
 	}
-	res, err = u.pipeline(ctx, cmd)
+	res, err = kv.pipeline(ctx, cmd)
 	if err != nil {
 		return nil, err
 	}
 	var values []*string
 	if err := json.Unmarshal(res[0], &values); err != nil {
-		return nil, fmt.Errorf("upstash: MGET: %w", err)
+		return nil, fmt.Errorf("kv: MGET: %w", err)
 	}
 	var gone []any
 	for i, v := range values {
@@ -249,14 +240,14 @@ func (u *Upstash) List(ctx context.Context, teamFP string) (map[string]Record, e
 		}
 	}
 	if len(gone) > 0 {
-		_, _ = u.pipeline(ctx, append([]any{"SREM", setKey(teamFP)}, gone...))
+		_, _ = kv.pipeline(ctx, append([]any{"SREM", setKey(teamFP)}, gone...))
 	}
 	return out, nil
 }
 
-func (u *Upstash) Count(ctx context.Context, key string, window time.Duration) (int64, error) {
+func (kv *KV) Count(ctx context.Context, key string, window time.Duration) (int64, error) {
 	k := "aiu:rl:" + key
-	res, err := u.pipeline(ctx,
+	res, err := kv.pipeline(ctx,
 		[]any{"INCR", k},
 		[]any{"EXPIRE", k, strconv.Itoa(int(window.Seconds())), "NX"},
 	)
@@ -265,7 +256,7 @@ func (u *Upstash) Count(ctx context.Context, key string, window time.Duration) (
 	}
 	var n int64
 	if err := json.Unmarshal(res[0], &n); err != nil {
-		return 0, fmt.Errorf("upstash: INCR: %w", err)
+		return 0, fmt.Errorf("kv: INCR: %w", err)
 	}
 	return n, nil
 }
@@ -273,37 +264,37 @@ func (u *Upstash) Count(ctx context.Context, key string, window time.Duration) (
 func decodeRecord(raw json.RawMessage) (*Record, error) {
 	var s *string
 	if err := json.Unmarshal(raw, &s); err != nil {
-		return nil, fmt.Errorf("upstash: GET: %w", err)
+		return nil, fmt.Errorf("kv: GET: %w", err)
 	}
 	if s == nil {
 		return nil, nil
 	}
 	var rec Record
 	if err := json.Unmarshal([]byte(*s), &rec); err != nil {
-		return nil, fmt.Errorf("upstash: stored record: %w", err)
+		return nil, fmt.Errorf("kv: stored record: %w", err)
 	}
 	return &rec, nil
 }
 
 // pipeline runs commands and returns each result, failing on any command error.
-func (u *Upstash) pipeline(ctx context.Context, cmds ...[]any) ([]json.RawMessage, error) {
+func (kv *KV) pipeline(ctx context.Context, cmds ...[]any) ([]json.RawMessage, error) {
 	body, err := json.Marshal(cmds)
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.URL+"/pipeline", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, kv.URL+"/pipeline", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+u.Token)
+	req.Header.Set("Authorization", "Bearer "+kv.Token)
 	req.Header.Set("Content-Type", "application/json")
-	hc := u.HTTP
+	hc := kv.HTTP
 	if hc == nil {
 		hc = &http.Client{Timeout: 10 * time.Second}
 	}
 	resp, err := hc.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("upstash: %w", err)
+		return nil, fmt.Errorf("kv: %w", err)
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
@@ -311,22 +302,22 @@ func (u *Upstash) pipeline(ctx context.Context, cmds ...[]any) ([]json.RawMessag
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("upstash: HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("kv: HTTP %d", resp.StatusCode)
 	}
 	var results []struct {
 		Result json.RawMessage `json:"result"`
 		Error  string          `json:"error"`
 	}
 	if err := json.Unmarshal(raw, &results); err != nil {
-		return nil, fmt.Errorf("upstash: %w", err)
+		return nil, fmt.Errorf("kv: %w", err)
 	}
 	if len(results) != len(cmds) {
-		return nil, errors.New("upstash: result count does not match")
+		return nil, errors.New("kv: result count does not match")
 	}
 	out := make([]json.RawMessage, len(results))
 	for i, r := range results {
 		if r.Error != "" {
-			return nil, fmt.Errorf("upstash: %s", r.Error)
+			return nil, fmt.Errorf("kv: %s", r.Error)
 		}
 		out[i] = r.Result
 	}

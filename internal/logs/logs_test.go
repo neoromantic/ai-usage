@@ -130,12 +130,12 @@ func TestProviderFailureIsolation(t *testing.T) {
 	}
 }
 
-// withoutHome drops the home each session was read from, to compare reads
+// withoutHome drops the homes each session was read from, to compare reads
 // of different homes.
 func withoutHome(in []Session) []Session {
 	out := make([]Session, len(in))
 	for i, s := range in {
-		s.Home = ""
+		s.Home, s.Homes = "", nil
 		out[i] = s
 	}
 	return out

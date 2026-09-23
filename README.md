@@ -5,145 +5,58 @@ ai-usage shows how much of your Claude Code, Codex, Grok, and Hermes quota you h
 It is one small binary for macOS, Linux, and Windows. The system scheduler runs it every 15 minutes. Each run reads what those tools already record on disk, asks the installed tools for your account and quota, and exits. A run can also publish an encrypted summary for this machine to a small relay, and read the summaries of the other machines in your team.
 
 ```
-ai-usage v1.2.3 · ann-mbp (ann) · team 472ghuwcctyu…
-last run 2m ago · last success 2m ago
-relay: pushed 2m ago · pulled 2m ago
+ai-usage v1.4.2 · sam-air (sam) · team q7dm3xk2…               Wed 23 Sep 09:40
+✓ collected 1m ago  · no relay  ✓ scheduled  ✓ up to date
 
-CLAUDE  ok
-  ann@example.com  max  (logged in)
-    quota 78% ! (cache, 4m ago)
-      5h             42%  resets in 2h 10m
-      7d             78% !  resets in 3d 4h  · at this pace full in 10h 56m, before reset
-    90 days: 2 sessions · in 1.6M out 405K cache read 60.0M write 2.9M
-    last active 20m ago
-      /Users/ann/src/api  1 session · in 1.2M out 310K cache read 48.0M write 2.1M
-      /Users/ann/src/web  1 session · in 400K out 95.0K cache read 12.0M write 800K
+ACCOUNTS  5 · 1 critical · 1 warning · 1 fills early · 2 stale · 1 unknown
+  ACCOUNT              QUOTA             5h  reset   7d  reset  READ
+  claude ──────────────────────────────────────────────────────────── 1 account
+● sam@example.com      ██████ 100% !!     ?  reset  67%  3d14h   9h~
+  └ also 7d Opus 100% !!, resets in 3d14h
+  └ ~ Claude Code updates its usage cache only while it runs
+  codex ──────────────────────────────────────────────────────────── 2 accounts
+● sam@example.com      ████▋░  78% !    41%  2h10m  78%▲  2d6h    1m
+  └ ▲ 7d full in 14h (Thu 00:20) at this pace, 1d15h before it resets
+  └ also used by hermes openai-codex on sam-air, assumed the same account
+○ sam.old@example.com  ······ unknown     —           —            —
+  └ no reading yet
+  grok ────────────────────────────────────────────────────────────── 1 account
+● 3f6c2a1e…            ██░░░░  35%        —         35%  4d23h  15h~
+  └ ~ grok writes its usage log only while it runs
+  hermes ──────────────────────────────────────────────────────────── 1 account
+● openai-codex         ████▋░  78% !    41%  2h10m  78%▲  2d6h    1m
+  └ quota of codex sam@example.com, assumed the same account
 
-CODEX  ok
-  ann@example.com  plus  (logged in)
-    quota 35% (harness, 2m ago)
-      5h             12%  resets in 4h
-      7d             35%  resets in 5d
-    90 days: 1 session · in 2.5M out 180K cache read 9.0M write 0
-    last active 3h ago
-      /Users/ann/src/api  1 session · in 2.5M out 180K cache read 9.0M write 0
+THIS DEVICE  sam-air (sam) · tokens in the last 90 days
+                                         SESS   INPUT  OUTPUT  CACHE R  CACHE W
+claude ● sam@example.com                   20    4.5M   10.1M     603M    48.1M
+    ~/src/garden/app                        9    2.1M    5.2M     310M    22.0M
+    ~/Notes                                 5    1.2M    2.4M     140M    12.0M
+    ~/src/garden/infra                      3    700K    1.5M    90.0M     8.0M
+    + 2 more projects · ai-usage --projects
+codex  ● sam@example.com                  369    552M   51.1M    16.8G        0
+    ~/src/garden/app                      212    301M   28.0M     9.6G        0
+    ~/src/garden/api                       88    140M   13.0M     4.3G        0
+    ~/.codex/worktrees/4d2c/app            41   70.0M    6.6M     2.1G        0
+    + 1 more project · ai-usage --projects
+codex  ○ sam.old@example.com                6    9.4M    820K     210M        0
+    ~/src/old-job/site                      6    9.4M    820K     210M        0
+grok   ● 3f6c2a1e…                          3    3.2M    224K    14.3M        0
+    ~/src/garden/app                        2    2.9M    200K    13.0M        0
+    ~/Notes                                 1    260K   23.8K     1.3M        0
+hermes ● openai-codex  via codex            4    2.1M    180K    31.0M        0
+    ~/src/garden/app                        4    2.1M    180K    31.0M        0
 
-GROK  skipped
-  not installed
-
-HERMES  skipped
-  not installed
-
-TEAM  read 2m ago
-  ann-mbp (ann)  (this device)  collected 2m ago · v1.2.3 · ok
-  bo-laptop (bo)  collected 9m ago · v1.2.3 · ok
-  claude
-    ann@example.com  quota 78% ! (from ann-mbp (ann), 4m ago) · in 1.6M out 405K cache read 60.0M write 2.9M on 1 device
-    bo@example.com  quota 91% !! (from bo-laptop (bo), 9m ago) · in 800K out 150K cache read 20.0M write 900K on 1 device
-  codex
-    ann@example.com  quota 35% (from ann-mbp (ann), 2m ago) · in 2.5M out 180K cache read 9.0M write 0 on 1 device
+● logged in here  ○ used here before  !! ≥90%  ! ≥75%  ▲ fills before reset
+~ old: reading 6h+  ? reset since reading  — no window
+more: ai-usage --projects  --json · ai-usage status
 ```
 
-`!` marks a window at 75% or more, and `!!` one at 90% or more. The quota line shows the fullest window that has not reset since the reading, and how old the reading is. When every window has reset since, it says quota unknown. A window that has reset keeps its last percent, with no mark, and says how long ago it reset. The pace comes from the readings stored over the last few hours.
+The header says whether collection, the relay, the schedule, and self-update are healthy; anything wrong gets a line of its own under it. ACCOUNTS has one row per account, with the fullest window that has not reset as a bar, the 5-hour and weekly windows with their reset countdowns, and how old the reading is. `!` marks 75% or more and `!!` 90% or more; `▲` says a window fills before it resets at the pace of the last few hours; `~` marks a reading over 6 hours old, and `?` a window that has reset since the reading. A Hermes account shows the quota of the Codex or Grok login it bills through, drawn in gray and assumed to be the same account; its tokens stay its own. Hermes accounts no harness reports a quota for, such as an API key, share one line. THIS DEVICE lists this machine's tokens over the last 90 days, by account and top projects; a Hermes session with no working directory, such as a Telegram chat, is listed under its Hermes folder, so each agent shows up on its own. The legend under the report explains only the marks on screen.
 
-## What it does, and what it does not
+With a relay and more than one machine in the team, ACCOUNTS adds a USED BY column, and a DEVICES section lists every machine with its version, when it last reported, and each tool's state. Past 12 machines, the healthy ones fold into one line.
 
-Each run:
-
-1. Finds the tools' data folders: `~/.claude`, `~/.codex`, `~/.grok`, and `~/.hermes`, plus any folder named by `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GROK_HOME`, or `HERMES_HOME`. Hermes profiles under `<home>/profiles/<name>` that have a `state.db` are found too, including the one `hermes profile use` selects.
-2. Adds up sessions and tokens from the last 90 days, by account and by project folder. A sub-agent's tokens count toward the session that started it.
-3. Asks each installed tool which account is logged in and how full its quota windows are.
-4. Saves a sample. Samples are kept for 90 days.
-5. If a relay is set, publishes this machine's snapshot and reads the rest of the team.
-6. Prints the report, unless the scheduler started it.
-
-A tool that is not installed is skipped. One tool failing does not stop the others. `ai-usage status` shows each tool's state and the last error.
-
-ai-usage does not:
-
-- call Anthropic, OpenAI, xAI, or any other provider itself
-- log in, log out, refresh a token, or switch accounts
-- open credential files, keychain items, or cookies
-- start a session, send a prompt, or spend quota
-- keep or send prompts, replies, tool arguments, or file contents
-- estimate cost in dollars
-
-### What it reads and runs
-
-`<home>` is the tool's data folder.
-
-| Tool | Files it reads | Command it runs |
-| --- | --- | --- |
-| Claude Code | `<home>/projects/*/*.jsonl` and the sub-agent logs under `<home>/projects/*/<session>/subagents/`. For the usage Claude Code cached and the id of the logged-in account: `~/.claude.json` for the default home, or `<home>/.claude.json` whenever `CLAUDE_CONFIG_DIR` names the home, `~/.claude` included. A legacy `<home>/.config.json` comes first. The cached usage is used only for a claude.ai login. | `claude auth status --json` |
-| Codex | `<home>/sessions/**/*.jsonl` and `<home>/archived_sessions/**/*.jsonl` | `codex app-server`, asked only for `account/read` (with `refreshToken: false`) and `account/rateLimits/read` after the handshake |
-| Grok | `<home>/sessions/*/*/updates.jsonl` and `summary.json`. From `<home>/logs/unified*.jsonl`, only the lines that name the signed-in user and the credit usage. | none |
-| Hermes | a private copy of `<home>/state.db`, from which it reads the session ids, working folders, billing provider, and token columns | none |
-
-Session logs hold your conversations. ai-usage reads them for token counts and the working folder, and keeps nothing else. It never opens `auth.json`, `credentials.json`, `.credentials.json`, `.env` files, or any file whose name contains `credential` or `cookie`.
-
-A tool's command runs with that tool's own login, so the tool may contact its own service while it answers, as it would when you run it. Commands start in your home directory, so a project's settings do not change which account answers. The `CLAUDE_CONFIG_DIR` or `CODEX_HOME` variable is set for the command when the home is not the default. `CLAUDE_CONFIG_DIR` is also kept when your environment sets it to the default `~/.claude`, and it is passed exactly as you wrote it, trailing slash included, since Claude Code names its login after that string. A command that does not answer within 20 seconds is stopped; on macOS and Linux, together with everything it started. After its answers, `codex app-server` gets up to 3 seconds to exit on its own before it is stopped.
-
-ai-usage looks for the `claude` and `codex` binaries on `PATH`, then in `~/.local/bin`, `~/bin`, `~/.bun/bin`, `~/.npm-global/bin`, `~/.claude/bin` or `~/.codex/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, and `/usr/bin`. On Windows it tries `%USERPROFILE%\.local\bin`, `%USERPROFILE%\.claude\bin` or `%USERPROFILE%\.codex\bin`, and `%APPDATA%\npm` after `PATH`.
-
-The scheduler does not see your shell's variables. When a run sees a home through `CODEX_HOME` or the like, it remembers that home for later runs, and for `CLAUDE_CONFIG_DIR` the exact value too, so scheduled runs ask Claude Code about the same login. After you set or change one of those variables, run `ai-usage` once in that shell.
-
-### Network
-
-ai-usage itself connects to two places:
-
-- the relay, if one is set: it sends this machine's snapshot and reads the team's
-- GitHub, in release builds: it checks for a new release at most every 6 hours and downloads it
-
-## Install
-
-macOS and Linux:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.sh | sh
-```
-
-Windows, in PowerShell:
-
-```powershell
-irm https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.ps1 | iex
-```
-
-Releases are built for amd64 and arm64 on each OS. The installer:
-
-1. downloads the release file for your OS and CPU, and `checksums.txt` from the same release
-2. checks the SHA-256 checksum
-3. installs the binary to `~/.local/bin/ai-usage`, or `%LOCALAPPDATA%\Programs\ai-usage\ai-usage.exe` on Windows, where it also adds that folder to your user `PATH`
-4. saves the relay and joins the team, if you gave them
-5. runs `ai-usage` once, which registers it with the scheduler
-
-The installer asks no questions. Run it again to upgrade in place. It reads these variables:
-
-| Variable | Meaning |
-| --- | --- |
-| `AI_USAGE_BIN_DIR` | where the binary goes |
-| `AI_USAGE_RELAY` | relay URL to save before the first run |
-| `AI_USAGE_TEAM_KEY` | team key to join before the first run |
-| `AI_USAGE_DOWNLOAD_URL` | where to download release files from, instead of the latest GitHub release |
-| `AI_USAGE_ALLOW_ROOT` | install for root even though the installer runs under `sudo` |
-
-To join a team while installing:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.sh |
-  AI_USAGE_RELAY=https://relay.example.com AI_USAGE_TEAM_KEY='aiu-team-1:…' sh
-```
-
-```powershell
-$env:AI_USAGE_RELAY = 'https://relay.example.com'
-$env:AI_USAGE_TEAM_KEY = 'aiu-team-1:…'
-irm https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.ps1 | iex
-```
-
-A key typed on the command line stays in your shell history. To avoid that, install first, then run `ai-usage team join` and paste the key.
-
-Run the installer as the person whose usage you want to collect. Under `sudo` it stops, because the collector would register root's crontab and read root's tools, and could leave root-owned files in your home.
-
-On Linux the schedule needs `crontab`, which some minimal systems lack. The installer needs `curl` or `wget`, and `sha256sum`, `shasum`, or `openssl`.
+A terminal 100 columns or wider also gets a PLAN column in ACCOUNTS and a LAST column, each account's last activity, in THIS DEVICE. When one tool has several data folders on the machine, such as the per-account Codex homes Orca keeps, each account in THIS DEVICE names the folder it is logged in to, such as `~/.codex` or `orca 7527b7a4`.
 
 ## First run
 
@@ -170,7 +83,7 @@ The state folder is `~/Library/Application Support/ai-usage` on macOS, `$XDG_CON
 
 | File | Contents |
 | --- | --- |
-| `config.json` | this device's id, the relay, remembered homes and the `CLAUDE_CONFIG_DIR` value seen for them, whether the schedule is off |
+| `config.json` | this device's id, the relay, remembered and added homes, the `CLAUDE_CONFIG_DIR` value seen for them, which login each added Hermes home bills through, whether the schedule is off |
 | `team.key` | the team's private key; this is the secret |
 | `state.json` | the last good readings, sessions, and health |
 | `team-cache.json` | the team's snapshots from the last read |
@@ -207,20 +120,23 @@ A release build may carry a default relay, chosen when the release was built. `r
 
 The relay accepts only a small, fixed-shape usage snapshot signed by the team key. It checks the signature and the shape and stores nothing else. It limits requests per IP address, writes per team, and machines per team (32). Each IP address can also add only 5 new teams and 32 new machines a day.
 
-To run your own relay on Vercel with Upstash Redis, or with `ai-usage relay serve`, see [docs/relay.md](docs/relay.md).
+To run your own relay on Vercel with Upstash for Redis (formerly Vercel KV), or with `ai-usage relay serve`, see [docs/relay.md](docs/relay.md).
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
-| `ai-usage [--json] [--offline]` | collect now and print the report; `--offline` skips the relay |
-| `ai-usage collect [--quiet] [--json] [--offline] [--home DIR]` | the same; the scheduler runs `collect --quiet --home DIR`, and `--home` overrides `AI_USAGE_HOME` |
-| `ai-usage report [--json]` | print the last collected report without collecting |
-| `ai-usage status [--json]` | version, last success, last error, relay, schedule, update, and each tool's state |
+| `ai-usage [--json] [--offline] [VIEW] [DISPLAY]` | collect now and print the report; `--offline` skips the relay |
+| `ai-usage collect [--quiet] [--json] [--offline] [--home DIR] [VIEW] [DISPLAY]` | the same; the scheduler runs `collect --quiet --home DIR`, and `--home` overrides `AI_USAGE_HOME` |
+| `ai-usage report [--json] [VIEW] [DISPLAY]` | print the last collected report without collecting |
+| `ai-usage status [--json] [DISPLAY]` | version, last success, last error, relay, schedule, update, and each tool's state, with full error texts |
 | `ai-usage team` | the team fingerprint and its machines |
 | `ai-usage team key` | print the team's private key |
 | `ai-usage team join [KEY]` | join a team; the key is read from standard input when omitted |
 | `ai-usage team forget-device ID` | remove a machine's snapshot from the relay |
+| `ai-usage home` | list every data folder this machine reads, per tool |
+| `ai-usage home add PROVIDER DIR... [--quota-from PROVIDER:DIR]` | read more data folders; see [Other data folders](#other-data-folders) |
+| `ai-usage home remove PROVIDER DIR...` | stop reading folders added before |
 | `ai-usage relay show` | print the relay in use |
 | `ai-usage relay set URL` | save a relay URL, `http://` or `https://` |
 | `ai-usage relay clear` | forget the saved relay |
@@ -232,12 +148,40 @@ To run your own relay on Vercel with Upstash Redis, or with `ai-usage relay serv
 | `ai-usage version` | print the version |
 | `ai-usage help` | print usage |
 
+`VIEW` is at most one of these:
+
+| Flag | View |
+| --- | --- |
+| `--projects` | every project on this machine, with its tokens |
+| `--tokens` | every team account's tokens, machine by machine |
+| `--devices` | every machine in the team, with none folded away |
+
+`DISPLAY` flags change how the console looks. `--json` ignores them.
+
+| Flag | Meaning |
+| --- | --- |
+| `--color=auto\|always\|never` | `auto`, the default, colors a terminal unless `NO_COLOR` is set or `TERM` is `dumb` |
+| `--ascii` | draw with ASCII only; the default when the locale (`LC_ALL`, `LC_CTYPE`, `LANG`) is not UTF-8, except in Windows Terminal |
+| `--width N` | lay out for N columns, 80 to 160; the default is the terminal's width, else `COLUMNS`, else 80 |
+
 | Variable | Meaning |
 | --- | --- |
 | `AI_USAGE_HOME` | the state folder |
 | `AI_USAGE_RELAY` | the relay URL, overriding the saved one |
 | `AI_USAGE_NO_SCHEDULE` | when set, this run does not register with the scheduler |
 | `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GROK_HOME`, `HERMES_HOME` | another data folder for that tool |
+
+## Other data folders
+
+Each tool's default folder (`~/.claude`, `~/.codex`, `~/.grok`, `~/.hermes`) is always read, and so are the profiles inside a Hermes folder and the per-account Codex folders Orca keeps. A folder named by `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GROK_HOME`, or `HERMES_HOME` in a run you start is remembered for scheduled runs. Folders nothing names, such as bots running under other users, are added by hand:
+
+```
+ai-usage home add hermes /srv/bots/alpha/.hermes /srv/bots/beta/.hermes --quota-from codex:/srv/bots/.codex
+```
+
+Hermes keeps its own login for a Codex or Grok subscription, so the collector cannot read which account it uses. By default a Hermes folder is taken to use the account logged in to `~/.codex` or `~/.grok`. `--quota-from` names the folder whose login it uses instead, which is then read too; it covers the profiles inside each Hermes folder. `ai-usage home` shows every folder a run reads and what each bills through.
+
+On a server, run the collector as a user that can read those folders. Hermes databases are read in place, read-only; a database Hermes has open is read the way any SQLite reader reads it, and one nobody has open is read without taking a lock.
 
 ## JSON for agents
 
@@ -248,10 +192,11 @@ schema_version, generated_at
 collector   version, device, team, last run, last success, last error,
             relay, schedule, and update state
 providers[] claude, codex, grok, hermes: status (ok, partial, error, skipped), error, homes,
-            accounts[]: label, plan, headline_percent, level (ok, warning, critical, unknown),
-                        quota with windows[] (percent, level, resets_at, pace), sessions,
-                        tokens, last_active_at, projects[]
-team        pulled_at, devices[], and providers[] with accounts summed across devices
+            accounts[]: label, home, plan, headline_percent, level (ok, warning, critical, unknown),
+                        quota with from and windows[] (percent, level, resets_at, pace), link,
+                        sessions, tokens, linked_usage[], last_active_at, projects[]
+team        pulled_at, devices[], and providers[] with accounts summed across devices:
+            plan, quota, link, tokens, per_device[], linked_usage[]
 ```
 
 `ai-usage status --json` prints `schema_version`, `collector`, and `sources[]`. Every field is described in [docs/json-schema.md](docs/json-schema.md).

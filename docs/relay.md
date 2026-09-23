@@ -10,12 +10,12 @@ Collectors find the relay by its base URL, without `/v1`:
 ai-usage relay set https://relay.example.com
 ```
 
-## On Vercel, with Upstash Redis
+## On Vercel, with Upstash for Redis (formerly Vercel KV)
 
-The repository deploys as it is. `vercel.json` selects the *Other* framework preset and sends `/v1/*` to the Go function in `api/relay.go`, which Vercel builds with the Go version from `go.mod`. There is no build command. `.vercelignore` uploads only `api/`, `internal/`, `go.mod`, `go.sum`, and `vercel.json`.
+The repository deploys as it is. `vercel.json` selects the *Other* framework preset and sends `/v1/*` to the Go function in `api/relay.go`, which Vercel builds with the Go version from `go.mod`. There is no build command. `.vercelignore` uploads only `api/`, `relay/`, `internal/`, `go.mod`, `go.sum`, and `vercel.json`.
 
 1. Import the repository into a new Vercel project, from your fork on GitHub or with `vercel link` in a clean clone.
-2. Add a store. In the project's Storage tab, add Upstash Redis from the Vercel Marketplace and connect it to the project. That sets `KV_REST_API_URL` and `KV_REST_API_TOKEN`. Or create a Redis database at Upstash yourself and set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in the project's environment variables. If both pairs are set, the `KV_` pair wins.
+2. Add a Redis store from the Vercel Marketplace: Upstash for Redis, the product that replaced Vercel KV. In the project's Storage tab, create it and connect it to the project; Vercel bills it with the project, so there is no other account to open and no client to install. Connecting it sets `KV_REST_API_URL` and `KV_REST_API_TOKEN`, which the relay reads; it speaks the store's REST API directly.
 3. Deploy to production. Variables apply to new deployments, so redeploy after adding them.
 4. Check it:
 
@@ -24,18 +24,18 @@ The repository deploys as it is. `vercel.json` selects the *Other* framework pre
    {"ok":true,"snapshot_version":1}
    ```
 
-   A `503` with `{"error":"relay store not configured"}` means the function found neither pair of variables. It refuses to run without a store, because Vercel starts and stops function instances as it likes, and a store in memory would lose snapshots at random. `vercel dev` runs one long-lived process, so there the function falls back to memory.
+   A `503` with `{"error":"relay store not configured"}` means the function did not find those two variables. It refuses to run without a store, because Vercel starts and stops function instances as it likes, and a store in memory would lose snapshots at random. `vercel dev` runs one long-lived process, so there the function falls back to memory.
 5. Point the collectors at it with `ai-usage relay set https://your-project.vercel.app`, with `AI_USAGE_RELAY` when installing, or by building your releases with it as the default (see [releasing.md](releasing.md)).
 
 Use the production domain or a custom domain. Vercel's Deployment Protection can put preview and per-deployment URLs behind a Vercel login, which collectors cannot pass.
 
 With the *Other* preset, Vercel also serves the repository's other files as static files. They are public in the repository anyway. Deploy from Git or from a clean clone, so that nothing else in a working copy, such as a `.env` file, is uploaded with them.
 
-Each collector run makes two relay requests, a write and a read, and each costs a few Redis commands. A device runs 96 times a day; check that against your Upstash plan's command allowance.
+Each collector run makes two relay requests, a write and a read, and each costs a few KV commands. A device runs 96 times a day; check that against the store plan's command allowance.
 
-A request to a path the relay does not serve costs no Redis command. Once a function instance has seen a client go over a limit, it answers that client's further requests with `429` without a Redis command until the window ends. Every request still costs a function invocation, and a signed team read returns up to about 1.4 MB. On a public deployment, also add a rate-limit rule for `/v1/` in the project's Vercel Firewall, so a flood is dropped before it reaches the function.
+A request to a path the relay does not serve costs no KV command. Once a function instance has seen a client go over a limit, it answers that client's further requests with `429` without a KV command until the window ends. Every request still costs a function invocation, and a signed team read returns up to about 1.4 MB. On a public deployment, also add a rate-limit rule for `/v1/` in the project's Vercel Firewall, so a flood is dropped before it reaches the function.
 
-What the relay keeps in Redis:
+What the relay keeps in KV:
 
 | Key | Contents |
 | --- | --- |
@@ -51,7 +51,7 @@ Any machine that can run ai-usage can run the relay:
 ai-usage relay serve --addr :8080
 ```
 
-It uses Upstash Redis when the same variables are set, and memory otherwise. It prints the store it chose. A memory relay loses its snapshots when it stops. Each collector run publishes its device's whole snapshot, so the team is complete again within 15 minutes of a restart, except for devices that are switched off.
+It uses the same store when the same variables are set, and memory otherwise. It prints the store it chose. A memory relay loses its snapshots when it stops. Each collector run publishes its device's whole snapshot, so the team is complete again within 15 minutes of a restart, except for devices that are switched off.
 
 Put it behind a reverse proxy that terminates TLS, such as Caddy or nginx. The relay limits requests by the client's address. By default that is the connection's own address, which behind a proxy is the proxy's, so every client would share one limit. Tell the relay which header your proxy sets to the client's address:
 
@@ -126,8 +126,13 @@ Headers, with binary values in unpadded base64url:
 
 A `PUT` body must be a valid snapshot in exactly the form `encoding/json` writes it, naming the same team and device as the path. The team read returns each stored body and signature as they were written, so every reader verifies them again.
 
+An account in a snapshot may carry `quota_from`, a provider name in plain text. It says that the account's quota windows are the reading of another provider's account on the same device, which this account is assumed to bill through: Hermes on a Codex or SuperGrok subscription shows the quota of the account logged in to `~/.codex` or `~/.grok`. It must name a known provider other than the account's own, and it comes only with windows. A snapshot without it is valid as before.
+
+A relay older than `quota_from` answers `422` to a snapshot that carries it. The collector then keeps that snapshot pending and does not read the team either, so the device sees only itself until the relay is updated. An older collector reading the team counts such a snapshot as unreadable and leaves that device out. Deploy the relay first, then update the collectors.
+
 | Status | Meaning |
 | --- | --- |
+| `400` | the `PUT` body could not be read within 30 seconds |
 | `401` | missing or bad signature, or a request time too far from the server's |
 | `403` | the key is missing or does not match the team, or the team already has 32 devices |
 | `404` | not a valid team or device id |

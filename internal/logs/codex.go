@@ -39,11 +39,16 @@ import (
 // out of Input. token_count lines also carry the rate limits the harness last
 // saw; each home's newest reading is kept as a fallback quota reading for
 // whoever is logged in at that home.
+//
+// One file linked into several homes, as Orca links each rollout into every
+// account's home, is read once, from the first of them. Its readings are no
+// home's fallback, since the file does not say which account it ran under.
 func readCodexHomes(homes []string, since time.Time, reads map[string]HomeRead) []Session {
 	var files []*codexFile
 	stale := map[string]string{}
+	linked := sameFiles{}
 	for _, h := range homes {
-		fs, hr := codexFiles(h, since, stale)
+		fs, hr := codexFiles(h, since, stale, linked)
 		files = append(files, fs...)
 		reads[h] = hr
 	}
@@ -52,7 +57,7 @@ func readCodexHomes(homes []string, since time.Time, reads map[string]HomeRead) 
 	for _, h := range homes {
 		var own []*codexFile
 		for _, f := range files {
-			if f.home == h {
+			if f.home == h && len(f.mirrors) == 0 {
 				own = append(own, f)
 			}
 		}
@@ -64,8 +69,8 @@ func readCodexHomes(homes []string, since time.Time, reads map[string]HomeRead) 
 }
 
 // codexFiles parses the fresh rollout files of one home and indexes its stale
-// ones in stale.
-func codexFiles(home string, since time.Time, stale map[string]string) ([]*codexFile, HomeRead) {
+// ones in stale. A file an earlier home already holds is noted on that one.
+func codexFiles(home string, since time.Time, stale map[string]string, linked sameFiles) ([]*codexFile, HomeRead) {
 	var out HomeRead
 	var files []*codexFile
 	for _, leaf := range []string{"sessions", "archived_sessions"} {
@@ -76,17 +81,14 @@ func codexFiles(home string, since time.Time, stale map[string]string) ([]*codex
 		if err != nil {
 			return nil, HomeRead{Err: err}
 		}
-		files = append(files, walkCodex(root, since, stale, &out)...)
-	}
-	for _, f := range files {
-		f.home = home
+		files = append(files, walkCodex(root, home, since, stale, linked, &out)...)
 	}
 	return files, out
 }
 
 // walkCodex parses the fresh rollout files under root and indexes the stale
 // ones by the thread id in their name.
-func walkCodex(root string, since time.Time, stale map[string]string, out *HomeRead) []*codexFile {
+func walkCodex(root, home string, since time.Time, stale map[string]string, linked sameFiles, out *HomeRead) []*codexFile {
 	var files []*codexFile
 	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -101,7 +103,14 @@ func walkCodex(root string, since time.Time, stale map[string]string, out *HomeR
 			out.Unreadable++
 			return nil
 		}
+		if first, ok := linked.find(d.Name(), info); ok {
+			if first != nil && first.home != home && !containsString(first.mirrors, home) {
+				first.mirrors = append(first.mirrors, home)
+			}
+			return nil
+		}
 		if !freshEnough(info.ModTime(), since) {
+			linked.add(d.Name(), info, nil)
 			if id := codexNameID(d.Name()); id != "" {
 				stale[id] = path
 			}
@@ -115,12 +124,37 @@ func walkCodex(root string, since time.Time, stale map[string]string, out *HomeR
 		if f.id == "" {
 			f.id = strings.TrimSuffix(d.Name(), ".jsonl")
 		}
+		f.home = home
 		f.updated = info.ModTime().UTC()
 		f.fresh = true
+		linked.add(d.Name(), info, f)
 		files = append(files, f)
 		return nil
 	})
 	return files
+}
+
+// sameFiles finds a file already read under another path, by name and then
+// by identity: a hard link, not a copy, is the same file.
+type sameFiles map[string][]sameFile
+
+type sameFile struct {
+	info fs.FileInfo
+	// file is nil for a file that was too old to read.
+	file *codexFile
+}
+
+func (s sameFiles) find(name string, info fs.FileInfo) (*codexFile, bool) {
+	for _, c := range s[name] {
+		if os.SameFile(c.info, info) {
+			return c.file, true
+		}
+	}
+	return nil, false
+}
+
+func (s sameFiles) add(name string, info fs.FileInfo, f *codexFile) {
+	s[name] = append(s[name], sameFile{info: info, file: f})
 }
 
 // linkedCodexFiles reads stale files that loaded threads name as parent,
@@ -213,7 +247,10 @@ func countCodex(files []*codexFile) []Session {
 		if !f.fresh {
 			continue
 		}
-		s := Session{ID: f.id, ParentID: f.parent, Project: f.project, Tokens: own[i], Updated: f.updated, Home: f.home}
+		s := Session{ID: f.id, ParentID: f.parent, Project: f.project, Tokens: own[i], Updated: f.updated, Home: f.home, Limits: f.limits[codexMainLimit]}
+		if len(f.mirrors) > 0 {
+			s.Homes = append([]string{f.home}, f.mirrors...)
+		}
 		if j, ok := byID[f.id]; ok {
 			// Pages and copies of one thread: each already counts only its own requests.
 			merged := out[j]
@@ -284,8 +321,10 @@ func codexLimits(files []*codexFile) *Limits {
 
 // codexFile is what one rollout file says about its own thread.
 type codexFile struct {
-	path    string
-	home    string
+	path string
+	home string
+	// mirrors are the other homes the same file is linked into.
+	mirrors []string
 	id      string
 	parent  string
 	project string

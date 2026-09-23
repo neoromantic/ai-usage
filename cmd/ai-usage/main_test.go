@@ -53,6 +53,14 @@ func hermetic(t *testing.T) {
 	for _, k := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "GROK_HOME", "HERMES_HOME"} {
 		t.Setenv(k, "")
 	}
+	// Orca's app data folder moves with these.
+	t.Setenv("APPDATA", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	// The console reads these; a test sees the same output everywhere.
+	for _, k := range []string{"COLUMNS", "NO_COLOR", "TERM", "LC_CTYPE", "LANG", "WT_SESSION", "TERM_PROGRAM"} {
+		t.Setenv(k, "")
+	}
+	t.Setenv("LC_ALL", "en_US.UTF-8")
 	t.Setenv("PATH", t.TempDir())
 
 	saved := struct {
@@ -383,13 +391,19 @@ func TestCollectOfflineThenViews(t *testing.T) {
 	}
 
 	text := d.ok("report")
-	for _, want := range []string{"CLAUDE  ok", "CODEX  ok", "dev@example.com", "relay: not configured"} {
+	for _, want := range []string{
+		"  · no relay  ",
+		"\nACCOUNTS  2 · 1 critical · 1 warning\n",
+		"\n● dev@example.com  █████▍  91% !!   42%  ",
+		"\nclaude ● dev@example.com    ",
+		"\ncodex  ● dev@example.com    ",
+	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("report text lacks %q:\n%s", want, text)
 		}
 	}
 	// The bare command collects and prints the same console report.
-	if out := d.ok("--offline"); !strings.Contains(out, "CLAUDE  ok") {
+	if out := d.ok("--offline"); !strings.Contains(out, "\nACCOUNTS  2 ") {
 		t.Fatalf("bare run printed:\n%s", out)
 	}
 	var fresh view.Report
@@ -397,8 +411,14 @@ func TestCollectOfflineThenViews(t *testing.T) {
 		t.Fatalf("collect --json: %v %+v", err, fresh.SchemaVersion)
 	}
 
-	status := d.ok("status")
-	for _, want := range []string{"version        dev", "directory      " + d.dir, "relay          not configured", "schedule       not registered", "claude         ok"} {
+	status := d.ok("status", "--width", "160")
+	for _, want := range []string{
+		"\nversion         dev\n",
+		"\ndirectory       " + d.dir + "\n",
+		"\nrelay         · not configured; the team view shows this device only\n",
+		"\nschedule      ✕ not registered; dev builds do not register themselves\n",
+		"\nsources       ✓ claude  ~/.claude · 1 account\n",
+	} {
 		if !strings.Contains(status, want) {
 			t.Fatalf("status lacks %q:\n%s", want, status)
 		}
@@ -509,7 +529,7 @@ func fingerprint(t *testing.T, d *device) string {
 
 func TestRelayServeClientIPHeader(t *testing.T) {
 	hermetic(t)
-	for _, k := range []string{"KV_REST_API_URL", "KV_REST_API_TOKEN", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"} {
+	for _, k := range []string{"KV_REST_API_URL", "KV_REST_API_TOKEN"} {
 		t.Setenv(k, "")
 	}
 	// A stopped context shuts the relay down as soon as it starts.
@@ -617,7 +637,7 @@ func TestTwoDevicesShareATeam(t *testing.T) {
 	if out := a.ok("team"); !strings.Contains(out, b.config().Device) || !strings.Contains(out, "read from the relay") {
 		t.Fatalf("team printed:\n%s", out)
 	}
-	if out := a.ok("status"); !strings.Contains(out, "relay          "+srv.URL) || strings.Contains(out, "relay error") {
+	if out := a.ok("status"); !strings.Contains(out, "\nrelay         ✓ "+srv.URL+"\n") {
 		t.Fatalf("status printed:\n%s", out)
 	}
 
@@ -636,6 +656,78 @@ func TestTwoDevicesShareATeam(t *testing.T) {
 }
 
 // A device keeps collecting while the relay is down and says so.
+// home add registers homes by absolute path and, for Hermes, the home whose
+// login they bill through, which it reads too. home remove undoes it.
+func TestHomeCommands(t *testing.T) {
+	hermetic(t)
+	d := newDevice(t)
+	root := filepath.Dir(d.home)
+	bots := filepath.Join(root, "bots")
+	for _, dir := range []string{".codex", ".hermes-a/profiles/p", ".hermes-b"} {
+		if err := os.MkdirAll(filepath.Join(bots, dir), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(bots, ".hermes-a/profiles/p/state.db"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(bots)
+	out := d.ok("home", "add", "hermes", ".hermes-a", ".hermes-b", "--quota-from", "codex:.codex")
+	codex, a, b := filepath.Join(bots, ".codex"), filepath.Join(bots, ".hermes-a"), filepath.Join(bots, ".hermes-b")
+	lines := map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		lines[strings.Join(strings.Fields(line), " ")] = true
+	}
+	for _, want := range []string{
+		"codex " + codex + " added",
+		"hermes " + a + " added · quota from codex " + codex,
+		filepath.Join(a, "profiles", "p") + " quota from codex " + codex,
+		b + " added · quota from codex " + codex,
+	} {
+		if !lines[want] {
+			t.Fatalf("home add output lacks %q:\n%s", want, out)
+		}
+	}
+	cfg := d.config()
+	ref := state.HomeRef{Provider: "codex", Home: codex}
+	if !reflect.DeepEqual(cfg.Homes, map[string][]string{"codex": {codex}, "hermes": {a, b}}) ||
+		!reflect.DeepEqual(cfg.QuotaFrom, map[string]state.HomeRef{a: ref, b: ref}) {
+		t.Fatalf("config = %+v %+v", cfg.Homes, cfg.QuotaFrom)
+	}
+
+	d.ok("home", "remove", "hermes", b)
+	cfg = d.config()
+	if !reflect.DeepEqual(cfg.Homes["hermes"], []string{a}) || len(cfg.QuotaFrom) != 1 {
+		t.Fatalf("after remove = %+v %+v", cfg.Homes, cfg.QuotaFrom)
+	}
+
+	for _, bad := range [][]string{
+		{"home", "add", "hermes"},
+		{"home", "add", "nope", ".codex"},
+		{"home", "add", "codex", ".codex", "--quota-from", "codex:.codex"},
+		{"home", "add", "hermes", ".hermes-b", "--quota-from", "claude:.codex"},
+		{"home", "add", "hermes", ".hermes-b", "--quota-from"},
+		{"home", "remove", "hermes", ".hermes-b", "--quota-from", "codex:.codex"},
+		{"home", "frob"},
+	} {
+		if r := d.run("", bad...); r.code != 2 {
+			t.Fatalf("%v: exit %d, %s", bad, r.code, r.stderr)
+		}
+	}
+	for _, bad := range [][]string{
+		{"home", "add", "hermes", "missing"},
+		{"home", "remove", "hermes", ".hermes-b"},
+		{"home", "remove", "codex", filepath.Join(d.home, ".codex")},
+	} {
+		if r := d.run("", bad...); r.code != 1 {
+			t.Fatalf("%v: exit %d, %s", bad, r.code, r.stderr)
+		}
+	}
+	if !reflect.DeepEqual(d.config().Homes, cfg.Homes) {
+		t.Fatal("a rejected command changed the config")
+	}
+}
+
 func TestUnreachableRelay(t *testing.T) {
 	hermetic(t)
 	srv := httptest.NewServer(http.NotFoundHandler())
@@ -812,7 +904,7 @@ func TestHousekeepingOnReleaseBuild(t *testing.T) {
 	if b, _ := os.ReadFile(exe); !bytes.Equal(b, bin) {
 		t.Fatal("binary was not replaced")
 	}
-	if out := d.ok("status"); !strings.Contains(out, "installed v1.3.0 for the next run") {
+	if out := d.ok("status"); !strings.Contains(out, "\nupdate        ↑ v1.3.0 is installed and runs next time\n") {
 		t.Fatalf("status:\n%s", out)
 	}
 
@@ -965,7 +1057,7 @@ func TestCommentedOutScheduleIsLeftAlone(t *testing.T) {
 	if st := d.state(); st.Schedule.Registered || !strings.Contains(st.Schedule.Error, "disabled by hand") {
 		t.Fatalf("schedule = %+v", st.Schedule)
 	}
-	if out := d.ok("status"); !strings.Contains(out, "schedule       not registered  disabled by hand") {
+	if out := d.ok("status"); !strings.Contains(out, "\nschedule      ✕ not registered: disabled by hand") || strings.Contains(out, "register: ai-usage schedule install") {
 		t.Fatalf("status:\n%s", out)
 	}
 	if out := d.ok("schedule", "status"); !strings.Contains(out, "disabled by hand") {

@@ -2,7 +2,9 @@ package logs
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -706,4 +708,62 @@ func TestCodexCountsResponsesTokenCountLeavesOut(t *testing.T) {
 			t.Fatalf("fork = %+v", got)
 		}
 	})
+}
+
+// Orca links each rollout into every account's home, and ~/.codex. A linked
+// file counts once, from the first home, and names every home it is in.
+// Its rate limits are the session's, not any home's fallback reading.
+func TestCodexHardLinkedHomesReadOnce(t *testing.T) {
+	root := t.TempDir()
+	def, acctA, acctB := filepath.Join(root, ".codex"), filepath.Join(root, "orca-a"), filepath.Join(root, "orca-b")
+	weekly := `{"limit_id":"codex","primary":{"used_percent":40.0,"window_minutes":10080,"resets_at":1790500000},"secondary":null,"plan_type":"pro"}`
+	shared := rollout(def, "sessions", "20", rootID)
+	mustWrite(t, shared,
+		cxMeta{at: "2026-09-20T10:00:00Z", id: rootID, cwd: "/work/app"}.String(),
+		cxCount("2026-09-20T10:00:01Z", e1[0], e1[1]),
+		cxLimits("2026-09-20T10:00:02Z", weekly),
+	)
+	for _, h := range []string{acctA, acctB} {
+		link := rollout(h, "sessions", "20", rootID)
+		if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Link(shared, link); err != nil {
+			t.Skipf("hard links unavailable: %v", err)
+		}
+	}
+	// B also ran a session of its own.
+	mustWrite(t, rollout(acctB, "sessions", "21", kidA),
+		cxMeta{at: "2026-09-21T10:00:00Z", id: kidA, cwd: "/work/b"}.String(),
+		cxCount("2026-09-21T10:00:01Z", u{10, 0, 1}, u{10, 0, 1}),
+		cxLimits("2026-09-21T10:00:02Z", `{"limit_id":"codex","primary":{"used_percent":5.0,"window_minutes":10080,"resets_at":1790600000},"secondary":null,"plan_type":"plus"}`),
+	)
+
+	res := ReadHomes("codex", []string{def, acctA, acctB}, since)
+	if got := strings.Join(ids(res), ","); got != rootID+","+kidA {
+		t.Fatalf("sessions = %s", got)
+	}
+	s := byID(t, res, rootID)
+	if s.Tokens != (Tokens{Input: 600, CacheRead: 400, Output: 50}) {
+		t.Fatalf("linked session tokens = %+v", s.Tokens)
+	}
+	if s.Home != def || !reflect.DeepEqual(s.Homes, []string{def, acctA, acctB}) {
+		t.Fatalf("linked session homes = %s %v", s.Home, s.Homes)
+	}
+	if s.Limits == nil || len(s.Limits.Windows) != 1 || s.Limits.Windows[0].ResetsAt.Unix() != 1790500000 {
+		t.Fatalf("linked session limits = %+v", s.Limits)
+	}
+	if own := byID(t, res, kidA); own.Home != acctB || own.Homes != nil {
+		t.Fatalf("own session = %+v", own)
+	}
+	if l := res.Homes[def].Limits; l != nil {
+		t.Fatalf("default home fell back to a linked file's limits: %+v", l)
+	}
+	if l := res.Homes[acctB].Limits; l == nil || l.Plan != "plus" {
+		t.Fatalf("B's own limits = %+v", l)
+	}
+	// Read alone, the default home is as before.
+	if alone := mustRead(t, "codex", def, since); alone.Limits == nil || byID(t, alone, rootID).Homes != nil {
+		t.Fatalf("default home alone = %+v", alone)
+	}
 }

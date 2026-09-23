@@ -56,21 +56,39 @@ var (
 const usage = `ai-usage collects AI harness usage on this device and shares it with a team.
 
 Usage:
-  ai-usage [--json] [--offline]          collect now and print the report
-  ai-usage collect [--quiet] [--json] [--home DIR]
+  ai-usage [--json] [--offline] [VIEW] [DISPLAY]
+                                         collect now and print the report
+  ai-usage collect [--quiet] [--json] [--offline] [--home DIR] [VIEW] [DISPLAY]
                                          what the system scheduler runs; --home overrides AI_USAGE_HOME
-  ai-usage report [--json]               print the last collected report, no collection
-  ai-usage status [--json]               collector health: version, last success, last error
+  ai-usage report [--json] [VIEW] [DISPLAY]
+                                         print the last collected report, no collection
+  ai-usage status [--json] [DISPLAY]     collector health: version, last success, last error
   ai-usage team                          show the team fingerprint and devices
   ai-usage team key                      print the team private key (the only secret)
   ai-usage team join [KEY]               join a team; the key is read from stdin when omitted
-  ai-usage team forget-device ID         remove another device's snapshot from the relay
+  ai-usage team forget-device ID         remove a device's snapshot from the relay
+  ai-usage home                          list the harness homes this device reads
+  ai-usage home add PROVIDER DIR... [--quota-from PROVIDER:DIR]
+                                         read more homes; --quota-from names the Codex or
+                                         Grok home whose login these Hermes homes bill through
+  ai-usage home remove PROVIDER DIR...   stop reading homes added before
   ai-usage relay show|set URL|clear      choose the relay this device publishes to
   ai-usage relay serve [--addr :8080] [--client-ip-header NAME]
-                                         run a relay (Upstash/Vercel KV from env, else memory)
+                                         run a relay (Vercel KV from env, else memory)
   ai-usage schedule install|remove|status
   ai-usage update                        check for a release now
   ai-usage version
+
+Views, one at a time (the default is accounts, devices, and this device):
+  --projects             every project on this device
+  --tokens               every team account's tokens, device by device
+  --devices              every team device, none folded away
+
+Display:
+  --color=auto|always|never
+                         auto colors a terminal, unless NO_COLOR is set or TERM=dumb
+  --ascii                ASCII glyphs; the default without a UTF-8 locale
+  --width N              columns, 80 to 160; default: the terminal's, else COLUMNS, else 80
 
 Environment:
   AI_USAGE_HOME          collector directory (default: OS config dir/ai-usage)
@@ -103,6 +121,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdStatus(args, stdout)
 	case "team":
 		err = cmdTeam(ctx, args, stdin, stdout)
+	case "home":
+		err = cmdHome(args, stdout)
 	case "relay":
 		err = cmdRelay(ctx, args, stdout, stderr)
 	case "schedule":
@@ -192,7 +212,11 @@ func cmdCollect(ctx context.Context, args []string, stdout io.Writer) (err error
 	quiet := fs.Bool("quiet", false, "")
 	offline := fs.Bool("offline", false, "")
 	home := fs.String("home", "", "")
+	disp := displayFlags(fs, true)
 	if err := parse(fs, args); err != nil {
+		return err
+	}
+	if err := disp.check(); err != nil {
 		return err
 	}
 	d, err := dir()
@@ -239,7 +263,7 @@ func cmdCollect(ctx context.Context, args []string, stdout io.Writer) (err error
 	if *quiet {
 		return nil
 	}
-	return printReport(stdout, d, res, endpoint, *jsonOut)
+	return printReport(stdout, d, res, endpoint, *jsonOut, disp)
 }
 
 // panicError is a collection that panicked.
@@ -402,7 +426,7 @@ func executable() (string, error) {
 	return exe, nil
 }
 
-func printReport(stdout io.Writer, d state.Dir, res *collect.Result, endpoint string, jsonOut bool) error {
+func printReport(stdout io.Writer, d state.Dir, res *collect.Result, endpoint string, jsonOut bool, disp *display) error {
 	now := clock().UTC()
 	samples, _ := d.LoadSamples(now.Add(-7 * 24 * time.Hour))
 	r := view.Build(view.Input{
@@ -423,7 +447,7 @@ func printReport(stdout io.Writer, d state.Dir, res *collect.Result, endpoint st
 		enc.SetIndent("", "  ")
 		return enc.Encode(r)
 	}
-	_, err := io.WriteString(stdout, view.Text(r))
+	_, err := io.WriteString(stdout, view.Text(r, disp.options(stdout)))
 	return err
 }
 
@@ -449,7 +473,11 @@ func loadResult(d state.Dir) (*collect.Result, error) {
 func cmdReport(args []string, stdout io.Writer) error {
 	fs := flags("report")
 	jsonOut := fs.Bool("json", false, "")
+	disp := displayFlags(fs, true)
 	if err := parse(fs, args); err != nil {
+		return err
+	}
+	if err := disp.check(); err != nil {
 		return err
 	}
 	d, err := dir()
@@ -466,13 +494,17 @@ func cmdReport(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return printReport(stdout, d, res, relayURL(res.Config), *jsonOut)
+	return printReport(stdout, d, res, relayURL(res.Config), *jsonOut, disp)
 }
 
 func cmdStatus(args []string, stdout io.Writer) error {
 	fs := flags("status")
 	jsonOut := fs.Bool("json", false, "")
+	disp := displayFlags(fs, false)
 	if err := parse(fs, args); err != nil {
+		return err
+	}
+	if err := disp.check(); err != nil {
 		return err
 	}
 	d, err := dir()
@@ -506,65 +538,8 @@ func cmdStatus(args []string, stdout io.Writer) error {
 		enc.SetIndent("", "  ")
 		return enc.Encode(out)
 	}
-	c := r.Collector
-	w := bufio.NewWriter(stdout)
-	defer w.Flush()
-	fmt.Fprintf(w, "version        %s\n", c.Version)
-	fmt.Fprintf(w, "directory      %s\n", string(d))
-	fmt.Fprintf(w, "device         %s  %s (%s)\n", c.Device, c.DeviceLabel, c.OSUser)
-	fmt.Fprintf(w, "team           %s\n", c.Team)
-	fmt.Fprintf(w, "last run       %s\n", stamp(c.LastRunAt))
-	fmt.Fprintf(w, "last success   %s\n", stamp(c.LastSuccessAt))
-	if c.LastError != nil {
-		fmt.Fprintf(w, "last error     %s  %s\n", stamp(c.LastErrorAt), *c.LastError)
-	} else {
-		fmt.Fprintf(w, "last error     none\n")
-	}
-	if c.Relay.URL == nil {
-		fmt.Fprintf(w, "relay          not configured\n")
-	} else {
-		fmt.Fprintf(w, "relay          %s  pushed %s  pulled %s  pending %v\n", *c.Relay.URL, stamp(c.Relay.LastPushAt), stamp(c.Relay.LastPullAt), c.Relay.Pending)
-		if c.Relay.LastError != nil {
-			fmt.Fprintf(w, "relay error    %s\n", *c.Relay.LastError)
-		}
-	}
-	sched := "registered"
-	if !c.Schedule.Registered {
-		sched = "not registered"
-	}
-	if c.Schedule.Error != nil {
-		sched += "  " + *c.Schedule.Error
-	}
-	fmt.Fprintf(w, "schedule       %s\n", sched)
-	upd := "checked " + stamp(c.Update.CheckedAt)
-	if c.Update.Latest != nil {
-		upd += "  latest " + *c.Update.Latest
-	}
-	if c.Update.Staged != nil {
-		upd += "  installed " + *c.Update.Staged + " for the next run"
-	}
-	if c.Update.Error != nil {
-		upd += "  " + *c.Update.Error
-	}
-	fmt.Fprintf(w, "update         %s\n", upd)
-	for _, s := range out.Sources {
-		line := fmt.Sprintf("%-14s %s", s.Provider, s.Status)
-		if len(s.Homes) > 0 {
-			line += "  " + strings.Join(s.Homes, ", ")
-		}
-		if s.Error != nil {
-			line += "  " + *s.Error
-		}
-		fmt.Fprintln(w, line)
-	}
-	return nil
-}
-
-func stamp(t *time.Time) string {
-	if t == nil {
-		return "never"
-	}
-	return t.Local().Format("2006-01-02 15:04:05")
+	_, err = io.WriteString(stdout, view.StatusText(r, string(d), disp.options(stdout)))
+	return err
 }
 
 func cmdTeam(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer) error {
