@@ -703,3 +703,67 @@ func TestCodexHardLinkedHomesReadOnce(t *testing.T) {
 		t.Fatalf("default home alone = %+v", alone)
 	}
 }
+
+// A request's input and output go to the hour of the line that counts it, in
+// the thread that counts it: a repeat, a replay, or a second copy of the file
+// adds no hours.
+func TestCodexHours(t *testing.T) {
+	t.Run("requests, repeats, and records", func(t *testing.T) {
+		home := t.TempDir()
+		mustWrite(t, rollout(home, "sessions", "20", rootID),
+			cxMeta{at: "2026-09-20T23:50:00.000Z", id: rootID, cwd: "/work/app"}.String(),
+			cxRecord("2026-09-20T23:59:58.000Z", rootID, "resp-1", e1[1]),
+			cxCount("2026-09-20T23:59:59.000Z", e1[0], e1[1]),
+			cxCount("2026-09-21T00:00:01.000Z", e1[0], e1[1]),
+			cxCount("2026-09-21T01:30:00.000Z", e2[0], e2[1]),
+			cxCount("2026-09-21T02:00:00.000Z", e1[0], e1[1]),
+			// A compaction's record, which the token_count after it leaves out.
+			cxRecord("2026-09-21T03:10:00.000Z", rootID, "resp-compact", u{2000, 1800, 40}),
+			cxCount("2026-09-21T03:10:02.000Z", e2[0], u{0, 0, 0}),
+		)
+		// Older Codex wrote only the cumulative total.
+		mustWrite(t, rollout(home, "sessions", "20", kidB),
+			cxMeta{at: "2026-09-20T09:00:00.000Z", id: kidB, cwd: "/work/old"}.String(),
+			cxTotal("2026-09-20T10:00:00.000Z", u{100, 0, 10}),
+			cxTotal("2026-09-21T11:00:00.000Z", u{250, 50, 30}),
+		)
+		res := mustRead(t, "codex", home, since)
+		checkHours(t, byID(t, res, rootID), map[string]int64{
+			"2026-09-20T23:00:00Z": 650,
+			"2026-09-21T01:00:00Z": 30,
+			"2026-09-21T03:00:00Z": 240,
+		})
+		checkHours(t, byID(t, res, kidB), map[string]int64{"2026-09-20T10:00:00Z": 110, "2026-09-21T11:00:00Z": 120})
+	})
+	t.Run("a fork's replay stays in its parent's hours", func(t *testing.T) {
+		home := t.TempDir()
+		mustWrite(t, rollout(home, "sessions", "20", rootID), rootLines...)
+		mustWrite(t, rollout(home, "sessions", "21", forkID),
+			cxMeta{at: "2026-09-21T09:00:00.000Z", id: forkID, cwd: "/work/app", source: `"vscode"`, extra: `,"forked_from_id":"` + rootID + `"`}.String(),
+			cxMeta{at: "2026-09-20T10:00:00.000Z", id: rootID, cwd: "/work/app"}.String(),
+			cxCount("2026-09-21T09:00:00.000Z", e1[0], e1[1]),
+			cxCount("2026-09-21T09:00:00.000Z", e2[0], e2[1]),
+			cxCount("2026-09-21T10:00:20.000Z", u{4000, 3300, 100}, u{1500, 1400, 20}),
+		)
+		// A sub-agent's hours are its root's.
+		mustWrite(t, rollout(home, "sessions", "21", kidA),
+			cxMeta{at: "2026-09-21T12:00:00.000Z", id: kidA, session: rootID, cwd: "/work/app", source: spawnedBy(rootID)}.String(),
+			cxCount("2026-09-21T12:00:10.000Z", u{300, 100, 20}, u{300, 100, 20}),
+		)
+		res := mustRead(t, "codex", home, since)
+		checkHours(t, byID(t, res, rootID), map[string]int64{"2026-09-20T10:00:00Z": 680, "2026-09-21T12:00:00Z": 220})
+		checkHours(t, byID(t, res, forkID), map[string]int64{"2026-09-21T10:00:00Z": 120})
+	})
+	t.Run("a thread in two files", func(t *testing.T) {
+		home := t.TempDir()
+		mustWrite(t, rollout(home, "sessions", "20", rootID), rootLines...)
+		mustWrite(t, rollout(home, "archived_sessions", "20", rootID), rootLines...)
+		// A later page continues the thread.
+		mustWrite(t, filepath.Join(home, "sessions", "2026", "09", "21", "rollout-2026-09-21T10-00-00-"+rootID+".jsonl"),
+			cxMeta{at: "2026-09-20T10:00:00.000Z", id: rootID, cwd: "/work/app", extra: `,"history_base":{"thread_id":"` + rootID + `","end_ordinal_exclusive":6,"end_byte_offset":4096}`}.String(),
+			cxCount("2026-09-21T10:00:05.000Z", u{3000, 2300, 90}, u{500, 400, 10}),
+		)
+		res := mustRead(t, "codex", home, since)
+		checkHours(t, byID(t, res, rootID), map[string]int64{"2026-09-20T10:00:00Z": 680, "2026-09-21T10:00:00Z": 110})
+	})
+}

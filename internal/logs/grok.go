@@ -6,16 +6,19 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
 
 // readGrok sums turn_completed usage in ~/.grok/sessions/<cwd>/<id>/updates.jsonl.
-// Each prompt id counts once, as the last turn_completed for that id.
+// Each prompt id counts once, as the last turn_completed for that id, in the
+// hour that line was written.
 // xAI counts cached input inside inputTokens, so cached tokens are moved out of Input.
 // Chat transcripts and prompt history stay closed.
 func readGrok(home string, since time.Time) (Result, error) {
@@ -111,12 +114,12 @@ func readGrok(home string, since time.Time) (Result, error) {
 			}
 		}
 		if slot.updates != "" {
-			tok, bad, err := parseGrokUpdates(slot.updates)
+			tok, hours, bad, err := parseGrokUpdates(slot.updates)
 			out.Malformed += bad
 			if err != nil {
 				out.Unreadable++
 			}
-			sess.Tokens = tok
+			sess.Tokens, sess.Hours = tok, hours
 		}
 		out.Sessions = append(out.Sessions, sess)
 	}
@@ -140,8 +143,14 @@ func parseGrokSummary(path string) (id, project string, malformed int, err error
 	return doc.Info.ID, strings.TrimSpace(doc.Info.Cwd), 0, nil
 }
 
-func parseGrokUpdates(path string) (Tokens, int, error) {
-	latest := map[string]Tokens{}
+// grokTurn is the usage of one prompt and when it was reported.
+type grokTurn struct {
+	tokens Tokens
+	at     time.Time
+}
+
+func parseGrokUpdates(path string) (Tokens, map[int64]int64, int, error) {
+	latest := map[string]grokTurn{}
 	var order []string
 	var anon int
 	var malformed int
@@ -163,25 +172,31 @@ func parseGrokUpdates(path string) (Tokens, int, error) {
 			anon++
 			prompt = fmt.Sprintf("#%d", anon)
 		}
-		if _, ok := latest[prompt]; !ok {
+		at := row.Timestamp.Time
+		if prev, ok := latest[prompt]; !ok {
 			order = append(order, prompt)
+		} else if at.IsZero() {
+			at = prev.at
 		}
 		input := usage.InputTokens - usage.CachedReadTokens
 		if input < 0 {
 			input = 0
 		}
-		latest[prompt] = Tokens{
+		latest[prompt] = grokTurn{at: at, tokens: Tokens{
 			Input:      input,
 			Output:     usage.OutputTokens,
 			CacheRead:  usage.CachedReadTokens,
 			CacheWrite: usage.CacheCreationTokens,
-		}
+		}}
 	})
 	var total Tokens
+	var hours map[int64]int64
 	for _, prompt := range order {
-		total = total.Add(latest[prompt])
+		last := latest[prompt]
+		total = total.Add(last.tokens)
+		AddHour(&hours, last.at, InOut(last.tokens))
 	}
-	return total, malformed + long, err
+	return total, hours, malformed + long, err
 }
 
 func decodeGrokPath(enc string) string {
@@ -193,7 +208,8 @@ func decodeGrokPath(enc string) string {
 }
 
 type grokLine struct {
-	Params struct {
+	Timestamp unixTime `json:"timestamp"`
+	Params    struct {
 		Update struct {
 			SessionUpdate string `json:"sessionUpdate"`
 			PromptID      string `json:"prompt_id"`
@@ -205,4 +221,31 @@ type grokLine struct {
 			} `json:"usage"`
 		} `json:"update"`
 	} `json:"params"`
+}
+
+// unixTime is a time a log writes as Unix seconds or milliseconds, or as an
+// RFC 3339 string. A value it cannot read is the zero time rather than an
+// error, so one odd time does not reject the line.
+type unixTime struct{ time.Time }
+
+func (t *unixTime) UnmarshalJSON(b []byte) error {
+	t.Time = time.Time{}
+	if len(b) > 0 && b[0] == '"' {
+		var s string
+		if json.Unmarshal(b, &s) == nil {
+			t.Time = parseTime(strings.TrimSpace(s))
+		}
+		return nil
+	}
+	f, err := strconv.ParseFloat(string(b), 64)
+	if err != nil || !(f > 0 && f < 1e15) {
+		return nil
+	}
+	// Seconds stay below this until the year 5138; milliseconds pass it in 1973.
+	if f >= 1e11 {
+		f /= 1000
+	}
+	sec, frac := math.Modf(f)
+	t.Time = time.Unix(int64(sec), int64(frac*1e9)).UTC()
+	return nil
 }

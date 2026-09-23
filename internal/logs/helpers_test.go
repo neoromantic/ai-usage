@@ -4,9 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sort"
 	"strings"
@@ -100,6 +102,41 @@ func total(res Result) Tokens {
 		sum = sum.Add(s.Tokens)
 	}
 	return sum
+}
+
+// checkHours fails unless s spent its tokens in the hours of want, which maps
+// a time in each hour, in RFC 3339, to that hour's tokens, and unless they add
+// up to its input plus output.
+func checkHours(t *testing.T, s Session, want map[string]int64) {
+	t.Helper()
+	w := map[int64]int64{}
+	for at, n := range want {
+		ts, err := time.Parse(time.RFC3339, at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w[HourOf(ts)] += n
+	}
+	var sum int64
+	for _, n := range s.Hours {
+		sum += n
+	}
+	if !reflect.DeepEqual(s.Hours, w) || sum != InOut(s.Tokens) {
+		t.Fatalf("%s hours = %s, adding up to %d, want %s, adding up to %d", s.ID, showHours(s.Hours), sum, showHours(w), InOut(s.Tokens))
+	}
+}
+
+func showHours(hours map[int64]int64) string {
+	keys := make([]int64, 0, len(hours))
+	for h := range hours {
+		keys = append(keys, h)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	out := make([]string, 0, len(keys))
+	for _, h := range keys {
+		out = append(out, fmt.Sprintf("%s=%d", HourStart(h).Format("2006-01-02T15h"), hours[h]))
+	}
+	return "[" + strings.Join(out, " ") + "]"
 }
 
 // noLeak fails when any session field carries log text.

@@ -25,6 +25,9 @@ import (
 // (vision, compression, title generation, background review) are auxiliary
 // calls no sessions row counts. Each session's Parts are its tokens by
 // billing provider, main loop and auxiliary calls together.
+//
+// Both tables hold running totals, not a time for each call, so a session
+// leaves Hours nil and the ledger places its growth at the run that sees it.
 func readHermes(home string, since time.Time) (Result, error) {
 	dbPath := filepath.Join(home, "state.db")
 	if _, err := os.Stat(dbPath); errors.Is(err, os.ErrNotExist) {

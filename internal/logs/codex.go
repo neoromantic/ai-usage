@@ -35,6 +35,9 @@ import (
 // token_count leaves out, so a record no token_count repeats counts once per
 // response id in the family.
 //
+// A request's tokens go to the hour of the line that counts it, in the thread
+// that counts it.
+//
 // OpenAI counts cached input inside input_tokens, so cached tokens are moved
 // out of Input. token_count lines also carry the rate limits the harness last
 // saw; each home's newest reading is kept as a fallback quota reading for
@@ -204,6 +207,7 @@ func countCodex(files []*codexFile) []Session {
 		families[root] = append(families[root], i)
 	}
 	own := make([]Tokens, len(files))
+	hours := make([]map[int64]int64, len(files))
 	for _, members := range families {
 		sort.SliceStable(members, func(a, b int) bool {
 			x, y := files[members[a]], files[members[b]]
@@ -219,7 +223,8 @@ func countCodex(files []*codexFile) []Session {
 		responses := map[string]bool{}
 		for _, i := range members {
 			var prev codexUsage
-			for _, ev := range files[i].events {
+			for _, c := range files[i].events {
+				ev := c.event
 				delta := ev.last
 				if !ev.hasLast {
 					delta = ev.total.since(prev)
@@ -229,14 +234,18 @@ func countCodex(files []*codexFile) []Session {
 					continue
 				}
 				seen[ev] = true
-				own[i] = own[i].Add(delta.tokens())
+				t := delta.tokens()
+				own[i] = own[i].Add(t)
+				AddHour(&hours[i], c.at, InOut(t))
 			}
 			for _, r := range files[i].unrepeated {
 				if responses[r.response] {
 					continue
 				}
 				responses[r.response] = true
-				own[i] = own[i].Add(r.usage.tokens())
+				t := r.usage.tokens()
+				own[i] = own[i].Add(t)
+				AddHour(&hours[i], r.at, InOut(t))
 			}
 		}
 	}
@@ -247,7 +256,7 @@ func countCodex(files []*codexFile) []Session {
 		if !f.fresh {
 			continue
 		}
-		s := Session{ID: f.id, ParentID: f.parent, Project: f.project, Tokens: own[i], Updated: f.updated, Home: f.home, Limits: f.limits[codexMainLimit]}
+		s := Session{ID: f.id, ParentID: f.parent, Project: f.project, Tokens: own[i], Hours: hours[i], Updated: f.updated, Home: f.home, Limits: f.limits[codexMainLimit]}
 		if len(f.mirrors) > 0 {
 			s.Homes = append([]string{f.home}, f.mirrors...)
 		}
@@ -255,6 +264,7 @@ func countCodex(files []*codexFile) []Session {
 			// Pages and copies of one thread: each already counts only its own requests.
 			merged := out[j]
 			merged.Tokens = merged.Tokens.Add(s.Tokens)
+			addHours(&merged, s)
 			// A thread kept in two homes grows in the one written last.
 			if s.Updated.After(merged.Updated) {
 				merged.Home = s.Home
@@ -332,7 +342,7 @@ type codexFile struct {
 	links   []string
 	start   time.Time
 	updated time.Time
-	events  []codexEvent
+	events  []codexCount
 	// unrepeated are this thread's usage records no token_count repeats.
 	unrepeated []codexRecord
 	// pending is the last record, until the next token_count settles it.
@@ -346,6 +356,7 @@ type codexFile struct {
 type codexRecord struct {
 	response string
 	usage    codexUsage
+	at       time.Time
 }
 
 func parseCodex(path string) (*codexFile, int, error) {
@@ -431,10 +442,10 @@ func (f *codexFile) count(row codexLine) {
 	}
 	f.settle(&ev)
 	// A notification that repeats the previous line adds nothing; skip storing it.
-	if n := len(f.events); n > 0 && f.events[n-1] == ev {
+	if n := len(f.events); n > 0 && f.events[n-1].event == ev {
 		return
 	}
-	f.events = append(f.events, ev)
+	f.events = append(f.events, codexCount{event: ev, at: at})
 }
 
 // record holds a response's usage until the next token_count shows whether it
@@ -446,7 +457,7 @@ func (f *codexFile) record(row codexLine) {
 		return
 	}
 	f.settle(nil)
-	f.pending = &codexRecord{response: p.ResponseID, usage: *p.Usage}
+	f.pending = &codexRecord{response: p.ResponseID, usage: *p.Usage, at: parseTime(row.Timestamp)}
 }
 
 // settle keeps the pending record unless ev, the next token_count, repeats
@@ -462,8 +473,15 @@ func (f *codexFile) settle(ev *codexEvent) {
 	f.pending = nil
 }
 
-// codexEvent is one token_count line. It is also the key that matches a
-// repeated or replayed request.
+// codexCount is one token_count line and when it was written.
+type codexCount struct {
+	event codexEvent
+	at    time.Time
+}
+
+// codexEvent is what one token_count line counts. It is also the key that
+// matches a repeated or replayed request, which a replay writes at another
+// time.
 type codexEvent struct {
 	total   codexUsage
 	last    codexUsage

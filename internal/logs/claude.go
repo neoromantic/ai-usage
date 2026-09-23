@@ -108,8 +108,9 @@ func claudeFiles(home string, since time.Time) ([]*claudeFile, HomeRead) {
 // home holds it. Files that share a session id (one session under two project
 // directories or in two homes) become one session, and a message both hold
 // counts once. A refused request belongs to the session its message counts
-// in. A session is raised to the usage Claude Code tracked for it, when that
-// is more.
+// in, and so does the hour of the message. A session is raised to the usage
+// Claude Code tracked for it, when that is more; the log gives no time for
+// that part.
 func countClaude(files []*claudeFile) []Session {
 	order := make([]int, len(files))
 	for i := range order {
@@ -151,6 +152,7 @@ func countClaude(files []*claudeFile) []Session {
 				claimed[key] = f.root()
 			}
 			f.sess.Tokens = f.sess.Tokens.Add(m.tokens)
+			AddHour(&f.sess.Hours, m.at, InOut(m.tokens))
 			if m.rejected != nil {
 				f.sess.Rejected = AddRejected(f.sess.Rejected, m.rejected)
 			}
@@ -168,6 +170,7 @@ func countClaude(files []*claudeFile) []Session {
 			continue
 		}
 		out[i].Tokens = out[i].Tokens.Add(f.sess.Tokens)
+		addHours(&out[i], f.sess)
 		// A session kept in two homes grows in the one written last.
 		if f.sess.Updated.After(out[i].Updated) {
 			out[i].Home = f.sess.Home
@@ -237,6 +240,8 @@ type claudeMsg struct {
 	// anon is a message with neither an id nor a line uuid; it cannot be matched.
 	anon   bool
 	tokens Tokens
+	// at is when the message's last snapshot was written.
+	at time.Time
 	// rejected is set on a request Claude refused because a window was full.
 	rejected *Limits
 }
@@ -294,6 +299,7 @@ func parseClaude(path, id, parent string) (*claudeFile, int, error) {
 			msgID = fmt.Sprintf("\x00anon-%d", anon)
 		}
 		u := row.Message.Usage
+		at := parseTime(row.Timestamp)
 		m := claudeMsg{
 			id:      msgID,
 			request: row.RequestID,
@@ -304,7 +310,8 @@ func parseClaude(path, id, parent string) (*claudeFile, int, error) {
 				CacheRead:  u.CacheReadInputTokens,
 				CacheWrite: u.CacheCreationInputTokens,
 			},
-			rejected: claudeRejected(row.QuotaLimits, parseTime(row.Timestamp)),
+			at:       at,
+			rejected: claudeRejected(row.QuotaLimits, at),
 		}
 		i, ok := index[msgID]
 		if !ok {
@@ -314,6 +321,9 @@ func parseClaude(path, id, parent string) (*claudeFile, int, error) {
 		}
 		if m.request == "" {
 			m.request = f.msgs[i].request
+		}
+		if m.at.IsZero() {
+			m.at = f.msgs[i].at
 		}
 		f.msgs[i] = m
 	})

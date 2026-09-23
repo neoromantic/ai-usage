@@ -189,3 +189,52 @@ func TestDecodeGrokPath(t *testing.T) {
 		}
 	}
 }
+
+// turnAt is turn with the line's timestamp, given as its JSON value.
+func turnAt(at, prompt string, usage [4]int64) string {
+	return `{"timestamp":` + at + `,` + strings.TrimPrefix(turn(prompt, usage), "{")
+}
+
+// Each prompt's input and output go to the hour of the turn_completed that is
+// counted for it. Grok writes Unix seconds; milliseconds and RFC 3339 read
+// too. A turn without a time goes to the hour the session was last written.
+func TestGrokHours(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, "sessions", "%2Fwork%2Fapp", "sid")
+	parse := func(at string) time.Time {
+		ts, err := time.Parse(time.RFC3339Nano, at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ts
+	}
+	sec := func(at string) string { return fmt.Sprint(parse(at).Unix()) }
+	ms := func(at string) string { return fmt.Sprint(parse(at).UnixMilli()) }
+	updates := filepath.Join(dir, "updates.jsonl")
+	mustWrite(t, updates,
+		turnAt(sec("2026-09-20T23:59:59Z"), "p1", [4]int64{10, 1, 2, 0}),
+		// The retried turn is the one counted, after midnight.
+		turnAt(sec("2026-09-21T00:00:05Z"), "p1", [4]int64{15, 4, 5, 0}),
+		turnAt(ms("2026-09-21T06:30:00.250Z"), "p2", [4]int64{30, 3, 10, 0}),
+		turnAt(`"2026-09-21T07:15:00Z"`, "p3", [4]int64{5, 1, 0, 0}),
+		turn("p4", [4]int64{7, 1, 0, 0}),
+		// An odd time does not reject the line.
+		turnAt(`{"at":"soon"}`, "p5", [4]int64{2, 1, 0, 0}),
+		// A retry without a time keeps the time of the turn it repeats.
+		turnAt(sec("2026-09-21T08:00:00Z"), "p6", [4]int64{1, 1, 0, 0}),
+		turn("p6", [4]int64{4, 2, 0, 0}),
+	)
+	ageFile(t, updates, now.Add(-time.Hour))
+
+	res := mustRead(t, "grok", home, since)
+	if res.Malformed != 0 {
+		t.Fatalf("malformed = %d", res.Malformed)
+	}
+	checkHours(t, byID(t, res, "sid"), map[string]int64{
+		"2026-09-21T00:00:05Z": 14,
+		"2026-09-21T06:30:00Z": 23,
+		"2026-09-21T07:15:00Z": 6,
+		"2026-09-21T08:00:00Z": 6,
+		"2026-09-22T11:00:00Z": 8 + 3,
+	})
+}

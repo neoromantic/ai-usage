@@ -812,3 +812,21 @@ func TestHermesAuxWithoutRouteIsUnknown(t *testing.T) {
 		t.Fatalf("parts = %+v tokens = %+v, want %+v", s.Parts, s.Tokens, want)
 	}
 }
+
+// Hermes keeps running totals, per session and per model and route, not a
+// time for each call, so it places no tokens in hours. The ledger places what
+// a session grew at the run that saw it; hours read from the totals would
+// move all of a long session to its last activity at every run.
+func TestHermesPlacesNoHours(t *testing.T) {
+	home := t.TempDir()
+	hermesWorkDB(t, home)
+	res := mustRead(t, "hermes", home, since)
+	if len(res.Sessions) == 0 {
+		t.Fatal("no sessions")
+	}
+	for _, s := range res.Sessions {
+		if s.Hours != nil {
+			t.Fatalf("%s hours = %s", s.ID, showHours(s.Hours))
+		}
+	}
+}

@@ -399,3 +399,56 @@ func TestClaudeRejectedRequests(t *testing.T) {
 	}
 	noLeak(t, res)
 }
+
+// Each message's input and output go to the hour of its last snapshot, in the
+// session that counts it. What the log gives no time for, a line without one
+// or the tracker's side calls, goes to the hour the session was last written.
+func TestClaudeHours(t *testing.T) {
+	t.Run("messages, sub-agents, copies, and the tracker", func(t *testing.T) {
+		home := t.TempDir()
+		dir := filepath.Join(home, "projects", "-work-claude")
+		orig := filepath.Join(dir, "orig.jsonl")
+		m2 := cl{id: "m2", req: "r2", session: "orig", cwd: "/work/claude", at: "2026-09-20T22:10:00Z", usage: use(20, 2, 0, 0)}.String()
+		mustWrite(t, orig,
+			m2,
+			// Snapshots of one message on both sides of midnight: the last is the one counted.
+			cl{uuid: "u1", id: "m1", req: "r1", session: "orig", cwd: "/work/claude", at: "2026-09-20T23:59:59Z", usage: use(10, 1, 5, 7)}.String(),
+			cl{uuid: "u2", id: "m1", req: "r1", session: "orig", cwd: "/work/claude", at: "2026-09-21T00:00:01Z", usage: use(10, 9, 5, 7)}.String(),
+			cl{id: "m3", req: "r3", session: "orig", cwd: "/work/claude", usage: use(3, 0, 0, 0)}.String(),
+			costState("orig", [4]int64{50, 20, 5, 7}),
+		)
+		sub := filepath.Join(dir, "orig", "subagents", "agent-1.jsonl")
+		mustWrite(t, sub, cl{id: "s1", req: "rs1", session: "orig", side: true, at: "2026-09-21T05:30:00Z", usage: use(4, 4, 0, 0)}.String())
+		// A resumed copy repeats m2 and adds a message of its own.
+		mustWrite(t, filepath.Join(dir, "copy.jsonl"),
+			`{"type":"user","cwd":"/work/claude","sessionId":"copy","message":{"role":"user","content":"`+secret+`"},"uuid":"c0","timestamp":"2026-09-21T08:59:00Z"}`,
+			m2,
+			cl{id: "m4", req: "r4", session: "copy", cwd: "/work/claude", at: "2026-09-21T09:00:00Z", usage: use(40, 4, 0, 0)}.String(),
+		)
+		ageFile(t, orig, now.Add(-time.Hour))
+		ageFile(t, sub, now.Add(-2*time.Hour))
+
+		res := mustRead(t, "claude", home, since)
+		got := byID(t, res, "orig")
+		if want := (Tokens{Input: 50, Output: 20, CacheWrite: 5, CacheRead: 7}); got.Tokens != want {
+			t.Fatalf("orig tokens = %+v, want %+v", got.Tokens, want)
+		}
+		checkHours(t, got, map[string]int64{
+			"2026-09-20T22:10:00Z": 22,
+			"2026-09-21T00:00:01Z": 19,
+			"2026-09-21T05:30:00Z": 8,
+			// m3, and what the tracker adds to the messages: 13 input and 5 output.
+			"2026-09-22T11:00:00Z": 3 + 18,
+		})
+		checkHours(t, byID(t, res, "copy"), map[string]int64{"2026-09-21T09:00:00Z": 44})
+	})
+	t.Run("one session in two projects", func(t *testing.T) {
+		home := t.TempDir()
+		shared := cl{id: "m1", req: "r1", session: "dup", cwd: "/work/a", at: "2026-09-20T10:00:00Z", usage: use(10, 1, 0, 0)}.String()
+		mustWrite(t, filepath.Join(home, "projects", "-work-a", "dup.jsonl"), shared)
+		mustWrite(t, filepath.Join(home, "projects", "-work-b", "dup.jsonl"), shared,
+			cl{id: "m2", req: "r2", session: "dup", cwd: "/work/a", at: "2026-09-21T10:00:00Z", usage: use(40, 4, 0, 0)}.String())
+		res := mustRead(t, "claude", home, since)
+		checkHours(t, byID(t, res, "dup"), map[string]int64{"2026-09-20T10:00:00Z": 11, "2026-09-21T10:00:00Z": 44})
+	})
+}
