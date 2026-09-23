@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1119,13 +1120,112 @@ func TestStatePersistsAcrossRuns(t *testing.T) {
 
 func TestRunFailsWhileLocked(t *testing.T) {
 	_, o := newWorld(t)
-	unlock, err := o.Dir.Lock(10 * time.Minute)
+	unlock, err := o.Dir.Lock()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer unlock()
 	if _, err := Run(context.Background(), o); err == nil {
 		t.Fatal("Run ran while another run holds the lock")
+	}
+}
+
+// TestRunWaitsForTheRunItOverlaps: a run that may wait uses the result of
+// the run it waited for, and collects itself when that run collected nothing
+// or collected with other inputs: another release, or homes this run's
+// environment names.
+func TestRunWaitsForTheRunItOverlaps(t *testing.T) {
+	for _, tc := range []struct {
+		name                         string
+		collects, newEnv, newVersion bool
+		waited                       bool
+	}{
+		{"collected", true, false, false, true},
+		{"did not collect", false, false, false, false},
+		{"new folder", true, true, false, false},
+		{"other release", true, false, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, o := newWorld(t)
+			h := w.home(t, "claude")
+			w.sessions("claude", h, sess("s1", "/p", 100, t0))
+			run(t, o)
+			held, err := o.Dir.Lock()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.newEnv {
+				w.extraHome(t, "codex", "work-codex")
+			}
+			if tc.newVersion {
+				o.Version = "v1.2.4"
+			}
+			reads := 0
+			read := o.ReadLogs
+			o.ReadLogs = func(p string, homes []string, since time.Time) logs.Result {
+				reads++
+				return read(p, homes, since)
+			}
+			w.now = t0.Add(30 * time.Minute)
+			o.Wait = 10 * time.Second
+			waiting := 0
+			o.Waiting = func() {
+				waiting++
+				go func() {
+					if tc.collects {
+						st, _ := o.Dir.LoadState()
+						st.LastRunAt = t0.Add(15 * time.Minute)
+						if err := o.Dir.SaveState(st); err != nil {
+							t.Error(err)
+						}
+					}
+					held()
+				}()
+			}
+			res := run(t, o)
+			if waiting != 1 || res.Waited != tc.waited || (reads == 0) != tc.waited {
+				t.Fatalf("waiting %d, waited %v, %d reads", waiting, res.Waited, reads)
+			}
+			want := w.now
+			if tc.waited {
+				want = t0.Add(15 * time.Minute)
+			}
+			if !res.State.LastRunAt.Equal(want) || !res.Doc.CollectedAt.Equal(want) {
+				t.Fatalf("result of %s, doc of %s, want %s", res.State.LastRunAt, res.Doc.CollectedAt, want)
+			}
+		})
+	}
+}
+
+// TestRunDoesNotBringBackARemovedHome: a folder a person removes while a run
+// records another one stays removed.
+func TestRunDoesNotBringBackARemovedHome(t *testing.T) {
+	w, o := newWorld(t)
+	old := w.extraHome(t, "codex", "old-codex")
+	run(t, o)
+	added := w.extraHome(t, "codex", "new-codex")
+	getenv := o.Getenv
+	removed := false
+	o.Getenv = func(k string) string {
+		if k == "CODEX_HOME" && !removed {
+			removed = true
+			if _, err := o.Dir.EditConfig(func(c *state.Config) error {
+				c.Homes["codex"] = slices.DeleteFunc(c.Homes["codex"], func(h string) bool { return h == old })
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return getenv(k)
+	}
+	w.now = t0.Add(15 * time.Minute)
+	run(t, o)
+	cfg, err := o.Dir.LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !removed || !reflect.DeepEqual(cfg.Homes["codex"], []string{added}) {
+		t.Fatalf("remembered = %v", cfg.Homes["codex"])
 	}
 }
 

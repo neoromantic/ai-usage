@@ -5,6 +5,9 @@ package collect
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/bits"
@@ -52,6 +55,11 @@ type Options struct {
 	// After runs under the run lock before the state is saved. The command
 	// layer uses it for scheduler registration and self-update bookkeeping.
 	After func(ctx context.Context, cfg *state.Config, st *state.State)
+	// Wait is how long a run waits for another, such as the scheduled one,
+	// to finish; zero fails at once with state.ErrBusy. Waiting is called
+	// when the wait starts.
+	Wait    time.Duration
+	Waiting func()
 
 	// quotaFrom is Config.QuotaFrom keyed by resolved home, set by Run.
 	quotaFrom map[string]map[string]string
@@ -65,6 +73,8 @@ type Result struct {
 	Key    *team.Key
 	Doc    snapshot.Doc
 	Team   TeamCache
+	// Waited is set when the result is the one the run waited for.
+	Waited bool
 }
 
 func (o *Options) fill() {
@@ -141,7 +151,15 @@ func LoadKey(dir state.Dir) (*team.Key, bool, error) {
 // the state and do not stop the run.
 func Run(ctx context.Context, o Options) (*Result, error) {
 	o.fill()
-	unlock, err := o.Dir.Lock(10 * time.Minute)
+	unlock, err := o.Dir.Lock()
+	waited := errors.Is(err, state.ErrBusy) && o.Wait > 0
+	var lastRun time.Time
+	if waited {
+		if st, err := o.Dir.LoadState(); err == nil {
+			lastRun = st.LastRunAt
+		}
+		unlock, err = o.Dir.LockWait(ctx, o.Wait, o.Waiting)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -164,15 +182,34 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	prevRun := st.LastRunAt
 
 	homes := Discover(o.UserHome, o.Getenv, cfg.Homes)
-	remembered, changed := Remember(cfg.Homes, o.UserHome, homes)
-	cfg.Homes = remembered
-	if homeEnv, envChanged := RememberEnv(cfg.HomeEnv, o.Getenv, homes); envChanged {
-		cfg.HomeEnv, changed = homeEnv, true
+	// Only the folders this run found beyond the remembered ones are
+	// recorded, into the config as it is now, so a folder a person added or
+	// removed since it was read stays that way.
+	found := unremembered(homes, o.UserHome, cfg.Homes)
+	remember := func(c *state.Config) bool {
+		remembered, changed := Remember(c.Homes, o.UserHome, found)
+		c.Homes = remembered
+		if homeEnv, envChanged := RememberEnv(c.HomeEnv, o.Getenv, homes); envChanged {
+			c.HomeEnv, changed = homeEnv, true
+		}
+		return changed
 	}
-	if changed {
-		if err := o.Dir.SaveConfig(cfg); err != nil {
+	if remember(&cfg) {
+		cfg, err = o.Dir.EditConfig(func(c *state.Config) error {
+			remember(c)
+			return nil
+		})
+		if err != nil {
 			return nil, err
 		}
+	}
+	inputs := runInputs(o, cfg, homes)
+	if waited && st.LastRunAt.After(lastRun) && st.LastRunInputs == inputs {
+		// The run waited for has just collected what this one would: the
+		// same release, relay, and homes.
+		cache, _ := LoadTeamCache(o.Dir)
+		doc := BuildDoc(st, key, cfg.Device, o.Hostname, o.OSUser, o.Version, st.LastRunAt)
+		return &Result{Config: cfg, State: st, Key: key, Doc: doc, Team: cache, Waited: true}, nil
 	}
 	if o.Ask == nil {
 		o.Ask = askHarness(o.Probe, cfg.HomeEnv)
@@ -230,6 +267,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	// A run succeeds when every installed source could be read. A run where
 	// nothing is installed has nothing to fail and still counts.
 	st.LastRunAt = now
+	st.LastRunInputs = inputs
 	if !failed {
 		st.LastSuccessAt = now
 	}
@@ -265,6 +303,24 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 		return res, err
 	}
 	return res, nil
+}
+
+// runInputs fingerprints what a run collects with: the release, the relay it
+// syncs with, the homes it reads, and how it reads them.
+func runInputs(o Options, cfg state.Config, homes map[string][]string) string {
+	in := struct {
+		Version   string
+		Relay     string
+		Homes     map[string][]string
+		HomeEnv   map[string]map[string]string
+		QuotaFrom map[string]map[string]string
+	}{o.Version, "", homes, cfg.HomeEnv, cfg.QuotaFrom}
+	if o.Relay != nil {
+		in.Relay = o.Relay.BaseURL
+	}
+	b, _ := json.Marshal(in)
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:16])
 }
 
 // readSession is one session as read this run, with the account its growth

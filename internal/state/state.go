@@ -5,6 +5,7 @@
 package state
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -92,12 +93,40 @@ func (d Dir) LoadConfig() (Config, error) {
 
 func (d Dir) SaveConfig(c Config) error { return writeJSON(d.Path("config.json"), c) }
 
+// EditConfig changes config.json under a lock of its own, held only while the
+// file is read and written. A person's command never waits for a collection,
+// and a run that records a newly found folder does not undo the command's
+// change, or the other way round.
+func (d Dir) EditConfig(edit func(*Config) error) (Config, error) {
+	unlock, err := d.lockWait(context.Background(), "config.lock", 10*time.Second, nil)
+	if errors.Is(err, ErrBusy) {
+		// Not ErrBusy, which means a run is collecting.
+		return Config{}, errors.New("another ai-usage command is changing config.json")
+	}
+	if err != nil {
+		return Config{}, fmt.Errorf("config.json: %w", err)
+	}
+	defer unlock()
+	c, err := d.LoadConfig()
+	if err != nil {
+		return c, err
+	}
+	if err := edit(&c); err != nil {
+		return c, err
+	}
+	return c, d.SaveConfig(c)
+}
+
 // State is rewritten by every run.
 type State struct {
 	LastRunAt     time.Time `json:"last_run_at"`
 	LastSuccessAt time.Time `json:"last_success_at"`
 	LastError     string    `json:"last_error,omitempty"`
 	LastErrorAt   time.Time `json:"last_error_at"`
+	// LastRunInputs fingerprints what the last run collected with: its
+	// version, relay, and homes. A run that waited for it reuses its result
+	// only when its own inputs are the same.
+	LastRunInputs string `json:"last_run_inputs,omitempty"`
 
 	Sources map[string]Source `json:"sources"`
 	// Current maps provider and home to the account logged in there at the last run.
@@ -235,55 +264,93 @@ func (d Dir) LoadState() (*State, error) {
 
 func (d Dir) SaveState(s *State) error { return writeJSON(d.Path("state.json"), s) }
 
-// Lock takes the run lock. A lock older than stale is taken over.
-func (d Dir) Lock(stale time.Duration) (func(), error) {
+// ErrBusy is Lock's error while another run holds the lock.
+var ErrBusy = errors.New("another ai-usage run is in progress")
+
+// Lock takes the run lock. A collection holds it from start to end, since it
+// reads and rewrites the state, samples, team cache, and binary. It is the
+// system's lock on run.lock, which ends with the process that holds it
+// however that process ends, so a run that was killed never leaves it behind.
+func (d Dir) Lock() (func(), error) { return d.lock("run.lock") }
+
+func (d Dir) lock(name string) (func(), error) {
 	if err := os.MkdirAll(string(d), 0o700); err != nil {
 		return nil, err
 	}
-	path := d.Path("run.lock")
-	nonce := make([]byte, 8)
-	if _, err := rand.Read(nonce); err != nil {
+	// The file stays in place: removing it would let a later run lock a new
+	// file while an earlier one still holds the old.
+	f, err := os.OpenFile(d.Path(name), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
 		return nil, err
 	}
-	owner := strconv.Itoa(os.Getpid()) + " " + hex.EncodeToString(nonce)
-	for attempt := 0; attempt < 2; attempt++ {
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-		if err == nil {
-			_, werr := f.WriteString(owner)
-			cerr := f.Close()
-			if werr != nil || cerr != nil {
-				_ = os.Remove(path)
-				return nil, errors.Join(werr, cerr)
-			}
-			// A run that outlived stale may have lost the lock to a later
-			// run; releasing must not remove that run's lock.
-			return func() {
-				if b, err := os.ReadFile(path); err == nil && string(b) == owner {
-					_ = os.Remove(path)
-				}
-			}, nil
-		}
-		if !errors.Is(err, os.ErrExist) {
-			return nil, err
-		}
-		info, statErr := os.Stat(path)
-		if statErr != nil || lockAge(info.ModTime()) < stale {
-			return nil, errors.New("another ai-usage run is in progress")
-		}
-		_ = os.Remove(path)
+	if err := lockFile(f); err != nil {
+		f.Close()
+		return nil, err
 	}
-	return nil, errors.New("could not take the run lock")
+	if heldBefore(f) {
+		f.Close()
+		return nil, ErrBusy
+	}
+	// The holder's process id, for a person who wonders which run it is.
+	if f.Truncate(0) == nil {
+		_, _ = f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
+	}
+	return func() {
+		_ = f.Truncate(0)
+		_ = f.Close()
+	}, nil
 }
 
-// lockAge is how long ago a lock was taken. A lock stamped in the future was
-// left by a crashed run before the clock went back; it counts from then too,
-// or it would hold off every run until the clock caught up.
-func lockAge(taken time.Time) time.Duration {
-	age := time.Since(taken)
-	if age < 0 {
-		return -age
+// heldBefore reports whether a release from before the system's lock holds
+// the lock file. Those create it and write "pid nonce" into it, and remove it
+// when done, so one that is still running while a newer release is installed
+// holds the lock by the file alone. It is held while its process runs, up to
+// the 10 minutes those releases allowed a run.
+func heldBefore(f *os.File) bool {
+	b := make([]byte, 64)
+	n, _ := f.ReadAt(b, 0)
+	pid, nonce, ok := strings.Cut(string(b[:n]), " ")
+	info, err := f.Stat()
+	if !ok || len(nonce) != 16 || err != nil {
+		return false
 	}
-	return age
+	if _, err := hex.DecodeString(nonce); err != nil {
+		return false
+	}
+	id, err := strconv.Atoi(pid)
+	if err != nil || id <= 0 || id == os.Getpid() {
+		return false
+	}
+	age := time.Since(info.ModTime())
+	return age > -10*time.Minute && age < 10*time.Minute && processAlive(id)
+}
+
+// lockPoll is how often LockWait tries the lock again.
+var lockPoll = 250 * time.Millisecond
+
+// LockWait takes the run lock like Lock, waiting up to wait for the run that
+// holds it, such as a scheduled one, to finish. waiting is called once, when
+// the wait starts.
+func (d Dir) LockWait(ctx context.Context, wait time.Duration, waiting func()) (func(), error) {
+	return d.lockWait(ctx, "run.lock", wait, waiting)
+}
+
+func (d Dir) lockWait(ctx context.Context, name string, wait time.Duration, waiting func()) (func(), error) {
+	deadline := time.Now().Add(wait)
+	for first := true; ; first = false {
+		unlock, err := d.lock(name)
+		if !errors.Is(err, ErrBusy) || !time.Now().Before(deadline) {
+			return unlock, err
+		}
+		if first && waiting != nil {
+			waiting()
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ErrBusy
+		case <-time.After(min(lockPoll, time.Until(deadline))):
+		}
+	}
 }
 
 func readJSON(path string, v any) error {

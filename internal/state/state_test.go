@@ -1,11 +1,17 @@
 package state
 
 import (
+	"bufio"
+	"context"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -35,89 +41,198 @@ func TestKeyRoundTrip(t *testing.T) {
 
 func TestLockIsExclusive(t *testing.T) {
 	d := tempDir(t)
-	unlock, err := d.Lock(10 * time.Minute)
+	unlock, err := d.Lock()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Lock(10 * time.Minute); err == nil {
-		t.Fatal("second lock succeeded while the first is held")
+	if _, err := d.Lock(); !errors.Is(err, ErrBusy) {
+		t.Fatalf("second lock while the first is held = %v", err)
+	}
+	if b, _ := os.ReadFile(d.Path("run.lock")); string(b) != strconv.Itoa(os.Getpid())+"\n" {
+		t.Fatalf("run.lock names %q", b)
 	}
 	unlock()
-	unlock2, err := d.Lock(10 * time.Minute)
+	if b, _ := os.ReadFile(d.Path("run.lock")); len(b) != 0 {
+		t.Fatalf("released run.lock names %q", b)
+	}
+	unlock2, err := d.Lock()
 	if err != nil {
 		t.Fatalf("lock after release: %v", err)
 	}
 	unlock2()
-	if _, err := os.Stat(d.Path("run.lock")); !os.IsNotExist(err) {
-		t.Fatalf("lock file left behind: %v", err)
-	}
 }
 
-func TestLockTakesOverStaleLock(t *testing.T) {
+// TestLockHonorsEarlierRelease: a release from before the system's lock holds
+// run.lock by having written "pid nonce" into it. Its lock holds a run off
+// while its process runs, for up to 10 minutes; a file a crashed run left
+// holds nothing.
+func TestLockHonorsEarlierRelease(t *testing.T) {
 	d := tempDir(t)
 	if err := os.MkdirAll(string(d), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	path := d.Path("run.lock")
-	if err := os.WriteFile(path, []byte("12345"), 0o600); err != nil {
+	write := func(owner string, age time.Duration) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(owner), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		at := time.Now().Add(-age)
+		if err := os.Chtimes(path, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	live := strconv.Itoa(os.Getppid()) + " 0011223344556677"
+	write(live, time.Minute)
+	if _, err := d.Lock(); !errors.Is(err, ErrBusy) {
+		t.Fatalf("lock while an earlier release runs = %v", err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != live {
+		t.Fatalf("the earlier release's lock became %q", b)
+	}
+	cases := map[string]string{"over 10 minutes old": live, "not a lock": "12345\n"}
+	if runtime.GOOS != "windows" {
+		gone := exec.Command(os.Args[0], "-test.run=^$")
+		if err := gone.Run(); err != nil {
+			t.Fatal(err)
+		}
+		cases["its process gone"] = strconv.Itoa(gone.Process.Pid) + " 0011223344556677"
+	}
+	for name, owner := range cases {
+		age := time.Minute
+		if name == "over 10 minutes old" {
+			age = time.Hour
+		}
+		write(owner, age)
+		unlock, err := d.Lock()
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		unlock()
+	}
+}
+
+// TestHoldLock is the other process of TestLockEndsWithItsProcess.
+func TestHoldLock(t *testing.T) {
+	dir := os.Getenv("AI_USAGE_TEST_HOLD_LOCK")
+	if dir == "" {
+		t.Skip("run by TestLockEndsWithItsProcess")
+	}
+	if _, err := Dir(dir).Lock(); err != nil {
 		t.Fatal(err)
 	}
-	old := time.Now().Add(-time.Hour)
-	if err := os.Chtimes(path, old, old); err != nil {
-		t.Fatal(err)
-	}
-	unlock, err := d.Lock(10 * time.Minute)
+	os.Stdout.WriteString("held\n")
+	time.Sleep(time.Minute)
+}
+
+// TestLockEndsWithItsProcess: another process's lock holds a run off, and a
+// run that was killed leaves no lock behind.
+func TestLockEndsWithItsProcess(t *testing.T) {
+	d := tempDir(t)
+	holder := exec.Command(os.Args[0], "-test.run=^TestHoldLock$")
+	holder.Env = append(os.Environ(), "AI_USAGE_TEST_HOLD_LOCK="+string(d))
+	out, err := holder.StdoutPipe()
 	if err != nil {
-		t.Fatalf("stale lock was not taken over: %v", err)
+		t.Fatal(err)
+	}
+	if err := holder.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Process.Kill()
+	if line, err := bufio.NewReader(out).ReadString('\n'); err != nil || line != "held\n" {
+		t.Fatalf("holder: %q, %v", line, err)
+	}
+	if _, err := d.Lock(); !errors.Is(err, ErrBusy) {
+		t.Fatalf("lock while another process holds it = %v", err)
+	}
+	if err := holder.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	_ = holder.Wait()
+	unlock, err := d.Lock()
+	if err != nil {
+		t.Fatalf("the lock of a killed run was left behind: %v", err)
 	}
 	unlock()
 }
 
-func TestLockReleaseKeepsLockTakenOverByLaterRun(t *testing.T) {
+// TestEditConfigKeepsConcurrentEdits: commands and runs that change the
+// config at the same time each keep their change.
+func TestEditConfigKeepsConcurrentEdits(t *testing.T) {
+	defer func(d time.Duration) { lockPoll = d }(lockPoll)
+	lockPoll = time.Millisecond
 	d := tempDir(t)
-	unlockSlow, err := d.Lock(10 * time.Minute)
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := d.EditConfig(func(c *Config) error {
+				if c.Homes == nil {
+					c.Homes = map[string][]string{}
+				}
+				c.Homes["claude"] = append(c.Homes["claude"], "/h/"+strconv.Itoa(i))
+				return nil
+			})
+			if err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	c, err := d.LoadConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The slow run outlives the stale limit and a later run takes over.
-	old := time.Now().Add(-time.Hour)
-	if err := os.Chtimes(d.Path("run.lock"), old, old); err != nil {
-		t.Fatal(err)
+	if len(c.Homes["claude"]) != 8 {
+		t.Fatalf("homes = %q", c.Homes["claude"])
 	}
-	unlockLater, err := d.Lock(10 * time.Minute)
-	if err != nil {
-		t.Fatalf("take over: %v", err)
-	}
-	unlockSlow()
-	if _, err := d.Lock(10 * time.Minute); err == nil {
-		t.Fatal("the slow run's release removed the later run's lock")
-	}
-	unlockLater()
-	unlock, err := d.Lock(10 * time.Minute)
-	if err != nil {
-		t.Fatalf("lock after the later run released: %v", err)
-	}
-	unlock()
 }
 
-// A crashed run's leftover lock, stamped before the clock went back, must not
-// hold off every run until the clock catches up.
-func TestLockTakesOverLockFromTheFuture(t *testing.T) {
+func TestLockWait(t *testing.T) {
+	defer func(d time.Duration) { lockPoll = d }(lockPoll)
+	lockPoll = 5 * time.Millisecond
+	ctx := context.Background()
 	d := tempDir(t)
-	if err := os.MkdirAll(string(d), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	path := d.Path("run.lock")
-	if err := os.WriteFile(path, []byte("12345"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	ahead := time.Now().Add(time.Hour)
-	if err := os.Chtimes(path, ahead, ahead); err != nil {
-		t.Fatal(err)
-	}
-	unlock, err := d.Lock(10 * time.Minute)
+	held, err := d.Lock()
 	if err != nil {
-		t.Fatalf("lock from the future was not taken over: %v", err)
+		t.Fatal(err)
+	}
+	// The holder finishes while the other run waits.
+	waited := 0
+	done := make(chan struct{})
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		held()
+		close(done)
+	}()
+	unlock, err := d.LockWait(ctx, 10*time.Second, func() { waited++ })
+	if err != nil {
+		t.Fatalf("LockWait: %v", err)
+	}
+	<-done
+	if waited != 1 {
+		t.Fatalf("waiting called %d times", waited)
+	}
+	// No wait at all when the lock is free, and busy once the wait runs out.
+	waited = 0
+	start := time.Now()
+	if _, err := d.LockWait(ctx, 30*time.Millisecond, func() { waited++ }); !errors.Is(err, ErrBusy) {
+		t.Fatalf("LockWait while held = %v", err)
+	}
+	if waited != 1 || time.Since(start) > 5*time.Second {
+		t.Fatalf("waited %d times for %s", waited, time.Since(start))
+	}
+	// Ctrl-C ends the wait.
+	cctx, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := d.LockWait(cctx, time.Hour, nil); !errors.Is(err, ErrBusy) {
+		t.Fatalf("LockWait after cancel = %v", err)
+	}
+	unlock()
+	unlock, err = d.LockWait(ctx, 0, func() { t.Fatal("waited for a free lock") })
+	if err != nil {
+		t.Fatal(err)
 	}
 	unlock()
 }

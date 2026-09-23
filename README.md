@@ -95,7 +95,7 @@ The state folder is `~/Library/Application Support/ai-usage` on macOS, `$XDG_CON
 | `state.json` | the last good readings, sessions, and health |
 | `team-cache.json` | the team's snapshots from the last read |
 | `samples/` | one file per day of samples, kept for 90 days |
-| `run.lock` | keeps two runs from overlapping |
+| `run.lock`, `config.lock` | keep two runs from overlapping, and two commands from changing `config.json` at once; held with the system's file lock, which ends with its process |
 
 ## Teams
 

@@ -42,7 +42,7 @@ var (
 const updateEvery = 6 * time.Hour
 
 // updateTimeout bounds a release check in a run. A slow link needs minutes
-// for the download; the run lock is taken over after 10.
+// for the download.
 const updateTimeout = 7 * time.Minute
 
 // Tests replace these so they never run a real harness, edit the crontab, or
@@ -117,21 +117,21 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	var err error
 	switch cmd {
 	case "", "collect":
-		err = cmdCollect(ctx, args, stdout)
+		err = cmdCollect(ctx, args, stdout, stderr)
 	case "report":
 		err = cmdReport(args, stdout)
 	case "status":
 		err = cmdStatus(args, stdout)
 	case "team":
-		err = cmdTeam(ctx, args, stdin, stdout)
+		err = cmdTeam(ctx, args, stdin, stdout, stderr)
 	case "home":
 		err = cmdHome(args, stdout)
 	case "relay":
 		err = cmdRelay(ctx, args, stdout, stderr)
 	case "schedule":
-		err = cmdSchedule(ctx, args, stdout)
+		err = cmdSchedule(ctx, args, stdout, stderr)
 	case "update":
-		err = cmdUpdate(ctx, stdout)
+		err = cmdUpdate(ctx, stdout, stderr)
 	case "version", "-version", "--version":
 		fmt.Fprintln(stdout, version)
 	case "help", "-h", "-help", "--help":
@@ -210,7 +210,7 @@ var osUser = func() string {
 	return os.Getenv("USERNAME")
 }
 
-func cmdCollect(ctx context.Context, args []string, stdout io.Writer) (err error) {
+func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) (err error) {
 	fs := flags("collect")
 	jsonOut := fs.Bool("json", false, "")
 	quiet := fs.Bool("quiet", false, "")
@@ -260,6 +260,15 @@ func cmdCollect(ctx context.Context, args []string, stdout io.Writer) (err error
 		// Run signs with the key it loads under the run lock.
 		opts.Relay = &relay.Client{BaseURL: endpoint}
 	}
+	if !*quiet {
+		// A run the person started while another, usually the scheduled
+		// one, collects waits for it and shows its result rather than
+		// collect twice. The scheduler runs with --quiet and just skips.
+		opts.Wait = lockWait
+		opts.Waiting = func() {
+			fmt.Fprintln(stderr, "ai-usage: another run, such as the scheduled one, is collecting now; waiting for its result")
+		}
+	}
 	res, err := runCollect(ctx, opts)
 	if err != nil {
 		return err
@@ -301,7 +310,7 @@ func rescue(ctx context.Context, d state.Dir, cause error) {
 		return
 	}
 	// A run that holds the lock does its own housekeeping.
-	unlock, err := d.Lock(10 * time.Minute)
+	unlock, err := d.Lock()
 	if err != nil {
 		return
 	}
@@ -377,6 +386,20 @@ func noteUpdate(st *state.State, now time.Time, res selfupdate.Result, err error
 	if res.Installed {
 		st.Update.Installed = res.Latest
 	}
+}
+
+// lockWait is how long a command the person started waits for another run,
+// such as a scheduled one, to release the run lock. A scheduled run on a Mac
+// takes up to about a minute at background priority.
+var lockWait = 3 * time.Minute
+
+// waitLock takes the run lock for a command the person started that changes
+// what a collection also writes or acts on: the team key and cache, the
+// binary, or the scheduler entry.
+func waitLock(ctx context.Context, d state.Dir, stderr io.Writer) (func(), error) {
+	return d.LockWait(ctx, lockWait, func() {
+		fmt.Fprintln(stderr, "ai-usage: waiting for another run, such as the scheduled one, to finish")
+	})
 }
 
 // disabledByHand is the schedule error for an entry the person paused.
@@ -546,7 +569,7 @@ func cmdStatus(args []string, stdout io.Writer) error {
 	return err
 }
 
-func cmdTeam(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer) error {
+func cmdTeam(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	d, err := dir()
 	if err != nil {
 		return err
@@ -598,7 +621,7 @@ func cmdTeam(ctx context.Context, args []string, stdin io.Reader, stdout io.Writ
 		default:
 			return usageError("team join takes one key")
 		}
-		return joinTeam(ctx, d, line, stdout)
+		return joinTeam(ctx, d, line, stdout, stderr)
 	case "forget-device":
 		if len(args) != 1 {
 			return usageError("team forget-device takes one device id")
@@ -624,7 +647,7 @@ func cmdTeam(ctx context.Context, args []string, stdin io.Reader, stdout io.Writ
 		}
 		fmt.Fprintf(stdout, "removed %s from team %s\n", args[0], key.Fingerprint())
 		// The cached team read no longer lists it either.
-		unlock, err := d.Lock(10 * time.Minute)
+		unlock, err := waitLock(ctx, d, stderr)
 		if err != nil {
 			return err
 		}
@@ -635,12 +658,12 @@ func cmdTeam(ctx context.Context, args []string, stdin io.Reader, stdout io.Writ
 	}
 }
 
-func joinTeam(ctx context.Context, d state.Dir, line string, stdout io.Writer) error {
+func joinTeam(ctx context.Context, d state.Dir, line string, stdout, stderr io.Writer) error {
 	next, err := team.Import(line)
 	if err != nil {
 		return err
 	}
-	unlock, err := d.Lock(10 * time.Minute)
+	unlock, err := waitLock(ctx, d, stderr)
 	if err != nil {
 		return err
 	}
@@ -755,15 +778,13 @@ func cmdRelay(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 		if p, err := url.Parse(u); err != nil || (p.Scheme != "https" && p.Scheme != "http") || p.Host == "" || p.RawQuery != "" || p.Fragment != "" {
 			return usageError("relay URL must look like https://host or https://host/path")
 		}
-		cfg.Relay = u
-		if err := d.SaveConfig(cfg); err != nil {
+		if _, err := d.EditConfig(func(c *state.Config) error { c.Relay = u; return nil }); err != nil {
 			return err
 		}
 		fmt.Fprintf(stdout, "relay set to %s\n", u)
 		return nil
 	case "clear":
-		cfg.Relay = ""
-		if err := d.SaveConfig(cfg); err != nil {
+		if _, err := d.EditConfig(func(c *state.Config) error { c.Relay = ""; return nil }); err != nil {
 			return err
 		}
 		if defaultRelay != "" {
@@ -777,7 +798,7 @@ func cmdRelay(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	}
 }
 
-func cmdSchedule(ctx context.Context, args []string, stdout io.Writer) error {
+func cmdSchedule(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) != 1 {
 		return usageError("schedule takes install, remove, or status")
 	}
@@ -785,8 +806,7 @@ func cmdSchedule(ctx context.Context, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	cfg, err := d.LoadConfig()
-	if err != nil {
+	if _, err := d.LoadConfig(); err != nil {
 		return err
 	}
 	s := newScheduler()
@@ -794,13 +814,21 @@ func cmdSchedule(ctx context.Context, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if args[0] == "install" || args[0] == "remove" {
+		// A run registers itself again unless the config says otherwise, so
+		// the entry and the config change between runs, never under one.
+		unlock, err := waitLock(ctx, d, stderr)
+		if err != nil {
+			return err
+		}
+		defer unlock()
+	}
 	switch args[0] {
 	case "install":
 		if err := s.Install(ctx, exe, home, os.Getenv("PATH")); err != nil {
 			return err
 		}
-		cfg.ScheduleOff = false
-		if err := d.SaveConfig(cfg); err != nil {
+		if _, err := d.EditConfig(func(c *state.Config) error { c.ScheduleOff = false; return nil }); err != nil {
 			return err
 		}
 		fmt.Fprintf(stdout, "registered %s to run every %s with state folder %s\n", exe, schedule.Interval, home)
@@ -808,8 +836,7 @@ func cmdSchedule(ctx context.Context, args []string, stdout io.Writer) error {
 		if err := s.Remove(ctx); err != nil {
 			return err
 		}
-		cfg.ScheduleOff = true
-		if err := d.SaveConfig(cfg); err != nil {
+		if _, err := d.EditConfig(func(c *state.Config) error { c.ScheduleOff = true; return nil }); err != nil {
 			return err
 		}
 		fmt.Fprintln(stdout, "removed from the system scheduler; later runs will not register again until `ai-usage schedule install`")
@@ -836,7 +863,7 @@ func cmdSchedule(ctx context.Context, args []string, stdout io.Writer) error {
 	return nil
 }
 
-func cmdUpdate(ctx context.Context, stdout io.Writer) error {
+func cmdUpdate(ctx context.Context, stdout, stderr io.Writer) error {
 	if selfupdate.Dev(version) {
 		return errors.New("this is a development build (" + version + "); install a release to self-update")
 	}
@@ -845,7 +872,7 @@ func cmdUpdate(ctx context.Context, stdout io.Writer) error {
 		return err
 	}
 	// The lock keeps a scheduled run from replacing the binary at the same time.
-	unlock, err := d.Lock(10 * time.Minute)
+	unlock, err := waitLock(ctx, d, stderr)
 	if err != nil {
 		return err
 	}

@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strings"
 	"text/tabwriter"
-	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
 	"github.com/neoromantic/ai-usage/internal/state"
@@ -99,7 +98,10 @@ func cmdHome(args []string, stdout io.Writer) error {
 		refs = append(refs, homeRef{provider: qp, home: abs})
 	}
 
-	cfg, err := changeHomes(d, func(cfg *state.Config) error {
+	// The config has a lock of its own, so this never waits for a
+	// collection, and it is released before anything is printed: a process
+	// killed while writing to a closed pipe would leave it held.
+	cfg, err := d.EditConfig(func(cfg *state.Config) error {
 		if sub == "add" {
 			addHomes(cfg, userHome, p, homes, refs)
 			return nil
@@ -110,25 +112,6 @@ func cmdHome(args []string, stdout io.Writer) error {
 		return err
 	}
 	return listHomes(cfg, userHome, stdout)
-}
-
-// changeHomes edits the config under the run lock, since a scheduled run
-// rewrites it too. The lock is released before anything is printed: a
-// process killed while writing to a closed pipe would leave it held.
-func changeHomes(d state.Dir, edit func(*state.Config) error) (state.Config, error) {
-	unlock, err := d.Lock(10 * time.Minute)
-	if err != nil {
-		return state.Config{}, err
-	}
-	defer unlock()
-	cfg, err := d.LoadConfig()
-	if err != nil {
-		return cfg, err
-	}
-	if err := edit(&cfg); err != nil {
-		return cfg, err
-	}
-	return cfg, d.SaveConfig(cfg)
 }
 
 func known(p string) bool {

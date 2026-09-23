@@ -227,6 +227,22 @@ func Remember(remembered map[string][]string, userHome string, found map[string]
 	return remembered, changed
 }
 
+// unremembered is the found homes Remember would add to remembered. Found
+// homes that are remembered already are left out, so recording the rest never
+// brings back one a person removed meanwhile.
+func unremembered(found map[string][]string, userHome string, remembered map[string][]string) map[string][]string {
+	all, _ := Remember(nil, userHome, found)
+	out := map[string][]string{}
+	for p, homes := range all {
+		for _, h := range homes {
+			if !contains(remembered[p], h) {
+				out[p] = append(out[p], h)
+			}
+		}
+	}
+	return out
+}
+
 // envKeptVerbatim are the variables whose exact value a harness depends on,
 // beyond the directory it names.
 var envKeptVerbatim = []string{"claude"}

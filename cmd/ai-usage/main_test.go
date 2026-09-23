@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -342,6 +343,89 @@ func TestReportBeforeAnyRunWritesNothing(t *testing.T) {
 	if _, err := os.Stat(d.dir); !os.IsNotExist(err) {
 		entries, _ := os.ReadDir(d.dir)
 		t.Fatalf("report created collector files: %v", entries)
+	}
+}
+
+// TestCollectWhileAnotherRunCollects: while the scheduled run holds the run
+// lock, a run the person started waits and shows that run's result instead
+// of collecting twice, the scheduler's own run skips, and editing the config
+// does not wait at all. After a change to what would be collected, or a
+// holder that did not collect, the waiting run collects itself.
+func TestCollectWhileAnotherRunCollects(t *testing.T) {
+	hermetic(t)
+	d := newDevice(t)
+	d.claude("11111111-aaaa", "/work/app", 1)
+	d.ok("collect", "--quiet", "--offline")
+	dir := state.Dir(d.dir)
+	clock = func() time.Time { return time.Now().Add(time.Hour) }
+	// hold stands in for the scheduled run: it holds the lock, and when it
+	// ends it has collected, with the same inputs, or not.
+	hold := func(collects bool) time.Time {
+		t.Helper()
+		held, err := dir.Lock()
+		if err != nil {
+			t.Fatal(err)
+		}
+		collected := d.state().LastRunAt.Add(15 * time.Minute)
+		go func() {
+			time.Sleep(300 * time.Millisecond)
+			if collects {
+				st, _ := dir.LoadState()
+				st.LastRunAt = collected
+				if err := dir.SaveState(st); err != nil {
+					t.Error(err)
+				}
+			}
+			held()
+		}()
+		return collected
+	}
+
+	collected := hold(true)
+	if r := d.run("", "collect", "--quiet", "--offline"); r.code == 0 || !strings.Contains(r.stderr, "in progress") {
+		t.Fatalf("scheduled run with the lock held: %+v", r)
+	}
+	r := d.run("", "collect", "--offline")
+	if r.code != 0 || !strings.Contains(r.stderr, "collecting now") || !strings.Contains(r.stdout, "ACCOUNTS") {
+		t.Fatalf("run the person started: %+v", r)
+	}
+	if got := d.state().LastRunAt; !got.Equal(collected) {
+		t.Fatalf("collected a second time: last run %s, want %s", got, collected)
+	}
+
+	// A home added while the scheduled run collects is read by the run that
+	// waited for it.
+	collected = hold(true)
+	extra := filepath.Join(d.home, "work-claude")
+	if err := os.MkdirAll(extra, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	d.ok("home", "add", "claude", extra)
+	if time.Since(start) > 5*time.Second {
+		t.Fatalf("home add waited %s for the collection", time.Since(start))
+	}
+	if r := d.run("", "collect", "--offline"); r.code != 0 || !strings.Contains(r.stderr, "collecting now") {
+		t.Fatalf("run after home add: %+v", r)
+	}
+	st := d.state()
+	if !st.LastRunAt.After(collected) || !slices.Contains(st.Sources["claude"].Homes, extra) {
+		t.Fatalf("did not collect the added home: last run %s, homes %q", st.LastRunAt, st.Sources["claude"].Homes)
+	}
+	if homes := d.config().Homes["claude"]; !slices.Contains(homes, extra) {
+		t.Fatalf("the added home was lost: %q", homes)
+	}
+
+	// A holder that did not collect, such as `ai-usage update`, leaves the
+	// collection to the run that waited.
+	before := d.state().LastRunAt
+	clock = func() time.Time { return time.Now().Add(2 * time.Hour) }
+	hold(false)
+	if r := d.run("", "collect", "--offline"); r.code != 0 || !strings.Contains(r.stderr, "collecting now") {
+		t.Fatalf("run after a holder that did not collect: %+v", r)
+	}
+	if got := d.state().LastRunAt; !got.After(before) {
+		t.Fatalf("did not collect: last run %s", got)
 	}
 }
 
@@ -1179,8 +1263,10 @@ func TestUpdateWhenCollectionFails(t *testing.T) {
 			if b, _ := os.ReadFile(exe); *downloads != 1 || !bytes.Equal(b, bin) {
 				t.Fatalf("release was not installed (%d downloads)", *downloads)
 			}
-			if _, err := os.Stat(filepath.Join(d.dir, "run.lock")); !os.IsNotExist(err) {
-				t.Fatal("run.lock was left behind")
+			if unlock, err := state.Dir(d.dir).Lock(); err != nil {
+				t.Fatalf("the run lock was left held: %v", err)
+			} else {
+				unlock()
 			}
 			if tc.file != "state.json" {
 				if st := d.state(); st.Update.Installed != "v1.3.0" || st.Update.CheckedAt.IsZero() {
@@ -1220,8 +1306,10 @@ func TestPanicIsRecordedAndStillUpdates(t *testing.T) {
 	if b, _ := os.ReadFile(exe); st.Update.Installed != "v1.3.0" || *downloads != 1 || !bytes.Equal(b, bin) {
 		t.Fatalf("update = %+v after %d downloads", st.Update, *downloads)
 	}
-	if _, err := os.Stat(filepath.Join(d.dir, "run.lock")); !os.IsNotExist(err) {
-		t.Fatal("run.lock was left behind")
+	if unlock, err := state.Dir(d.dir).Lock(); err != nil {
+		t.Fatalf("the run lock was left held: %v", err)
+	} else {
+		unlock()
 	}
 	if out := d.ok("status"); !strings.Contains(out, "clock bug") {
 		t.Fatalf("status hides the panic:\n%s", out)
