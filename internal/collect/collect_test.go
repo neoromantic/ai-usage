@@ -1087,7 +1087,7 @@ func TestNothingInstalledIsASuccessfulRun(t *testing.T) {
 	}
 }
 
-func TestInstalledBinaryWithoutHomeIsStillAsked(t *testing.T) {
+func TestInstalledToolWithoutItsHomeIsNotAsked(t *testing.T) {
 	w, o := newWorld(t)
 	bin := filepath.Join(w.userHome, ".local", "bin")
 	if err := os.MkdirAll(bin, 0o700); err != nil {
@@ -1096,24 +1096,13 @@ func TestInstalledBinaryWithoutHomeIsStillAsked(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte("x"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	def := filepath.Join(w.userHome, ".claude") // not created
-	w.login("claude", def, "ann", quota(t0, 5))
 	res := run(t, o)
-	a := totalsFor(t, res.State, "claude", "ann")
-	if !a.Current || a.Quota == nil {
-		t.Fatalf("totals = %+v", a)
+	if len(w.asked) != 0 {
+		t.Fatalf("asked %v", w.asked)
 	}
-	if res.State.Sources["claude"].Status != "ok" {
-		t.Fatalf("source = %+v", res.State.Sources["claude"])
-	}
-
-	// It says nobody is logged in: ann is no longer current.
-	w.now = t0.Add(15 * time.Minute)
-	w.readings[state.Key("claude", def)] = probe.Reading{}
-	w.askErr[state.Key("claude", def)] = notLoggedIn("claude")
-	res = run(t, o)
-	if IsCurrent(res.State, "claude", "ann") {
-		t.Fatalf("current = %v", res.State.Current)
+	// Installed, so not "skipped", which the report shows as not installed.
+	if s := res.State.Sources["claude"]; s.Status != "ok" || len(s.Homes) != 0 {
+		t.Fatalf("source = %+v", s)
 	}
 }
 

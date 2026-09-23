@@ -471,20 +471,11 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 		if len(homes) > 0 {
 			probed = []string{""}
 		}
-	} else if len(homes) == 0 {
-		// Installed binary, no data directory yet: still ask who is logged in.
-		home := filepath.Join(o.UserHome, "."+p)
-		probed = []string{home}
-		reading, perr := o.Ask(ctx, p, home)
-		// A tool that is installed but was never used, such as one in a
-		// bot's image, has nobody logged in: not a problem.
-		if perr != nil && !isLoggedOut(perr) {
-			errs = append(errs, shortErr(perr))
-		}
-		if strings.TrimSpace(reading.Account) != "" || isLoggedOut(perr) {
-			applyReading(st, p, home, reading, isLoggedOut(perr), nil, now, prevRun)
-		}
 	}
+	// An installed tool without its data directory has never been used, and
+	// nobody is logged in to it: logging in makes the directory. It is not
+	// asked, since asking would start it and it would make the directory
+	// itself, in the home of someone who may only have the app that bundles it.
 	keepCurrent(st, p, probed)
 	switch {
 	case len(errs) == 0:
