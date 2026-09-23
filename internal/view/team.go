@@ -85,6 +85,7 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 	linked := map[string]map[string]*LinkedUsage{}
 	var devs []*device
 	aliases := map[string]snapshot.Alias{}
+	aliasBy := map[string]string{}
 	for _, d := range docs {
 		label := open(d.DeviceLabel)
 		dev := &TeamDevice{
@@ -107,12 +108,17 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 		dv := &device{dev: dev, name: label + " (" + dev.OSUser + ")", collectedAt: d.CollectedAt, shift: dayShift(d.CollectedAt, now)}
 		devs = append(devs, dv)
 		for _, a := range d.Aliases {
-			k := state.Key(a.Provider, open(a.Label))
-			if cur, ok := aliases[k]; !ok || a.At.After(cur.At) {
-				if a.Name != "" {
-					a.Name = open(a.Name)
+			if a.Name != "" {
+				// A name the alias command would refuse is not one.
+				if a.Name = open(a.Name); snapshot.CheckAlias(a.Name) != nil {
+					continue
 				}
-				aliases[k] = a
+			}
+			k := aliasKey(a.Provider, open(a.Label))
+			// The newest wins, and of two set at once, the one from the
+			// smaller device id, as the alias command picks.
+			if cur, ok := aliases[k]; !ok || a.At.After(cur.At) || (a.At.Equal(cur.At) && d.Device < aliasBy[k]) {
+				aliases[k], aliasBy[k] = a, d.Device
 			}
 		}
 
@@ -383,22 +389,31 @@ func users(provider string, m map[string]*teamAccount, devs []*device) {
 func names(provider string, m map[string]*teamAccount, aliases map[string]snapshot.Alias) {
 	count := map[string]int{}
 	for _, x := range m {
-		count[defaultName(x.ta.Label)]++
+		count[ShortName(x.ta.Label)]++
 	}
 	for _, x := range m {
 		x.ta.Name = x.ta.Label
-		if n := defaultName(x.ta.Label); count[n] == 1 {
+		if n := ShortName(x.ta.Label); count[n] == 1 {
 			x.ta.Name = n
 		}
-		if a, ok := aliases[state.Key(provider, x.ta.Label)]; ok && a.Name != "" {
+		if a, ok := aliases[aliasKey(provider, x.ta.Label)]; ok && a.Name != "" {
 			x.ta.Name, x.ta.Alias = a.Name, strPtr(a.Name)
 		}
 	}
 }
 
-// defaultName is a label's short name before collisions: the part of an
-// email before the @, or the first 8 characters of an id.
-func defaultName(label string) string {
+// aliasKey keys an alias by provider and label, with an email in any case.
+func aliasKey(provider, label string) string {
+	if strings.Contains(label, "@") {
+		label = strings.ToLower(label)
+	}
+	return state.Key(provider, label)
+}
+
+// ShortName is a label's short name when the team gave it none, before
+// collisions: the part of an email before the @, the first 8 characters of
+// an id, else the whole label.
+func ShortName(label string) string {
 	if i := strings.Index(label, "@"); i > 0 {
 		return label[:i]
 	}

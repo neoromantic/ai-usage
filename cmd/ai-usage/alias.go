@@ -10,17 +10,13 @@ import (
 	"strings"
 	"text/tabwriter"
 	"time"
-	"unicode"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
+	"github.com/neoromantic/ai-usage/internal/view"
 )
-
-// maxAlias is how wide an account's short name may be, in columns: a
-// column of the device matrix.
-const maxAlias = 12
 
 // argError is an argument that names nothing, or more than one thing, this
 // device knows. It exits 2 like a usage error, but says what there is instead
@@ -57,7 +53,7 @@ func cmdAlias(args []string, stdout io.Writer) error {
 	var name string
 	if !clear && len(rest) == 2 {
 		name = strings.TrimSpace(rest[1])
-		if err := validAlias(name); err != nil {
+		if err := snapshot.CheckAlias(name); err != nil {
 			return usageError(err.Error())
 		}
 	}
@@ -116,74 +112,6 @@ func cmdAlias(args []string, stdout io.Writer) error {
 		fmt.Fprintf(stdout, "a provider before the account, as in %s:%s, picks one alone\n", targets[len(targets)-1].provider, label)
 	}
 	return nil
-}
-
-// validAlias says what is wrong with an account's short name, if anything.
-// The snapshot seals the name, so its checks do not see it; these keep it to
-// a matrix column and to text a terminal shows as it is.
-func validAlias(n string) error {
-	switch {
-	case n == "":
-		return errors.New("a name cannot be empty")
-	case strings.ContainsFunc(n, unicode.IsSpace):
-		return errors.New("a name cannot contain spaces")
-	case strings.ContainsFunc(n, unicode.IsControl):
-		return errors.New("a name cannot contain control characters")
-	case snapshot.Printable(n) != n || strings.ContainsFunc(n, func(r rune) bool { return !unicode.IsGraphic(r) }):
-		return errors.New("a name cannot contain invisible characters")
-	case aliasWidth(n) > maxAlias:
-		return fmt.Errorf("a name is at most %d columns wide", maxAlias)
-	}
-	return nil
-}
-
-// aliasWidth is how many columns n takes, counting East Asian wide runes and
-// emoji as two. A combining mark counts as one, so it errs long.
-func aliasWidth(n string) int {
-	w := 0
-	for _, r := range n {
-		switch {
-		case r >= 0x1100 && r <= 0x115F, r >= 0x2E80 && r <= 0xA4CF, r >= 0xAC00 && r <= 0xD7A3,
-			r >= 0xF900 && r <= 0xFAFF, r >= 0xFE30 && r <= 0xFE4F, r >= 0xFF00 && r <= 0xFF60,
-			r >= 0xFFE0 && r <= 0xFFE6, r >= 0x1F300 && r <= 0x1FAFF, r >= 0x20000 && r <= 0x3FFFD:
-			w += 2
-		default:
-			w++
-		}
-	}
-	return w
-}
-
-// shortName is an account's name when the team gave it none, as the report
-// gives it: the part of an email before the @, the first 8 characters of an
-// id, else the whole label.
-func shortName(label string) string {
-	if i := strings.Index(label, "@"); i > 0 {
-		return label[:i]
-	}
-	if idLike(label) {
-		return label[:8]
-	}
-	return label
-}
-
-// idLike is a label that is an opaque id, such as a UUID: 16 or more letters,
-// digits, dashes, and underscores with a digit among them.
-func idLike(s string) bool {
-	if len(s) < 16 {
-		return false
-	}
-	digits := false
-	for _, r := range s {
-		switch {
-		case r >= '0' && r <= '9':
-			digits = true
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r == '-', r == '_':
-		default:
-			return false
-		}
-	}
-	return digits
 }
 
 // sameLabel matches labels as the harnesses spell them, emails in any case.
@@ -273,7 +201,7 @@ func loadAliasBook(d state.Dir, cfg state.Config, st *state.State) *aliasBook {
 					l, ok := open(a.Label)
 					n, nok := open(a.Name)
 					// A name this command would refuse is not one.
-					if !ok || !nok || (n != "" && validAlias(n) != nil) {
+					if !ok || !nok || (n != "" && snapshot.CheckAlias(n) != nil) {
 						continue
 					}
 					add(a.Provider, l)
@@ -311,7 +239,7 @@ func (b *aliasBook) current(a account) string {
 	if n := b.alias(a); n != "" {
 		return n
 	}
-	return shortName(a.label)
+	return view.ShortName(a.label)
 }
 
 // nameOf is the name the accounts go by now, when they have one.
@@ -353,7 +281,7 @@ func (b *aliasBook) match(q string) ([]account, error) {
 	}
 	if len(found) == 0 {
 		for _, a := range pool {
-			if strings.EqualFold(b.alias(a), q) || strings.EqualFold(shortName(a.label), q) {
+			if strings.EqualFold(b.alias(a), q) || strings.EqualFold(view.ShortName(a.label), q) {
 				found = append(found, a)
 			}
 		}

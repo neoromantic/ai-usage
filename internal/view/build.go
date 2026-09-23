@@ -120,7 +120,7 @@ func teamName(t Team, provider, label string) string {
 			}
 		}
 	}
-	return defaultName(label)
+	return ShortName(label)
 }
 
 // currentHome is the first of the provider's homes whose login is label.

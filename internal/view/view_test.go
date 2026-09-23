@@ -265,6 +265,34 @@ func TestAliasesTravelAndTheNewestWins(t *testing.T) {
 	}
 }
 
+// A name the alias command would refuse, which only another build can seal,
+// is not shown. Of two names set at once, the smaller device id's wins, as
+// the alias command picks, and an email matches in any case.
+func TestAliasesTheReportRefuses(t *testing.T) {
+	st := emptyState()
+	addAccount(st, "codex", "bots@corp.test", true, nil, 10)
+	addAccount(st, "claude", "sam@mail.test", true, nil, 10)
+	f := newFixture(t, st)
+	at := now.Add(-time.Hour)
+	doc := func(device string, aliases map[string]state.Alias) snapshot.Doc {
+		return docWith(t, f.key, state.Config{Device: device, Aliases: aliases}, device, now, emptyState())
+	}
+	r := withTeam(t, f,
+		doc("d-device-2", map[string]state.Alias{state.Key("codex", "bots@corp.test"): {Name: "second", At: at}}),
+		doc("d-device-1", map[string]state.Alias{state.Key("codex", "bots@corp.test"): {Name: "first", At: at}}),
+		doc("d-device-0", map[string]state.Alias{
+			state.Key("codex", "bots@corp.test"): {Name: "bad name", At: now},
+			state.Key("claude", "Sam@Mail.test"): {Name: "sammy", At: at},
+		}),
+	)
+	if a := findTeamAccount(t, r, "codex", "bots@corp.test"); a.Name != "first" {
+		t.Fatalf("bots = %q", a.Name)
+	}
+	if a := findTeamAccount(t, r, "claude", "sam@mail.test"); a.Name != "sammy" {
+		t.Fatalf("sam = %q", a.Name)
+	}
+}
+
 // Users counts the devices that spent on the account since its main window
 // began, Hermes through it included, and names the busiest.
 func TestUsersSinceTheWindowBegan(t *testing.T) {
