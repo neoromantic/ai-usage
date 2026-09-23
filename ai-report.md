@@ -144,6 +144,10 @@ Recorded on 2026-09-23 with the owner. Not started.
   - comments that restate the code.
 
   The CLI, the snapshot (`schema_version` 2), and the relay protocol stay compatible, and behavior does not change. Run it with the current tests, before they are pruned, so they check the refactor.
+- **Find why an account has no name or no reading.** One Mac in the team (`Mac.localdomain`, on v0.1.1) shows both. The cause comes first; the fix follows from it.
+  - Its Codex usage is filed under `unknown`: 2,875 sessions and 1.2G input tokens, the most of any account. The same device reports `codex initialize: app-server exited without answering`, so the harness never said who is logged in. Find why the app server does not answer there, and whether that history is claimed by the right account once it does.
+  - Its Claude Max account has 90 days of usage but has never had a quota reading. Find where the reading is lost: the harness, its usage cache, or the collector.
+  - Check both again once the device runs the current release.
 
 ## Implementation status
 
