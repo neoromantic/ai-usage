@@ -290,9 +290,7 @@ func known(w *Window) bool { return w != nil && !w.Reset && !unread(w) }
 
 // unread says a window was not read since Claude refused a request: how
 // full it is now is not known.
-//
-// TODO(integrator): return w.Unread once Window has the field.
-func unread(w *Window) bool { return false }
+func unread(w *Window) bool { return w != nil && w.Unread }
 
 // leftText is what is left of a window: a whole percent, ~ before it for an
 // old reading, and ? when it is not known.
