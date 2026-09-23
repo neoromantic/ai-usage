@@ -1,0 +1,56 @@
+name: Release
+
+# Push a tag like v1.2.3 to publish. A tag with a suffix, like v1.2.3-rc.1,
+# becomes a prerelease: installers and self-update skip it.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # No module or build cache: release binaries build from a clean slate.
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: false
+      - run: go vet ./...
+      - run: go test ./...
+      # The repository variable AI_USAGE_RELAY_URL, if set, becomes the
+      # binaries' default relay. It reaches dist.sh through the environment,
+      # never pasted into the script.
+      - name: Build
+        env:
+          AI_USAGE_RELAY_URL: ${{ vars.AI_USAGE_RELAY_URL }}
+        run: sh .github/scripts/dist.sh "$GITHUB_REF_NAME" dist
+      - name: Check the build
+        run: |
+          test "$(./dist/ai-usage_linux_amd64 version)" = "$GITHUB_REF_NAME"
+          test "$(wc -l <dist/checksums.txt)" -eq 6
+          (cd dist && sha256sum --strict -c checksums.txt)
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          flags=()
+          if [[ $TAG == *-* ]]; then flags+=(--prerelease); fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # A rerun: replace the files, then make sure the release is out.
+            gh release upload "$TAG" dist/* --clobber
+          else
+            # Created as a draft, so releases/latest never points at a release
+            # whose files are still uploading.
+            gh release create "$TAG" dist/* --draft --verify-tag --title "$TAG" --generate-notes "${flags[@]}"
+          fi
+          gh release edit "$TAG" --draft=false

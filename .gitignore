@@ -1,0 +1,6 @@
+/ai-usage
+/ai-usage.exe
+*.test
+/dist/
+.vercel
+.env*.local

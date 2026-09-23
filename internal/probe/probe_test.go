@@ -1,0 +1,476 @@
+package probe
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"slices"
+	"strings"
+	"syscall"
+	"testing"
+	"time"
+)
+
+var testNow = time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
+
+// fakeEnv runs this test binary as the harness named by the probe, in the
+// given mode. Probes replace cmd.Env, so the mode travels in Environ.
+func fakeEnv(t *testing.T, mode string, environ ...string) (Env, string) {
+	t.Helper()
+	record := filepath.Join(t.TempDir(), "record.jsonl")
+	env := Env{
+		Command: func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			argv := append([]string{"-test.run=^TestHelperProcess$", "--", filepath.Base(name)}, args...)
+			return exec.CommandContext(ctx, os.Args[0], argv...)
+		},
+		LookPath: func(name string) (string, error) { return filepath.Join("fake", "bin", name), nil },
+		Environ:  append(helperEnviron(mode, record), environ...),
+		HomeDir:  t.TempDir(),
+		Now:      func() time.Time { return testNow },
+		Timeout:  10 * time.Second,
+	}
+	return env, record
+}
+
+func helperEnviron(mode, record string) []string {
+	// The race runtime otherwise sleeps a second before a clean exit.
+	env := []string{"PROBE_HELPER=" + mode, "PROBE_RECORD=" + record, "GORACE=atexit_sleep_ms=0"}
+	for _, k := range []string{"PATH", "SYSTEMROOT", "TMPDIR", "TEMP", "TMP"} {
+		if v, ok := os.LookupEnv(k); ok {
+			env = append(env, k+"="+v)
+		}
+	}
+	return env
+}
+
+// helperRecord is the first line a fake harness writes to PROBE_RECORD; each
+// line it reads from stdin follows.
+type helperRecord struct {
+	Name string            `json:"name"`
+	Args []string          `json:"args"`
+	Env  map[string]string `json:"env"`
+	PID  int               `json:"pid"`
+	Dir  string            `json:"dir"`
+}
+
+func readRecord(t *testing.T, path string) (helperRecord, []map[string]any) {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("fake harness left no record: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(body)), "\n")
+	var rec helperRecord
+	if err := json.Unmarshal([]byte(lines[0]), &rec); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	var msgs []map[string]any
+	for _, l := range lines[1:] {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(l), &m); err != nil {
+			t.Fatalf("recorded message %q: %v", l, err)
+		}
+		msgs = append(msgs, m)
+	}
+	return rec, msgs
+}
+
+func methods(msgs []map[string]any) []string {
+	var out []string
+	for _, m := range msgs {
+		s, _ := m["method"].(string)
+		out = append(out, s)
+	}
+	return out
+}
+
+// TestHelperProcess is not a test. fakeEnv runs it as a harness binary.
+func TestHelperProcess(t *testing.T) {
+	mode := os.Getenv("PROBE_HELPER")
+	if mode == "" {
+		return
+	}
+	args := os.Args
+	for i, a := range args {
+		if a == "--" {
+			args = args[i+1:]
+			break
+		}
+	}
+	os.Exit(fakeHarness(mode, args))
+}
+
+func fakeHarness(mode string, args []string) int {
+	if mode == "sleep-until-released" {
+		release := os.Getenv("PROBE_RELEASE")
+		for deadline := time.Now().Add(time.Minute); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+			if _, err := os.Stat(release); err == nil {
+				break
+			}
+		}
+		return 0
+	}
+	rec, err := os.OpenFile(os.Getenv("PROBE_RECORD"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return 90
+	}
+	defer rec.Close()
+	seen := map[string]string{}
+	for _, k := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME"} {
+		if v, ok := os.LookupEnv(k); ok {
+			seen[k] = v
+		}
+	}
+	dir, _ := os.Getwd()
+	head, _ := json.Marshal(helperRecord{Name: args[0], Args: args[1:], Env: seen, PID: os.Getpid(), Dir: dir})
+	_, _ = rec.Write(append(head, '\n'))
+
+	if strings.HasPrefix(mode, "codex-") {
+		return fakeCodex(mode, rec)
+	}
+	switch mode {
+	case "claude-ok":
+		fmt.Println(`{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","email":" dev@example.com ","orgName":"Example","subscriptionType":"max"}`)
+	case "claude-no-email":
+		fmt.Println(`{"loggedIn":true,"authMethod":"api_key","apiProvider":"firstParty"}`)
+	case "claude-bedrock":
+		fmt.Println(`{"loggedIn":true,"authMethod":"third_party","apiProvider":"bedrock"}`)
+	case "claude-logged-out":
+		// The real CLI exits 1 when logged out and still prints JSON.
+		fmt.Println(`{"loggedIn":false,"authMethod":"none","apiProvider":"firstParty"}`)
+		return 1
+	case "claude-not-json":
+		fmt.Println("Checking authentication status...")
+	case "claude-fail":
+		fmt.Fprintln(os.Stderr, "boom")
+		return 2
+	case "claude-hang":
+		time.Sleep(time.Minute)
+	case "claude-orphan":
+		// A child that keeps stdout open after this process is killed.
+		cmd := exec.Command(os.Args[0], "-test.run=^TestHelperProcess$", "--", "sleeper")
+		cmd.Env = append(os.Environ(), "PROBE_HELPER=sleep-until-released")
+		cmd.Stdout = os.Stdout
+		if err := cmd.Start(); err != nil {
+			return 91
+		}
+		_, _ = fmt.Fprintf(rec, `{"child_pid":%d}`+"\n", cmd.Process.Pid)
+		time.Sleep(time.Minute)
+	default:
+		return 92
+	}
+	return 0
+}
+
+// fakeCodex speaks the app-server's newline JSON-RPC on stdio.
+func fakeCodex(mode string, rec *os.File) int {
+	in := bufio.NewReader(os.Stdin)
+	write := func(lines ...string) {
+		for _, l := range lines {
+			_, _ = os.Stdout.WriteString(l + "\n")
+		}
+	}
+	for {
+		line, err := in.ReadBytes('\n')
+		if err != nil {
+			switch mode {
+			case "codex-hang", "codex-linger":
+				time.Sleep(time.Minute)
+			case "codex-slow-exit":
+				// Work the real server finishes after its input ends.
+				time.Sleep(300 * time.Millisecond)
+				_, _ = rec.WriteString(`{"exit":"clean"}` + "\n")
+			}
+			return 0
+		}
+		_, _ = rec.Write(line)
+		var m struct {
+			ID     *int            `json:"id"`
+			Method string          `json:"method"`
+			Params json.RawMessage `json:"params"`
+		}
+		if json.Unmarshal(line, &m) != nil {
+			return 93
+		}
+		reply := func(result string) { write(fmt.Sprintf(`{"id":%d,"result":%s}`, *m.ID, result)) }
+		fail := func(msg string) { write(fmt.Sprintf(`{"id":%d,"error":{"code":-32600,"message":%q}}`, *m.ID, msg)) }
+		switch m.Method {
+		case "initialize":
+			if mode == "codex-exit" {
+				return 3
+			}
+			var p struct {
+				ClientInfo *struct{ Name, Version string } `json:"clientInfo"`
+			}
+			if json.Unmarshal(m.Params, &p) != nil || p.ClientInfo == nil || p.ClientInfo.Name == "" {
+				fail("clientInfo is required")
+				continue
+			}
+			write(`{"method":"configWarning","params":{"summary":"noise before the answer"}}`)
+			reply(`{"userAgent":"fake/1","codexHome":"/nowhere"}`)
+		case "initialized":
+		case "account/read":
+			var p struct {
+				RefreshToken *bool `json:"refreshToken"`
+			}
+			if json.Unmarshal(m.Params, &p) != nil || p.RefreshToken == nil || *p.RefreshToken {
+				fail("refreshToken must be sent as false")
+				continue
+			}
+			// Server-initiated traffic may reuse the id; it carries a method.
+			write(
+				fmt.Sprintf(`{"id":%d,"method":"item/tool/requestUserInput","params":{}}`, *m.ID),
+				`{"id":99,"result":{"late":true}}`,
+				`{"method":"account/rateLimits/updated","params":{"rateLimits":{}}}`,
+				`not json at all`,
+			)
+			switch mode {
+			case "codex-hang":
+				continue
+			case "codex-account-error":
+				fail("boom")
+			case "codex-logged-out":
+				reply(`{"account":null,"requiresOpenaiAuth":true}`)
+			case "codex-apikey":
+				reply(`{"account":{"type":"apiKey"},"requiresOpenaiAuth":true}`)
+			case "codex-no-email":
+				reply(`{"account":{"type":"chatgpt","email":null,"planType":"plus"},"requiresOpenaiAuth":true}`)
+			default:
+				// Split mid-line to show the reader waits for the newline.
+				msg := fmt.Sprintf(`{"id":%d,"result":{"account":{"type":"chatgpt","email":"dev@example.com","planType":"pro"},"requiresOpenaiAuth":true}}`, *m.ID)
+				_, _ = os.Stdout.WriteString(msg[:20])
+				time.Sleep(20 * time.Millisecond)
+				_, _ = os.Stdout.WriteString(msg[20:] + "\n" + `{"method":"account/updated","params":{}}` + "\n")
+			}
+		case "account/rateLimits/read":
+			if mode == "codex-apikey" {
+				fail("rate limits need a ChatGPT login")
+				continue
+			}
+			reply(`{"rateLimits":{"limitId":"codex","primary":{"usedPercent":1,"windowDurationMins":300,"resetsAt":null},"planType":"pro"},` +
+				`"rateLimitsByLimitId":{` +
+				`"codex_other":{"limitId":"codex_other","primary":{"usedPercent":9,"windowDurationMins":60,"resetsAt":1790000000},"secondary":null,"planType":"team"},` +
+				`"codex":{"limitId":"codex","primary":{"usedPercent":12,"windowDurationMins":300,"resetsAt":1790003600},"secondary":{"usedPercent":40,"windowDurationMins":10080,"resetsAt":1790500000},"planType":"pro"}}}`)
+		default:
+			fail("unexpected method " + m.Method)
+		}
+	}
+}
+
+func TestHarnessEnv(t *testing.T) {
+	tests := []struct {
+		name    string
+		environ []string
+		value   string
+		want    []string
+	}{
+		{"set", []string{"PATH=/bin"}, "/h", []string{"PATH=/bin", "CLAUDE_CONFIG_DIR=/h"}},
+		{"replace", []string{"CLAUDE_CONFIG_DIR=/old", "PATH=/bin"}, "/h", []string{"PATH=/bin", "CLAUDE_CONFIG_DIR=/h"}},
+		{"remove for default home", []string{"CLAUDE_CONFIG_DIR=/old", "PATH=/bin", "CLAUDE_CONFIG_DIR=/older"}, "", []string{"PATH=/bin"}},
+		{"similar names kept", []string{"CLAUDE_CONFIG_DIRS=a", "XCLAUDE_CONFIG_DIR=b", "CLAUDE_CONFIG_DIR"}, "", []string{"CLAUDE_CONFIG_DIRS=a", "XCLAUDE_CONFIG_DIR=b", "CLAUDE_CONFIG_DIR"}},
+		{"empty environ stays empty", []string{}, "", []string{}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Env{Environ: tc.environ}.harnessEnv("CLAUDE_CONFIG_DIR", tc.value)
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestHarnessEnvNilInheritsProcess(t *testing.T) {
+	t.Setenv("PROBE_MARKER", "yes")
+	t.Setenv("CODEX_HOME", "/stale")
+	got := Env{}.harnessEnv("CODEX_HOME", "")
+	if !slices.Contains(got, "PROBE_MARKER=yes") {
+		t.Errorf("nil Environ should inherit the process environment, got %d entries", len(got))
+	}
+	for _, kv := range got {
+		if strings.HasPrefix(kv, "CODEX_HOME=") {
+			t.Errorf("CODEX_HOME kept: %q", kv)
+		}
+	}
+}
+
+func TestHarnessEnvWindowsIgnoresCase(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("variable names are case-insensitive only on Windows")
+	}
+	got := Env{Environ: []string{"Claude_Config_Dir=/old"}}.harnessEnv("CLAUDE_CONFIG_DIR", "")
+	if len(got) != 0 {
+		t.Errorf("got %q", got)
+	}
+}
+
+func exeName(name string) string {
+	if runtime.GOOS == "windows" {
+		return name + ".exe"
+	}
+	return name
+}
+
+func writeExe(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func notOnPath(string) (string, error) { return "", exec.ErrNotFound }
+
+func TestFindUsesPathFirst(t *testing.T) {
+	home := t.TempDir()
+	writeExe(t, filepath.Join(home, ".local", "bin", exeName("claude")))
+	env := Env{HomeDir: home, LookPath: func(n string) (string, error) { return "/on/path/" + n, nil }}
+	if p, ok := env.find("claude"); !ok || p != "/on/path/claude" {
+		t.Errorf("find = %q, %v", p, ok)
+	}
+}
+
+func TestFindFallbackDirs(t *testing.T) {
+	for _, rel := range []string{
+		filepath.Join(".local", "bin"),
+		filepath.Join(".codex", "bin"),
+	} {
+		t.Run(rel, func(t *testing.T) {
+			home := t.TempDir()
+			want := filepath.Join(home, rel, exeName("codex"))
+			writeExe(t, want)
+			env := Env{HomeDir: home, LookPath: notOnPath}
+			if p, ok := env.find("codex"); !ok || p != want {
+				t.Errorf("find = %q, %v; want %q", p, ok, want)
+			}
+			if !env.Find("codex") || env.Find("grok") {
+				t.Error("Find disagrees with find")
+			}
+		})
+	}
+}
+
+func TestFindWindowsShim(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("npm .cmd shims are a Windows install")
+	}
+	home := t.TempDir()
+	want := filepath.Join(home, "AppData", "Roaming", "npm", "codex.cmd")
+	writeExe(t, want)
+	if p, ok := (Env{HomeDir: home, LookPath: notOnPath}).find("codex"); !ok || p != want {
+		t.Errorf("find = %q, %v; want %q", p, ok, want)
+	}
+}
+
+func TestFindSkipsDirsAndNonExecutables(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".local", "bin", exeName("claude")), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" {
+		p := filepath.Join(home, "bin", "claude")
+		writeExe(t, p)
+		if err := os.Chmod(p, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if p, ok := (Env{HomeDir: home, LookPath: notOnPath}).find("claude"); ok {
+		t.Errorf("found %q", p)
+	}
+}
+
+func TestFindSystemDirsWithoutHome(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no shared bin directories are searched on Windows")
+	}
+	dir := t.TempDir()
+	want := filepath.Join(dir, "grok")
+	writeExe(t, want)
+	env := Env{LookPath: notOnPath, SystemBinDirs: []string{filepath.Join(dir, "missing"), dir}}
+	if p, ok := env.find("grok"); !ok || p != want {
+		t.Errorf("find = %q, %v; want %q", p, ok, want)
+	}
+}
+
+// sameDir fails unless the fake harness ran in want.
+func sameDir(t *testing.T, got, want string) {
+	t.Helper()
+	a, errA := os.Stat(got)
+	b, errB := os.Stat(want)
+	if errA != nil || errB != nil || !os.SameFile(a, b) {
+		t.Errorf("harness ran in %q, want %q", got, want)
+	}
+}
+
+// waitGone reports whether pid is gone within a few seconds. An orphan is
+// reaped by init only after it dies, so this polls.
+func waitGone(pid int) bool {
+	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if processGone(pid) {
+			return true
+		}
+	}
+	return false
+}
+
+// processGone reports whether pid has exited and been reaped.
+func processGone(pid int) bool {
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return true
+	}
+	return p.Signal(syscall.Signal(0)) != nil
+}
+
+// waitNoGoroutine fails if a goroutine running fn is still alive after a grace period.
+func waitNoGoroutine(t *testing.T, fn string) {
+	t.Helper()
+	buf := make([]byte, 1<<20)
+	for deadline := time.Now().Add(3 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		n := runtime.Stack(buf, true)
+		if !strings.Contains(string(buf[:n]), fn) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("goroutine still running %s:\n%s", fn, buf[:n])
+		}
+	}
+}
+
+// saysLoggedOut is how collect tells a harness that answered "nobody is
+// logged in" from one that did not answer.
+func saysLoggedOut(err error) bool {
+	var lo interface{ LoggedOut() bool }
+	return errors.As(err, &lo) && lo.LoggedOut()
+}
+
+func TestJoinedErrorsKeepLoggedOut(t *testing.T) {
+	err := joinErrors([]error{errors.New("claude auth status: slow"), notLoggedIn("claude"), errors.New("claude config is not JSON")})
+	if got, want := err.Error(), "claude auth status: slow; claude: not logged in; claude config is not JSON"; got != want {
+		t.Errorf("message = %q, want %q", got, want)
+	}
+	if !saysLoggedOut(err) {
+		t.Error("the joined error lost the logged-out answer")
+	}
+	if saysLoggedOut(joinErrors([]error{errors.New("codex initialize: no answer in time")})) {
+		t.Error("a timeout reads as logged out")
+	}
+	if joinErrors(nil) != nil {
+		t.Error("no problems should be no error")
+	}
+}
+
+func errText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}

@@ -83,3 +83,73 @@ These PitStop behaviors are out, even though the project does them:
 - Opt-out telemetry back to the project.
 - A notifier when a window crosses a threshold. Version 1 only marks 75% and 90% in the console output.
 - Account switching, after monitoring works.
+
+## Implementation status
+
+Status as of 2026-09-23. The Go code in this repository implements version 1. See `README.md` for use and `docs/` for the JSON schema, the relay, and releasing. Everything above is covered except the items listed below. After it was built, the code went through an adversarial review against this document, and the confirmed findings were fixed. A real end-to-end run with two devices and a local relay passed: token sums, a quota that is not summed, the offline backlog, and `forget-device`.
+
+Done, in short:
+
+- **Binary and scheduling**
+  - One pure-Go binary (`cmd/ai-usage`) for Windows, macOS, and Linux on amd64 and arm64. `install.sh` and `install.ps1` install it with one command. `install.sh` refuses `sudo`, so that it never registers root's crontab.
+  - The first run of a release build registers `*/15` in cron, or a 15-minute Task Scheduler task. The Windows task comes from a task definition that also runs on battery.
+  - The scheduler entry names this device's state folder (`collect --quiet --home DIR`), so scheduled runs never fork the device, the key, or the ledger.
+- **Self-update**
+  - Updates come from GitHub releases, with SHA-256 checksums, inside the run lock. The downloaded binary must start and report the release's version before it replaces the old one.
+  - The new binary replaces the old one after the run has read everything, so the next run is the update.
+  - It cannot be turned off. It still runs when a collection fails or panics, so a release with a parser bug cannot pin a device to itself. Only dev builds skip it.
+- **Discovery**
+  - Default homes are found, plus `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GROK_HOME`, `HERMES_HOME`, and Hermes profiles (`<home>/profiles/<name>`).
+  - Homes named by the environment are remembered, with the exact variable value, so scheduler runs still find them.
+- **Probes** only ask the harnesses, from the user's home directory:
+  - Claude: `claude auth status --json`, and Claude Code's own config and cached usage. Never the keychain or `.credentials.json`.
+  - Codex: `codex app-server`, with only `initialize`, `account/read` (no refresh), and `account/rateLimits/read`.
+  - Grok: its local files.
+  - An explicit "not logged in" clears the logged-in mark.
+  - One source that panics becomes that source's error, and the others still run.
+- **Logs**
+  - Sessions, tokens, and cache reads and writes are read per project. That includes Claude side calls recorded in its cost state and Codex compaction records.
+  - Sub-agents roll up into their parents. All homes of one provider are read together, so forked, resumed, or duplicated transcripts count once, even across homes.
+  - A line too long to read is skipped, not fatal.
+- **Accounts and quota**
+  - Accounts are tracked across switches. Token growth goes to the account logged in at that sample. Each account keeps its last good quota and shows how old it is.
+  - Samples are taken every 15 minutes and kept for 90 days. Pace predicts when a window fills before its reset.
+  - The headline is the fullest window that has not reset since the reading. If every window has reset, or there is no reading, it shows "unknown". Marks appear at 75% and 90%.
+- **Views**: console text and versioned JSON (`schema_version` 2). Both include the other devices in the team.
+- **Team key**: Ed25519, and its fingerprint names the team. Joining means `ai-usage team join` with the exported private key.
+- **Snapshot**: fixed-shape, strict JSON of 32 KB or less.
+  - Counts, percents, timestamps, and provider and window names are plain.
+  - Device label, OS user, account label, project paths, and error text are sealed with the team key.
+  - Every write is signed.
+- **Relay**: `ai-usage relay serve`, or the Vercel function in `api/`, backed by Upstash or Vercel KV.
+  - It checks the signature and the exact shape, and rejects stale writes.
+  - Rate limits apply per IP, and per day to new teams and new devices from one IP (IPv6 per /48). A forwarding header is trusted only when the operator names it and the request comes through their proxy.
+  - Snapshots expire 7 to 90 days after their last update.
+  - Clients verify every document they pull and keep one per device.
+- **Resilience**
+  - An unreachable relay, or one that holds a newer snapshot for this device id, leaves the newest snapshot pending and is shown. The next run that reaches the relay sends it.
+  - A damaged `state.json` is set aside as `state.json.bad` rather than stopping every run.
+- **Status**: `ai-usage status` shows the version, the last success, the last error, and the relay, schedule, and update health.
+
+Deferred or not done. These are cumbersome, or they need an action outside this repository:
+
+- **The relay is not deployed.** Deploying it needs a Vercel project linked to this repository, an Upstash Redis (Vercel KV) store attached (`KV_REST_API_URL`, `KV_REST_API_TOKEN`), and the repository variable `AI_USAGE_RELAY_URL`, so that release builds carry a default relay. Until then, each device runs `ai-usage relay set URL`. Client-IP detection on Vercel (`RemoteAddr` or `X-Real-Ip`) has not been seen on a real deployment.
+- **CI and releases have never run on GitHub.** The first `v*` tag will be their first real run. See `docs/releasing.md`.
+- **Nothing has run on real Windows.** Task Scheduler registration from XML (the task has no explicit user, so it relies on `schtasks /Create /XML` using the caller), the `.old` rename during self-update, and `install.ps1` are covered only by unit tests and the CI definitions.
+  - `schtasks` starts a console program, so a console window can flash every 15 minutes. Fixing that needs a GUI-subsystem launcher, or `conhost --headless`, which only newer Windows builds have.
+  - `schtasks /Query` errors are localized, so any query failure is treated as "no task".
+- **Claude quota freshness.** Claude Code writes its usage cache only when it runs, so an idle machine shows an old reading with its age. A fresh reading without a session would mean driving `claude` in tmux and scraping `/usage`. That is fragile and deferred. Claude transcripts also carry `quotaLimits` on rejected requests; they are not used yet.
+- **Hermes has no quota source.** Its tokens are counted per billing provider. Grok labels an account read from its logs by its `user_id` UUID when the harness does not report a better one.
+- **Account identity is the harness's label,** usually an email. One email in two workspaces or organizations is one account.
+- **The first run attributes all local history to the account logged in at that moment.** Older logs do not say which account wrote them. A forward clock jump of more than 90 days prunes the ledger, and history is attributed again after it.
+- **The device cap can be exceeded briefly when two new devices write at once.** Counting and then writing is not atomic on the REST store. A Lua script or `SET NX` per slot would fix it.
+- **Pace uses only this device's samples,** not the team's.
+- **Two collectors that read the same harness home count it twice in the team view.** Examples are two OS users sharing a home, or a `CODEX_HOME` inherited by a second collector. Each device publishes its own totals.
+- **The Claude desktop app's agent-mode sessions (`local-agent-mode-sessions`) are not discovered.**
+- **Panics in probe goroutines.** A panic inside a goroutine a probe starts still ends the process. The command-level rescue records it and still runs the release check.
+- **Rare miscounts in logs:**
+  - A sub-agent transcript whose parent session aged out of the 90-day window is counted as a session of its own.
+  - A Claude sub-agent file in a home that lacks its parent's transcript is not counted.
+  - Two different Codex events in a forked session family with identical `(total, last)` usage are counted once.
+  - Claude side calls (compaction, titles, classifiers) are counted only once Claude Code exits and writes its cost state.
+  - Codex compactions in rollouts written before Codex added `token_usage_record` lines are not counted.

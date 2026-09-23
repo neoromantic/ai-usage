@@ -1,0 +1,7 @@
+# The relay deploy needs only the Go handler and the packages it imports.
+/*
+!/api
+!/internal
+!/go.mod
+!/go.sum
+!/vercel.json
