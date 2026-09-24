@@ -277,22 +277,26 @@ func (p *page) attentionText(a Attention, room int) []chunks {
 		return forms(s+old, s)
 	case AttentionOver:
 		pace := " at " + p.pace(a) + " pace"
-		if a.At == nil {
-			pct := ""
-			if a.Percent != nil {
-				pct = strconv.Itoa(int(*a.Percent)) + "% "
-			}
-			return forms("on"+pace+" for "+pct+"at its reset"+old, "over at its reset")
+		// At a forecast of exactly 100% the window runs out at its reset,
+		// and has no time of its own to run out; one that runs out less
+		// than a minute before the reset runs out at it too.
+		at, before := a.At, ""
+		switch {
+		case a.ResetsAt == nil:
+		case at == nil || a.ResetsAt.Sub(*at) < time.Minute:
+			at, before = a.ResetsAt, ", at its reset"
+		default:
+			before = ", " + dur(a.ResetsAt.Sub(*at)) + " before reset"
+		}
+		if at == nil {
+			s := "runs out at its reset"
+			return forms(s+pace+old, s+old, s)
 		}
 		verb := "runs out ~"
-		if !a.At.After(p.now) {
+		if !at.After(p.now) {
 			verb = "ran out ~"
 		}
-		s := verb + p.clock(*a.At)
-		before := ""
-		if a.ResetsAt != nil && a.ResetsAt.After(*a.At) {
-			before = ", " + dur(a.ResetsAt.Sub(*a.At)) + " before reset"
-		}
+		s := verb + p.clock(*at)
 		// A short line drops the pace first, then the reading's age: when it
 		// runs out and how long before the reset are what the line says.
 		return forms(s+pace+before+old, s+before+old, s+before, s+old, s)

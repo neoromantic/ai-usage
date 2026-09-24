@@ -99,8 +99,8 @@ type Attention struct {
 	// Devices is the device of an error or silence, or every device on an
 	// old release.
 	Devices []string `json:"devices,omitempty"`
-	// At is when an out window resets, when an over window runs out, or
-	// when a silent device last reported.
+	// At is when an out window resets, when an over window runs out before
+	// its reset, or when a silent device last reported.
 	At *time.Time `json:"at,omitempty"`
 	// ResetsAt is when an over or under window resets.
 	ResetsAt *time.Time `json:"resets_at,omitempty"`
@@ -226,7 +226,8 @@ type Forecast struct {
 	// from 0 to 1.
 	Elapsed float64 `json:"elapsed"`
 	// RunsOutAt is when the window reaches 100% at that pace, when the
-	// forecast is over 100%.
+	// forecast is over 100% before it is rounded. At exactly 100% the
+	// window runs out at its reset, and this is nil.
 	RunsOutAt *time.Time `json:"runs_out_at"`
 }
 

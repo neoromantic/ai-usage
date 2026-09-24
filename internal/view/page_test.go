@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/neoromantic/ai-usage/internal/snapshot"
+	"github.com/neoromantic/ai-usage/internal/state"
 )
 
 // pageSection is the plain lines of the body section whose title starts
@@ -119,6 +122,52 @@ func TestPageOverLine(t *testing.T) {
 		lines := pageSection(Render(r, Options{Width: w, Loc: sampleZone}), "ATTENTION")
 		if len(lines) < 5 || lines[3] != want[0] || lines[4] != want[1] {
 			t.Errorf("at %d:\n%s\nwant\n%s", w, strings.Join(lines, "\n"), strings.Join(want, "\n"))
+		}
+	}
+}
+
+// TestPageOverAtReset: a window at 50% with half the week gone is on at this
+// week's pace for 100%, and runs out at its reset; at 50.2% it is on for
+// 100% too, and runs out 40 minutes before. Each OVER line says when, and
+// how long before the reset.
+func TestPageOverAtReset(t *testing.T) {
+	for _, c := range []struct {
+		used float64
+		read time.Duration // how long ago the reading was taken
+		want map[int]string
+	}{
+		{50, 0, map[int]string{
+			80:  " OVER  codex kim@mail.test  runs out ~Sat 00:00, at its reset",
+			120: " OVER  codex kim@mail.test  runs out ~Sat 00:00 at this week's pace, at its reset",
+		}},
+		{50, 30 * time.Hour, map[int]string{
+			80:  " OVER  codex kim@mail.test  runs out ~Thu 18:00, at its reset · reading 1d old",
+			120: " OVER  codex kim@mail.test  runs out ~Thu 18:00 at this week's pace, at its reset · reading 1d old",
+		}},
+		{50.2, 0, map[int]string{
+			80:  " OVER  codex kim@mail.test  runs out ~Fri 23:19, 40m before reset",
+			120: " OVER  codex kim@mail.test  runs out ~Fri 23:19 at this week's pace, 40m before reset",
+		}},
+	} {
+		at := now.Add(-c.read)
+		st := emptyState()
+		addAccount(st, "codex", "kim@mail.test", true, &state.Quota{At: at, Windows: []snapshot.Window{week7(c.used, at.Add(week/2))}}, 10)
+		r := Build(newFixture(t, st).in)
+		if len(r.Attention) != 1 || r.Attention[0].Kind != AttentionOver || *r.Attention[0].Percent != 100 {
+			t.Fatalf("%v%% read %v ago: attention %+v", c.used, c.read, r.Attention)
+		}
+		for w, want := range c.want {
+			lines := pageSection(Render(r, Options{Width: w, Loc: time.UTC}), "ATTENTION")
+			if len(lines) != 2 || lines[1] != want {
+				t.Errorf("%v%% read %v ago, at %d:\n%s\nwant\n%s", c.used, c.read, w, strings.Join(lines, "\n"), want)
+			}
+		}
+		// A report that does not say when the window resets says it all
+		// the same.
+		r.Attention[0].At, r.Attention[0].ResetsAt = nil, nil
+		lines := pageSection(Render(r, Options{Width: 120, Loc: time.UTC}), "ATTENTION")
+		if want := " OVER  codex kim@mail.test  runs out at its reset at this week's pace"; len(lines) != 2 || !strings.HasPrefix(lines[1], want) {
+			t.Errorf("%v%% read %v ago, with no reset:\n%s\nwant\n%s", c.used, c.read, strings.Join(lines, "\n"), want)
 		}
 	}
 }

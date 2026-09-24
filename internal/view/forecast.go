@@ -68,7 +68,10 @@ func forecast(w snapshot.Window, at time.Time) *Forecast {
 		return nil
 	}
 	f := &Forecast{Percent: pct, Elapsed: elapsed}
-	if pct > 100 && used > 0 && used < 100 {
+	// It runs out before its reset when used ÷ elapsed is over 100% before
+	// it is rounded, so a forecast of 100.4% runs out too. At exactly 100%
+	// it runs out at its reset. With no time elapsed, the ratio is infinite.
+	if used > 0 && used < 100 && used/elapsed > 100 {
 		// At the same pace, used grows to 100 in 100/used of the time it
 		// took to reach used.
 		runs := start.Add(time.Duration(100 / used * float64(at.Sub(start))))

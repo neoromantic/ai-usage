@@ -60,7 +60,7 @@ Each entry is one thing that needs attention, from the team's view of each subsc
 | `kind` | When | Fields |
 | --- | --- | --- |
 | `out` | a window of a subscription is at 100% | `provider`, `account`, `name`, `window`; `at` is when it resets |
-| `over` | a window of a subscription will run out before it resets, at its pace so far | `provider`, `account`, `name`, `window`; `at` is when it runs out, `resets_at` when it resets, `percent` its forecast |
+| `over` | a window of a subscription will run out before it resets, at its pace so far | `provider`, `account`, `name`, `window`; `at` is when it runs out, absent when it runs out at its reset, `resets_at` when it resets, `percent` its forecast |
 | `error` | a device's collector or one of its tools fails; on this device, also a run a bug stopped before it could report, its relay, or its update check | `devices` names the device; `message` is the error, which starts with `relay` or `update` when it is theirs |
 | `silent` | a device has not reported for a day, with or without an error in its last report | `devices` names the device; `at` is when it last reported; `message` is the error it last reported, if it had one |
 | `old` | devices run an older release than the team's newest | `devices` lists every one of them; `message` is the newest release |
@@ -154,7 +154,7 @@ A window:
 | --- | --- | --- |
 | `percent` | number | `percent` divided by `elapsed`, as a whole percent up to `999`. Over 100 means demand is larger than the quota: the window runs out before it resets |
 | `elapsed` | number | the share of the window that had passed at the reading, from 0 to 1. The window began at `resets_at` minus its length, which is `minutes`, else the length its name starts with, such as `5h` or `7d` |
-| `runs_out_at` | time | when the window reaches 100% at that pace, when `percent` is over 100 and the window is not full yet; `null` otherwise |
+| `runs_out_at` | time | when the window reaches 100% at that pace, when the window's `percent` divided by `elapsed` is over 100 before it is rounded and the window is not full yet; `null` otherwise. A forecast of exactly 100 runs out at the reset, and has none |
 
 The pace is the average since the window began, nights and weekends included, so one busy hour does not raise an alarm, and it follows a change of pace slowly.
 
@@ -279,6 +279,7 @@ A cell:
 ## Added within version 3
 
 - `unknown` on the `usage` objects under `team`, and `window_unknown` on a matrix column and cell, for a device on a collector older than v0.2.0. Such a device's periods used to be `0`, even `90d`; it was not among `users`; and its `share` was `0`, so the other devices shared the whole window. Now `90d` has its tokens, and a share that is not known is `null`, which `share` already allowed. Such a device counts in `users` when it used the account since the window began. `busiest` names the only user even when its tokens are not known, and is `null` when none of two or more users has known tokens, which `busiest` already allowed, though `users` is then above 0. No field changed meaning, so the version stays 3. A reader that ignores the new fields takes the known part of a period as all of it, as it took the zeros before.
+- `runs_out_at`, and `at` on an `over` entry, for a forecast that rounds to 100 but is over it before it is rounded, such as 100.4. They were `null` and absent for every forecast of 100, although such a window runs out before it resets.
 
 ## Changes from version 2
 

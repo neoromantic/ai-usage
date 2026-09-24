@@ -143,7 +143,7 @@ AT RESET is how full the window will be at its reset, if it is used from now on 
 - The window began at its reset time minus its length. The length comes from the harness, or from the window's name, such as `5h` or `7d`.
 - `elapsed` is the share of the window that had passed when the reading was taken.
 - The forecast is `used ÷ elapsed`, as a whole percent, up to `999%`.
-- It runs out at `start + (100 ÷ used) × (reading time − start)`, when the forecast is over 100%.
+- It runs out at `start + (100 ÷ used) × (reading time − start)`, when the forecast is over 100% before it is rounded. At exactly 100% it runs out at its reset.
 - Before a tenth of the window has passed, the forecast is shown only when it is already over.
 - The average since the window began includes nights and weekends, so one busy hour does not raise an alarm. It follows a change of pace slowly. Giving the last day more weight is later work.
 

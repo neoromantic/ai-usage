@@ -62,6 +62,31 @@ func TestForecastRunsOut(t *testing.T) {
 	}
 }
 
+// A forecast that rounds to 100% runs out before the reset when it is over
+// 100% before it is rounded, and at the reset when it is 100% exactly.
+func TestForecastRunsOutAtRoundedHundred(t *testing.T) {
+	// Half the week gone.
+	start := now.Add(-week / 2)
+	reset := start.Add(week)
+	w := readWindow(week7(50.2, reset), now, now)
+	// 100.4%: 50.2% in 3.5 days, full in 3.5 × 100 ÷ 50.2 days, 40 minutes
+	// before the reset.
+	if w.State != StateOver || w.Forecast.Percent != 100 || w.Forecast.RunsOutAt == nil {
+		t.Fatalf("100.4%% = %s %+v, want over at 100%%, running out", w.State, w.Forecast)
+	}
+	if d := reset.Sub(*w.Forecast.RunsOutAt); d < 40*time.Minute || d > 41*time.Minute {
+		t.Fatalf("100.4%% runs out %v before the reset", d)
+	}
+	// 100% exactly has no time to run out before the reset.
+	if w := readWindow(week7(50, reset), now, now); w.State != StateOver || w.Forecast.Percent != 100 || w.Forecast.RunsOutAt != nil {
+		t.Fatalf("100%% = %s %+v", w.State, w.Forecast)
+	}
+	// 99.6% rounds to 100% as well, and does not run out.
+	if w := readWindow(week7(49.8, reset), now, now); w.State != StateOver || w.Forecast.Percent != 100 || w.Forecast.RunsOutAt != nil {
+		t.Fatalf("99.6%% = %s %+v", w.State, w.Forecast)
+	}
+}
+
 func TestForecastCapsAt999(t *testing.T) {
 	reset := now.Add(week - time.Hour)
 	if w := readWindow(week7(90, reset), now, now); w.State != StateOver || w.Forecast.Percent != MaxForecast {
