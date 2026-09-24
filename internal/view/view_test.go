@@ -265,6 +265,50 @@ func TestAliasesTravelAndTheNewestWins(t *testing.T) {
 	}
 }
 
+// A name another account of the provider goes by, set before this device
+// read that account, does not tell the two apart: both go by the full label.
+func TestAliasThatAnotherAccountGoesBy(t *testing.T) {
+	st := emptyState()
+	addAccount(st, "codex", "ann@a.io", true, nil, 10)
+	addAccount(st, "codex", "ann@b.io", false, nil, 10)
+	addAccount(st, "claude", "lee@corp.test", true, nil, 10)
+	f := newFixture(t, st)
+	f.in.Config.Aliases = map[string]state.Alias{
+		state.Key("codex", "ann@a.io"):       {Name: "kim", At: now.Add(-time.Hour)},
+		state.Key("claude", "lee@corp.test"): {Name: "Sam", At: now.Add(-time.Hour)},
+	}
+	f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", now)
+	other := emptyState()
+	addAccount(other, "codex", "kim@corp.test", true, nil, 10)
+	addAccount(other, "claude", "sam@mail.test", true, nil, 10)
+	r := withTeam(t, f, otherDoc(t, f.key, "d-other-device", "otherbox", now, other))
+
+	for _, c := range []struct{ provider, label, name string }{
+		{"codex", "ann@a.io", "ann@a.io"},
+		{"codex", "kim@corp.test", "kim@corp.test"},
+		// The alias leaves ann@b.io the only ann.
+		{"codex", "ann@b.io", "ann"},
+		// Names differ only in case: the alias command refuses that too.
+		{"claude", "lee@corp.test", "lee@corp.test"},
+		{"claude", "sam@mail.test", "sam@mail.test"},
+	} {
+		if a := findTeamAccount(t, r, c.provider, c.label); a.Name != c.name {
+			t.Errorf("%s %s: name %q, want %q", c.provider, c.label, a.Name, c.name)
+		}
+	}
+	if a := findTeamAccount(t, r, "codex", "ann@a.io"); a.Alias == nil || *a.Alias != "kim" {
+		t.Fatalf("alias = %v", a.Alias)
+	}
+	seen := map[string]bool{}
+	for _, c := range r.Team.Matrix.Columns {
+		k := c.Provider + ":" + strings.ToLower(c.Name)
+		if seen[k] {
+			t.Fatalf("two columns go by %s: %+v", k, r.Team.Matrix.Columns)
+		}
+		seen[k] = true
+	}
+}
+
 // A name the alias command would refuse, which only another build can seal,
 // is not shown. Of two names set at once, the smaller device id's wins, as
 // the alias command picks, and an email matches in any case.

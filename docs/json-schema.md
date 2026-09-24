@@ -96,7 +96,7 @@ An account is one login. After you switch accounts, the previous one stays, with
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `label` | string | what the tool calls the account, such as an email address or a user id; `unknown` when it did not say |
-| `name` | string | the account's short name: the one the team gave it with `ai-usage alias`, else the part of an email before the `@`, the first 8 characters of an id (a UUID, or 16 or more letters, digits, `-`, and `_` with a digit among them), or else the whole label. When two accounts of one provider would get the same name without an alias, both use their full label |
+| `name` | string | the account's short name: the one the team gave it with `ai-usage alias`, else the part of an email before the `@`, the first 8 characters of an id (a UUID, or 16 or more letters, digits, `-`, and `_` with a digit among them), or else the whole label. When two accounts of one provider would go by the same name, in any case, both use their full label, even when the name is an alias; the team account's `alias` still holds it |
 | `current` | bool | logged in right now. It turns `false` when the tool answers that nobody is logged in; a tool that does not answer leaves the last account current |
 | `home` | string | the first of `homes` the account is logged in to now; absent when it is not logged in |
 | `plan` | string | the plan the tool reports |

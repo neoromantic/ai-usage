@@ -384,20 +384,32 @@ func users(provider string, m map[string]*teamAccount, devs []*device) {
 
 // names gives each account of a provider its short name: the alias the
 // team gave it, else the part of an email before the @, else the first 8
-// characters of an id. Two default names that would be the same are both
-// the full label.
+// characters of an id. When two accounts go by the same name, in any case,
+// as the alias command compares names, both go by the full label. A device
+// can give an account a name before it reads another device's account that
+// goes by it.
 func names(provider string, m map[string]*teamAccount, aliases map[string]snapshot.Alias) {
-	count := map[string]int{}
 	for _, x := range m {
-		count[ShortName(x.ta.Label)]++
-	}
-	for _, x := range m {
-		x.ta.Name = x.ta.Label
-		if n := ShortName(x.ta.Label); count[n] == 1 {
-			x.ta.Name = n
-		}
+		x.ta.Name = ShortName(x.ta.Label)
 		if a, ok := aliases[aliasKey(provider, x.ta.Label)]; ok && a.Name != "" {
 			x.ta.Name, x.ta.Alias = a.Name, strPtr(a.Name)
+		}
+	}
+	// A full label can be another account's name too, so this goes on until
+	// no name is taken twice. A full label stays, so it ends.
+	for {
+		count := map[string]int{}
+		for _, x := range m {
+			count[strings.ToLower(x.ta.Name)]++
+		}
+		same := false
+		for _, x := range m {
+			if count[strings.ToLower(x.ta.Name)] > 1 && x.ta.Name != x.ta.Label {
+				x.ta.Name, same = x.ta.Label, true
+			}
+		}
+		if !same {
+			return
 		}
 	}
 }
