@@ -42,9 +42,10 @@ func showView(ctx context.Context, d state.Dir, res *collect.Result, endpoint st
 
 // viewConfig is the interactive view of res on stdout. It is written with
 // the escapes the static report would be, so --color and NO_COLOR mean the
-// same in both. It does not ask the terminal for its background before it
-// opens: Bubble Tea asks once it reads the terminal, so the keys typed
-// meanwhile reach the view.
+// same in both. It starts on the background COLORFGBG says, and does not
+// ask the terminal before it opens: Bubble Tea asks once it reads the
+// terminal, so the keys typed meanwhile reach the view, and the answer
+// then decides.
 func viewConfig(d state.Dir, res *collect.Result, endpoint string, disp *display, offline bool, stdout io.Writer) tui.Config {
 	o := disp.options(stdout, false)
 	// The view follows the terminal's width unless --width fixes it.

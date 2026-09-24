@@ -41,8 +41,9 @@ func TestOpenView(t *testing.T) {
 	}
 }
 
-// TestViewConfig: the interactive view does not ask the terminal for its
-// background before it opens; Bubble Tea asks once it reads the keys too.
+// TestViewConfig: the interactive view starts on the background COLORFGBG
+// says, else dark, and does not ask the terminal before it opens; Bubble
+// Tea asks once it reads the keys too, and the answer then decides.
 func TestViewConfig(t *testing.T) {
 	hermetic(t)
 	saved := background
@@ -59,6 +60,10 @@ func TestViewConfig(t *testing.T) {
 	}
 	if c := viewConfig(state.Dir(d.dir), res, "", &display{color: "always"}, true, io.Discard); !c.Options.Color || !c.Options.Dark {
 		t.Fatalf("the view starts with %+v", c.Options)
+	}
+	t.Setenv("COLORFGBG", "0;15")
+	if c := viewConfig(state.Dir(d.dir), res, "", &display{color: "always"}, true, io.Discard); c.Options.Dark {
+		t.Fatalf("with a light COLORFGBG, the view starts with %+v", c.Options)
 	}
 
 	// The view is written with the escapes the static report would be.

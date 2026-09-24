@@ -222,7 +222,7 @@ The key bar follows the common practice of modern TUIs:
 
 ### Color
 
-Semantic tokens, never raw colors in the code. Each has a value for dark and for light terminals. The terminal is light or dark as `COLORFGBG` says, else as it answers when asked, else dark. The report asks only from the terminal's foreground and only with no keys typed ahead; the interactive view asks once it is open, so no key is lost.
+Semantic tokens, never raw colors in the code. Each has a value for dark and for light terminals. The report takes the terminal as light or dark as `COLORFGBG` says, else as the terminal answers when asked, else dark; it asks only from the terminal's foreground and only with no keys typed ahead. The interactive view starts as `COLORFGBG` says, else dark, and asks the terminal once it is open, so no key is lost; the answer then decides, even where `COLORFGBG` says otherwise.
 
 | Token | Use |
 | --- | --- |

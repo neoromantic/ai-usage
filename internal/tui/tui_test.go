@@ -616,6 +616,8 @@ func TestReload(t *testing.T) {
 	}
 }
 
+// TestBackground: the terminal's answer decides the background, whatever
+// the view started on.
 func TestBackground(t *testing.T) {
 	m := model(t, 120, 30, Config{Options: view.Options{Dark: true}})
 	if m = update(t, m, tea.BackgroundColorMsg{Color: color.White}); m.opts.Dark {
