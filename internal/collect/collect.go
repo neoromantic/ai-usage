@@ -311,10 +311,19 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 		o.Relay = &client
 		last := st.Relay
 		syncTeam(ctx, o, st, cfg.Device, &res.Doc, &res.Team, now)
-		if ctx.Err() != nil {
-			// A stop that cuts the exchange short is no failure of the
-			// relay's; a snapshot it did not push stays pending.
+		if ctx.Err() != nil && st.Relay.LastErrorAt.Equal(now) && !st.Relay.LastPullAt.Equal(now) {
+			// A stop that cuts the exchange short before its read is no
+			// failure of the relay's. A snapshot it did not push stays
+			// pending, with the last run's error; once the snapshot is
+			// pushed, the cached read's error stands, as when a run skips
+			// the read.
 			st.Relay.LastError, st.Relay.LastErrorAt = last.LastError, last.LastErrorAt
+			if st.Relay.LastPushAt.Equal(now) {
+				st.Relay.LastError = res.Team.ReadError
+				if res.Team.ReadError != "" {
+					st.Relay.LastErrorAt = res.Team.PulledAt
+				}
+			}
 		}
 		if st.Relay.LastError != "" && st.Relay.LastErrorAt.Equal(now) {
 			problems = append(problems, st.Relay.LastError)

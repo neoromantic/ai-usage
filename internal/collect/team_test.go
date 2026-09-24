@@ -1,8 +1,11 @@
 package collect
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -169,6 +172,103 @@ func TestRelayBacklogIsSentWhenItReturns(t *testing.T) {
 	own := res.Team.Docs[0]
 	if len(own.Accounts) != 1 || own.Accounts[0].Tokens != tok(250) {
 		t.Fatalf("published accounts = %+v", own.Accounts)
+	}
+}
+
+// stopTransport stops the run at one step of its exchange with the relay:
+// as the push starts, as the pull starts, or once the pull is read in full.
+type stopTransport struct {
+	next   http.RoundTripper
+	cancel context.CancelFunc
+	at     string
+}
+
+func (s stopTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	step := "push"
+	if req.Method == http.MethodGet {
+		step = "pull"
+	}
+	if step == s.at {
+		s.cancel()
+		return nil, req.Context().Err()
+	}
+	resp, err := s.next.RoundTrip(req)
+	if err != nil || step != "pull" || s.at != "read" {
+		return resp, err
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	s.cancel()
+	return resp, err
+}
+
+// TestStoppedExchange: a run stopped during its exchange with the relay
+// keeps the last run's relay error only while its snapshot has not reached
+// the relay.
+func TestStoppedExchange(t *testing.T) {
+	for _, at := range []string{"push", "pull", "read"} {
+		w, o := newWorld(t)
+		h := w.home(t, "claude")
+		w.login("claude", h, "ann", nil)
+		w.sessions("claude", h, sess("s1", "/p", 100, t0))
+		r := newRelay(t, w)
+		o.Relay = &relay.Client{BaseURL: "http://127.0.0.1:1", Now: func() time.Time { return w.now }}
+		last := run(t, o).State.Relay
+		if !strings.Contains(last.LastError, "relay unreachable") {
+			t.Fatalf("relay state = %+v", last)
+		}
+
+		w.now = t0.Add(15 * time.Minute)
+		w.sessions("claude", h, sess("s1", "/p", 250, w.now))
+		ctx, cancel := context.WithCancel(context.Background())
+		o.Relay = r.client(w)
+		o.Relay.HTTP = &http.Client{Transport: stopTransport{r.srv.Client().Transport, cancel, at}}
+		_, err := Run(ctx, o)
+		cancel()
+		if err != nil {
+			t.Fatalf("stopped at the %s: %v", at, err)
+		}
+		rs, err := o.Dir.LoadState()
+		if err != nil {
+			t.Fatal(err)
+		}
+		pushed := at != "push"
+		switch {
+		case rs.Relay.Pending == pushed, rs.Relay.LastPushAt.Equal(w.now) != pushed:
+			t.Errorf("stopped at the %s, the snapshot is pending %v: %+v", at, rs.Relay.Pending, rs.Relay)
+		case pushed && rs.Relay.LastError != "":
+			t.Errorf("stopped at the %s after a push, the relay error is %q", at, rs.Relay.LastError)
+		case !pushed && (rs.Relay.LastError != last.LastError || !rs.Relay.LastErrorAt.Equal(last.LastErrorAt)):
+			t.Errorf("stopped at the push, the relay error is %q at %v", rs.Relay.LastError, rs.Relay.LastErrorAt)
+		case rs.Relay.LastPullAt.Equal(w.now) != (at == "read"):
+			t.Errorf("stopped at the %s, the last pull is %v", at, rs.Relay.LastPullAt)
+		}
+	}
+
+	// Once the snapshot is pushed, what was wrong with the cached read
+	// stands, as when a run skips the read.
+	w, o := newWorld(t)
+	r := newRelay(t, w)
+	key, _, _ := LoadKey(o.Dir)
+	body, _ := json.Marshal(BuildDoc(ledger(), key, state.Config{Device: "d-forged-device"}, "x", "y", "v1", t0))
+	_ = r.store.Put(context.Background(), key.Fingerprint(), "d-forged-device", relay.Record{Body: body, Sig: []byte("not a signature")}, time.Hour)
+	o.Relay = r.client(w)
+	run(t, o)
+	w.now = t0.Add(15 * time.Minute)
+	o.Relay = &relay.Client{BaseURL: "http://127.0.0.1:1", Now: func() time.Time { return w.now }}
+	run(t, o)
+	w.now = t0.Add(30 * time.Minute)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	o.Relay = r.client(w)
+	o.Relay.HTTP = &http.Client{Transport: stopTransport{r.srv.Client().Transport, cancel, "pull"}}
+	res, err := Run(ctx, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rs := res.State.Relay; !strings.Contains(rs.LastError, "do not verify") || !rs.LastErrorAt.Equal(t0) || !rs.LastPushAt.Equal(w.now) {
+		t.Errorf("stopped at the pull after a read that did not verify: %+v", rs)
 	}
 }
 
