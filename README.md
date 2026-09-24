@@ -31,7 +31,7 @@ SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
   GROK
 ● a4c2e917       SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  annbook           11h
 
-DEVICES × SUBSCRIPTIONS  13 · 7d · M tokens in+out                                     ‹tokens›  share
+DEVICES × SUBSCRIPTIONS  13 · 7d · M tokens in+out                   ‹usage›  status   ‹tokens›  share
                    CLAUDE ──────────  CODEX ─────────────────────────────  GROK ───  NO QUOTA
                         ann      kim       ann      sam      lee  unknown  a4c2e917    hermes     TOTAL
   srv1                    2        ·        12        ·      240        ·         ·         8       262
@@ -70,11 +70,11 @@ The header names this machine and the team, and says whether collection, the rel
 
 SUBSCRIPTIONS has one row per Claude, Codex, and Grok account, grouped by tool, the worst first. The bar is the weekly window: the heavy line is what has been used, and the tick how much would be used by now if the window were spent evenly. LEFT is what is left, RESETS when it resets, and AT RESET how full it will be then at its average pace since the window began: `over` at 100% or more, which means it runs out by its reset, `tight` from 85%, `ok` from 50%, and `under` below that. A window that limits the account more than the weekly one, such as a model's window or a full 5-hour window, gets an indented row of its own. `~` marks a reading over 6 hours old, unless the window is full, since a full window stays full until it resets. `?` marks an account with no reading, a window that has reset since it was read, or a Claude 5-hour or weekly window that a refused request did not read. USERS counts the machines that used the account in this window and names the busiest. Hermes is a tool, not a subscription: what it spends through a Codex or Grok login counts as that login's use.
 
-DEVICES × SUBSCRIPTIONS is every machine against every subscription, in millions of input plus output tokens over the last 7 days, cache left out. NO QUOTA holds the tokens no subscription covers, such as Hermes on an API key. A machine on a release older than v0.2.0 sends only its tokens over 90 days: its cells show them at 90 days, `?` in a shorter period it may have used, and a total that misses its part shows `≥` before the part that is known, or `?` when that is under a million. With only this machine, the section is USAGE instead: a row per subscription, with today, 7 days, 30 days, and 90 days. PROJECTS lists this machine's top projects over every account; `--projects` lists all of them. A dim legend at the bottom explains only the marks on screen.
+DEVICES × SUBSCRIPTIONS is every machine against every subscription, in millions of input plus output tokens over the last 7 days, cache left out. NO QUOTA holds the tokens no subscription covers, such as Hermes on an API key. A machine on a release older than v0.2.0 sends only its tokens over 90 days: its cells show them at 90 days, `?` in a shorter period it may have used, and a total that misses its part shows `≥` before the part that is known, or `?` when that is under a million. The section has a second view, status: a row per machine with its user, its release, how long ago it reported, the tools it reads, its tokens today and over 7, 30, and 90 days, and a note of what is wrong with it, such as an error or an update to install. `--devices` prints that view. With only this machine, the section is USAGE instead: a row per subscription, with today, 7 days, 30 days, and 90 days. PROJECTS lists this machine's top projects over every account; `--projects` lists all of them. A dim legend at the bottom explains only the marks on screen.
 
 The matrix shows accounts by short names: the part of an email before the `@`, or the first 8 characters of an id. `ai-usage alias` gives an account a name for the whole team; see [Teams](#teams).
 
-When standard input and output are both terminals, `ai-usage` opens the same page as an interactive view. It scrolls, and the matrix scrolls sideways; `p` picks the period (today, 7, 30, or 90 days), `%` shows each machine's estimated share of each subscription's window, `r` collects now, `?` lists every key, and `q` quits. Piped output, `--json`, `--plain`, and `TERM=dumb` print the page instead, and so does the installer's first run. The page is at its best at 120 to 160 columns; narrower, it drops columns in a fixed order, down to 80.
+When standard input and output are both terminals, `ai-usage` opens the same page as an interactive view. It scrolls, and the matrix scrolls sideways; `s` switches DEVICES between the matrix and the status view, `p` picks the period (today, 7, 30, or 90 days), `%` shows each machine's estimated share of each subscription's window, `r` collects now, `?` lists every key, and `q` quits. Piped output, `--json`, `--plain`, and `TERM=dumb` print the page instead, and so does the installer's first run. The page is at its best at 120 to 160 columns; narrower, it drops columns in a fixed order, down to 80.
 
 ## Install
 
@@ -270,7 +270,7 @@ Or, from a clone with the Vercel CLI logged in, run `sh scripts/deploy-relay.sh`
 | `ai-usage version` | print the version |
 | `ai-usage help` | print usage |
 
-`VIEW` is `--projects`: every project on this machine in PROJECTS, not only the top ones.
+`VIEW` flags choose what the page shows. `--projects` lists every project on this machine in PROJECTS, not only the top ones. `--devices` shows DEVICES as each machine's status, and the interactive view opens on it; `s` switches back. `status` takes neither.
 
 `DISPLAY` flags change how the console looks. `--json` ignores them.
 

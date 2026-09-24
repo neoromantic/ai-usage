@@ -54,7 +54,7 @@ SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
   GROK
 ● a4c2e917               SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈      ?                              —   1  annbook            11h
 
-DEVICES × SUBSCRIPTIONS  13 · 7d · M tokens in+out                        ‹tokens›  share
+DEVICES × SUBSCRIPTIONS  13 · 7d · M tokens in+out      ‹usage›  status   ‹tokens›  share
                       CLAUDE ─────────  CODEX ────────────────────────────  GROK     NO QUOTA
                           ann      kim      ann      sam      lee  unknown a4c2e917   hermes   TOTAL
 ● annbook                  19        ·      180        ·        ·        ·        3        ·     202
@@ -75,7 +75,7 @@ PROJECTS  annbook · by 7d · M tokens in+out
   ~/src/acme/os                        3    10     3  claude, grok    11h
   + 237 more
 
- ↑↓ scroll · ←→ matrix · p period ‹7d› · % share · r refresh · ? help · q quit
+ ↑↓ scroll · ←→ matrix · s ‹usage› status · p period ‹7d› · % share · r refresh · ? help · q quit
 ```
 
 ## Header
@@ -180,7 +180,44 @@ A matrix. Each device is a row, sorted by total, largest first. Each subscriptio
 
 Many devices scroll down, and many subscriptions scroll sideways, with the device column and the headers kept in place. The static report prints the columns that fit and ends the header with `+N more`.
 
-With a single device, a matrix of one row says little. The section becomes USAGE: a row per subscription, with today, 7d, 30d, and 90d.
+The section has two views, usage and status. The title names them as pills before the matrix's modes, `‹usage›  status   ‹tokens›  share`, where both pairs fit; where they do not, as at 80 columns, the views go and the modes stay.
+
+With a single device, a matrix of one row says little. The section becomes USAGE: a row per subscription, with today, 7d, 30d, and 90d. It has one view, so `s` and `--devices` change nothing there.
+
+### Status
+
+The status view is DEVICES as a table of each device's state, as the DEVICES table before v0.2.0 had it: which devices report, on which release, and what fails on them. `s` in the interactive view switches to it and back; `--devices` prints it and opens the interactive view on it. It came back on 2026-09-24 at the owner's request.
+
+```
+DEVICES  13 · 1 error · 2 old · by 7d · M tokens in+out                                                 usage  ‹status›
+                           COLLECTOR ───────────────────────────  TOKENS ────────────────
+  DEVICE           USER    VERSION   SEEN  VIA                    TODAY    7D   30D   90D  NOTE
+  srv1             root    v1.4.2      8m  claude, codex, hermes     31   262   786  2227
+● annbook          ann     v1.4.2      7m  claude, codex, grok       42   202   849  2224
+× Mac.localdomain  kim     v1.4.0 ↓   16m  claude, codex ×           32   105   400   947  codex: app-server exited wi…
+↓ MacBook-Pro-Kim  sam     v1.4.0 ↓   30m  codex                      3    60   149   239  update: latest v1.4.2
+  bot-a            hermes  v1.4.2      9m  codex, hermes              4    30   105   210
+  ⋮
+  TOTAL                                                             123   736  2559  6387
+```
+
+- The rows are the matrix's, in the matrix's order for the chosen period, and the section is as tall as the matrix: a title, a line of group headings, the column headers, the rows, and TOTAL. A device keeps its line when the view changes, so the page keeps its place.
+- The title counts the devices that fail, are silent, or run an older release than the team's newest, each in its state's color: errors in the out color, silent in the tight color, old dim. A count of none is left out. A silent device counts as silent, not as an error, since its error is the one it last reported.
+- COLLECTOR heads VERSION, SEEN, and VIA, and TOKENS the periods, each with a thin rule, as the providers head the matrix's columns.
+- The status view has no share mode. `%` leaves the key bar and does nothing there, and the matrix keeps its mode and its sideways scroll for when it shows again.
+
+| Column | Shows |
+| --- | --- |
+| mark | as in the matrix: `●` this device, `×` an error, `~` silent, `↓` an old release |
+| DEVICE | the matrix's name for it |
+| USER | the OS user, dim |
+| VERSION | the collector's release; an older one than the team's newest is dim and followed by `↓` |
+| SEEN | how long ago it last reported, dim; a silent device's in the tight color |
+| VIA | the harnesses it reads, dim; one that fails or reads only in part is in the out color and followed by `×`; `·` for none |
+| TODAY 7D 30D 90D | its input plus output tokens, as the matrix's TOTAL column prints them, with `≥` and `?` for a device on a collector older than v0.2.0; the chosen period's header is plain, the others dim |
+| NOTE | for a silent device, `silent since` when it last reported, then the error it last reported, as ATTENTION says it; else what fails on it, in the out color; else `update: latest v1.4.2`; else nothing. Only the error is in color |
+
+The bottom row is TOTAL for each period, by the matrix's rules for `≥` and `?`. With no note on any device, there is no NOTE column.
 
 ## PROJECTS
 
@@ -210,7 +247,8 @@ Keys:
 | --- | --- |
 | `↑` `↓` `j` `k`, `PgUp` `PgDn` `Space`, `g` `G`, the mouse wheel | scroll the page |
 | `←` `→` `h` `l`, Shift and the wheel | scroll the matrix |
-| `p`, or `1` `7` `3` `9` | the period: today, 7d, 30d, or 90d |
+| `s` | DEVICES as the matrix or as each device's status |
+| `p`, or `1` `7` `3` `9` | the period: today, 7d, 30d, or 90d, in either view |
 | `%` | tokens or share in the matrix |
 | `r` | collect now; the header shows a spinner until it is done |
 | `?` | every key and the legend, in a panel; `Esc` closes it |
@@ -219,9 +257,9 @@ Keys:
 The key bar follows the common practice of modern TUIs:
 
 - A key is bold, in the accent color. What it does is dim. Items are separated by a faint `·`.
-- The current period and mode are pills: the chosen one in reverse accent, the others dim, as in `p period ‹7d›` and `‹tokens› share`.
-- Only keys that do something now appear: `←→ matrix` only when the matrix does not fit.
-- On a narrow terminal, the bar drops keys from the least used, and keeps `?` and `q` last.
+- The current period and mode are pills: the chosen one in reverse accent, the others dim, as in `p period ‹7d›` and `‹tokens› share`. The views of DEVICES are pills after their key, as in `s ‹usage› status`.
+- Only keys that do something now appear: `←→ matrix` only when the matrix shows and does not fit, `%` only when the matrix shows, and `s` only on a team of more than one device.
+- On a narrow terminal, the bar drops keys from the least used: `%`, `r`, `s`, `←→`, the period, and scroll. It keeps `?` and `q` last.
 
 ## Visual system
 
@@ -266,6 +304,8 @@ With `--color never`, `NO_COLOR`, or a pipe, the words and marks carry the meani
 
 The page is laid out for 120 to 160 columns, and down to 80. As SUBSCRIPTIONS narrows, it drops LAST, then PLAN, then the reset's clock time, then the busiest user's name, and last the bar shrinks from 24 cells to 12.
 
+The matrix's title drops the view pills before its modes, and the status view's title drops the unit before the view pills. As the status view narrows, NOTE is cut first, to as few as 16 columns. Then USER goes, then VIA, then TODAY, 30D, and 7D. The chosen period, 90D, DEVICE, VERSION, and SEEN stay. NOTE then takes what is left, and goes with less than 4 columns. At 80 columns the fixture keeps VERSION, SEEN, the four periods, and a short NOTE.
+
 ## Short names
 
 - The matrix needs short account names. By default a name is the part of an email before the `@`, or the first 8 characters of an id. When two names collide within a provider, both show the full label.
@@ -279,8 +319,8 @@ The page is laid out for 120 to 160 columns, and down to 80. As SUBSCRIPTIONS na
 - The HERMES section.
 - The `!!` and `▲` marks and the 6-hour pace in the console.
 - THIS DEVICE's list of accounts; the matrix row and PROJECTS replace it.
-- In DEVICES: VERSION, SEEN, IN+OUT, NOTE, and the `cl cx gk hm` grid. What was wrong with a device goes to ATTENTION.
-- `--tokens` and `--devices`, which the matrix replaces.
+- In DEVICES: IN+OUT and the `cl cx gk hm` grid. The status view has the tokens of each period and VIA instead. What was wrong with a device goes to ATTENTION too.
+- `--tokens`, which the matrix replaces.
 
 ## Build order
 
