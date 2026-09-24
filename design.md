@@ -93,7 +93,7 @@ Shown only when something is wrong. At most 6 lines, then `+N more`; the interac
 | `ERROR` | a device's collector or one of its harnesses fails | the device and the error |
 | `SILENT` | a device has not reported for a day | since when, and the error it last reported, if any |
 | `OLD` | devices run an older release | all of them in one line |
-| `UNDER` | past half of a window, its forecast is under 50% | how much of the window will go unused |
+| `UNDER` | past half of an account's weekly window, its forecast is under 50% | how much of the window will go unused |
 
 A badge is its word in reverse video, colored by its state. `UNDER` is a hint rather than a problem: that subscription has room for more work.
 
