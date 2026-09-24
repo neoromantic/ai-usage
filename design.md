@@ -34,7 +34,7 @@ ATTENTION
  OUT    codex ann@acme.dev          back Fri 17:09, in 1d 23h
  OUT    claude ann · Fable          back Sun 01:00, in 3d 7h
  OVER   codex sam@mail.test         runs out ~Sat 06:54 at this week's pace, 2d 13h before reset
- OVER   claude ann@acme.dev         runs out ~Thu 01:17 at this week's pace · reading 1d old
+ OVER   claude ann@acme.dev         runs out ~Thu 01:17 at this week's pace, 2d 23h before reset · reading 1d old
  ERROR  Mac.localdomain             codex: app-server exited without answering
  OLD    2 devices on v0.1.1         Mac.localdomain, MacBook-Pro-Kim · latest v0.1.3
 
