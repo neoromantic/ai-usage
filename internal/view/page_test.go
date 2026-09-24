@@ -1,6 +1,9 @@
 package view
 
 import (
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -62,6 +65,47 @@ func TestPageAttentionIsCut(t *testing.T) {
 	}
 	if p.Legend != "" {
 		t.Errorf("the interactive view has a legend: %q", p.Legend)
+	}
+}
+
+// TestPageOldLine: on a team where every other device is behind, the OLD
+// line's names give way to a count, so the latest release stays on it, and
+// the subject of devices on several releases is not cut, from 80 columns.
+func TestPageOldLine(t *testing.T) {
+	names := regexp.MustCompile(`^ OLD +12 devices on (v1\.4\.0|old releases)  +(.+) \+(\d+) · latest v1\.4\.2$`)
+	for _, mixed := range []bool{false, true} {
+		r := loadReport(t, "team")
+		var old []string
+		for i := range r.Team.Devices {
+			d := &r.Team.Devices[i]
+			if d.This {
+				continue
+			}
+			d.Old, d.CollectorVersion = true, "v1.4.0"
+			if mixed && d.Label == "bot-a" {
+				d.CollectorVersion = "v1.3.9"
+			}
+			old = append(old, d.Label)
+		}
+		sort.Strings(old)
+		for i := range r.Attention {
+			if r.Attention[i].Kind == AttentionOld {
+				r.Attention[i].Devices = old
+			}
+		}
+		for _, w := range []int{80, 100, 120} {
+			lines := pageSection(Render(r, Options{Width: w, Loc: sampleZone}), "ATTENTION")
+			line := lines[len(lines)-1]
+			m := names.FindStringSubmatch(line)
+			if m == nil || (m[1] == "old releases") != mixed {
+				t.Errorf("mixed %v at %d: %q", mixed, w, line)
+				continue
+			}
+			shown := len(strings.Split(m[2], ", "))
+			if more, _ := strconv.Atoi(m[3]); shown+more != len(old) {
+				t.Errorf("mixed %v at %d: %d names and +%d of %d: %q", mixed, w, shown, more, len(old), line)
+			}
+		}
 	}
 }
 

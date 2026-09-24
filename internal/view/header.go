@@ -183,7 +183,7 @@ func (p *page) attention() []chunks {
 		line = append(line, subjects[i].cut(subjW, p.g.ell).padTo(subjW)...)
 		line = append(line, p.space(2))
 		room := p.w - line.width()
-		forms := p.attentionText(a)
+		forms := p.attentionText(a, room)
 		text := forms[len(forms)-1]
 		for _, f := range forms {
 			if f.width() <= room {
@@ -224,7 +224,8 @@ func (p *page) subject(a Attention) chunks {
 		if n == 1 {
 			word = "device"
 		}
-		on := "older releases"
+		// "12 devices on old releases" fits the subject's cap at 80 columns.
+		on := "old releases"
 		if vs := p.versions(a.Devices); len(vs) == 1 {
 			on = p.txt(vs[0])
 		}
@@ -252,8 +253,8 @@ func (p *page) versions(devices []string) []string {
 }
 
 // attentionText is what to know, from the fullest form to the shortest;
-// the line takes the first that fits.
-func (p *page) attentionText(a Attention) []chunks {
+// the line takes the first that fits in room.
+func (p *page) attentionText(a Attention, room int) []chunks {
 	g := p.g
 	old := ""
 	if a.ReadingAge > 0 {
@@ -320,8 +321,8 @@ func (p *page) attentionText(a Attention) []chunks {
 		for _, d := range a.Devices {
 			names = append(names, p.txt(d))
 		}
-		room := p.w - 20 - width(latest)
-		return forms(nameList(names, nil, max(room, 12), g.ell) + latest)
+		// The names give way to a count, so the latest release keeps its place.
+		return forms(nameList(names, nil, max(room-width(latest), 12), g.ell) + latest)
 	}
 	return forms(p.txt(a.Message))
 }
