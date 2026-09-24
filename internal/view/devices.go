@@ -7,13 +7,42 @@ import (
 	"strings"
 )
 
-// devices is who spends what: DEVICES × SUBSCRIPTIONS, or USAGE on a team
-// of one device, where a matrix of one row says little.
+// devices is who spends what: DEVICES × SUBSCRIPTIONS, or its status view,
+// or USAGE on a team of one device, where a matrix of one row says little.
 func (p *page) devices() []chunks {
-	if len(p.r.Team.Devices) <= 1 {
+	switch {
+	case !p.deviceViews():
 		return p.usage()
+	case p.o.DeviceStatus:
+		return p.deviceStatus()
 	}
 	return p.grid()
+}
+
+// deviceViews says DEVICES has two views, the matrix and the status table:
+// on a team of more than one device.
+func (p *page) deviceViews() bool { return len(p.r.Team.Devices) > 1 }
+
+// viewPills are the two views of DEVICES, the one shown chosen.
+func (p *page) viewPills() chunks {
+	st := p.o.DeviceStatus
+	return chunks{p.pill("usage", !st), p.plain(" "), p.pill("status", st)}
+}
+
+// sortRows puts the matrix's rows in the order it shows them: the most
+// tokens in the period first, tokens not known before none, then by name.
+// The status view shows its rows in the same order.
+func sortRows(rows []Row, per Period) {
+	sort.SliceStable(rows, func(i, j int) bool {
+		a, b := per.Of(rows[i].Usage), per.Of(rows[j].Usage)
+		if a != b {
+			return a > b
+		}
+		if ka, kb := per.Known(rows[i].Usage), per.Known(rows[j].Usage); ka != kb {
+			return kb
+		}
+		return rows[i].Device < rows[j].Device
+	})
 }
 
 // gridCol is one column of the matrix: a subscription, or the tokens of a
@@ -62,17 +91,7 @@ func (p *page) grid() []chunks {
 		cols = append(cols, gridCol{c: c, idx: i, group: grp, known: share || per.Known(c.Usage)})
 	}
 	rows := append([]Row(nil), m.Rows...)
-	sort.SliceStable(rows, func(i, j int) bool {
-		a, b := per.Of(rows[i].Usage), per.Of(rows[j].Usage)
-		if a != b {
-			return a > b
-		}
-		// Tokens that are not known go before none.
-		if ka, kb := per.Known(rows[i].Usage), per.Known(rows[j].Usage); ka != kb {
-			return kb
-		}
-		return rows[i].Device < rows[j].Device
-	})
+	sortRows(rows, per)
 	value := func(r Row, c gridCol) float64 {
 		if c.idx >= len(r.Cells) {
 			return 0
@@ -174,7 +193,12 @@ func (p *page) grid() []chunks {
 	} else {
 		title = append(title, p.muted(strconv.Itoa(len(rows))+g.sep+per.String()+g.sep+"M tokens in+out"))
 	}
+	// The views go before the matrix's modes, and are the first to go
+	// where both do not fit.
 	pills := chunks{p.pill("tokens", !share), p.plain(" "), p.pill("share", share)}
+	if views := append(p.viewPills(), p.plain("  ")); max(edge, title.width()+2+views.width()+pills.width()) <= p.w {
+		pills = append(views, pills...)
+	}
 	if at := max(edge, title.width()+2+pills.width()); at <= p.w {
 		p.mark("chosen")
 		title = append(title.padTo(at-pills.width()), pills...)

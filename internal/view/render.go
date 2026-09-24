@@ -133,6 +133,11 @@ type Options struct {
 	Share bool
 	// AllProjects lists every project, not the top 10.
 	AllProjects bool
+	// DeviceStatus shows DEVICES as its status table, a row per device with
+	// its release, when it last reported, what it reads, and its tokens in
+	// every period, instead of the matrix. A team of one device shows USAGE
+	// either way.
+	DeviceStatus bool
 	// Interactive draws the page for the interactive view: every ATTENTION
 	// line and no legend, which is in its help.
 	Interactive bool
@@ -160,8 +165,11 @@ type Page struct {
 	Legend string
 	// MatrixColumns is how many subscription columns the matrix has, and
 	// MatrixShown how many of them fit from MatrixScroll on. Both are 0 on a
-	// page with no matrix, as with a single device.
+	// page with no matrix, as with a single device or in the status view.
 	MatrixColumns, MatrixShown int
+	// DeviceViews says DEVICES has two views, the matrix and the status
+	// table, as on a team of more than one device.
+	DeviceViews bool
 	// Width is how wide the widest line of the header and the body is. The
 	// header's right side ends there.
 	Width int
@@ -188,7 +196,7 @@ func Render(r Report, o Options) Page {
 	head := p.header(width)
 	width = max(width, head.width())
 	out := Page{Header: head.String(), Body: make([]string, len(body)), Width: width,
-		MatrixColumns: p.matrixColumns, MatrixShown: p.matrixShown}
+		MatrixColumns: p.matrixColumns, MatrixShown: p.matrixShown, DeviceViews: p.deviceViews()}
 	for i, l := range body {
 		out.Body[i] = l.String()
 	}

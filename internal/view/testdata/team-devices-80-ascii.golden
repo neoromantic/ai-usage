@@ -1,0 +1,60 @@
+ai-usage . annbook . team qmvrtzpa     * collected 7m  * relay 7m  * up to date
+
+ATTENTION
+ OUT    codex ann@acme.dev   back Fri 17:09, in 1d 23h
+ OUT    claude ann . Fable   back Sun 01:00, in 3d 7h
+ OVER   claude ann@acme.dev  runs out ~Thu 01:17, 2d 23h before reset
+ OVER   codex sam@mail.test  runs out ~Sat 06:54, 2d 13h before reset
+ ERROR  Mac.localdomain      codex: app-server exited without answering
+ OLD    2 devices on v1.4.0  Mac.localdomain, MacBook-Pro-Kim . latest v1.4.2
+
+SUBSCRIPTIONS  7 . 2 out . 1 over . 3 no reading
+
+  CLAUDE         THIS WEEK                 LEFT  RESETS    AT RESET  USERS
+* ann@acme.dev   =========+======--------  ~33%  3d 7h   ~174% over      2
+    Fable        ============+===========    0%  3d 7h          out
+  kim@corp.test  ........................     ?                   -      1
+
+  CODEX
+* ann@acme.dev   =================+======    0%  1d 23h         out      2
+  sam@mail.test  ======+===--------------   58%  5d 2h    157% over      1
+* lee@corp.test  ===|--------------------   88%  5d 22h      81% ok     10
+  unknown        ........................     ?                   -      1
+
+  GROK
+* a4c2e917       ........................     ?                   -      1
+
+DEVICES  13 . 1 error . 2 old . by 7d . M tokens in+out         usage  [status]
+                   COLLECTOR ----  TOKENS ----------------
+  DEVICE           VERSION   SEEN  TODAY    7D   30D   90D  NOTE
+  srv1             v1.4.2      8m     31   262   786  2227
+* annbook          v1.4.2      7m     42   202   849  2224
+x Mac.localdomain  v1.4.0 v   16m     32   105   400   947  codex: app-serve...
+v MacBook-Pro-Kim  v1.4.0 v   30m      3    60   149   239  latest v1.4.2
+  bot-a            v1.4.2      9m      4    30   105   210
+  bot-b            v1.4.2     10m      4    26    91   183
+  bot-c            v1.4.2     11m      2    17    58   116
+  bot-d            v1.4.2     12m      2    12    42    84
+  bot-e            v1.4.2     13m      1     9    32    63
+  bot-f            v1.4.2     14m     <1     7    25    49
+  bot-g            v1.4.2     15m     <1     4    14    28
+  bot-h            v1.4.2     16m     <1     2     7    14
+  bot-i            v1.4.2     17m     <1    <1     1     3
+  TOTAL                              123   736  2559  6387
+
+PROJECTS  annbook . by 7d . M tokens in+out
+  PROJECT                                    7D  90D  SESS  VIA            LAST
+  ~/src/acme/app                            118  420    43  codex, claude    1h
+  ~/Vault                                    43  130    56  codex            3h
+  ~/src/site                                 18   62     6  codex            2d
+  ~/src/ai-usage                             11   11     3  claude, grok     7m
+  ~/src/acme/os                               4   12     3  claude, grok    11h
+  ~/src/acme/relay                            3    9     2  codex            1d
+  ~/dotfiles                                  2    5     4  codex, claude    4d
+  ~/scratch                                   1    3     5  claude           5d
+  ~/src/acme/landing                         <1    7     2  codex            6d
+  ~/Library/.../Notes/Projects/2026          <1    2     1  claude           6d
+  + 4 more
+
+= used  - left  |+ even use  . no reading  ~ stale
+? unknown  - no forecast  * here  x error  v old  [] chosen

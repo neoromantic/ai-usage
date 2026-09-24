@@ -38,6 +38,12 @@ var sampleZone = time.FixedZone("UTC+3", 3*60*60)
 // plainText is the static page as a pipe gets it: every escape stripped.
 func plainText(r Report, o Options) string { return sgr.ReplaceAllString(Text(r, o), "") }
 
+// devices is o with DEVICES in its status view.
+func devices(o Options) Options {
+	o.DeviceStatus = true
+	return o
+}
+
 func TestGolden(t *testing.T) {
 	team, single, older := loadReport(t, "team"), loadReport(t, "single"), olderTeam(t)
 	page := func(w int) Options { return Options{Width: w, Loc: sampleZone} }
@@ -100,6 +106,21 @@ func TestGolden(t *testing.T) {
 			o.Share = true
 			return plainText(older, o)
 		}},
+		// The status view of DEVICES, as --devices prints it.
+		{"team-devices-80", func() string { return plainText(team, devices(page(80))) }},
+		{"team-devices-120", func() string { return plainText(team, devices(page(120))) }},
+		{"team-devices-160", func() string { return plainText(team, devices(page(160))) }},
+		{"team-devices-80-ascii", func() string {
+			o := devices(page(80))
+			o.ASCII = true
+			return plainText(team, o)
+		}},
+		{"team-devices-120-color", func() string {
+			o := devices(page(120))
+			o.Color, o.Dark = true, true
+			return Text(team, o)
+		}},
+		{"team-older-devices", func() string { return plainText(older, devices(page(120))) }},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			got := c.out()
@@ -140,6 +161,7 @@ func TestWidths(t *testing.T) {
 				for _, color := range []bool{false, true} {
 					o := Options{Width: w, ASCII: ascii, Color: color, Loc: sampleZone}
 					checkLines(t, name, o, Text(r, o))
+					checkLines(t, name, devices(o), Text(r, devices(o)))
 				}
 			}
 		}
@@ -149,8 +171,10 @@ func TestWidths(t *testing.T) {
 					for _, ascii := range []bool{false, true} {
 						o := Options{Width: w, Period: per, Share: share, ASCII: ascii, AllProjects: share, Loc: sampleZone}
 						checkLines(t, name, o, Text(r, o))
+						checkLines(t, name, devices(o), Text(r, devices(o)))
 						o.Interactive, o.MatrixScroll, o.Busy = true, 3, "|"
 						checkLines(t, name, o, Text(r, o))
+						checkLines(t, name, devices(o), Text(r, devices(o)))
 					}
 				}
 			}
@@ -199,8 +223,10 @@ func checkLines(t *testing.T, name string, o Options, out string) {
 func TestPageFits(t *testing.T) {
 	reports := map[string]Report{"team": loadReport(t, "team"), "single": loadReport(t, "single"), "older": olderTeam(t)}
 	for name, r := range reports {
-		for _, w := range []int{80, 120, 160} {
-			p := Render(r, Options{Width: w, Loc: sampleZone})
+		for _, o := range []Options{{Width: 80}, {Width: 120}, {Width: 160}, devices(Options{Width: 80}), devices(Options{Width: 120}), devices(Options{Width: 160})} {
+			o.Loc = sampleZone
+			w := o.Width
+			p := Render(r, o)
 			widest := 0
 			for _, l := range append([]string{p.Header}, p.Body...) {
 				widest = max(widest, width(sgr.ReplaceAllString(l, "")))

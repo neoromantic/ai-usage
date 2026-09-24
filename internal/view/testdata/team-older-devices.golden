@@ -1,0 +1,28 @@
+ai-usage · annbook · team kzdvvj2u                              ● collected 7m ago  ● relay 7m ago  ● up to date
+
+ATTENTION
+ OVER  claude ann@acme.dev  runs out ~Thu 15:00 at this week's pace, 2d before reset
+ OLD   1 device on v0.1.4   MacBook-Old · latest v0.2.0
+
+SUBSCRIPTIONS  3 · 1 over · 1 tight
+
+  CLAUDE         THIS WEEK                 LEFT  RESETS         AT RESET  USERS            LAST
+● ann@acme.dev   ━━━━━━━━━━╋━━━──────────   40%  4d Sat 15:00  140% over   2  annbook        1h
+  kim@corp.test  ━━━━━━━───┃─────────────   70%  4d Sat 15:00     70% ok   1  MacBook-Old    5h
+
+  CODEX
+  lee@corp.test  ━━━━━━━━━━┃─────────────   60%  4d Sat 15:00  94% tight   1  srv1           2h
+
+DEVICES  3 · 1 old · by 7d · M tokens in+out                                                     usage  ‹status›
+                     COLLECTOR ─────────────────────────────────  TOKENS ────────────────
+  DEVICE       USER  VERSION   SEEN  VIA                          TODAY    7D   30D   90D  NOTE
+  srv1         root  v0.2.0     10m  claude, codex, grok, hermes     30    60    60    90
+● annbook      ann   v0.2.0      7m  claude, codex, grok, hermes      4     8    12    12
+↓ MacBook-Old  dana  v0.1.4 ↓   20m  claude, codex, grok, hermes      ?     ?     ?   620  update: latest v0.2.0
+  TOTAL                                                             ≥34   ≥68   ≥72   722
+
+PROJECTS  annbook · by 7d · M tokens in+out
+  PROJECT    7D  90D  SESS  VIA     LAST
+  ~/src/app   8   12     1  claude    1h
+
+━ used  ─ left  ┃╋ even use  ? unknown  ≥ at least  ● here  ↓ old  ‹› chosen
