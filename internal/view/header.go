@@ -293,7 +293,9 @@ func (p *page) attentionText(a Attention, room int) []chunks {
 		if a.ResetsAt != nil && a.ResetsAt.After(*a.At) {
 			before = ", " + dur(a.ResetsAt.Sub(*a.At)) + " before reset"
 		}
-		return forms(s+pace+before+old, s+pace+old, s+old, s)
+		// A short line drops the pace first, then the reading's age: when it
+		// runs out and how long before the reset are what the line says.
+		return forms(s+pace+before+old, s+before+old, s+before, s+old, s)
 	case AttentionUnder:
 		unused := "some of it"
 		if a.Percent != nil {

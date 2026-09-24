@@ -3,8 +3,8 @@ ai-usage · annbook · team qmvrtzpa     ● collected 7m  ● relay 7m  ● up 
 ATTENTION
  OUT    codex ann@acme.dev   back Fri 17:09, in 1d 23h
  OUT    claude ann · Fable   back Sun 01:00, in 3d 7h
- OVER   claude ann@acme.dev  runs out ~Thu 01:17 · reading 1d old
- OVER   codex sam@mail.test  runs out ~Sat 06:54 at this week's pace
+ OVER   claude ann@acme.dev  runs out ~Thu 01:17, 2d 23h before reset
+ OVER   codex sam@mail.test  runs out ~Sat 06:54, 2d 13h before reset
  ERROR  Mac.localdomain      codex: app-server exited without answering
  OLD    2 devices on v1.4.0  Mac.localdomain, MacBook-Pro-Kim · latest v1.4.2
 

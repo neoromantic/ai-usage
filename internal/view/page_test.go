@@ -68,6 +68,27 @@ func TestPageAttentionIsCut(t *testing.T) {
 	}
 }
 
+// TestPageOverLine: an OVER line that is short of room drops the pace
+// first, then the reading's age, and keeps how long before the reset.
+func TestPageOverLine(t *testing.T) {
+	r := loadReport(t, "team")
+	for w, want := range map[int][]string{
+		80: {
+			" OVER   claude ann@acme.dev  runs out ~Thu 01:17, 2d 23h before reset",
+			" OVER   codex sam@mail.test  runs out ~Sat 06:54, 2d 13h before reset",
+		},
+		100: {
+			" OVER   claude ann@acme.dev  runs out ~Thu 01:17, 2d 23h before reset · reading 1d old",
+			" OVER   codex sam@mail.test  runs out ~Sat 06:54 at this week's pace, 2d 13h before reset",
+		},
+	} {
+		lines := pageSection(Render(r, Options{Width: w, Loc: sampleZone}), "ATTENTION")
+		if len(lines) < 5 || lines[3] != want[0] || lines[4] != want[1] {
+			t.Errorf("at %d:\n%s\nwant\n%s", w, strings.Join(lines, "\n"), strings.Join(want, "\n"))
+		}
+	}
+}
+
 // TestPageOldLine: on a team where every other device is behind, the OLD
 // line's names give way to a count, so the latest release stays on it, and
 // the subject of devices on several releases is not cut, from 80 columns.
