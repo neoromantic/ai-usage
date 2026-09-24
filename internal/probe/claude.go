@@ -21,9 +21,9 @@ import (
 //
 // Claude Code writes that cache only when it reads the usage, as its /usage
 // dialog does. So for a claude.ai subscription whose cache is missing or
-// older than claudeFresh, in a home this OS user owns, Claude Code is first
-// asked to read it again. The cache is as fresh as Claude Code last made it.
-// Its age is reported.
+// older than claudeFresh, in a home this OS user owns and used since that
+// cache, Claude Code is first asked to read it again. The cache is as fresh
+// as Claude Code last made it. Its age is reported.
 func Claude(ctx context.Context, env Env, home string) (Reading, error) {
 	var r Reading
 	var errs []error
@@ -38,7 +38,7 @@ func Claude(ctx context.Context, env Env, home string) (Reading, error) {
 			errs = append(errs, err)
 		}
 		r.Account, r.Plan = st.label(), st.SubscriptionType
-		if st.subscription() && claudeOwned(file, home) && claudeStale(file, env.now()) {
+		if st.subscription() && claudeUsedSince(file, LastUse(ctx)) && claudeOwned(file, home) && claudeStale(file, env.now()) {
 			err := claudeRefresh(ctx, env, bin, configDir)
 			// The read is judged by the cache it leaves, not by how Claude
 			// Code exits: one that could not reach the usage, as offline,
@@ -281,6 +281,37 @@ func claudeStale(path string, now time.Time) bool {
 	}
 	age := now.Sub(time.UnixMilli(c.FetchedAtMs))
 	return age < 0 || age >= claudeFresh
+}
+
+type lastUseKey struct{}
+
+// WithLastUse tells a probe when the home it asks about was last used, as
+// its logs show.
+func WithLastUse(ctx context.Context, t time.Time) context.Context {
+	return context.WithValue(ctx, lastUseKey{}, t)
+}
+
+// LastUse is the time WithLastUse gave, or zero.
+func LastUse(ctx context.Context) time.Time {
+	t, _ := ctx.Value(lastUseKey{}).(time.Time)
+	return t
+}
+
+// claudeUsedSince reports whether the home was used after the cache in the
+// config file at path was fetched, or at all when there is none. Claude
+// Code renews an expired login when it reads the usage, so it is asked only
+// for a home in use, whose own sessions keep that login alive anyway. It
+// never keeps an idle login alive, and an idle home has spent nothing since.
+func claudeUsedSince(path string, used time.Time) bool {
+	if used.IsZero() {
+		return false
+	}
+	cfg, err := readClaudeConfig(path)
+	if err != nil {
+		return false
+	}
+	c := cfg.cache()
+	return c == nil || used.After(time.UnixMilli(c.FetchedAtMs))
 }
 
 // claudeOwned reports whether this OS user owns the home and the config

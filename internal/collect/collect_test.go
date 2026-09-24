@@ -35,6 +35,8 @@ type world struct {
 	readings map[string]probe.Reading // provider+home
 	askErr   map[string]error
 	asked    []string
+	// lastUse is when each asked home was last used, as the probe was told.
+	lastUse map[string]time.Time
 }
 
 func newWorld(t *testing.T) (*world, Options) {
@@ -48,6 +50,7 @@ func newWorld(t *testing.T) (*world, Options) {
 		readErr:  map[string]error{},
 		readings: map[string]probe.Reading{},
 		askErr:   map[string]error{},
+		lastUse:  map[string]time.Time{},
 	}
 	if err := os.MkdirAll(w.userHome, 0o700); err != nil {
 		t.Fatal(err)
@@ -117,11 +120,12 @@ func (w *world) read(p string, homes []string, since time.Time) logs.Result {
 	return out
 }
 
-func (w *world) ask(_ context.Context, p, home string) (probe.Reading, error) {
+func (w *world) ask(ctx context.Context, p, home string) (probe.Reading, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	k := state.Key(p, home)
 	w.asked = append(w.asked, k)
+	w.lastUse[k] = probe.LastUse(ctx)
 	return w.readings[k], w.askErr[k]
 }
 
@@ -480,6 +484,22 @@ func TestUnusedHomeWithoutLoginIsNoProblem(t *testing.T) {
 	w.sessions("claude", h, sess("s1", "/p", 100, w.now))
 	if got := run(t, o).State.Sources["claude"]; got.Status != "partial" {
 		t.Fatalf("a used home logged out: source = %+v", got)
+	}
+}
+
+// Each home is asked about with when its logs show it was last used, so
+// Claude Code reads the usage only for a home in use.
+func TestAskTellsWhenTheHomeWasLastUsed(t *testing.T) {
+	w, o := newWorld(t)
+	h := w.home(t, "claude")
+	idle := w.extraHome(t, "claude", "idle-claude")
+	w.sessions("claude", h, sess("s1", "/p", 100, t0.Add(-time.Hour)), sess("s2", "/p", 100, t0.Add(-2*time.Hour)))
+	run(t, o)
+	if got := w.lastUse[state.Key("claude", h)]; !got.Equal(t0.Add(-time.Hour)) {
+		t.Errorf("used home: last use %v", got)
+	}
+	if got, ok := w.lastUse[state.Key("claude", idle)]; !ok || !got.IsZero() {
+		t.Errorf("idle home: last use %v, asked %v", got, ok)
 	}
 }
 

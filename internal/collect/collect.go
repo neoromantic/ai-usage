@@ -398,6 +398,18 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 			apps[h] = readClaudeAppSession(rec)
 		}
 	}
+	// Which homes have usage, and when each was last used, as the logs
+	// show.
+	used := map[string]bool{}
+	lastUse := map[string]time.Time{}
+	for _, s := range res.Sessions {
+		for _, h := range append([]string{s.Home}, s.Homes...) {
+			used[h] = true
+			if s.Updated.After(lastUse[h]) {
+				lastUse[h] = s.Updated
+			}
+		}
+	}
 	labels := map[string]string{}
 	var answers []answer
 	if p != "hermes" {
@@ -405,20 +417,13 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 			if _, ok := apps[home]; ok {
 				return probe.Reading{}, nil
 			}
-			return o.Ask(ctx, p, home)
+			return o.Ask(probe.WithLastUse(ctx, lastUse[home]), p, home)
 		}, p, homes)
 	}
 	// partial means some home's read was incomplete, so a lower count than
 	// last time is a missing file rather than a real drop.
 	partial := false
 	legacy := legacyNamed(st, p)
-	used := map[string]bool{}
-	for _, s := range res.Sessions {
-		used[s.Home] = true
-		for _, h := range s.Homes {
-			used[h] = true
-		}
-	}
 	var probeErrs [][2]string
 	for i, home := range homes {
 		hr := res.Homes[home]

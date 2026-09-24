@@ -208,17 +208,10 @@ func writeFile(t *testing.T, path, body string) {
 	}
 }
 
-// cachedJustNow makes claudeCache a minute old, so Claude Code is not asked
-// to read the usage again. TestClaudeRefreshesUsage covers that.
-func cachedJustNow(env *Env) {
-	env.Now = func() time.Time { return time.UnixMilli(fetchedAtMs).Add(time.Minute) }
-}
-
 func TestClaudeDefaultHome(t *testing.T) {
 	// A CLAUDE_CONFIG_DIR inherited from the caller would point the CLI at
 	// another home, so it is removed for the default one.
 	env, record := fakeEnv(t, "claude-ok", "CLAUDE_CONFIG_DIR=/stale")
-	cachedJustNow(&env)
 	home := filepath.Join(env.HomeDir, ".claude")
 	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
 	writeFile(t, filepath.Join(home, ".claude.json"), `{"oauthAccount":{"accountUuid":"acct-1"},"cachedUsageUtilization":{"fetchedAtMs":1,"accountUuid":"acct-1","utilization":{"limits":[{"kind":"session","percent":99}]}}}`)
@@ -249,7 +242,6 @@ func TestClaudeDefaultHome(t *testing.T) {
 // inside it and its login to another keychain entry, so it is kept.
 func TestClaudeDefaultHomeNamedByEnv(t *testing.T) {
 	env, record := fakeEnv(t, "claude-ok")
-	cachedJustNow(&env)
 	home := filepath.Join(env.HomeDir, ".claude")
 	value := home + string(filepath.Separator)
 	env.Environ = append(env.Environ, "CLAUDE_CONFIG_DIR="+value)
@@ -271,7 +263,6 @@ func TestClaudeDefaultHomeNamedByEnv(t *testing.T) {
 
 func TestClaudeCustomHome(t *testing.T) {
 	env, record := fakeEnv(t, "claude-ok", "CLAUDE_CONFIG_DIR=/stale")
-	cachedJustNow(&env)
 	home := filepath.Join(env.HomeDir, "work-claude")
 	writeFile(t, filepath.Join(home, ".claude.json"), claudeCache)
 
@@ -390,7 +381,7 @@ func TestClaudeRefreshesUsage(t *testing.T) {
 			env.Environ = append(env.Environ, "PROBE_CACHE="+file)
 			start := time.Now()
 
-			r, err := Claude(context.Background(), env, home)
+			r, err := Claude(WithLastUse(context.Background(), start), env, home)
 			if err != nil {
 				t.Fatalf("error: %v", err)
 			}
@@ -426,10 +417,11 @@ func TestClaudeRefreshesUsage(t *testing.T) {
 }
 
 // Claude Code is not asked to read the usage when its cache is fresh, for a
-// login without usage limits, or with nobody logged in. Nor when its config
-// cannot be read, since Claude Code would meet the same file, nor in a home
-// another OS user owns, whose files it would take over. A skipped read is
-// no problem. The Claude app's agent-mode homes are not probed at all:
+// login without usage limits, or with nobody logged in. Nor for a home not
+// used since its cache, or never, whose login it would keep alive. Nor when
+// its config cannot be read, since Claude Code would meet the same file,
+// nor in a home another OS user owns, whose files it would take over. A
+// skipped read is no problem. The Claude app's agent-mode homes are not probed at all:
 // collect's TestClaudeAppSessionsGoToTheirRecordedAccount covers them.
 func TestClaudeSkipsUsageRefresh(t *testing.T) {
 	fresh := fmt.Sprintf(`{"oauthAccount":{"accountUuid":"acct-1"},"cachedUsageUtilization":{"fetchedAtMs":%d,"accountUuid":"acct-1","utilization":{"limits":[{"kind":"session","percent":12}]}}}`,
@@ -437,8 +429,13 @@ func TestClaudeSkipsUsageRefresh(t *testing.T) {
 	tests := []struct {
 		name, mode, config string
 		othersHome         bool
+		// unused is how long before the cache the home was last used, or
+		// -1 for never.
+		unused time.Duration
 	}{
 		{name: "fresh cache", mode: "claude-ok", config: fresh},
+		{name: "not used since the cache", mode: "claude-ok", config: claudeCache, unused: time.Second},
+		{name: "never used", mode: "claude-ok", config: claudeCache, unused: -1},
 		{name: "config not JSON", mode: "claude-ok", config: `{`},
 		{name: "console login", mode: "claude-console", config: claudeCache},
 		{name: "api key", mode: "claude-no-email", config: claudeCache},
@@ -455,7 +452,14 @@ func TestClaudeSkipsUsageRefresh(t *testing.T) {
 			}
 			env, record := fakeEnv(t, tc.mode)
 			writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), tc.config)
-			_, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"))
+			used := testNow
+			switch {
+			case tc.unused > 0:
+				used = time.UnixMilli(fetchedAtMs).Add(-tc.unused)
+			case tc.unused < 0:
+				used = time.Time{}
+			}
+			_, err := Claude(WithLastUse(context.Background(), used), env, filepath.Join(env.HomeDir, ".claude"))
 			if runs := readRuns(t, record); len(runs) != 1 {
 				t.Errorf("ran %d commands, the last %q", len(runs), runs[len(runs)-1].Args)
 			}
@@ -510,7 +514,7 @@ func TestClaudeUsageRefreshFails(t *testing.T) {
 			file := filepath.Join(env.HomeDir, ".claude.json")
 			writeFile(t, file, claudeCache)
 			env.Environ = append(env.Environ, "PROBE_CACHE="+file)
-			r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"))
+			r, err := Claude(WithLastUse(context.Background(), time.Now()), env, filepath.Join(env.HomeDir, ".claude"))
 			if (err == nil) != (tc.wantErr == "") || !strings.Contains(errText(err), tc.wantErr) || saysLoggedOut(err) {
 				t.Errorf("error = %q, want one with %q", errText(err), tc.wantErr)
 			}
@@ -532,7 +536,7 @@ func TestClaudeUsageRefreshTimeout(t *testing.T) {
 	env, record := fakeEnv(t, "claude-ok", "PROBE_USAGE=hang", "PROBE_RELEASE="+release)
 	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
 	start := time.Now()
-	r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"))
+	r, err := Claude(WithLastUse(context.Background(), testNow), env, filepath.Join(env.HomeDir, ".claude"))
 	if took := time.Since(start); took > 8*time.Second {
 		t.Errorf("took %v", took)
 	}
