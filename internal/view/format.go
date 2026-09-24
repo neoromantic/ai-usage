@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // style is an SGR parameter string. Only the 16 base colors are used, so the
@@ -98,24 +100,24 @@ var asciiGlyphs = glyphs{
 	sep: " - ", ge: ">=",
 }
 
-// width is the display width. Everything the console draws itself is one
-// column wide; labels and paths may carry wide East Asian runes and emoji.
-func width(s string) int {
-	n := 0
-	for _, r := range s {
-		n += runeWidth(r)
-	}
-	return n
-}
+// width is the display width, as a terminal draws s. Everything the console
+// draws itself is one column wide; labels and paths may carry wide East Asian
+// runes and emoji, which take two.
+func width(s string) int { return ansi.StringWidth(s) }
 
-func runeWidth(r rune) int {
-	switch {
-	case r >= 0x1100 && r <= 0x115F, r >= 0x2E80 && r <= 0xA4CF, r >= 0xAC00 && r <= 0xD7A3,
-		r >= 0xF900 && r <= 0xFAFF, r >= 0xFE30 && r <= 0xFE4F, r >= 0xFF00 && r <= 0xFF60,
-		r >= 0xFFE0 && r <= 0xFFE6, r >= 0x1F300 && r <= 0x1FAFF, r >= 0x20000 && r <= 0x3FFFD:
-		return 2
+// chars are the characters of s as a terminal draws them: a letter with its
+// accents, or an emoji with its modifiers, is one character.
+func chars(s string) []string {
+	var out []string
+	for s != "" {
+		c, _ := ansi.FirstGraphemeCluster(s, ansi.GraphemeWidth)
+		if c == "" {
+			c = s[:1]
+		}
+		out = append(out, c)
+		s = s[len(c):]
 	}
-	return 1
+	return out
 }
 
 func padRight(s string, w int) string {
@@ -143,27 +145,29 @@ func truncEnd(s string, w int, ell string) string {
 	return prefix(s, w-width(ell)) + ell
 }
 
+// prefix is the start of s within w columns, and suffix its end; neither
+// cuts a character in two.
 func prefix(s string, w int) string {
 	var b strings.Builder
 	n := 0
-	for _, r := range s {
-		if n+runeWidth(r) > w {
+	for _, c := range chars(s) {
+		if n+width(c) > w {
 			break
 		}
-		b.WriteRune(r)
-		n += runeWidth(r)
+		b.WriteString(c)
+		n += width(c)
 	}
 	return b.String()
 }
 
 func suffix(s string, w int) string {
-	rs := []rune(s)
-	n, i := 0, len(rs)
-	for i > 0 && n+runeWidth(rs[i-1]) <= w {
+	cs := chars(s)
+	n, i := 0, len(cs)
+	for i > 0 && n+width(cs[i-1]) <= w {
 		i--
-		n += runeWidth(rs[i])
+		n += width(cs[i])
 	}
-	return string(rs[i:])
+	return strings.Join(cs[i:], "")
 }
 
 // truncMid keeps both ends of s.

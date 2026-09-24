@@ -2,8 +2,11 @@ package view
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestNumbers(t *testing.T) {
@@ -91,6 +94,75 @@ func TestTruncation(t *testing.T) {
 	} {
 		if got := truncPath(c.p, c.w, "…"); got != c.want || width(got) > c.w {
 			t.Errorf("truncPath(%q, %d) = %q, want %q", c.p, c.w, got, c.want)
+		}
+	}
+}
+
+// TestWidth measures text as a terminal draws it: emoji two columns wide,
+// in the Basic Multilingual Plane too, and a character with its modifiers
+// as one.
+func TestWidth(t *testing.T) {
+	for _, c := range []struct {
+		s    string
+		want int
+	}{
+		{"annbook", 7},
+		{"⚡✅✨❌⭐", 10},
+		{"⚡️ci-runner✅", 13},
+		{"日本語", 6},
+		{"café", 4},
+		{"━─┃╋┈●×↓·‹›—…", 13},
+	} {
+		if got := width(c.s); got != c.want {
+			t.Errorf("width(%q) = %d, want %d", c.s, got, c.want)
+		}
+	}
+	for _, c := range []struct {
+		s    string
+		w    int
+		pre  string
+		suf  string
+		cutE string
+	}{
+		{"⚡️ci✅", 3, "⚡️c", "i✅", "⚡️…"},
+		{"⚡️ci✅", 2, "⚡️", "✅", "…"},
+		{"cafés", 4, "café", "afés", "caf…"},
+	} {
+		if got := prefix(c.s, c.w); got != c.pre {
+			t.Errorf("prefix(%q, %d) = %q, want %q", c.s, c.w, got, c.pre)
+		}
+		if got := suffix(c.s, c.w); got != c.suf {
+			t.Errorf("suffix(%q, %d) = %q, want %q", c.s, c.w, got, c.suf)
+		}
+		if got := truncEnd(c.s, c.w, "…"); got != c.cutE || width(got) > c.w {
+			t.Errorf("truncEnd(%q, %d) = %q, want %q", c.s, c.w, got, c.cutE)
+		}
+	}
+}
+
+// TestPageWideCharacters draws a page whose device, label, and path carry
+// emoji, and measures each line as a terminal does: none is too wide, and
+// the matrix keeps its columns.
+func TestPageWideCharacters(t *testing.T) {
+	r := loadReport(t, "team")
+	r.Collector.DeviceLabel = "⚡✅✨❌⭐box"
+	r.Projects[0].Path = "/Users/ann/src/⚡✅✨❌⭐-app"
+	for i := range r.Team.Matrix.Rows {
+		if r.Team.Matrix.Rows[i].Device == "srv1" {
+			r.Team.Matrix.Rows[i].Device = "⚡️ci-runner✅"
+		}
+	}
+	p := Render(r, Options{Width: 80, Loc: sampleZone})
+	for i, l := range append([]string{p.Header}, p.Body...) {
+		if w := ansi.StringWidth(l); w > 79 {
+			t.Errorf("line %d is %d wide: %q", i, w, sgr.ReplaceAllString(l, ""))
+		}
+	}
+	m := pageSection(p, "DEVICES")
+	for _, l := range m[2:] {
+		if w, want := ansi.StringWidth(l), ansi.StringWidth(m[2]); w != want {
+			t.Errorf("a matrix row is %d wide, its header %d:\n%s", w, want, strings.Join(m, "\n"))
+			break
 		}
 	}
 }
