@@ -88,10 +88,13 @@ func (p *page) subscriptions() []chunks {
 			if a.Quota != nil {
 				main = mainWindow(a.Quota.Windows)
 			}
-			if a.State == StateUnknown || a.State == "" {
-				noReading++
-			} else {
+			// An account with a reading of its main window but no forecast
+			// yet, as in the first tenth of the window, counts in neither.
+			switch {
+			case a.State != StateUnknown && a.State != "":
 				counts[a.State]++
+			case !known(main):
+				noReading++
 			}
 			label := a.Label
 			if a.Alias != nil && a.Name == *a.Alias {
