@@ -48,22 +48,37 @@ func (l chunks) width() int {
 	return n
 }
 
+// drawn is how much of the line String draws: how many chunks, and the text
+// of the last of them without its trailing spaces. Spaces in reverse video
+// show, so they are kept.
+func (l chunks) drawn() (int, string) {
+	for end := len(l); end > 0; end-- {
+		c := l[end-1]
+		last := c.text
+		if !c.st.GetReverse() {
+			last = strings.TrimRight(last, " ")
+		}
+		if last != "" {
+			return end, last
+		}
+	}
+	return 0, ""
+}
+
+// drawnWidth is how wide String draws the line: its width without the
+// trailing spaces it leaves out, such as those after an unchosen pill.
+func (l chunks) drawnWidth() int {
+	end, last := l.drawn()
+	if end == 0 {
+		return 0
+	}
+	return l[:end-1].width() + width(last)
+}
+
 // String draws the line without its trailing spaces. Whitespace is never
 // styled, except in reverse video, where it shows.
 func (l chunks) String() string {
-	end := len(l)
-	last := ""
-	for end > 0 {
-		c := l[end-1]
-		last = c.text
-		if !c.st.GetReverse() {
-			last = strings.TrimRight(c.text, " ")
-		}
-		if last != "" {
-			break
-		}
-		end--
-	}
+	end, last := l.drawn()
 	var b strings.Builder
 	for i := 0; i < end; i++ {
 		c := l[i]

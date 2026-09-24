@@ -218,34 +218,43 @@ func checkLines(t *testing.T, name string, o Options, out string) {
 	}
 }
 
-// TestPageFits checks that Page.Width is the widest line, and the header
-// ends there.
+// TestPageFits checks that Page.Width is the widest line as it is drawn,
+// the body's or the header's own, and that the header ends there, at every
+// width, in both views of DEVICES, both modes of the matrix, and every
+// period.
 func TestPageFits(t *testing.T) {
 	reports := map[string]Report{"team": loadReport(t, "team"), "single": loadReport(t, "single"), "older": olderTeam(t)}
 	for name, r := range reports {
-		for _, o := range []Options{{Width: 80}, {Width: 120}, {Width: 160}, devices(Options{Width: 80}), devices(Options{Width: 120}), devices(Options{Width: 160})} {
-			o.Loc = sampleZone
-			w := o.Width
-			p := Render(r, o)
-			widest := 0
-			for _, l := range append([]string{p.Header}, p.Body...) {
-				widest = max(widest, width(sgr.ReplaceAllString(l, "")))
-			}
-			if p.Width != widest {
-				t.Errorf("%s at %d: Width %d, the widest line %d", name, w, p.Width, widest)
-			}
-			if hw := width(sgr.ReplaceAllString(p.Header, "")); hw != p.Width {
-				t.Errorf("%s at %d: the header ends at %d, not %d", name, w, hw, p.Width)
-			}
-			if len(p.Body) < 2 || p.Body[0] != "" || p.Body[1] == "" || p.Body[len(p.Body)-1] == "" {
-				t.Errorf("%s at %d: the body does not start with one blank line, or ends with one", name, w)
-			}
-		}
-		// The health items keep their gap from the left side at every width.
 		for w := 80; w <= 160; w++ {
-			h := sgr.ReplaceAllString(Render(r, Options{Width: w, Loc: sampleZone}).Header, "")
-			if !strings.Contains(h, "  ● collected") {
-				t.Errorf("%s at %d: the header lost its health: %q", name, w, h)
+			for _, status := range []bool{false, true} {
+				for _, share := range []bool{false, true} {
+					for _, per := range Periods {
+						o := Options{Width: w, Loc: sampleZone, DeviceStatus: status, Share: share, Period: per}
+						p := Render(r, o)
+						body := 0
+						for _, l := range p.Body {
+							body = max(body, width(sgr.ReplaceAllString(l, "")))
+						}
+						// The header on its own is its sides two columns apart.
+						h := sgr.ReplaceAllString(p.Header, "")
+						i := strings.Index(h, "  ● collected")
+						if i < 0 {
+							t.Errorf("%s %+v: the header lost its health: %q", name, o, h)
+							continue
+						}
+						gap := i + 2 - len(strings.TrimRight(h[:i], " "))
+						own := width(h) - gap + 2
+						if p.Width != max(body, own) {
+							t.Errorf("%s %+v: Width %d, the widest body line %d, the header's own width %d", name, o, p.Width, body, own)
+						}
+						if width(h) != p.Width {
+							t.Errorf("%s %+v: the header ends at %d, not %d", name, o, width(h), p.Width)
+						}
+						if len(p.Body) < 2 || p.Body[0] != "" || p.Body[1] == "" || p.Body[len(p.Body)-1] == "" {
+							t.Errorf("%s %+v: the body does not start with one blank line, or ends with one", name, o)
+						}
+					}
+				}
 			}
 		}
 	}

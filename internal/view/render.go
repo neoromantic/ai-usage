@@ -188,13 +188,16 @@ func Render(r Report, o Options) Page {
 		body = append(body, nil)
 		body = append(body, s...)
 	}
+	// The width is of the lines as they are drawn, without the spaces that
+	// end some, as after an unchosen pill, so the header ends where the
+	// widest of them does.
 	width := 0
 	for i, l := range body {
 		body[i] = l.cut(p.w, p.g.ell)
-		width = max(width, body[i].width())
+		width = max(width, body[i].drawnWidth())
 	}
 	head := p.header(width)
-	width = max(width, head.width())
+	width = max(width, head.drawnWidth())
 	out := Page{Header: head.String(), Body: make([]string, len(body)), Width: width,
 		MatrixColumns: p.matrixColumns, MatrixShown: p.matrixShown, DeviceViews: p.deviceViews()}
 	for i, l := range body {
