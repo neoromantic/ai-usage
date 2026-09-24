@@ -283,3 +283,28 @@ func TestOlderCollectorSilent(t *testing.T) {
 		}
 	}
 }
+
+// The part after ≥ is rounded down, so the bound holds.
+func TestAtLeastRoundsDown(t *testing.T) {
+	p := newPage(&Report{}, Options{})
+	for _, c := range []struct {
+		n       int64
+		unknown bool
+		want    string
+	}{
+		{7_600_000, false, "8"},
+		{7_600_000, true, "≥7"},
+		{1_500_000, true, "≥1"},
+		{1_000_000, true, "≥1"},
+		{999_999, true, "?"},
+		{0, true, "?"},
+	} {
+		u := Usage{Week: c.n}
+		if c.unknown {
+			u.Unknown = Week.bit()
+		}
+		if got := p.tokens(Week, u); got != c.want {
+			t.Errorf("%d, unknown %v: %q, want %q", c.n, c.unknown, got, c.want)
+		}
+	}
+}

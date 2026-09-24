@@ -328,8 +328,9 @@ func (p *page) millions(n int64) string {
 
 // tokens prints a period's tokens in u as millions does, when they are all
 // known. When some are not, as a device's on a collector older than v0.2.0,
-// it prints ≥ before those that are, or ? when they are under a million,
-// so a sum with a part missing never reads as exact.
+// it prints ≥ before the whole millions of those that are, rounded down so
+// the bound holds, or ? when they are under a million, so a sum with a part
+// missing never reads as exact.
 func (p *page) tokens(per Period, u Usage) string {
 	n := per.Of(u)
 	switch {
@@ -338,7 +339,7 @@ func (p *page) tokens(per Period, u Usage) string {
 	case n < 1_000_000:
 		return "?"
 	}
-	return p.g.atLeast + p.millions(n)
+	return p.g.atLeast + strconv.FormatInt(n/1_000_000, 10)
 }
 
 // percent prints a share of a window in whole percents, <1 under one, and
