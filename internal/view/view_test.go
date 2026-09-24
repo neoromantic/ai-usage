@@ -615,8 +615,8 @@ func TestTeamLinkFromTheWire(t *testing.T) {
 }
 
 // A borrowed reading that matches two accounts names neither. What Hermes
-// spent through each is on the wire, so it still goes to the right one; in
-// the matrix it has no subscription to count under.
+// spent through each is on the wire, so it still goes to the right one, in
+// the matrix too.
 func TestTeamLinkThatMatchesTwoAccountsHasNoLabel(t *testing.T) {
 	f := newFixture(t, emptyState())
 	other := emptyState()
@@ -636,9 +636,8 @@ func TestTeamLinkThatMatchesTwoAccountsHasNoLabel(t *testing.T) {
 	if carl := findTeamAccount(t, r, "codex", "carl"); len(carl.LinkedUsage) != 0 {
 		t.Fatalf("carl linked usage = %+v", carl.LinkedUsage)
 	}
-	last := r.Team.Matrix.Columns[len(r.Team.Matrix.Columns)-1]
-	if !last.NoQuota || last.Provider != "hermes" || last.Usage.Today != 60 {
-		t.Fatalf("columns = %+v", r.Team.Matrix.Columns)
+	if cols := r.Team.Matrix.Columns; len(cols) != 2 || cols[0].Label != "bob" || cols[0].Usage.Today != 150+60 || cols[1].Usage.Today != 15 {
+		t.Fatalf("columns = %+v", cols)
 	}
 }
 
@@ -706,6 +705,64 @@ func TestTeamLinkedUsageSplitsByLogin(t *testing.T) {
 		if len(got) != 1 || got[0].Tokens != want || got[0].Sessions != 1 {
 			t.Fatalf("%s linked usage = %+v", label, got)
 		}
+	}
+}
+
+// In the matrix and in USERS too, each login counts what went through it.
+// The snapshot does not split Hermes' days by login, so they go by the
+// same proportion.
+func TestMatrixSplitsHermesByLogin(t *testing.T) {
+	start := now.Add(-3 * 24 * time.Hour)
+	q := func(pct float64) *state.Quota {
+		return &state.Quota{At: now, Source: "harness", Windows: []snapshot.Window{week7(pct, start.Add(week))}}
+	}
+	f := newFixture(t, emptyState())
+	other := emptyState()
+	addAccount(other, "codex", "bots@acme.dev", false, q(40), 0)
+	addAccount(other, "codex", "sam@mail.test", true, q(10), 0)
+	addHermes(other, "openai-codex", "codex", "bots@acme.dev", 0)
+	for _, s := range []struct {
+		project, to string
+		n           int64
+		at          time.Time
+	}{{"/bots", "bots@acme.dev", 4_000_000, now.Add(-2 * time.Hour)}, {"/sam", "sam@mail.test", 1_000_000, now.Add(-3 * time.Hour)}} {
+		spend(other, "hermes", "openai-codex", s.project, s.n, s.at)
+		other.Sessions[state.Key("hermes", "openai-codex", s.project, s.at.String())].Via = map[string]snapshot.Tokens{state.Key("codex", s.to): {Input: s.n}}
+	}
+	r := withTeam(t, f, otherDoc(t, f.key, "d-other-device", "otherbox", now, other))
+
+	if h := findTeamAccount(t, r, "hermes", "openai-codex"); h.Link == nil || h.Link.Label != "bots@acme.dev" {
+		t.Fatalf("link = %+v", h.Link)
+	}
+	mx := r.Team.Matrix
+	if len(mx.Rows) != 2 || mx.Rows[0].Device != "otherbox" || mx.Rows[0].Usage.Week != 5_000_000 {
+		t.Fatalf("rows = %+v", mx.Rows)
+	}
+	for label, want := range map[string]struct {
+		tokens int64
+		share  float64
+	}{"bots@acme.dev": {4_000_000, 40}, "sam@mail.test": {1_000_000, 10}} {
+		col := -1
+		for i, c := range mx.Columns {
+			if c.Label == label {
+				col = i
+			}
+		}
+		if col < 0 {
+			t.Fatalf("no column %s in %+v", label, mx.Columns)
+		}
+		if c := mx.Columns[col]; c.Usage.Week != want.tokens || c.WindowTokens != want.tokens {
+			t.Fatalf("%s column = %+v", label, c)
+		}
+		if c := mx.Rows[0].Cells[col]; c.Usage.Week != want.tokens || c.Share == nil || *c.Share != want.share {
+			t.Fatalf("%s cell = %+v", label, c)
+		}
+	}
+	if sam := findTeamAccount(t, r, "codex", "sam@mail.test"); sam.Users != 1 || sam.Busiest == nil || *sam.Busiest != "otherbox" {
+		t.Fatalf("sam users = %d %v", sam.Users, sam.Busiest)
+	}
+	if got := shares(10, []int64{1, 1, 1}); !reflect.DeepEqual(got, []int64{3, 4, 3}) {
+		t.Fatalf("shares = %v", got)
 	}
 }
 

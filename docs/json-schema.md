@@ -234,7 +234,7 @@ A team account. Each provider's accounts are in the order the report lists them:
 
 ### matrix
 
-Who spends what: each device against each subscription, and the tokens that have no subscription.
+Who spends what: each device against each subscription, and the tokens that have no subscription. A device's Hermes account counts under each login it spent through, with the part of its tokens that went through that login in the last 90 days. Its snapshot does not split its days, or its tokens since a window began, by login, so each login gets that part of them, and so does what it counted through no login. One that spent through no login counts under the login it is linked to on that device, or under no quota when there is none.
 
 | Field | Type | Meaning |
 | --- | --- | --- |

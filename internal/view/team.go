@@ -1,11 +1,13 @@
 package view
 
 import (
+	"math"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/logs"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
@@ -36,7 +38,8 @@ type winReading struct {
 	from string
 }
 
-// devAccount is one account on one device doc.
+// devAccount is one account on one device doc, or the part of a Hermes
+// account that went through one login.
 type devAccount struct {
 	provider, label string
 	usage           Usage
@@ -44,6 +47,13 @@ type devAccount struct {
 	recent          []snapshot.Recent
 	// link is the account a Hermes account bills through on that device.
 	link *Link
+}
+
+// login is what a Hermes account on one device spent through one login, in
+// input plus output tokens.
+type login struct {
+	link   Link
+	tokens int64
 }
 
 // device is one device doc while the team is merged.
@@ -126,6 +136,14 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 		for i, a := range d.Accounts {
 			labels[i] = open(a.Label)
 		}
+		// through is, by Hermes account, what it spent through each login.
+		through := map[string][]login{}
+		for i, a := range d.Accounts {
+			for _, u := range a.Linked {
+				k := state.Key(u.Provider, open(u.Label))
+				through[k] = append(through[k], login{Link{a.Provider, labels[i]}, logs.InOut(u.Tokens)})
+			}
+		}
 		for i, a := range d.Accounts {
 			if byProv[a.Provider] == nil {
 				byProv[a.Provider] = map[string]*teamAccount{}
@@ -184,7 +202,8 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 			for _, u := range a.Linked {
 				addLinked(linked, a.Provider, l, u.Provider, open(u.Label), dv.name, u)
 			}
-			dv.accts = append(dv.accts, devAccount{provider: a.Provider, label: l, usage: usage, days: a.Days, recent: a.Recent, link: link})
+			da := devAccount{provider: a.Provider, label: l, usage: usage, days: a.Days, recent: a.Recent, link: link}
+			dv.accts = append(dv.accts, da.split(through[state.Key(a.Provider, l)], dv.shift)...)
 		}
 	}
 
@@ -334,6 +353,56 @@ func absDuration(d time.Duration) time.Duration {
 		return -d
 	}
 	return d
+}
+
+// split divides a Hermes account on one device among the logins it spent
+// through, in proportion to what the device counted through each. The
+// snapshot does not split the account's days, or its tokens since a window
+// began, by login, so each login gets that share of them, and so does what
+// the device counted through no login, as from before it recorded logins.
+// An account that spent through no login stays whole, on its link.
+func (a devAccount) split(logins []login, shift int) []devAccount {
+	var parts []devAccount
+	var weights []int64
+	for _, l := range logins {
+		if l.tokens > 0 {
+			parts = append(parts, devAccount{provider: a.provider, label: a.label, link: &l.link})
+			weights = append(weights, l.tokens)
+		}
+	}
+	if subscription(a.provider) || len(parts) == 0 {
+		return []devAccount{a}
+	}
+	for _, n := range a.days {
+		for i, v := range shares(n, weights) {
+			parts[i].days = append(parts[i].days, v)
+		}
+	}
+	for _, r := range a.recent {
+		for i, v := range shares(r.Tokens, weights) {
+			parts[i].recent = append(parts[i].recent, snapshot.Recent{Window: r.Window, Start: r.Start, Tokens: v})
+		}
+	}
+	for i := range parts {
+		parts[i].usage = usageOf(parts[i].days, shift)
+	}
+	return parts
+}
+
+// shares divides n in proportion to weights, in whole tokens that add up to
+// n.
+func shares(n int64, weights []int64) []int64 {
+	var sum, upTo, prev int64
+	for _, w := range weights {
+		sum += w
+	}
+	out := make([]int64, len(weights))
+	for i, w := range weights {
+		upTo += w
+		next := int64(math.Round(float64(n) * float64(upTo) / float64(sum)))
+		out[i], prev = next-prev, next
+	}
+	return out
 }
 
 // billsTo is the subscription account a device account's tokens count
