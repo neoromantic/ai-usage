@@ -666,8 +666,23 @@
         "last_error": null,
         "sources": [
           {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
             "provider": "codex",
             "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
             "error": null
           }
         ],
@@ -693,9 +708,24 @@
         "last_error": null,
         "sources": [
           {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
             "provider": "codex",
             "status": "error",
             "error": "codex: app-server exited without answering"
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
           }
         ],
         "error": "codex: app-server exited without answering",
@@ -720,8 +750,23 @@
         "last_error": null,
         "sources": [
           {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
             "provider": "codex",
             "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
             "error": null
           }
         ],
@@ -747,7 +792,22 @@
         "last_error": null,
         "sources": [
           {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
             "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
             "status": "ok",
             "error": null
           }
@@ -774,7 +834,22 @@
         "last_error": null,
         "sources": [
           {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
             "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
             "status": "ok",
             "error": null
           }
@@ -801,7 +876,22 @@
         "last_error": null,
         "sources": [
           {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
             "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
             "status": "ok",
             "error": null
           }
@@ -828,7 +918,22 @@
         "last_error": null,
         "sources": [
           {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
             "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
             "status": "ok",
             "error": null
           }
@@ -855,7 +960,22 @@
         "last_error": null,
         "sources": [
           {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
             "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
             "status": "ok",
             "error": null
           }
@@ -882,7 +1002,22 @@
         "last_error": null,
         "sources": [
           {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
             "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
             "status": "ok",
             "error": null
           }
@@ -909,7 +1044,22 @@
         "last_error": null,
         "sources": [
           {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
             "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
             "status": "ok",
             "error": null
           }
@@ -936,7 +1086,22 @@
         "last_error": null,
         "sources": [
           {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
             "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
             "status": "ok",
             "error": null
           }
@@ -963,7 +1128,22 @@
         "last_error": null,
         "sources": [
           {
+            "provider": "claude",
+            "status": "skipped",
+            "error": null
+          },
+          {
             "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
             "status": "ok",
             "error": null
           }
@@ -990,7 +1170,22 @@
         "last_error": null,
         "sources": [
           {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
             "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "skipped",
+            "error": null
+          },
+          {
+            "provider": "hermes",
             "status": "ok",
             "error": null
           }
