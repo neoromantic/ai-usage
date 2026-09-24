@@ -91,8 +91,10 @@ Usage:
   ai-usage update                        check for a release now
   ai-usage version
 
-Display:
+View:
   --projects             every project on this device, not only the busiest
+
+Display:
   --color=auto|always|never
                          auto colors a terminal, unless NO_COLOR is set or TERM=dumb
   --ascii                ASCII glyphs; the default without a UTF-8 locale

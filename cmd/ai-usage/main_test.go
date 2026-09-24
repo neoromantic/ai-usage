@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -339,6 +340,61 @@ func TestVersionHelpAndUsageErrors(t *testing.T) {
 	}
 	if r := d.run("", "bogus"); !strings.Contains(r.stderr, "bogus") {
 		t.Fatalf("stderr = %q", r.stderr)
+	}
+}
+
+// TestUsageSections: each [SECTION] in a synopsis is a heading of the usage,
+// and the command takes every flag listed under that heading.
+func TestUsageSections(t *testing.T) {
+	hermetic(t)
+	d := newDevice(t)
+	sections := map[string][]string{}
+	heading := ""
+	flagLine := regexp.MustCompile(`^  (--[a-z-]+)(=[a-z]+| [A-Z]+)?`)
+	for _, l := range strings.Split(usage, "\n") {
+		if h, ok := strings.CutSuffix(l, ":"); ok && !strings.HasPrefix(l, " ") {
+			heading = strings.ToUpper(h)
+		} else if m := flagLine.FindStringSubmatch(l); m != nil {
+			// A flag with a value gets one it takes: the first choice, or 1.
+			f := m[1] + m[2]
+			if strings.HasPrefix(m[2], " ") {
+				f = m[1] + "=1"
+			}
+			sections[heading] = append(sections[heading], f)
+		}
+	}
+	word := regexp.MustCompile(`^[a-z-]+$`)
+	checked := 0
+	for _, l := range strings.Split(usage, "\n") {
+		rest, ok := strings.CutPrefix(l, "  ai-usage")
+		if !ok {
+			continue
+		}
+		var cmd []string
+		for _, f := range strings.Fields(rest) {
+			if !word.MatchString(f) {
+				break
+			}
+			cmd = append(cmd, f)
+		}
+		for _, m := range regexp.MustCompile(`\[([A-Z]+)\]`).FindAllStringSubmatch(rest, -1) {
+			flags, ok := sections[m[1]]
+			// KEY is the argument its line explains.
+			if !ok && m[1] != "KEY" {
+				t.Errorf("%q: no heading says what %s is", strings.TrimSpace(l), m[0])
+			}
+			for _, f := range flags {
+				// -h stops the command once its flags are read.
+				if r := d.run("", append(slices.Clone(cmd), f, "-h")...); r.code != 0 {
+					first, _, _ := strings.Cut(r.stderr, "\n")
+					t.Errorf("ai-usage %s: %s", strings.Join(append(cmd, f), " "), first)
+				}
+				checked++
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no synopsis names a section of flags")
 	}
 }
 
