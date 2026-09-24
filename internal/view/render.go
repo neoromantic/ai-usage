@@ -170,6 +170,14 @@ type Page struct {
 	// DeviceViews says DEVICES has two views, the matrix and the status
 	// table, as on a team of more than one device.
 	DeviceViews bool
+	// DevicesHead are the lines of Body over the rows of DEVICES, from the
+	// first to one past the last: its title, the group headings, and the
+	// column headers, in either view. DevicesEnd is one past the section's
+	// last line, TOTAL. The interactive view keeps the head at the top while
+	// the rows scroll under it. All are 0 on a page without the two views,
+	// as with a single device, whose USAGE has no rows to keep a head over.
+	DevicesHead [2]int
+	DevicesEnd  int
 	// Width is how wide the widest line of the header and the body is. The
 	// header's right side ends there.
 	Width int
@@ -180,12 +188,22 @@ type Page struct {
 func Render(r Report, o Options) Page {
 	p := newPage(&r, o)
 	var body []chunks
-	for _, s := range [][]chunks{p.attention(), p.subscriptions(), p.devices(), p.projects()} {
+	// Where DEVICES heads its rows, and where it ends.
+	var devHead [2]int
+	devEnd := 0
+	sections := [][]chunks{p.attention(), p.subscriptions(), p.devices(), p.projects()}
+	for i, s := range sections {
 		if len(s) == 0 {
 			continue
 		}
 		// A blank line under the header, and between two sections.
 		body = append(body, nil)
+		// DEVICES is the third section. Its rows have a head in either view,
+		// and USAGE, on a single device, none.
+		if i == 2 && p.deviceViews() {
+			devHead = [2]int{len(body), len(body) + devicesHead}
+			devEnd = len(body) + len(s)
+		}
 		body = append(body, s...)
 	}
 	// The width is of the lines as they are drawn, without the spaces that
@@ -199,7 +217,8 @@ func Render(r Report, o Options) Page {
 	head := p.header(width)
 	width = max(width, head.drawnWidth())
 	out := Page{Header: head.String(), Body: make([]string, len(body)), Width: width,
-		MatrixColumns: p.matrixColumns, MatrixShown: p.matrixShown, DeviceViews: p.deviceViews()}
+		MatrixColumns: p.matrixColumns, MatrixShown: p.matrixShown, DeviceViews: p.deviceViews(),
+		DevicesHead: devHead, DevicesEnd: devEnd}
 	for i, l := range body {
 		out.Body[i] = l.String()
 	}

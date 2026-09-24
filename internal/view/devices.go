@@ -62,6 +62,10 @@ type gridCol struct {
 const (
 	gridCell   = 8  // the narrowest a matrix column is
 	deviceName = 20 // the widest a device's name is
+	// devicesHead is how many lines are over the rows of DEVICES, in the
+	// matrix and in the status view alike: the title, the group headings,
+	// and the column headers.
+	devicesHead = 3
 )
 
 // grid is DEVICES × SUBSCRIPTIONS: a row per device, the most tokens in

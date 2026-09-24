@@ -178,7 +178,7 @@ A matrix. Each device is a row, sorted by total, largest first. Each subscriptio
 - A total with a `?` in it never reads as exact. It is `≥` before the part that is known, in whole millions rounded down so the bound holds, as `≥68`, or `?` when that part is under a million. The rule is the same for a row's total, a column's, and the grand total, in every period.
 - In the share mode, a window that such a device used since it began cannot be split, since part of the team's tokens are not known. Its share is `?`, and so is the share of every other device that used the window; a device that did not is `·`. The bottom row still shows how full the window is.
 
-Many devices scroll down, and many subscriptions scroll sideways, with the device column and the headers kept in place. The static report prints the columns that fit and ends the header with `+N more`.
+Many devices scroll down, and many subscriptions scroll sideways, with the device column and the headers kept in place: the interactive view keeps the title, the providers' line, and the subscriptions' names at the top of the page while the rows scroll under them. The static report prints the columns that fit and ends the header with `+N more`.
 
 The section has two views, usage and status. The title names them as pills before the matrix's modes, `‹usage›  status   ‹tokens›  share`, where both pairs fit; where they do not, as at 80 columns, the views go and the modes stay.
 
@@ -201,7 +201,7 @@ DEVICES  13 · 1 error · 2 old · by 7d · M tokens in+out                     
   TOTAL                                                             123   736  2559  6387
 ```
 
-- The rows are the matrix's, in the matrix's order for the chosen period, and the section is as tall as the matrix: a title, a line of group headings, the column headers, the rows, and TOTAL. A device keeps its line when the view changes, so the page keeps its place.
+- The rows are the matrix's, in the matrix's order for the chosen period, and the section is as tall as the matrix: a title, a line of group headings, the column headers, the rows, and TOTAL. A device keeps its line when the view changes, so the page keeps its place. The interactive view keeps its first three lines at the top while the rows scroll, as it keeps the matrix's.
 - The title counts the devices that fail, are silent, or run an older release than the team's newest, each in its state's color: errors in the out color, silent in the tight color, old dim. A count of none is left out. A silent device counts as silent, not as an error, since its error is the one it last reported.
 - COLLECTOR heads VERSION, SEEN, and VIA, and TOKENS the periods, each with a thin rule, as the providers head the matrix's columns.
 - The status view has no share mode. `%` leaves the key bar and does nothing there, and the matrix keeps its mode and its sideways scroll for when it shows again.
@@ -241,6 +241,7 @@ With every mark on screen it is one line from 120 columns on. `≥ at least`, wh
 
 - It runs on the alternate screen, so the scrollback stays clean, and restores the terminal on exit, a crash included.
 - The header stays at the top and the key bar at the bottom. The page scrolls between them.
+- Scrolled into DEVICES, the page keeps the section's three lines over its rows at its top, in either view, as a sticky table header. It stays from the line its title would scroll off on, with the first row right under it the line before, until TOTAL comes up under it, and then lets go. A screen down starts under it with the line after the last one shown, so no row is skipped.
 - It reflows on resize. Relative times tick, and the page reloads when a scheduled run saves new state.
 
 Keys:

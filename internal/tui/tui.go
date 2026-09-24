@@ -243,9 +243,9 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m.scroll(1)
 	case "pgup":
-		m.scroll(-m.bodyHeight())
+		m.scrollScreen(-1)
 	case "pgdown", "space":
-		m.scroll(m.bodyHeight())
+		m.scrollScreen(1)
 	case "g", "home":
 		m.scroll(-1 << 30)
 	case "G", "end":
@@ -314,6 +314,44 @@ func (m *Model) scroll(n int) {
 		return
 	}
 	m.top = clamp(m.top+n, 0, m.maxTop())
+}
+
+// scrollScreen moves the page, or the help when it is open, a screen up or
+// down. The head of DEVICES pinned over its rows hides no line from it: a
+// screen down starts under the head with the line under the last one shown,
+// and a screen up ends with the line over the first one shown.
+func (m *Model) scrollScreen(dir int) {
+	n := m.bodyHeight()
+	switch {
+	case m.help:
+		m.scroll(dir * n)
+	case dir < 0:
+		m.scroll(m.pinned(m.top) - n)
+	default:
+		// The furthest top whose first line in sight, under the head where
+		// it is pinned, is no further down than the line under the last one.
+		next := m.top + n
+		top := min(next, m.maxTop())
+		for top > m.top+1 && top+m.pinned(top) > next {
+			top--
+		}
+		m.scroll(top - m.top)
+	}
+}
+
+// pinned is how many lines of the head of DEVICES, its title, the group
+// headings, and the column headers, the page keeps at its top when it is
+// scrolled to line top: all of them from the line the title scrolls off on,
+// while TOTAL is still under them, as a table keeps a sticky header; else
+// none. They cover the head's own lines and the rows scrolled past, each of
+// which is in sight a line up. A body no taller than the head keeps none.
+func (m Model) pinned(top int) int {
+	h := m.page.DevicesHead
+	n := h[1] - h[0]
+	if n <= 0 || m.bodyHeight() <= n || top <= h[0] || top+n >= m.page.DevicesEnd {
+		return 0
+	}
+	return n
 }
 
 // scrollMatrix moves the matrix by n subscription columns, no further left
@@ -473,7 +511,8 @@ func (m Model) View() tea.View {
 }
 
 // screen is the header, the page or the help, a status line when something
-// failed, the rule, and the key bar, one row each, height rows in all.
+// failed, the rule, and the key bar, one row each, height rows in all. The
+// page keeps the head of DEVICES at its top while the rows scroll under it.
 func (m Model) screen() string {
 	w, h := m.width, m.height
 	if w <= 0 || h <= 0 {
@@ -488,15 +527,20 @@ func (m Model) screen() string {
 	}
 	rows := make([]string, 0, h)
 	rows = append(rows, fit(m.page.Header, w))
-	lines, top := m.page.Body, m.top
+	lines, top, pin := m.page.Body, m.top, m.pinned(m.top)
 	if m.help {
-		lines, top = m.helpLines(), m.helpTop
+		lines, top, pin = m.helpLines(), m.helpTop, 0
 	}
 	n := m.bodyHeight()
 	for i := range n {
-		if top+i < len(lines) {
+		switch {
+		case i < pin:
+			// The head of DEVICES, as the page draws it, scrolled sideways
+			// with the matrix.
+			rows = append(rows, fit(lines[m.page.DevicesHead[0]+i], w))
+		case top+i < len(lines):
 			rows = append(rows, fit(lines[top+i], w))
-		} else {
+		default:
 			rows = append(rows, "")
 		}
 	}

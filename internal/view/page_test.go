@@ -238,6 +238,48 @@ func TestPageMatrixScroll(t *testing.T) {
 	}
 }
 
+// TestPageDevicesHead: the page says which of its lines head the rows of
+// DEVICES, the title, the group headings, and the column headers, and where
+// the section ends, after TOTAL, in both views and both modes, in every
+// period, at every tier, scrolled sideways or not. USAGE, on a single
+// device, has none.
+func TestPageDevicesHead(t *testing.T) {
+	for name, r := range map[string]Report{"team": loadReport(t, "team"), "older": olderTeam(t)} {
+		for _, w := range []int{80, 120, 160} {
+			for _, status := range []bool{false, true} {
+				for _, share := range []bool{false, true} {
+					for _, per := range Periods {
+						for _, scroll := range []int{0, 2} {
+							o := Options{Width: w, Loc: sampleZone, DeviceStatus: status, Share: share, Period: per,
+								Interactive: scroll > 0, MatrixScroll: scroll}
+							p := Render(r, o)
+							h, end := p.DevicesHead, p.DevicesEnd
+							sec := pageSection(p, "DEVICES")
+							if h[1]-h[0] != 3 || end-h[0] != len(sec) || end-h[1]-1 != len(r.Team.Devices) {
+								t.Errorf("%s %+v: head %v, end %d, for a section of %d lines:\n%s", name, o, h, end, len(sec), strings.Join(sec, "\n"))
+								continue
+							}
+							for i, l := range sec {
+								if got := sgr.ReplaceAllString(p.Body[h[0]+i], ""); got != l {
+									t.Errorf("%s %+v: line %d of the section is %q, not %q", name, o, h[0]+i, got, l)
+								}
+							}
+							if !strings.HasPrefix(sec[len(sec)-1], "  TOTAL ") || end < len(p.Body) && p.Body[end] != "" {
+								t.Errorf("%s %+v: the section does not end after TOTAL at %d", name, o, end)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	for _, status := range []bool{false, true} {
+		if p := Render(loadReport(t, "single"), Options{Width: 120, DeviceStatus: status}); p.DevicesHead != [2]int{} || p.DevicesEnd != 0 {
+			t.Errorf("a single device, status %v: head %v, end %d", status, p.DevicesHead, p.DevicesEnd)
+		}
+	}
+}
+
 func TestPageHeat(t *testing.T) {
 	r := loadReport(t, "team")
 	row := func(p Page, device string) string {

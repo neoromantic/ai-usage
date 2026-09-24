@@ -429,6 +429,19 @@ func TestDeviceViews(t *testing.T) {
 // the status view alone and keeps refresh, dropping only share, and the
 // status view has room for every key it has.
 func TestDeviceViewsAt80(t *testing.T) {
+	m := model(t, 80, 30, Config{Report: teamReport(t), Render: view.Render, Refresh: refresher()})
+	if got, want := bar(m), " ↑↓ scroll · ←→ matrix · s status · p period ‹7d› · r refresh · ? help · q quit"; got != want {
+		t.Errorf("usage at 80\n got %q\nwant %q", got, want)
+	}
+	m = keys(t, m, "s")
+	if got, want := bar(m), " ↑↓ scroll · s usage ‹status› · p period ‹7d› · r refresh · ? help · q quit"; got != want {
+		t.Errorf("status at 80\n got %q\nwant %q", got, want)
+	}
+}
+
+// teamReport is the view's team fixture: 13 devices on 8 subscriptions.
+func teamReport(t *testing.T) view.Report {
+	t.Helper()
 	b, err := os.ReadFile(filepath.Join("..", "view", "testdata", "team.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -437,13 +450,215 @@ func TestDeviceViewsAt80(t *testing.T) {
 	if err := json.Unmarshal(b, &r); err != nil {
 		t.Fatal(err)
 	}
-	m := model(t, 80, 30, Config{Report: r, Render: view.Render, Refresh: refresher()})
-	if got, want := bar(m), " ↑↓ scroll · ←→ matrix · s status · p period ‹7d› · r refresh · ? help · q quit"; got != want {
-		t.Errorf("usage at 80\n got %q\nwant %q", got, want)
+	return r
+}
+
+// bigTeam is the team fixture with 12 more Hermes bots, bot-j to bot-u, on
+// lee's subscription as bot-i is, each a little less busy than the one
+// before: 25 devices, more rows than a screen holds.
+func bigTeam(t *testing.T) view.Report {
+	t.Helper()
+	r := teamReport(t)
+	m := &r.Team.Matrix
+	var row view.Row
+	for _, x := range m.Rows {
+		if x.Device == "bot-i" {
+			row = x
+		}
+	}
+	var dev view.TeamDevice
+	for _, d := range r.Team.Devices {
+		if d.Label == "bot-i" {
+			dev = d
+		}
+	}
+	lee := -1
+	for k, c := range m.Columns {
+		if c.Label == "lee@corp.test" {
+			lee = k
+		}
+	}
+	if row.Device == "" || dev.Label == "" || lee < 0 {
+		t.Fatal("the team fixture has no bot-i on lee's subscription")
+	}
+	for i := range 12 {
+		week := int64(1_900_000 - i*150_000)
+		u := view.Usage{Today: week / 7, Week: week, Month: 4 * week, Quarter: 11 * week}
+		name, id := fmt.Sprintf("bot-%c", 'j'+i), fmt.Sprintf("d-b%02xc1d2e3f4a5b6c7d8e9f%x0", 9+i, (9+i)%16)
+		cells := append([]view.Cell(nil), row.Cells...)
+		cells[lee] = view.Cell{Usage: u, WindowTokens: week / 7}
+		m.Rows = append(m.Rows, view.Row{Device: name, DeviceID: id, Cells: cells, Usage: u})
+		c := &m.Columns[lee].Usage
+		c.Today, c.Week, c.Month, c.Quarter = c.Today+u.Today, c.Week+u.Week, c.Month+u.Month, c.Quarter+u.Quarter
+		d := dev
+		d.Device, d.Label, d.Usage = id, name, u
+		d.Sources = append([]view.Source(nil), dev.Sources...)
+		r.Team.Devices = append(r.Team.Devices, d)
+	}
+	return r
+}
+
+// sight checks the page's rows on the screen: the page from its top, with
+// the head of DEVICES in the first three instead once its title has
+// scrolled off, while TOTAL is still under them. It returns the lines of
+// the page in sight, in order, and whether the head is pinned.
+func sight(t *testing.T, m Model) (in []int, pinned bool) {
+	t.Helper()
+	rows := screen(m)[1 : 1+m.bodyHeight()]
+	body := ansiStrip(m.page.Body)
+	h, end := m.page.DevicesHead, m.page.DevicesEnd
+	pinned = m.top > h[0] && m.top+3 < end
+	for i, row := range rows {
+		line, want := m.top+i, ""
+		switch {
+		case pinned && i < 3:
+			line, want = -1, body[h[0]+i]
+		case line < len(body):
+			want = body[line]
+		default:
+			line = -1
+		}
+		if row != want {
+			t.Fatalf("top %d, pinned %v: row %d is %q, want %q\n%s", m.top, pinned, i, row, want, strings.Join(rows, "\n"))
+		}
+		if line >= 0 {
+			in = append(in, line)
+		}
+	}
+	return in, pinned
+}
+
+// TestPinnedHead: scrolled down through a team of more devices than fit,
+// the page keeps the head of DEVICES at its top, in both views, while the
+// rows scroll under it: from the step its title scrolls off, with the
+// first device row right under it the step before, to the step TOTAL
+// comes up under it, or to the end of a page too short for that. Every
+// line of the page comes into sight, row by row, and a screen at a time,
+// which skips none under the head.
+func TestPinnedHead(t *testing.T) {
+	r := bigTeam(t)
+	for _, size := range []struct{ w, h int }{{80, 24}, {120, 24}, {80, 12}, {120, 12}} {
+		for _, status := range []bool{false, true} {
+			at := fmt.Sprintf("%dx%d, status %v", size.w, size.h, status)
+			m := model(t, size.w, size.h, Config{Report: r, Render: view.Render, Options: view.Options{DeviceStatus: status}})
+			h, end := m.page.DevicesHead, m.page.DevicesEnd
+			// At 24 rows the page is too short under DEVICES to scroll TOTAL
+			// up under the head; at 12 it is not.
+			if short := m.maxTop() < end-3; short != (size.h == 24) {
+				t.Fatalf("%s: the page's last top is %d, DEVICES ends at %d", at, m.maxTop(), end)
+			}
+			title := "DEVICES × SUBSCRIPTIONS  25 · "
+			if status {
+				title = "DEVICES  25 · "
+			}
+			if h[1]-h[0] != 3 || end-h[1]-1 != 25 || !strings.HasPrefix(ansi.Strip(m.page.Body[h[0]]), title) {
+				t.Fatalf("%s: head %v, end %d:\n%s", at, h, end, strings.Join(ansiStrip(m.page.Body), "\n"))
+			}
+			first := ansi.Strip(m.page.Body[h[1]])
+			seen := map[int]bool{}
+			pins := 0
+			for {
+				in, pinned := sight(t, m)
+				for _, l := range in {
+					seen[l] = true
+				}
+				if pinned {
+					pins++
+				}
+				rows := screen(m)
+				switch m.top {
+				case h[0]:
+					// The head at the top on its own, the first device row
+					// right under it.
+					if rows[4] != first {
+						t.Errorf("%s, top %d: %q under the head, not the first device row %q", at, m.top, rows[4], first)
+					}
+				case end - 4:
+					if !pinned || !strings.HasPrefix(rows[4], "  TOTAL ") {
+						t.Errorf("%s, top %d: TOTAL is not under the pinned head:\n%s", at, m.top, strings.Join(rows, "\n"))
+					}
+				case end - 3:
+					// TOTAL came up under the head: the head is let go, and
+					// TOTAL goes on up with the rows over it.
+					if pinned || !strings.HasPrefix(rows[3], "  TOTAL ") {
+						t.Errorf("%s, top %d: the head is still pinned:\n%s", at, m.top, strings.Join(rows, "\n"))
+					}
+				}
+				if m.top == m.maxTop() {
+					break
+				}
+				m = keys(t, m, "j")
+			}
+			if want := min(end-4, m.maxTop()) - h[0]; pins != want {
+				t.Errorf("%s: pinned at %d tops, want %d", at, pins, want)
+			}
+			for l := range m.page.Body {
+				if !seen[l] {
+					t.Errorf("%s: line %d never came into sight: %q", at, l, ansi.Strip(m.page.Body[l]))
+				}
+			}
+			// Back up row by row, then a screen at a time down and up: a
+			// new screen starts no further down than the line under the
+			// last one in sight, and ends no further up than the line over
+			// the first.
+			for m.top > 0 {
+				m = keys(t, m, "k")
+				sight(t, m)
+			}
+			for _, k := range []string{"pgdown", "pgup"} {
+				for {
+					before, _ := sight(t, m)
+					top := m.top
+					m = keys(t, m, k)
+					if m.top == top {
+						break
+					}
+					after, _ := sight(t, m)
+					if k == "pgdown" && (m.top < top || after[0] > before[len(before)-1]+1) ||
+						k == "pgup" && (m.top > top || after[len(after)-1] < before[0]-1) {
+						t.Errorf("%s, %s from %d to %d: %v in sight, then %v", at, k, top, m.top, before, after)
+					}
+				}
+				if k == "pgdown" && m.top != m.maxTop() || k == "pgup" && m.top != 0 {
+					t.Errorf("%s: %s stopped at %d", at, k, m.top)
+				}
+			}
+		}
+	}
+}
+
+// TestPinnedHeadSideways: the pinned head is the page's own, so the names
+// of the subscriptions scroll sideways with the matrix under them, and s
+// pins the status view's head in its place. The wheel keeps it pinned, and
+// the help covers it.
+func TestPinnedHeadSideways(t *testing.T) {
+	m := model(t, 80, 24, Config{Report: bigTeam(t), Render: view.Render})
+	h := m.page.DevicesHead
+	for m.top < h[0]+8 {
+		m = keys(t, m, "j")
+	}
+	names := screen(m)[3]
+	if _, pinned := sight(t, m); !pinned || names != ansi.Strip(m.page.Body[h[0]+2]) {
+		t.Fatalf("not pinned at %d: %q", m.top, names)
+	}
+	m = keys(t, m, "right", "right")
+	if _, pinned := sight(t, m); !pinned || m.opts.MatrixScroll != 2 || screen(m)[3] == names {
+		t.Fatalf("scrolled sideways by %d, pinned %v, names %q, were %q", m.opts.MatrixScroll, pinned, screen(m)[3], names)
+	}
+	m = update(t, m, tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+	if _, pinned := sight(t, m); !pinned || m.top != h[0]+11 {
+		t.Fatalf("wheel down: top %d, pinned %v", m.top, pinned)
 	}
 	m = keys(t, m, "s")
-	if got, want := bar(m), " ↑↓ scroll · s usage ‹status› · p period ‹7d› · r refresh · ? help · q quit"; got != want {
-		t.Errorf("status at 80\n got %q\nwant %q", got, want)
+	if _, pinned := sight(t, m); !pinned || !strings.HasPrefix(screen(m)[1], "DEVICES  25 · ") || !strings.HasPrefix(screen(m)[3], "  DEVICE ") {
+		t.Fatalf("status view, pinned %v:\n%s", pinned, strings.Join(screen(m), "\n"))
+	}
+	m = keys(t, m, "?")
+	if rows := screen(m); rows[1] != "" || rows[2] != "KEYS" {
+		t.Fatalf("the help under a pinned head:\n%s", strings.Join(rows, "\n"))
+	}
+	if m = keys(t, m, "esc"); !strings.HasPrefix(screen(m)[1], "DEVICES  25 · ") {
+		t.Fatalf("the head is not back after the help: %q", screen(m)[1])
 	}
 }
 
