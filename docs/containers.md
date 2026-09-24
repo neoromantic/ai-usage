@@ -31,7 +31,7 @@ Its first run collects and prints the report, with a short guide under it. Both 
 
 ## Keep it running
 
-`ai-usage schedule run` collects at once and then every 15 minutes, at the quarter hours, until it is stopped. Each collection is a new process of the binary on disk, so an update takes effect at the next one. While it runs, other runs in the container do not try to register with a system scheduler, and `ai-usage status` shows the schedule as `every 15 minutes by ai-usage schedule run`. It stops on `SIGTERM` or `SIGINT` and passes `SIGTERM` on to a collection in progress, which stops without leaving its files half written.
+`ai-usage schedule run` collects at once and then every 15 minutes, at the quarter hours, until it is stopped. Each collection is a new process of the binary on disk, so an update takes effect at the next one. While it runs, other runs in the container do not try to register with a system scheduler, and `ai-usage status` shows the schedule as `every 15 minutes by ai-usage schedule run`. It stops on `SIGTERM` or `SIGINT` and passes `SIGTERM` on to a collection in progress, which stops without leaving its files half written or saving what the stop cut short as a failure.
 
 Run it as the same user, beside the container's main process.
 

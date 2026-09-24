@@ -1702,3 +1702,66 @@ func fullest(q *view.Quota) float64 {
 	}
 	return p
 }
+
+// TestStopAfterSample: a collection stopped once its sample is written
+// saves what it collected, with its snapshot pending, but not the stop as a
+// relay failure, and it leaves the release check to the next run.
+func TestStopAfterSample(t *testing.T) {
+	hermetic(t)
+	d := newDevice(t)
+	d.claude("11111111-aaaa", "/work/app", 1)
+	d.ok("collect", "--quiet", "--offline")
+	version = "v9.9.9"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var once sync.Once
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The collection is stopped while the relay takes its snapshot. The
+		// server sees the client go only once the body is read.
+		_, _ = io.Copy(io.Discard, r.Body)
+		once.Do(cancel)
+		select {
+		case <-r.Context().Done():
+		case <-time.After(10 * time.Second):
+		}
+	}))
+	defer srv.Close()
+	t.Setenv("AI_USAGE_RELAY", srv.URL)
+	if err := collectNow(state.Dir(d.dir), false)(ctx); err != nil {
+		t.Fatal(err)
+	}
+	st := d.state()
+	if !st.Relay.Pending || st.Relay.LastError != "" || st.LastError != "" {
+		t.Errorf("relay %+v, last error %q", st.Relay, st.LastError)
+	}
+	if !reflect.DeepEqual(st.Update, state.Update{}) {
+		t.Errorf("update %+v", st.Update)
+	}
+}
+
+// TestStoppedHousekeeping: a release check or a scheduler lookup that a
+// stop cuts short records nothing, since it failed at nothing.
+func TestStoppedHousekeeping(t *testing.T) {
+	hermetic(t)
+	version = "v9.9.9"
+	newScheduler = func() schedule.Scheduler {
+		return schedule.Scheduler{GOOS: "linux", Run: func(ctx context.Context, name string, args []string, _ []byte) ([]byte, error) {
+			if ctx.Err() == nil {
+				t.Errorf("%s %v ran unstopped", name, args)
+			}
+			return nil, ctx.Err()
+		}}
+	}
+	d := newDevice(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	st := &state.State{Schedule: state.Schedule{Registered: true, CheckedAt: time.Unix(1e9, 0).UTC()}}
+	want := *st
+	if updateIfDue(ctx, st, time.Now()) || !reflect.DeepEqual(st.Update, want.Update) {
+		t.Errorf("a stopped release check: %+v", st.Update)
+	}
+	ensureSchedule(ctx, state.Dir(d.dir), st, time.Now())
+	if !reflect.DeepEqual(st.Schedule, want.Schedule) {
+		t.Errorf("a stopped scheduler lookup: %+v", st.Schedule)
+	}
+}

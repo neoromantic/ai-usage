@@ -209,7 +209,7 @@ Keys:
 | `%` | tokens or share in the matrix |
 | `r` | collect now; the header shows a spinner until it is done |
 | `?` | every key and the legend, in a panel; `Esc` closes it |
-| `q`, `Esc`, `Ctrl-C` | quit |
+| `q`, `Esc`, `Ctrl-C` | quit; a collection `r` started stops, and what the stop cuts short is not saved as a failure |
 
 The key bar follows the common practice of modern TUIs:
 

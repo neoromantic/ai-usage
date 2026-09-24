@@ -1,15 +1,22 @@
 package main
 
 import (
+	"context"
 	"io"
+	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/colorprofile"
 
+	"github.com/neoromantic/ai-usage/internal/probe"
 	"github.com/neoromantic/ai-usage/internal/state"
+	"github.com/neoromantic/ai-usage/internal/tui"
 )
 
 func TestOpenView(t *testing.T) {
@@ -107,4 +114,93 @@ func TestReportStaysStatic(t *testing.T) {
 	if (&display{}).interactive(f, false, false) {
 		t.Fatal("a file opened the interactive view")
 	}
+}
+
+// TestQuitDuringRefresh: closing the view while the collection `r` started
+// still runs stops that collection, and it saves nothing: not the probes
+// the stop made fail, not a sample, and not a release check.
+func TestQuitDuringRefresh(t *testing.T) {
+	hermetic(t)
+	d := newDevice(t)
+	d.claude("11111111-aaaa", "/work/app", 1)
+	d.ok("collect", "--quiet", "--offline")
+	// New usage gives the stopped collection a sample to write.
+	d.claude("33333333-cccc", "/work/web", 2)
+	before := tree(t, d.dir)
+	res, err := loadResult(state.Dir(d.dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A release build checks for a release after it collects, which
+	// hermetic fails the test for.
+	version = "v9.9.9"
+	started := make(chan struct{})
+	var once sync.Once
+	probeEnv = func() probe.Env {
+		e := fakeProbeEnv()
+		// Each harness answers only once the collection is stopped.
+		e.Command = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			once.Do(func() { close(started) })
+			<-ctx.Done()
+			return exec.CommandContext(ctx, name, args...)
+		}
+		return e
+	}
+
+	in, keys := io.Pipe()
+	t.Cleanup(func() { keys.Close() })
+	done := make(chan error, 1)
+	go func() {
+		done <- tui.Run(context.Background(), viewConfig(state.Dir(d.dir), res, "", &display{}, true, io.Discard), in, io.Discard)
+	}()
+	if _, err := io.WriteString(keys, "r"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Fatal("r did not collect")
+	}
+	if _, err := io.WriteString(keys, "q"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the view did not close")
+	}
+	after := tree(t, d.dir)
+	for name, body := range after {
+		if before[name] != body {
+			t.Errorf("the stopped collection wrote %s:\n%s", name, body)
+		}
+	}
+	for name := range before {
+		if _, ok := after[name]; !ok {
+			t.Errorf("the stopped collection removed %s", name)
+		}
+	}
+}
+
+// tree is every file under dir, by its path in dir.
+func tree(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	files := map[string]string{}
+	err := filepath.WalkDir(dir, func(path string, e fs.DirEntry, err error) error {
+		if err != nil || e.IsDir() {
+			return err
+		}
+		b, err := os.ReadFile(path)
+		rel, _ := filepath.Rel(dir, path)
+		files[filepath.ToSlash(rel)] = string(b)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
 }

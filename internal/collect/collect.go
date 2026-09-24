@@ -155,8 +155,9 @@ func LoadKey(dir state.Dir) (*team.Key, bool, error) {
 }
 
 // Run takes one sample. It returns an error only when the collector's own
-// state cannot be read or written; source and relay failures are recorded in
-// the state and do not stop the run.
+// state cannot be read or written, or when ctx ends before the sample is
+// written; source and relay failures are recorded in the state and do not
+// stop the run.
 func Run(ctx context.Context, o Options) (*Result, error) {
 	o.fill()
 	unlock, err := o.Dir.Lock()
@@ -269,6 +270,12 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 		}
 		return a.Label < b.Label
 	})
+	// A run stopped before it writes, as when the view that started it
+	// closes, saves nothing: what failed in it failed because it stopped,
+	// and the next run collects what it would have.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := o.Dir.AppendSample(sample); err != nil {
 		problems = append(problems, "samples: "+err.Error())
 	}
@@ -302,13 +309,20 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 		client := *o.Relay
 		client.Key = key
 		o.Relay = &client
+		last := st.Relay
 		syncTeam(ctx, o, st, cfg.Device, &res.Doc, &res.Team, now)
+		if ctx.Err() != nil {
+			// A stop that cuts the exchange short is no failure of the
+			// relay's; a snapshot it did not push stays pending.
+			st.Relay.LastError, st.Relay.LastErrorAt = last.LastError, last.LastErrorAt
+		}
 		if st.Relay.LastError != "" && st.Relay.LastErrorAt.Equal(now) {
 			problems = append(problems, st.Relay.LastError)
 			noteProblems()
 		}
 	}
-	if o.After != nil {
+	// A stopped run leaves its housekeeping to the next one.
+	if o.After != nil && ctx.Err() == nil {
 		o.After(ctx, &res.Config, st)
 	}
 	if err := o.Dir.SaveState(st); err != nil {

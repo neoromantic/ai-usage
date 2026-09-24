@@ -299,9 +299,10 @@ func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) (e
 	}
 	// A failure before housekeeping still gets its release check, so a
 	// release that breaks collection can be replaced by the one that fixes it.
+	// A run stopped by a signal failed at nothing.
 	housekept := false
 	defer func() {
-		if err != nil && !housekept {
+		if err != nil && !housekept && ctx.Err() == nil {
 			rescue(ctx, d, err)
 		}
 	}()
@@ -473,6 +474,10 @@ func updateIfDue(ctx context.Context, st *state.State, now time.Time) bool {
 	uctx, cancel := context.WithTimeout(ctx, updateTimeout)
 	defer cancel()
 	res, err := newUpdater().Check(uctx)
+	if err != nil && ctx.Err() != nil {
+		// A check the run's stop cut short is left for the next run.
+		return false
+	}
 	noteUpdate(st, now, res, err)
 	return true
 }
@@ -512,6 +517,7 @@ const disabledByHand = "disabled by hand in the system scheduler; `ai-usage sche
 // ensureSchedule registers this binary and state folder unless the scheduler
 // already runs them. An entry the person commented out or disabled stays so.
 func ensureSchedule(ctx context.Context, d state.Dir, st *state.State, now time.Time) {
+	last := st.Schedule
 	st.Schedule.CheckedAt = now
 	st.Schedule.Foreground = false
 	exe, home, err := job(d)
@@ -527,6 +533,12 @@ func ensureSchedule(ctx context.Context, d state.Dir, st *state.State, now time.
 	}
 	if err == nil && got != schedule.Active {
 		err = s.Install(ctx, exe, home, os.Getenv("PATH"))
+	}
+	if err != nil && ctx.Err() != nil {
+		// A lookup or install the run's stop cut short leaves the schedule
+		// as the last run found it.
+		st.Schedule = last
+		return
 	}
 	st.Schedule.Registered = err == nil
 	st.Schedule.Error = ""
@@ -1036,8 +1048,9 @@ var (
 	collectOnce = func(ctx context.Context, exe, home string, stderr io.Writer) error {
 		cmd := exec.CommandContext(ctx, exe, "collect", "--quiet", "--home", home)
 		cmd.Stdout, cmd.Stderr = stderr, stderr
-		// A stopped schedule lets the collection release its lock and save;
-		// Windows cannot send the signal, so it waits and then kills.
+		// A stopped schedule lets the collection release its lock, and save
+		// none of what the stop made fail; Windows cannot send the signal,
+		// so it waits and then kills.
 		cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 		cmd.WaitDelay = 30 * time.Second
 		err := cmd.Run()
