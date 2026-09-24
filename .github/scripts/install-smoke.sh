@@ -98,7 +98,7 @@ unset AI_USAGE_RELAY AI_USAGE_TEAM_KEY
 [ "$("$bin" relay show)" = http://127.0.0.1:9 ] || fail "the installer did not save the relay"
 "$bin" status
 "$bin" report --json >"$work/report.json"
-grep -q '"schema_version": 2' "$work/report.json" || fail "report is not schema version 2"
+grep -q '"schema_version": 3' "$work/report.json" || fail "report is not schema version 3"
 
 if [ "$goos" = windows ]; then
 	# Register with the real Task Scheduler from the task definition, check
