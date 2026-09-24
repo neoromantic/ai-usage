@@ -503,6 +503,43 @@ func TestAskTellsWhenTheHomeWasLastUsed(t *testing.T) {
 	}
 }
 
+// Homes that share their logs through a symlink read the same sessions,
+// which go to one of them. Which login ran them is not known, so no home of
+// the pair is told it was used, and Claude Code is asked for neither.
+func TestHomesSharingClaudeLogsAreNotToldTheirUse(t *testing.T) {
+	w, o := newWorld(t)
+	personal := w.home(t, "claude")
+	work := w.extraHome(t, "claude", "work-claude")
+	own := filepath.Join(filepath.Dir(w.userHome), "own-claude")
+	cfg, err := o.Dir.LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Homes = map[string][]string{"claude": {own}}
+	if err := o.Dir.SaveConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range []string{personal, own} {
+		if err := os.MkdirAll(filepath.Join(h, "projects"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Join(personal, "projects"), filepath.Join(work, "projects")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	w.sessions("claude", personal, sess("s1", "/p", 100, t0.Add(-5*time.Minute)))
+	w.sessions("claude", own, sess("s2", "/p", 100, t0.Add(-time.Hour)))
+	run(t, o)
+	for _, h := range []string{personal, work} {
+		if got, ok := w.lastUse[state.Key("claude", h)]; !ok || !got.IsZero() {
+			t.Errorf("%s: last use %v, asked %v", h, got, ok)
+		}
+	}
+	if got := w.lastUse[state.Key("claude", own)]; !got.Equal(t0.Add(-time.Hour)) {
+		t.Errorf("home with its own logs: last use %v", got)
+	}
+}
+
 func TestLoggedOutHomeDoesNotClaimLater(t *testing.T) {
 	// A home that said nobody is logged in has answered; the usage counted
 	// then is no one's, whoever logs in afterwards.

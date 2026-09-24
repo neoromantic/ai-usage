@@ -358,6 +358,29 @@ func runInputs(o Options, cfg state.Config, homes map[string][]string) string {
 	return hex.EncodeToString(sum[:16])
 }
 
+// sharedClaudeLogs is the Claude homes whose projects folder is another
+// home's too, through a symlink.
+func sharedClaudeLogs(p string, homes []string) map[string]bool {
+	shared := map[string]bool{}
+	if p != "claude" {
+		return shared
+	}
+	by := map[string][]string{}
+	for _, h := range homes {
+		if dir, err := filepath.EvalSymlinks(filepath.Join(h, "projects")); err == nil {
+			by[dir] = append(by[dir], h)
+		}
+	}
+	for _, hs := range by {
+		if len(hs) > 1 {
+			for _, h := range hs {
+				shared[h] = true
+			}
+		}
+	}
+	return shared
+}
+
 // readSession is one session as read this run, with the account its growth
 // belongs to.
 type readSession struct {
@@ -409,6 +432,11 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 				lastUse[h] = s.Updated
 			}
 		}
+	}
+	// Claude homes that share their logs go unused: the logs give their
+	// sessions to one of them, and cannot say which login ran them.
+	for h := range sharedClaudeLogs(p, homes) {
+		delete(lastUse, h)
 	}
 	labels := map[string]string{}
 	var answers []answer
