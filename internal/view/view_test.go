@@ -649,6 +649,54 @@ func TestHeaderFailuresAreInAttention(t *testing.T) {
 	}
 }
 
+// A run a bug stopped leaves no report, so its error is not the device's; it
+// is in ATTENTION as this device's all the same, while the device is
+// silent too. A run that failed and reported it is named once.
+func TestFailedRunIsInAttention(t *testing.T) {
+	bug := "collection stopped by a bug: runtime error: invalid memory address or nil pointer dereference"
+	for _, c := range []struct {
+		name string
+		ran  time.Duration
+		want []string
+		line string
+	}{
+		{"a bug", 15 * time.Minute, []string{"error thisbox " + bug}, " ERROR  thisbox  " + bug},
+		{"a bug every run", 30 * time.Hour, []string{"error thisbox " + bug, "silent thisbox "}, " ERROR   thisbox  " + bug},
+	} {
+		st := emptyState()
+		f := newFixture(t, st)
+		ran := now.Add(-c.ran)
+		st.LastRunAt, st.LastSuccessAt = ran, ran
+		st.LastError, st.LastErrorAt = bug, now.Add(-time.Minute)
+		f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", ran)
+		r := Build(f.in)
+		var got []string
+		for _, a := range r.Attention {
+			got = append(got, a.Kind+" "+strings.Join(a.Devices, ",")+" "+a.Message)
+		}
+		if !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: attention =\n%s\nwant\n%s", c.name, strings.Join(got, "\n"), strings.Join(c.want, "\n"))
+		}
+		page := plainText(r, Options{Width: 120, Loc: time.UTC})
+		for _, s := range []string{"● last run failed 1m ago", "\n" + c.line + "\n"} {
+			if !strings.Contains(page, s) {
+				t.Errorf("%s: the page lacks %q:\n%s", c.name, s, page)
+			}
+		}
+	}
+
+	st := emptyState()
+	st.Sources["codex"] = state.Source{Status: "error", Error: "app-server exited without answering"}
+	f := newFixture(t, st)
+	st.LastSuccessAt = now.Add(-time.Hour)
+	st.LastError, st.LastErrorAt = "codex: app-server exited without answering", now
+	f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", now)
+	r := Build(f.in)
+	if len(r.Attention) != 1 || r.Attention[0].Message != st.LastError {
+		t.Fatalf("attention = %+v", r.Attention)
+	}
+}
+
 // A device's own error starts with its harness's name, so it is not named
 // twice; a last run that failed after the last success is an error too.
 func TestDeviceErrors(t *testing.T) {

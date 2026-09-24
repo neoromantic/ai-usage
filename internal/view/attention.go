@@ -20,7 +20,8 @@ var attentionRank = map[string]int{
 // attention is what needs attention now, most urgent first: windows that
 // are out or will run out, devices that fail or are silent, devices on an
 // older release, and windows past half that will be left mostly unused.
-// This device's relay and update check fail as errors of this device.
+// This device's failed run, relay, and update check are errors of this
+// device.
 func attention(t Team, c Collector, now time.Time) []Attention {
 	out := []Attention{}
 	for _, p := range t.Providers {
@@ -76,7 +77,7 @@ func attention(t Team, c Collector, now time.Time) []Attention {
 			out = append(out, Attention{Kind: AttentionError, Devices: []string{d.Label}, Message: *d.Error})
 		}
 		if d.This {
-			for _, e := range collectorErrors(c) {
+			for _, e := range collectorErrors(c, d.CollectedAt) {
 				out = append(out, Attention{Kind: AttentionError, Devices: []string{d.Label}, Message: e})
 			}
 		}
@@ -110,12 +111,17 @@ func attention(t Team, c Collector, now time.Time) []Attention {
 	return out
 }
 
-// collectorErrors are the errors behind the header's failing relay and
-// update check, each named once. A run that failed is its device's error
-// already; a run whose sources were read counts as a success, whatever its
-// relay or update check did.
-func collectorErrors(c Collector) []string {
+// collectorErrors are the errors behind the header's failed run, failing
+// relay, and failed update check that this device's report, made at
+// reported, does not carry, each named once. A run that failed is its
+// device's error already, unless it failed after the report, as a run a bug
+// stopped does. A run whose sources were read counts as a success, whatever
+// its relay or update check did.
+func collectorErrors(c Collector, reported time.Time) []string {
 	var out []string
+	if failed(c) && c.LastErrorAt.After(reported) {
+		out = append(out, *c.LastError)
+	}
 	if c.Relay.URL != nil && c.Relay.LastError != nil {
 		out = append(out, sourceError("relay", *c.Relay.LastError))
 	}

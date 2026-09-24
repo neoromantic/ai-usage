@@ -60,7 +60,7 @@ Each entry is one thing that needs attention, from the team's view of each subsc
 | --- | --- | --- |
 | `out` | a window of a subscription is at 100% | `provider`, `account`, `name`, `window`; `at` is when it resets |
 | `over` | a window of a subscription will run out before it resets, at its pace so far | `provider`, `account`, `name`, `window`; `at` is when it runs out, `resets_at` when it resets, `percent` its forecast |
-| `error` | a device's collector or one of its tools fails; on this device, also its relay or its update check | `devices` names the device; `message` is the error, which starts with `relay` or `update` when it is theirs |
+| `error` | a device's collector or one of its tools fails; on this device, also a run a bug stopped before it could report, its relay, or its update check | `devices` names the device; `message` is the error, which starts with `relay` or `update` when it is theirs |
 | `silent` | a device has not reported for a day, with or without an error in its last report | `devices` names the device; `at` is when it last reported; `message` is the error it last reported, if it had one |
 | `old` | devices run an older release than the team's newest | `devices` lists every one of them; `message` is the newest release |
 | `under` | past half of a subscription's main window, its forecast is under 50% | `provider`, `account`, `name`; `resets_at` is when it resets, `percent` its forecast |
