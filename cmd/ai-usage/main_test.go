@@ -141,6 +141,9 @@ func TestHelperProcess(t *testing.T) {
 	switch cmd := filepath.Base(args[0]) + " " + strings.Join(args[1:], " "); cmd {
 	case "claude auth status --json":
 		fmt.Println(`{"loggedIn":true,"authMethod":"claude.ai","email":"dev@example.com","subscriptionType":"max"}`)
+	case `claude -p /usage --no-session-persistence --model ai-usage-no-model --settings {"disableAllHooks":true}`:
+		// It leaves the usage each test caches as it is.
+		fmt.Println("Current session: 42% used")
 	case "codex app-server":
 		fakeCodexAppServer(os.Stdin, os.Stdout)
 	default:

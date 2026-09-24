@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,6 +58,9 @@ type helperRecord struct {
 	Env  map[string]string `json:"env"`
 	PID  int               `json:"pid"`
 	Dir  string            `json:"dir"`
+	// Stdin is what `claude -p` found on its input: "N bytes" once it
+	// ended, or "open" while it did not.
+	Stdin string `json:"stdin,omitempty"`
 }
 
 func readRecord(t *testing.T, path string) (helperRecord, []map[string]any) {
@@ -79,6 +83,23 @@ func readRecord(t *testing.T, path string) (helperRecord, []map[string]any) {
 		msgs = append(msgs, m)
 	}
 	return rec, msgs
+}
+
+// readRuns is the record of each run of a fake harness, in order.
+func readRuns(t *testing.T, path string) []helperRecord {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("fake harness left no record: %v", err)
+	}
+	var out []helperRecord
+	for _, l := range strings.Split(strings.TrimSpace(string(body)), "\n") {
+		var r helperRecord
+		if json.Unmarshal([]byte(l), &r) == nil && r.Name != "" {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 func methods(msgs []map[string]any) []string {
@@ -122,14 +143,22 @@ func fakeHarness(mode string, args []string) int {
 	}
 	defer rec.Close()
 	seen := map[string]string{}
-	for _, k := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME"} {
+	for _, k := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "DISABLE_AUTOUPDATER", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"} {
 		if v, ok := os.LookupEnv(k); ok {
 			seen[k] = v
 		}
 	}
 	dir, _ := os.Getwd()
-	head, _ := json.Marshal(helperRecord{Name: args[0], Args: args[1:], Env: seen, PID: os.Getpid(), Dir: dir})
+	run := helperRecord{Name: args[0], Args: args[1:], Env: seen, PID: os.Getpid(), Dir: dir}
+	usage := strings.HasPrefix(mode, "claude-") && slices.Contains(args, "-p")
+	if usage {
+		run.Stdin = stdinState()
+	}
+	head, _ := json.Marshal(run)
 	_, _ = rec.Write(append(head, '\n'))
+	if usage {
+		return fakeClaudeUsage(os.Getenv("PROBE_USAGE"), args, rec)
+	}
 
 	if strings.HasPrefix(mode, "codex-") {
 		// The codex on PATH is too old for app-server, or for account/read;
@@ -145,6 +174,9 @@ func fakeHarness(mode string, args []string) int {
 	switch mode {
 	case "claude-ok":
 		fmt.Println(`{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","email":" dev@example.com ","orgName":"Example","subscriptionType":"max"}`)
+	case "claude-console":
+		// A Console login signs in through claude.ai and pays per token.
+		fmt.Println(`{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","email":"dev@example.com","orgName":"Example","subscriptionType":null}`)
 	case "claude-no-email":
 		fmt.Println(`{"loggedIn":true,"authMethod":"api_key","apiProvider":"firstParty"}`)
 	case "claude-bedrock":
@@ -159,18 +191,79 @@ func fakeHarness(mode string, args []string) int {
 		fmt.Fprintln(os.Stderr, "boom")
 		return 2
 	case "claude-orphan":
-		// A child that keeps stdout open after this process is killed.
-		cmd := exec.Command(os.Args[0], "-test.run=^TestHelperProcess$", "--", "sleeper")
-		cmd.Env = append(os.Environ(), "PROBE_HELPER=sleep-until-released")
-		cmd.Stdout = os.Stdout
-		if err := cmd.Start(); err != nil {
-			return 91
-		}
-		_, _ = fmt.Fprintf(rec, `{"child_pid":%d}`+"\n", cmd.Process.Pid)
-		time.Sleep(time.Minute)
+		return hangWithChild(rec)
 	default:
 		return 92
 	}
+	return 0
+}
+
+// hangWithChild starts a child that keeps stdout open after this process is
+// killed, records its pid, and hangs.
+func hangWithChild(rec *os.File) int {
+	cmd := exec.Command(os.Args[0], "-test.run=^TestHelperProcess$", "--", "sleeper")
+	cmd.Env = append(os.Environ(), "PROBE_HELPER=sleep-until-released")
+	cmd.Stdout = os.Stdout
+	if err := cmd.Start(); err != nil {
+		return 91
+	}
+	_, _ = fmt.Fprintf(rec, `{"child_pid":%d}`+"\n", cmd.Process.Pid)
+	time.Sleep(time.Minute)
+	return 0
+}
+
+// stdinState reads stdin to its end, for up to two seconds.
+func stdinState() string {
+	n := make(chan int64, 1)
+	go func() {
+		c, _ := io.Copy(io.Discard, os.Stdin)
+		n <- c
+	}()
+	select {
+	case c := <-n:
+		return fmt.Sprintf("%d bytes", c)
+	case <-time.After(2 * time.Second):
+		return "open"
+	}
+}
+
+// fakeClaudeUsage is `claude -p /usage`, in the way PROBE_USAGE names. By
+// default it caches a fresh reading of 7% in the config file PROBE_CACHE
+// names, if any, for the account logged in there, as Claude Code does.
+func fakeClaudeUsage(mode string, args []string, rec *os.File) int {
+	switch mode {
+	case "fail":
+		fmt.Fprintln(os.Stderr, "Error: usage is unavailable right now")
+		return 1
+	case "old":
+		// Sent to the model as a prompt, which the API does not know.
+		model := args[slices.Index(args, "--model")+1]
+		fmt.Printf("There's an issue with the selected model (%s). It may not exist or you may not have access to it.\n", model)
+		return 1
+	case "hang":
+		return hangWithChild(rec)
+	}
+	if path := os.Getenv("PROBE_CACHE"); path != "" {
+		body, err := os.ReadFile(path)
+		var cfg map[string]any
+		if err != nil || json.Unmarshal(body, &cfg) != nil {
+			return 94
+		}
+		acct, _ := cfg["oauthAccount"].(map[string]any)
+		cfg["cachedUsageUtilization"] = map[string]any{
+			"fetchedAtMs": time.Now().UnixMilli(),
+			"accountUuid": acct["accountUuid"],
+			"utilization": map[string]any{"limits": []any{map[string]any{"kind": "session", "percent": 7}}},
+		}
+		body, _ = json.Marshal(cfg)
+		if os.WriteFile(path, body, 0o600) != nil {
+			return 95
+		}
+	}
+	if mode == "write-then-fail" {
+		return 1
+	}
+	fmt.Println("Current session: 7% used")
 	return 0
 }
 

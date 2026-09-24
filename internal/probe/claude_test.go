@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -360,6 +361,152 @@ func TestClaudeTimeout(t *testing.T) {
 		t.Fatal("no child recorded")
 	}
 	if pid := int(msgs[0]["child_pid"].(float64)); !waitGone(pid) {
+		t.Errorf("child %d still running", pid)
+	}
+}
+
+// A claude.ai subscription whose cache is stale has Claude Code read the
+// usage again, as auth status runs, and the reading is what it cached.
+func TestClaudeRefreshesUsage(t *testing.T) {
+	for _, name := range []string{".claude", "work-claude"} {
+		t.Run(name, func(t *testing.T) {
+			env, record := fakeEnv(t, "claude-ok", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "DISABLE_AUTOUPDATER=0")
+			env.Now = time.Now
+			home := filepath.Join(env.HomeDir, name)
+			file := filepath.Join(home, ".claude.json")
+			if name == ".claude" {
+				file = filepath.Join(env.HomeDir, ".claude.json")
+			}
+			writeFile(t, file, claudeCache)
+			env.Environ = append(env.Environ, "PROBE_CACHE="+file)
+			start := time.Now()
+
+			r, err := Claude(context.Background(), env, home)
+			if err != nil {
+				t.Fatalf("error: %v", err)
+			}
+			if r.Quota == nil || len(r.Quota.Windows) != 1 || r.Quota.Windows[0].Percent != 7 || r.Quota.At.Before(start.Add(-time.Second)) {
+				t.Errorf("quota = %+v", describe(r.Quota))
+			}
+			runs := readRuns(t, record)
+			if len(runs) != 2 {
+				t.Fatalf("ran %d commands", len(runs))
+			}
+			auth, usage := runs[0], runs[1]
+			want := []string{"-p", "/usage", "--no-session-persistence", "--model", "ai-usage-no-model", "--settings", `{"disableAllHooks":true}`}
+			if usage.Name != "claude" || !slices.Equal(usage.Args, want) {
+				t.Errorf("ran %s %q", usage.Name, usage.Args)
+			}
+			dir, set := usage.Env["CLAUDE_CONFIG_DIR"]
+			if authDir, authSet := auth.Env["CLAUDE_CONFIG_DIR"]; dir != authDir || set != authSet {
+				t.Errorf("CLAUDE_CONFIG_DIR = %q, auth status had %q", dir, authDir)
+			}
+			if got := usage.Env["DISABLE_AUTOUPDATER"]; got != "1" {
+				t.Errorf("DISABLE_AUTOUPDATER = %q", got)
+			}
+			// With it, Claude Code does not read the usage.
+			if v, ok := usage.Env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"]; ok {
+				t.Errorf("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=%q reached claude", v)
+			}
+			if usage.Stdin != "0 bytes" {
+				t.Errorf("stdin: %s", usage.Stdin)
+			}
+			sameDir(t, usage.Dir, env.HomeDir)
+		})
+	}
+}
+
+// Claude Code is not asked to read the usage when its cache is fresh, for a
+// login without usage limits, or with nobody logged in. Nor when its config
+// cannot be read, since Claude Code would meet the same file. The Claude
+// app's agent-mode homes are not probed at all: collect's
+// TestClaudeAppSessionsGoToTheirRecordedAccount covers them.
+func TestClaudeSkipsUsageRefresh(t *testing.T) {
+	fresh := fmt.Sprintf(`{"oauthAccount":{"accountUuid":"acct-1"},"cachedUsageUtilization":{"fetchedAtMs":%d,"accountUuid":"acct-1","utilization":{"limits":[{"kind":"session","percent":12}]}}}`,
+		testNow.Add(-5*time.Minute).UnixMilli())
+	tests := []struct{ name, mode, config string }{
+		{"fresh cache", "claude-ok", fresh},
+		{"config not JSON", "claude-ok", `{`},
+		{"console login", "claude-console", claudeCache},
+		{"api key", "claude-no-email", claudeCache},
+		{"cloud provider", "claude-bedrock", claudeCache},
+		{"logged out", "claude-logged-out", claudeCache},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			env, record := fakeEnv(t, tc.mode)
+			writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), tc.config)
+			_, _ = Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"))
+			if runs := readRuns(t, record); len(runs) != 1 {
+				t.Errorf("ran %d commands, the last %q", len(runs), runs[len(runs)-1].Args)
+			}
+		})
+	}
+}
+
+// A read that fails keeps the reading Claude Code cached before, and says
+// why, unless the cache is fresh after all.
+func TestClaudeUsageRefreshFails(t *testing.T) {
+	tests := []struct {
+		usage   string
+		wantErr string
+		percent float64
+	}{
+		{usage: "fail", wantErr: "exit status 1", percent: 12},
+		// One that sent /usage to a model is too old to read it.
+		{usage: "old", wantErr: "update", percent: 12},
+		{usage: "write-then-fail", percent: 7},
+	}
+	for _, tc := range tests {
+		t.Run(tc.usage, func(t *testing.T) {
+			env, _ := fakeEnv(t, "claude-ok", "PROBE_USAGE="+tc.usage)
+			env.Now = time.Now
+			file := filepath.Join(env.HomeDir, ".claude.json")
+			writeFile(t, file, claudeCache)
+			env.Environ = append(env.Environ, "PROBE_CACHE="+file)
+			r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"))
+			if (err == nil) != (tc.wantErr == "") || !strings.Contains(errText(err), tc.wantErr) || saysLoggedOut(err) {
+				t.Errorf("error = %q, want one with %q", errText(err), tc.wantErr)
+			}
+			if r.Account != "dev@example.com" || r.Quota == nil || r.Quota.Windows[0].Percent != tc.percent {
+				t.Errorf("reading = %+v, quota %+v", r, describe(r.Quota))
+			}
+		})
+	}
+}
+
+// A read that hangs, and leaves a child holding its output, times out with
+// its whole process group, and the cached reading stays.
+func TestClaudeUsageRefreshTimeout(t *testing.T) {
+	release := filepath.Join(t.TempDir(), "release")
+	t.Cleanup(func() { _ = os.WriteFile(release, nil, 0o600) })
+	timeout := claudeUsageTimeout
+	t.Cleanup(func() { claudeUsageTimeout = timeout })
+	claudeUsageTimeout = 500 * time.Millisecond
+	env, record := fakeEnv(t, "claude-ok", "PROBE_USAGE=hang", "PROBE_RELEASE="+release)
+	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
+	start := time.Now()
+	r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"))
+	if took := time.Since(start); took > 8*time.Second {
+		t.Errorf("took %v", took)
+	}
+	if !strings.Contains(errText(err), "in time") || r.Quota == nil || r.Quota.Windows[0].Percent != 12 {
+		t.Errorf("quota %+v, error %v", describe(r.Quota), err)
+	}
+	if runtime.GOOS == "windows" {
+		return
+	}
+	_, msgs := readRecord(t, record)
+	pid := 0
+	for _, m := range msgs {
+		if p, ok := m["child_pid"].(float64); ok {
+			pid = int(p)
+		}
+	}
+	if pid == 0 {
+		t.Fatal("no child recorded")
+	}
+	if !waitGone(pid) {
 		t.Errorf("child %d still running", pid)
 	}
 }

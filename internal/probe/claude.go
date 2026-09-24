@@ -19,11 +19,15 @@ import (
 // a claude.ai login, and only when it names the same account the config file
 // says is logged in.
 //
-// The cache is as fresh as Claude Code last made it. Its age is reported.
+// Claude Code writes that cache only when it reads the usage, as its /usage
+// dialog does. So for a claude.ai subscription whose cache is missing or
+// older than claudeFresh, Claude Code is first asked to read it again. The
+// cache is as fresh as Claude Code last made it. Its age is reported.
 func Claude(ctx context.Context, env Env, home string) (Reading, error) {
 	var r Reading
 	var errs []error
 	configDir := env.claudeConfigDir(home)
+	file := claudeConfigFile(env.HomeDir, home, configDir)
 
 	var st claudeStatus
 	if bin, ok := env.find("claude"); ok {
@@ -33,11 +37,19 @@ func Claude(ctx context.Context, env Env, home string) (Reading, error) {
 			errs = append(errs, err)
 		}
 		r.Account, r.Plan = st.label(), st.SubscriptionType
+		if st.subscription() && claudeStale(file, env.now()) {
+			// A read that failed is no problem when the cache is fresh
+			// anyway, as when Claude Code wrote it before it failed, or
+			// the person's own session did meanwhile.
+			if err := claudeRefresh(ctx, env, bin, configDir); err != nil && claudeStale(file, env.now()) {
+				errs = append(errs, err)
+			}
+		}
 	} else {
 		errs = append(errs, errors.New("claude binary not found; account unknown"))
 	}
 
-	quota, err := claudeCachedUsage(claudeConfigFile(env.HomeDir, home, configDir))
+	quota, err := claudeCachedUsage(file)
 	if err != nil {
 		errs = append(errs, err)
 	}
@@ -108,6 +120,13 @@ type claudeStatus struct {
 	SubscriptionType string `json:"subscriptionType"`
 }
 
+// subscription reports whether the login is a claude.ai subscription, the
+// only kind with usage limits. A Console login also signs in through
+// claude.ai, and has no subscription.
+func (st claudeStatus) subscription() bool {
+	return st.AuthMethod == "claude.ai" && strings.TrimSpace(st.SubscriptionType) != ""
+}
+
 // label names a login by its email, or by how it signs in when it has none.
 func (st claudeStatus) label() string {
 	if !st.LoggedIn {
@@ -148,15 +167,111 @@ func claudeAuthStatus(ctx context.Context, env Env, bin, configDir string) (clau
 	return st, nil
 }
 
+// claudeFresh is how old the usage cache may be before Claude Code is asked
+// to read the usage again. A run every 15 minutes finds it older.
+const claudeFresh = 10 * time.Minute
+
+// claudeUsageTimeout bounds that read, which takes a few seconds.
+var claudeUsageTimeout = time.Minute
+
+// claudeGuardModel names no model. /usage ignores it, since it calls none.
+// A Claude Code that cannot run /usage without a terminal sends it to the
+// model as a prompt instead, and that fails before it spends a token.
+const claudeGuardModel = "ai-usage-no-model"
+
+// claudeRefresh has Claude Code read the account's usage and cache it, as
+// its /usage dialog does. In print mode /usage is a local command: it calls
+// no model, and --no-session-persistence leaves no session behind. Hooks
+// and the updater are off. Nonessential traffic is left on, since without
+// it Claude Code does not read the usage. Only the last line of what it
+// prints is kept, for the error of a read that failed.
+func claudeRefresh(ctx context.Context, env Env, bin, configDir string) error {
+	ctx, cancel := context.WithTimeout(ctx, claudeUsageTimeout)
+	defer cancel()
+	cmd := env.command(ctx, bin, "-p", "/usage", "--no-session-persistence",
+		"--model", claudeGuardModel, "--settings", `{"disableAllHooks":true}`)
+	child := env.WithEnv("CLAUDE_CONFIG_DIR", configDir).WithEnv("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "")
+	cmd.Env = env.pathFor(child.harnessEnv("DISABLE_AUTOUPDATER", "1"), bin)
+	// The null device: there is no prompt to wait for.
+	cmd.Stdin = nil
+	var said lastLine
+	cmd.Stdout, cmd.Stderr = &said, &said
+	cmd.WaitDelay = time.Second
+	err := cmd.Run()
+	switch {
+	case err == nil:
+		return nil
+	case ctx.Err() != nil:
+		return errors.New("claude /usage: no answer in time")
+	case strings.Contains(said.String(), claudeGuardModel):
+		return errors.New("claude /usage: not supported by this Claude Code; update it")
+	}
+	msg := "claude /usage: " + shortErr(err)
+	if l := said.String(); l != "" {
+		msg += ": " + l
+	}
+	return errors.New(msg)
+}
+
 type claudeConfig struct {
 	OAuthAccount *struct {
 		AccountUUID string `json:"accountUuid"`
 	} `json:"oauthAccount"`
-	Cached *struct {
-		FetchedAtMs int64                      `json:"fetchedAtMs"`
-		AccountUUID string                     `json:"accountUuid"`
-		Utilization map[string]json.RawMessage `json:"utilization"`
-	} `json:"cachedUsageUtilization"`
+	Cached *claudeUsageCache `json:"cachedUsageUtilization"`
+}
+
+type claudeUsageCache struct {
+	FetchedAtMs int64                      `json:"fetchedAtMs"`
+	AccountUUID string                     `json:"accountUuid"`
+	Utilization map[string]json.RawMessage `json:"utilization"`
+}
+
+// readClaudeConfig reads Claude Code's config file. A missing file is an
+// empty config, not an error.
+func readClaudeConfig(path string) (claudeConfig, error) {
+	var cfg claudeConfig
+	body, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return cfg, nil
+	}
+	if err != nil {
+		return cfg, fmt.Errorf("claude config: %s", shortErr(err))
+	}
+	if json.Unmarshal(body, &cfg) != nil {
+		return claudeConfig{}, errors.New("claude config is not JSON")
+	}
+	return cfg, nil
+}
+
+// cache is the usage cached for the account logged in, or nil.
+func (cfg claudeConfig) cache() *claudeUsageCache {
+	c := cfg.Cached
+	if c == nil || c.FetchedAtMs <= 0 {
+		return nil
+	}
+	if cfg.OAuthAccount == nil || c.AccountUUID == "" || c.AccountUUID != cfg.OAuthAccount.AccountUUID {
+		// The cache belongs to an account that is no longer logged in.
+		return nil
+	}
+	return c
+}
+
+// claudeStale reports whether Claude Code should read the usage again: the
+// cache in the config file at path is missing, another account's, or older
+// than claudeFresh. One from the future is stale too, as it is to Claude
+// Code. A config that cannot be read is not: Claude Code would meet the
+// same file, and reading the cache reports it.
+func claudeStale(path string, now time.Time) bool {
+	cfg, err := readClaudeConfig(path)
+	if err != nil {
+		return false
+	}
+	c := cfg.cache()
+	if c == nil {
+		return true
+	}
+	age := now.Sub(time.UnixMilli(c.FetchedAtMs))
+	return age < 0 || age >= claudeFresh
 }
 
 type claudeWindow struct {
@@ -178,23 +293,12 @@ type claudeLimit struct {
 // claudeCachedUsage reads cachedUsageUtilization. A missing file or cache is
 // no reading, not an error.
 func claudeCachedUsage(path string) (*Quota, error) {
-	body, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
+	cfg, err := readClaudeConfig(path)
 	if err != nil {
-		return nil, fmt.Errorf("claude config: %s", shortErr(err))
+		return nil, err
 	}
-	var cfg claudeConfig
-	if err := json.Unmarshal(body, &cfg); err != nil {
-		return nil, errors.New("claude config is not JSON")
-	}
-	c := cfg.Cached
-	if c == nil || c.FetchedAtMs <= 0 {
-		return nil, nil
-	}
-	if cfg.OAuthAccount == nil || c.AccountUUID == "" || c.AccountUUID != cfg.OAuthAccount.AccountUUID {
-		// The cache belongs to an account that is no longer logged in.
+	c := cfg.cache()
+	if c == nil {
 		return nil, nil
 	}
 	q := &Quota{At: time.UnixMilli(c.FetchedAtMs).UTC(), Source: "cache"}
