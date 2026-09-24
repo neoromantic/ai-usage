@@ -29,6 +29,7 @@ func (m Model) helpLines() []string {
 		{"p", "the next period: today, 7d, 30d, 90d"},
 		{"1 7 3 9", "today, 7d, 30d, or 90d"},
 		{"%", "tokens or share in the matrix"},
+		{"s", "DEVICES as the matrix, or as each device's status"},
 	}
 	if m.cfg.Refresh != nil {
 		keys = append(keys, entry{"r", "collect now; the header shows a spinner until it is done"})
@@ -43,9 +44,9 @@ func (m Model) helpLines() []string {
 		{g("≥", ">="), "at least: a total with a part that is not known"},
 		{g("—", "-"), "no forecast: no reading, or too early in the window"},
 		{g("●", "*"), "this device, or an account logged in on it"},
-		{g("×", "x"), "a device that fails"},
+		{g("×", "x"), "a device that fails, or a harness that fails in VIA"},
 		{"~", "a silent device, or a reading older than 6 hours"},
-		{g("↓", "v"), "a device on an older release"},
+		{g("↓", "v"), "a device on an older release, or that release in VERSION"},
 		{g("·", "."), "nothing"},
 		{g("‹ ›", "[ ]"), "the chosen option"},
 	}

@@ -309,6 +309,125 @@ func TestShare(t *testing.T) {
 	}
 }
 
+// viewsRender is fakeRender for a team whose DEVICES has both views: the
+// status view has no matrix, and the header says which view shows.
+func viewsRender(n, cols int) func(view.Report, view.Options) view.Page {
+	return func(r view.Report, o view.Options) view.Page {
+		c := cols
+		if o.DeviceStatus {
+			c = 0
+		}
+		p := fakeRender(n, c)(r, o)
+		p.DeviceViews = true
+		p.Header += fmt.Sprintf(" status=%v", o.DeviceStatus)
+		return p
+	}
+}
+
+// TestDeviceViews: s steps between the matrix and the status view, which
+// has no share and no sideways scroll, keeps the page's top and the
+// matrix's scroll, and takes the period keys.
+func TestDeviceViews(t *testing.T) {
+	m := model(t, 120, 30, Config{Render: viewsRender(100, 12), Refresh: refresher()})
+	const usage = " ↑↓ scroll · ←→ matrix · s ‹usage› status · p period ‹7d› · % share · r refresh · ? help · q quit"
+	if got := bar(m); got != usage {
+		t.Fatalf("usage bar\n got %q\nwant %q", got, usage)
+	}
+	m = keys(t, m, "j", "j", "j", "right", "right")
+	m = keys(t, m, "s")
+	const status = " ↑↓ scroll · s usage ‹status› · p period ‹7d› · r refresh · ? help · q quit"
+	if got := bar(m); !m.opts.DeviceStatus || got != status || !strings.Contains(screen(m)[0], "status=true") {
+		t.Fatalf("status bar\n got %q\nwant %q\nheader %q", got, status, screen(m)[0])
+	}
+	if m.top != 3 || m.opts.MatrixScroll != 2 {
+		t.Fatalf("s moved the page: top %d, matrix scroll %d", m.top, m.opts.MatrixScroll)
+	}
+	// % and sideways do nothing here; the period keys work.
+	m = keys(t, m, "%", "left", "h", "p", "9")
+	m = update(t, m, tea.MouseWheelMsg{Button: tea.MouseWheelUp, Mod: tea.ModShift})
+	if m.opts.Share || m.opts.MatrixScroll != 2 || m.opts.Period != view.Quarter || !strings.Contains(bar(m), "‹90d›") {
+		t.Fatalf("keys in status: share %v, scroll %d, period %s, bar %q", m.opts.Share, m.opts.MatrixScroll, m.opts.Period, bar(m))
+	}
+	// Back to the matrix, as it was scrolled.
+	m = keys(t, m, "s")
+	if got := bar(m); m.opts.DeviceStatus || m.opts.MatrixScroll != 2 || m.top != 3 || !strings.Contains(got, "s ‹usage› status · p period ‹90d› · % share") {
+		t.Fatalf("back: status %v, scroll %d, top %d, bar %q", m.opts.DeviceStatus, m.opts.MatrixScroll, m.top, got)
+	}
+	// In share mode, the status view hides % and keeps the mode.
+	m = keys(t, m, "%", "s")
+	if !m.opts.Share || strings.Contains(bar(m), "%") {
+		t.Fatalf("share in status: %v %q", m.opts.Share, bar(m))
+	}
+	if m = keys(t, m, "s"); !strings.Contains(bar(m), "% ‹share›") {
+		t.Fatalf("share after status: %q", bar(m))
+	}
+
+	// A view opened in status starts there; in the help, s waits.
+	m = model(t, 120, 30, Config{Render: viewsRender(100, 12), Options: view.Options{DeviceStatus: true}})
+	if got := bar(m); !strings.Contains(got, "s usage ‹status›") {
+		t.Fatalf("opened in status: %q", got)
+	}
+	if m = keys(t, m, "?", "s"); !m.opts.DeviceStatus {
+		t.Fatal("s in the help changed the view")
+	}
+	// The help says what s does, and what its marks mean there.
+	help := strings.Join(ansiStrip(m.helpLines()), "\n")
+	for _, want := range []string{"  s ", "each device's status", "fails in VIA", "release in VERSION"} {
+		if !strings.Contains(help, want) {
+			t.Errorf("help lacks %q:\n%s", want, help)
+		}
+	}
+	// One device has one view: s does nothing and is not in the bar.
+	m = model(t, 120, 30, Config{})
+	if m = keys(t, m, "s"); m.opts.DeviceStatus || strings.Contains(bar(m), " s ") {
+		t.Fatalf("one view: status %v, bar %q", m.opts.DeviceStatus, bar(m))
+	}
+
+	// In ASCII the chosen view is in brackets; in color, a pill as wide.
+	m = model(t, 120, 30, Config{Render: viewsRender(100, 12), Options: view.Options{ASCII: true}})
+	if got := bar(m); !strings.Contains(got, " . s [usage] status . ") {
+		t.Fatalf("ascii: %q", got)
+	}
+	m = model(t, 120, 30, Config{Render: viewsRender(100, 12), Options: view.Options{Color: true, Dark: true}})
+	if got := ansi.Strip(m.keyBar()); !strings.Contains(got, "s  usage  status · p") || !strings.Contains(m.keyBar(), m.pill("usage")) {
+		t.Fatalf("color: %q", got)
+	}
+
+	// A narrow terminal drops share and refresh, then the views, before
+	// the matrix.
+	for _, c := range []struct {
+		width int
+		want  string
+	}{
+		{97, usage},
+		{96, " ↑↓ scroll · ←→ matrix · s ‹usage› status · p period ‹7d› · r refresh · ? help · q quit"},
+		{86, " ↑↓ scroll · ←→ matrix · s ‹usage› status · p period ‹7d› · ? help · q quit"},
+		{75, " ↑↓ scroll · ←→ matrix · s ‹usage› status · p period ‹7d› · ? help · q quit"},
+		{74, " ↑↓ scroll · ←→ matrix · p period ‹7d› · ? help · q quit"},
+		{55, " ↑↓ scroll · p period ‹7d› · ? help · q quit"},
+	} {
+		if got := bar(model(t, c.width, 30, Config{Render: viewsRender(100, 12), Refresh: refresher()})); got != c.want {
+			t.Errorf("width %d\n got %q\nwant %q", c.width, got, c.want)
+		}
+	}
+}
+
+// TestDeviceViewsDrawn: s draws the status view of a real report, with the
+// device's release, and the page keeps its lines.
+func TestDeviceViewsDrawn(t *testing.T) {
+	var r view.Report
+	if err := json.Unmarshal([]byte(olderReport), &r); err != nil {
+		t.Fatal(err)
+	}
+	m := model(t, 120, 40, Config{Report: r, Render: view.Render})
+	lines := len(m.page.Body)
+	m = keys(t, m, "s")
+	text := strings.Join(screen(m), "\n")
+	if !strings.Contains(text, "DEVICES  2 · 1 old · by 7d") || !strings.Contains(text, "v0.1.4 ↓") || len(m.page.Body) != lines {
+		t.Fatalf("status view, %d lines, was %d:\n%s", len(m.page.Body), lines, text)
+	}
+}
+
 // olderReport is a team with a device on a collector older than v0.2.0,
 // whose tokens over 90 days alone are known, as the report's JSON has it.
 const olderReport = `{"generated_at": "2026-09-23T17:38:00Z", "collector": {"device_label": "annbook"}, "team": {

@@ -66,6 +66,9 @@ type item struct {
 	key string
 	// action is what the key does, and pill the option chosen now.
 	action, pill string
+	// choices are the options the key steps between, pill among them, for
+	// a key with no action.
+	choices []string
 	// drop is the order a narrow terminal drops it in, the least used
 	// first; 0 is never.
 	drop int
@@ -76,10 +79,25 @@ func (it item) width() int {
 	if it.action != "" {
 		w += 1 + ansi.StringWidth(it.action)
 	}
-	if it.pill != "" {
-		w += 1 + ansi.StringWidth(it.pill) + 2
+	for _, c := range it.options() {
+		w += 1 + ansi.StringWidth(c)
+		if c == it.pill {
+			w += 2
+		}
 	}
 	return w
+}
+
+// options are the options the key bar shows after the key and its action:
+// its choices, or the pill alone.
+func (it item) options() []string {
+	if len(it.choices) > 0 {
+		return it.choices
+	}
+	if it.pill != "" {
+		return []string{it.pill}
+	}
+	return nil
 }
 
 // items are the keys that do something now, in the key bar's order, with
@@ -97,13 +115,20 @@ func (m Model) items() []item {
 		return append(its, item{key: "esc", action: "close"}, item{key: "q", action: "quit"})
 	}
 	if m.maxTop() > 0 {
-		its = append(its, item{key: vertical, action: "scroll", drop: 5})
+		its = append(its, item{key: vertical, action: "scroll", drop: 6})
 	}
 	if m.matrixCut() {
-		its = append(its, item{key: sideways, action: "matrix", drop: 3})
+		its = append(its, item{key: sideways, action: "matrix", drop: 4})
 	}
-	its = append(its, item{key: "p", action: "period", pill: m.opts.Period.String(), drop: 4})
-	if m.page.MatrixColumns > 0 || m.opts.Share {
+	if m.page.DeviceViews {
+		views := item{key: "s", choices: []string{"usage", "status"}, pill: "usage", drop: 3}
+		if m.opts.DeviceStatus {
+			views.pill = "status"
+		}
+		its = append(its, views)
+	}
+	its = append(its, item{key: "p", action: "period", pill: m.opts.Period.String(), drop: 5})
+	if m.shareKey() {
 		share := item{key: "%", action: "share", drop: 1}
 		if m.opts.Share {
 			share.action, share.pill = "", "share"
@@ -158,8 +183,12 @@ func (m Model) keyBar() string {
 		if it.action != "" {
 			b.WriteString(" " + m.style(it.action, styleAction))
 		}
-		if it.pill != "" {
-			b.WriteString(" " + m.pill(it.pill))
+		for _, c := range it.options() {
+			if c == it.pill {
+				b.WriteString(" " + m.pill(c))
+			} else {
+				b.WriteString(" " + m.style(c, styleAction))
+			}
 		}
 	}
 	return fit(b.String(), m.width)

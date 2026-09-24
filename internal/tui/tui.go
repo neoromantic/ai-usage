@@ -25,9 +25,9 @@ type Config struct {
 	// Report is the report shown first. A zero one is loaded at the start.
 	Report view.Report
 	// Options say how the page is drawn. A Width above 0 fixes the layout
-	// width; 0 follows the terminal. Period and Share are where the view
-	// starts. The view sets Interactive, MatrixScroll, and Busy itself, and
-	// Dark once the terminal says what its background is.
+	// width; 0 follows the terminal. Period, Share, and DeviceStatus are
+	// where the view starts. The view sets Interactive, MatrixScroll, and
+	// Busy itself, and Dark once the terminal says what its background is.
 	Options view.Options
 	// Profile is the escapes the terminal is written with, as the static
 	// report would write them; Unknown lets Bubble Tea detect them.
@@ -271,9 +271,16 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		m.setPeriod(view.Quarter)
 	case "%":
 		// Share mode can always be left, even when it leaves no column,
-		// as on a team with only NO QUOTA tokens.
-		if m.page.MatrixColumns > 0 || m.opts.Share {
+		// as on a team with only NO QUOTA tokens. The status view has no
+		// share; the mode waits for the matrix.
+		if m.shareKey() {
 			m.opts.Share = !m.opts.Share
+			m.draw()
+		}
+	case "s":
+		// The two views of DEVICES are as tall, so the page keeps its top.
+		if m.page.DeviceViews {
+			m.opts.DeviceStatus = !m.opts.DeviceStatus
 			m.draw()
 		}
 	case "r":
@@ -313,7 +320,7 @@ func (m *Model) scroll(n int) {
 // than its first and no further right than showing its last.
 func (m *Model) scrollMatrix(n int) {
 	s := m.opts.MatrixScroll + n
-	if s < 0 || n > 0 && !m.matrixRight() {
+	if m.statusView() || s < 0 || n > 0 && !m.matrixRight() {
 		return
 	}
 	m.opts.MatrixScroll = s
@@ -325,8 +332,20 @@ func (m Model) matrixRight() bool {
 	return m.opts.MatrixScroll+m.page.MatrixShown < m.page.MatrixColumns
 }
 
-// matrixCut says the matrix does not fit, so ← and → do something.
-func (m Model) matrixCut() bool { return m.opts.MatrixScroll > 0 || m.matrixRight() }
+// matrixCut says the matrix shows and does not fit, so ← and → do
+// something.
+func (m Model) matrixCut() bool {
+	return !m.statusView() && (m.opts.MatrixScroll > 0 || m.matrixRight())
+}
+
+// statusView says DEVICES shows its status view, not the matrix.
+func (m Model) statusView() bool { return m.opts.DeviceStatus && m.page.DeviceViews }
+
+// shareKey says % does something: the matrix shows, and has a column to
+// share or is in share mode.
+func (m Model) shareKey() bool {
+	return !m.statusView() && (m.page.MatrixColumns > 0 || m.opts.Share)
+}
 
 func (m *Model) setPeriod(p view.Period) {
 	if m.opts.Period != p {
@@ -387,13 +406,14 @@ func (m *Model) draw() {
 		return
 	}
 	m.page = m.render(m.opts)
-	if m.opts.MatrixScroll > 0 && m.page.MatrixColumns == 0 {
+	// The status view keeps the matrix's scroll for when it shows again.
+	if m.opts.MatrixScroll > 0 && m.page.MatrixColumns == 0 && !m.statusView() {
 		m.opts.MatrixScroll = 0
 		m.page = m.render(m.opts)
 	}
 	// Scrolled right on a terminal that grew, or a matrix that lost columns:
 	// scroll left while the columns on the right still all show.
-	for m.opts.MatrixScroll > 0 {
+	for m.opts.MatrixScroll > 0 && !m.statusView() {
 		o := m.opts
 		o.MatrixScroll--
 		p := m.render(o)
