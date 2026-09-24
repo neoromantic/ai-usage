@@ -252,7 +252,13 @@ func (p *page) grid() []chunks {
 	for _, k := range shown {
 		c := cols[k]
 		total = append(total, p.space(c.x-cur))
-		total = append(total, p.right(p.cell(bottom(c)), c.w)...)
+		if share && c.c.Percent == nil {
+			// A window whose percent is not known has a plain ? at the
+			// bottom.
+			total = append(total, p.right(p.plain(bottom(c)), c.w)...)
+		} else {
+			total = append(total, p.right(p.cell(bottom(c)), c.w)...)
+		}
 		cur = c.x + c.w
 	}
 	if totalW > 0 {
