@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"regexp"
 	"strings"
@@ -150,7 +151,7 @@ func TestTerminalDetection(t *testing.T) {
 		t.Fatalf("flag width %d", w)
 	}
 
-	for _, k := range []string{"NO_COLOR", "COLORTERM", "CLICOLOR", "CLICOLOR_FORCE", "TTY_FORCE"} {
+	for _, k := range []string{"NO_COLOR", "COLORTERM", "CLICOLOR", "CLICOLOR_FORCE", "TTY_FORCE", "COLORFGBG"} {
 		t.Setenv(k, "")
 	}
 	t.Setenv("TERM", "xterm-256color")
@@ -178,7 +179,7 @@ func TestTerminalDetection(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	profiles(colorprofile.NoTTY, colorprofile.ANSI, colorprofile.NoTTY)
 	t.Setenv("TTY_FORCE", "")
-	if o := (&display{color: "always"}).options(&buf); !o.Color || !o.Dark {
+	if o := (&display{color: "always"}).options(&buf, true); !o.Color || !o.Dark {
 		t.Errorf("--color=always draws %+v", o)
 	}
 
@@ -198,6 +199,40 @@ func TestTerminalDetection(t *testing.T) {
 		t.Setenv("TERM_PROGRAM", "")
 		if got := utf8Locale(); got != c.utf8 {
 			t.Errorf("LC_ALL=%q LC_CTYPE=%q LANG=%q: utf8 = %v", c.all, c.ctype, c.lang, got)
+		}
+	}
+}
+
+// TestBackground: the background is what COLORFGBG says, else what the
+// terminal answers where it may be asked, else dark.
+func TestBackground(t *testing.T) {
+	saved := background
+	t.Cleanup(func() { background = saved })
+	var buf bytes.Buffer
+	for _, c := range []struct {
+		fgbg string
+		// answer is the terminal's: dark, light, or nothing.
+		answer           string
+		ask, asked, dark bool
+	}{
+		{"", "light", true, true, false},
+		{"", "", true, true, true},
+		// The interactive view does not ask before it opens.
+		{"", "light", false, false, true},
+		{"0;15", "dark", true, false, false},
+		{"15;0", "light", true, false, true},
+		{"0;default;15", "dark", true, false, false},
+		{"7;8", "light", true, false, true},
+		{"15;default", "light", true, true, false},
+	} {
+		t.Setenv("COLORFGBG", c.fgbg)
+		asked := false
+		background = func(io.Writer) (bool, bool) {
+			asked = true
+			return c.answer == "dark", c.answer != ""
+		}
+		if o := (&display{color: "always"}).options(&buf, c.ask); o.Dark != c.dark || asked != c.asked {
+			t.Errorf("COLORFGBG=%q, answer %q, ask %v: dark %v, asked %v", c.fgbg, c.answer, c.ask, o.Dark, asked)
 		}
 	}
 }

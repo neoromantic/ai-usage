@@ -68,7 +68,7 @@ func hermetic(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	// The console reads these; a test sees the same output everywhere.
 	for _, k := range []string{"COLUMNS", "NO_COLOR", "TERM", "LC_CTYPE", "LANG", "WT_SESSION", "TERM_PROGRAM",
-		"COLORTERM", "CLICOLOR", "CLICOLOR_FORCE", "TTY_FORCE"} {
+		"COLORTERM", "CLICOLOR", "CLICOLOR_FORCE", "TTY_FORCE", "COLORFGBG"} {
 		t.Setenv(k, "")
 	}
 	t.Setenv("LC_ALL", "en_US.UTF-8")

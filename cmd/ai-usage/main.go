@@ -581,7 +581,7 @@ func printReport(stdout io.Writer, d state.Dir, res *collect.Result, endpoint st
 		enc.SetIndent("", "  ")
 		return enc.Encode(r)
 	}
-	o := disp.options(stdout)
+	o := disp.options(stdout, true)
 	text := view.Text(r, o)
 	if guide {
 		text += "\n" + view.Guide(r, newScheduler().Name(), o)
@@ -680,7 +680,7 @@ func cmdStatus(args []string, stdout io.Writer) error {
 		enc.SetIndent("", "  ")
 		return enc.Encode(out)
 	}
-	_, err = io.WriteString(disp.writer(stdout), view.StatusText(r, string(d), disp.options(stdout)))
+	_, err = io.WriteString(disp.writer(stdout), view.StatusText(r, string(d), disp.options(stdout, true)))
 	return err
 }
 

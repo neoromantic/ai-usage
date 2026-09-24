@@ -1,10 +1,13 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/neoromantic/ai-usage/internal/state"
 )
 
 func TestOpenView(t *testing.T) {
@@ -26,6 +29,27 @@ func TestOpenView(t *testing.T) {
 		if got := openView(c.in, c.out, c.json, c.plain, c.gd, c.term); got != c.want {
 			t.Errorf("%s: %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+// TestViewConfig: the interactive view does not ask the terminal for its
+// background before it opens; Bubble Tea asks once it reads the keys too.
+func TestViewConfig(t *testing.T) {
+	hermetic(t)
+	saved := background
+	t.Cleanup(func() { background = saved })
+	background = func(io.Writer) (bool, bool) {
+		t.Error("the view asked the terminal before it opened")
+		return true, true
+	}
+	d := newDevice(t)
+	d.ok("collect", "--quiet", "--offline")
+	res, err := loadResult(state.Dir(d.dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := viewConfig(state.Dir(d.dir), res, "", &display{color: "always"}, true, io.Discard); !c.Options.Color || !c.Options.Dark {
+		t.Fatalf("the view starts with %+v", c.Options)
 	}
 }
 

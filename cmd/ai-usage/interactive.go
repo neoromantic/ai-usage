@@ -37,10 +37,17 @@ func openView(in, out, jsonOut, plain, guide bool, term string) bool {
 // reloads the report from disk when a run saves new state, and `r` runs the
 // collection the bare `ai-usage` runs, offline when this run is.
 func showView(ctx context.Context, d state.Dir, res *collect.Result, endpoint string, disp *display, offline bool, stdout io.Writer) error {
-	o := disp.options(stdout)
+	return tui.Run(ctx, viewConfig(d, res, endpoint, disp, offline, stdout), os.Stdin, stdout)
+}
+
+// viewConfig is the interactive view of res on stdout. It does not ask the
+// terminal for its background before it opens: Bubble Tea asks once it
+// reads the terminal, so the keys typed meanwhile reach the view.
+func viewConfig(d state.Dir, res *collect.Result, endpoint string, disp *display, offline bool, stdout io.Writer) tui.Config {
+	o := disp.options(stdout, false)
 	// The view follows the terminal's width unless --width fixes it.
 	o.Width = disp.width
-	return tui.Run(ctx, tui.Config{
+	return tui.Config{
 		Report:  reportAt(d, res, endpoint, clock().UTC()),
 		Options: o,
 		Load: func(now time.Time) (view.Report, error) {
@@ -56,7 +63,7 @@ func showView(ctx context.Context, d state.Dir, res *collect.Result, endpoint st
 		},
 		Watch: []string{d.Path("state.json"), d.Path("team-cache.json")},
 		Now:   clock,
-	}, os.Stdin, stdout)
+	}
 }
 
 // reportAt is the report of a run result as of now.

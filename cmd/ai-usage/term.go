@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
 	"golang.org/x/term"
 
@@ -53,8 +52,9 @@ func (d *display) check() error {
 }
 
 // options is how the report is drawn on stdout: in color when the
-// terminal takes color, for its background when it can be asked.
-func (d *display) options(stdout io.Writer) view.Options {
+// terminal takes color, for its background when it is known. ask lets the
+// terminal be asked, as the static report does.
+func (d *display) options(stdout io.Writer, ask bool) view.Options {
 	o := view.Options{
 		Width:       termWidth(d.width, stdout),
 		Color:       d.profile(stdout) >= colorprofile.ANSI,
@@ -63,7 +63,7 @@ func (d *display) options(stdout io.Writer) view.Options {
 		AllProjects: d.projects,
 	}
 	if o.Color {
-		o.Dark = darkBackground(stdout)
+		o.Dark = darkBackground(stdout, ask)
 	}
 	return o
 }
@@ -104,20 +104,33 @@ func (d *display) profile(stdout io.Writer) colorprofile.Profile {
 	return p
 }
 
-// darkBackground asks the terminal for its background when both ends are
-// a terminal; otherwise it is taken to be dark.
-func darkBackground(stdout io.Writer) bool {
-	out, ok := stdout.(*os.File)
-	if !ok {
-		return true
+// background asks the terminal stdout is drawn on what its background is,
+// and says whether it answered. Tests replace it.
+var background = askBackground
+
+// darkBackground is whether the terminal's background is dark: as COLORFGBG
+// says, else as the terminal answers when ask lets it be asked, else dark.
+func darkBackground(stdout io.Writer, ask bool) bool {
+	if dark, ok := fgbgDark(os.Getenv("COLORFGBG")); ok {
+		return dark
 	}
-	if _, tty := terminal(out); !tty {
-		return true
+	if ask {
+		if dark, ok := background(stdout); ok {
+			return dark
+		}
 	}
-	if _, tty := terminal(os.Stdin); !tty {
-		return true
+	return true
+}
+
+// fgbgDark reads COLORFGBG, "fg;bg" or "fg;default;bg", as rxvt and others
+// set it: a background of color 0 to 6, or 8, is dark, as Vim takes it.
+func fgbgDark(v string) (dark, ok bool) {
+	i := strings.LastIndexByte(v, ';')
+	bg, err := strconv.Atoi(v[i+1:])
+	if i < 0 || err != nil || bg < 0 || bg > 15 {
+		return false, false
 	}
-	return lipgloss.HasDarkBackground(os.Stdin, out)
+	return bg <= 6 || bg == 8, true
 }
 
 // terminal is the descriptor of w when it is a terminal.
