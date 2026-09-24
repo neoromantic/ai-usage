@@ -45,6 +45,8 @@ type devAccount struct {
 	usage           Usage
 	days            []int64
 	recent          []snapshot.Recent
+	// last is the account's newest activity on that device.
+	last *time.Time
 	// link is the account a Hermes account bills through on that device.
 	link *Link
 }
@@ -174,9 +176,7 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 				Device: dv.name, DeviceID: d.Device, Current: a.Current,
 				Sessions: a.Sessions, Tokens: a.Tokens, Usage: usage, LastActiveAt: timeOf(a.LastActiveAt),
 			})
-			if a.LastActiveAt != nil && (x.ta.LastActiveAt == nil || a.LastActiveAt.After(*x.ta.LastActiveAt)) {
-				x.ta.LastActiveAt = timeOf(a.LastActiveAt)
-			}
+			x.active(a.LastActiveAt)
 			if a.Plan != "" && (x.ta.Plan == nil || d.CollectedAt.After(x.planAt)) {
 				x.ta.Plan, x.planAt = strPtr(a.Plan), d.CollectedAt
 			}
@@ -202,8 +202,19 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 			for _, u := range a.Linked {
 				addLinked(linked, a.Provider, l, u.Provider, open(u.Label), dv.name, u)
 			}
-			da := devAccount{provider: a.Provider, label: l, usage: usage, days: a.Days, recent: a.Recent, link: link}
+			da := devAccount{provider: a.Provider, label: l, usage: usage, days: a.Days, recent: a.Recent, last: a.LastActiveAt, link: link}
 			dv.accts = append(dv.accts, da.split(through[state.Key(a.Provider, l)], dv.shift)...)
+		}
+	}
+	// What Hermes spends through a login is that login's use, and its newest
+	// activity is the login's too. A device whose Hermes spent through
+	// several logins gives each one its newest activity, since its snapshot
+	// does not say which login that went through.
+	for _, dv := range devs {
+		for _, a := range dv.accts {
+			if x := billsTo(a, byProv); x != nil && !subscription(a.provider) {
+				x.active(a.last)
+			}
 		}
 	}
 
@@ -308,6 +319,13 @@ func latestVersion(checked string, devs []*device) string {
 	return best
 }
 
+// active makes at the team account's newest activity when it is newer.
+func (x *teamAccount) active(at *time.Time) {
+	if at != nil && (x.ta.LastActiveAt == nil || at.After(*x.ta.LastActiveAt)) {
+		x.ta.LastActiveAt = timeOf(at)
+	}
+}
+
 // quota is the team account's reading: the newest reading of each window,
 // in the order the windows first came.
 func (x *teamAccount) quota(provider string, now time.Time) *Quota {
@@ -366,7 +384,7 @@ func (a devAccount) split(logins []login, shift int) []devAccount {
 	var weights []int64
 	for _, l := range logins {
 		if l.tokens > 0 {
-			parts = append(parts, devAccount{provider: a.provider, label: a.label, link: &l.link})
+			parts = append(parts, devAccount{provider: a.provider, label: a.label, last: a.last, link: &l.link})
 			weights = append(weights, l.tokens)
 		}
 	}

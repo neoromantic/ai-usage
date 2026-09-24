@@ -766,6 +766,34 @@ func TestMatrixSplitsHermesByLogin(t *testing.T) {
 	}
 }
 
+// LAST counts what Hermes spent through a login: a login bot containers use
+// may see nothing else.
+func TestLastActivityThroughHermes(t *testing.T) {
+	f := newFixture(t, emptyState())
+	bot := emptyState()
+	addAccount(bot, "codex", "lee@corp.test", true, codexQuota(now.Add(-time.Hour), 30), 0)
+	addAccount(bot, "codex", "sam@mail.test", false, nil, 0)
+	spend(bot, "codex", "sam@mail.test", "/w", 10, now.Add(-3*24*time.Hour))
+	addHermes(bot, "openai-codex", "codex", "lee@corp.test", 3_000_000)
+	// One session through sam, older than the one through lee.
+	bot.Sessions[state.Key("hermes", "sam")] = &state.Session{
+		Provider: "hermes", Project: "/work/sam", Updated: now.Add(-2 * time.Hour),
+		By:  map[string]snapshot.Tokens{"openai-codex": {Input: 20}},
+		Via: map[string]snapshot.Tokens{state.Key("codex", "sam@mail.test"): {Input: 20}},
+	}
+	r := withTeam(t, f, otherDoc(t, f.key, "d-bot-device", "srv1", now, bot))
+
+	// Hermes' newest activity on the device, through whichever login.
+	for _, label := range []string{"lee@corp.test", "sam@mail.test"} {
+		if a := findTeamAccount(t, r, "codex", label); a.LastActiveAt == nil || !a.LastActiveAt.Equal(now.Add(-time.Hour)) {
+			t.Fatalf("%s last active = %v", label, a.LastActiveAt)
+		}
+	}
+	if d := findTeamAccount(t, r, "codex", "sam@mail.test").PerDevice[0]; d.LastActiveAt == nil || !d.LastActiveAt.Equal(now.Add(-3*24*time.Hour)) {
+		t.Fatalf("sam's own last active = %v", d.LastActiveAt)
+	}
+}
+
 func TestTeamPlanIsTheNewestAndPerDeviceIsByTokens(t *testing.T) {
 	f := newFixture(t, emptyState())
 	var docs []snapshot.Doc

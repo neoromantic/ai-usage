@@ -228,7 +228,7 @@ A team account. Each provider's accounts are in the order the report lists them:
 | `sessions`, `tokens`, `usage` | | summed across devices; the account's own, without what linked accounts spent through it |
 | `users` | number | how many devices have tokens on the account since its main window began, or in the last 7 days when it has none, what linked accounts spent through it included |
 | `busiest` | string | the name of the one of those devices with the most tokens; `null` when there is none |
-| `last_active_at` | time | the newest activity on the account on any device |
+| `last_active_at` | time | the newest activity on the account on any device, what Hermes spent through it included. A device whose Hermes spent through several logins gives each one its newest activity, since its snapshot does not say which login that went through |
 | `per_device` | list | `{device, device_id, current, sessions, tokens, usage, last_active_at}` for each device that has the account, `device` as `host (user)`; most tokens first, then by `device` |
 | `linked_usage` | list | `{provider, label, devices, sessions, tokens}` for each account of another tool that spent through this one on any device, as each device counted it session by session, summed across devices, with the devices it ran on; `[]` when none. These tokens are that account's and are not in `tokens` |
 
