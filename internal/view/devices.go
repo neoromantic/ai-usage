@@ -114,9 +114,18 @@ func (p *page) grid() []chunks {
 	if !share {
 		totalW = max(gridCell, width(p.millions(grand)))
 	}
-	block := 0
-	if totalW > 0 {
-		block = 2 + totalW
+	// after is how wide the matrix is right of its last column: TOTAL, and
+	// over it the count of the columns off the right edge, if any.
+	more := func(n int) string { return "+" + strconv.Itoa(n) + " more" }
+	after := func(off int) int {
+		n := 0
+		if totalW > 0 {
+			n = 2 + totalW
+		}
+		if off > 0 {
+			n = max(n, 2+width(more(off)))
+		}
+		return n
 	}
 
 	// The columns that fit, from the scroll on.
@@ -128,7 +137,7 @@ func (p *page) grid() []chunks {
 		if k == scroll || cols[k].group != cols[k-1].group {
 			gap = 2
 		}
-		if len(shown) > 0 && x+gap+cols[k].w+block > p.w {
+		if len(shown) > 0 && x+gap+cols[k].w+after(len(cols)-k-1) > p.w {
 			break
 		}
 		cols[k].x = x + gap
@@ -136,8 +145,10 @@ func (p *page) grid() []chunks {
 		shown = append(shown, k)
 	}
 	p.matrixColumns, p.matrixShown = len(cols), len(shown)
-	edge := x + block
-	hidden := len(cols) - len(shown)
+	// The count is of the columns off the right edge only. Those scrolled
+	// off the left are the interactive view's, whose key bar leads back.
+	hidden := len(cols) - scroll - len(shown)
+	edge := x + after(hidden)
 
 	title := chunks{p.bold("DEVICES " + g.times + " SUBSCRIPTIONS"), p.plain("  ")}
 	if share {
@@ -177,8 +188,7 @@ func (p *page) grid() []chunks {
 		i = j + 1
 	}
 	if hidden > 0 {
-		more := "+" + strconv.Itoa(hidden) + " more"
-		heads = append(heads, p.space(max(edge-width(more), cur+2)-cur), p.muted(more))
+		heads = append(heads, p.space(edge-width(more(hidden))-cur), p.muted(more(hidden)))
 	}
 	out = append(out, heads)
 
