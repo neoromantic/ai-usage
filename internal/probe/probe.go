@@ -4,7 +4,8 @@
 // It runs only one-shot commands that print identity or quota, and reads only
 // files where the harness already cached that answer. It never opens a
 // credential file, never starts a conversation, and never runs a login,
-// logout, or token-refresh command.
+// logout, or token-refresh command. Claude Code, asked for its usage, renews
+// its own expired login on the way, as any of its sessions does.
 package probe
 
 import (

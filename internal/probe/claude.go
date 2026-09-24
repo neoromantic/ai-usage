@@ -21,8 +21,9 @@ import (
 //
 // Claude Code writes that cache only when it reads the usage, as its /usage
 // dialog does. So for a claude.ai subscription whose cache is missing or
-// older than claudeFresh, Claude Code is first asked to read it again. The
-// cache is as fresh as Claude Code last made it. Its age is reported.
+// older than claudeFresh, in a home this OS user owns, Claude Code is first
+// asked to read it again. The cache is as fresh as Claude Code last made it.
+// Its age is reported.
 func Claude(ctx context.Context, env Env, home string) (Reading, error) {
 	var r Reading
 	var errs []error
@@ -37,11 +38,17 @@ func Claude(ctx context.Context, env Env, home string) (Reading, error) {
 			errs = append(errs, err)
 		}
 		r.Account, r.Plan = st.label(), st.SubscriptionType
-		if st.subscription() && claudeStale(file, env.now()) {
-			// A read that failed is no problem when the cache is fresh
-			// anyway, as when Claude Code wrote it before it failed, or
-			// the person's own session did meanwhile.
-			if err := claudeRefresh(ctx, env, bin, configDir); err != nil && claudeStale(file, env.now()) {
+		if st.subscription() && claudeOwned(file, home) && claudeStale(file, env.now()) {
+			err := claudeRefresh(ctx, env, bin, configDir)
+			// The read is judged by the cache it leaves, not by how Claude
+			// Code exits: one that could not reach the usage, as offline,
+			// still exits 0. And one that failed is no problem when the
+			// cache is fresh anyway, as when Claude Code wrote it before it
+			// failed, or the person's own session did meanwhile.
+			if claudeStale(file, env.now()) {
+				if err == nil {
+					err = errors.New("claude /usage: no new reading")
+				}
 				errs = append(errs, err)
 			}
 		}
@@ -181,9 +188,11 @@ const claudeGuardModel = "ai-usage-no-model"
 
 // claudeRefresh has Claude Code read the account's usage and cache it, as
 // its /usage dialog does. In print mode /usage is a local command: it calls
-// no model, and --no-session-persistence leaves no session behind. Hooks
-// and the updater are off. Nonessential traffic is left on, since without
-// it Claude Code does not read the usage. Only the last line of what it
+// no model, and --no-session-persistence leaves no session behind. The
+// person's hooks and the updater are off; hooks an organization manages
+// still run. Nonessential traffic is left on, since without it Claude Code
+// does not read the usage. Like any of its sessions, Claude Code renews its
+// own login on the way when that has expired. Only the last line of what it
 // prints is kept, for the error of a read that failed.
 func claudeRefresh(ctx context.Context, env Env, bin, configDir string) error {
 	ctx, cancel := context.WithTimeout(ctx, claudeUsageTimeout)
@@ -272,6 +281,28 @@ func claudeStale(path string, now time.Time) bool {
 	}
 	age := now.Sub(time.UnixMilli(c.FetchedAtMs))
 	return age < 0 || age >= claudeFresh
+}
+
+// claudeOwned reports whether this OS user owns the home and the config
+// file, or for one that does not exist yet, the folder it would be made in.
+// Claude Code saves a file as the user that runs it, so a read run for a
+// home another user owns, as a root collector's bot folders, would leave
+// that user's config, and a login renewed on the way, to this one, and lock
+// that user's own Claude Code out of them. Such a home's cache is only read.
+var claudeOwned = func(file, home string) bool {
+	return ownedByUs(existing(file)) && ownedByUs(existing(home))
+}
+
+// existing is path, or the nearest folder above it that exists.
+func existing(path string) string {
+	for {
+		_, err := os.Stat(path)
+		parent := filepath.Dir(path)
+		if !errors.Is(err, os.ErrNotExist) || parent == path {
+			return path
+		}
+		path = parent
+	}
 }
 
 type claudeWindow struct {

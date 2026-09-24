@@ -14,3 +14,6 @@ func killGroup(cmd *exec.Cmd) error {
 	}
 	return cmd.Process.Kill()
 }
+
+// ownedByUs is true: without Unix user ids, who owns a file is not checked.
+func ownedByUs(string) bool { return true }

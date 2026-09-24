@@ -208,10 +208,17 @@ func writeFile(t *testing.T, path, body string) {
 	}
 }
 
+// cachedJustNow makes claudeCache a minute old, so Claude Code is not asked
+// to read the usage again. TestClaudeRefreshesUsage covers that.
+func cachedJustNow(env *Env) {
+	env.Now = func() time.Time { return time.UnixMilli(fetchedAtMs).Add(time.Minute) }
+}
+
 func TestClaudeDefaultHome(t *testing.T) {
 	// A CLAUDE_CONFIG_DIR inherited from the caller would point the CLI at
 	// another home, so it is removed for the default one.
 	env, record := fakeEnv(t, "claude-ok", "CLAUDE_CONFIG_DIR=/stale")
+	cachedJustNow(&env)
 	home := filepath.Join(env.HomeDir, ".claude")
 	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
 	writeFile(t, filepath.Join(home, ".claude.json"), `{"oauthAccount":{"accountUuid":"acct-1"},"cachedUsageUtilization":{"fetchedAtMs":1,"accountUuid":"acct-1","utilization":{"limits":[{"kind":"session","percent":99}]}}}`)
@@ -242,6 +249,7 @@ func TestClaudeDefaultHome(t *testing.T) {
 // inside it and its login to another keychain entry, so it is kept.
 func TestClaudeDefaultHomeNamedByEnv(t *testing.T) {
 	env, record := fakeEnv(t, "claude-ok")
+	cachedJustNow(&env)
 	home := filepath.Join(env.HomeDir, ".claude")
 	value := home + string(filepath.Separator)
 	env.Environ = append(env.Environ, "CLAUDE_CONFIG_DIR="+value)
@@ -263,6 +271,7 @@ func TestClaudeDefaultHomeNamedByEnv(t *testing.T) {
 
 func TestClaudeCustomHome(t *testing.T) {
 	env, record := fakeEnv(t, "claude-ok", "CLAUDE_CONFIG_DIR=/stale")
+	cachedJustNow(&env)
 	home := filepath.Join(env.HomeDir, "work-claude")
 	writeFile(t, filepath.Join(home, ".claude.json"), claudeCache)
 
@@ -418,34 +427,69 @@ func TestClaudeRefreshesUsage(t *testing.T) {
 
 // Claude Code is not asked to read the usage when its cache is fresh, for a
 // login without usage limits, or with nobody logged in. Nor when its config
-// cannot be read, since Claude Code would meet the same file. The Claude
-// app's agent-mode homes are not probed at all: collect's
-// TestClaudeAppSessionsGoToTheirRecordedAccount covers them.
+// cannot be read, since Claude Code would meet the same file, nor in a home
+// another OS user owns, whose files it would take over. A skipped read is
+// no problem. The Claude app's agent-mode homes are not probed at all:
+// collect's TestClaudeAppSessionsGoToTheirRecordedAccount covers them.
 func TestClaudeSkipsUsageRefresh(t *testing.T) {
 	fresh := fmt.Sprintf(`{"oauthAccount":{"accountUuid":"acct-1"},"cachedUsageUtilization":{"fetchedAtMs":%d,"accountUuid":"acct-1","utilization":{"limits":[{"kind":"session","percent":12}]}}}`,
 		testNow.Add(-5*time.Minute).UnixMilli())
-	tests := []struct{ name, mode, config string }{
-		{"fresh cache", "claude-ok", fresh},
-		{"config not JSON", "claude-ok", `{`},
-		{"console login", "claude-console", claudeCache},
-		{"api key", "claude-no-email", claudeCache},
-		{"cloud provider", "claude-bedrock", claudeCache},
-		{"logged out", "claude-logged-out", claudeCache},
+	tests := []struct {
+		name, mode, config string
+		othersHome         bool
+	}{
+		{name: "fresh cache", mode: "claude-ok", config: fresh},
+		{name: "config not JSON", mode: "claude-ok", config: `{`},
+		{name: "console login", mode: "claude-console", config: claudeCache},
+		{name: "api key", mode: "claude-no-email", config: claudeCache},
+		{name: "cloud provider", mode: "claude-bedrock", config: claudeCache},
+		{name: "logged out", mode: "claude-logged-out", config: claudeCache},
+		{name: "another user's home", mode: "claude-ok", config: claudeCache, othersHome: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.othersHome {
+				owned := claudeOwned
+				t.Cleanup(func() { claudeOwned = owned })
+				claudeOwned = func(string, string) bool { return false }
+			}
 			env, record := fakeEnv(t, tc.mode)
 			writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), tc.config)
-			_, _ = Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"))
+			_, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"))
 			if runs := readRuns(t, record); len(runs) != 1 {
 				t.Errorf("ran %d commands, the last %q", len(runs), runs[len(runs)-1].Args)
+			}
+			if strings.Contains(errText(err), "/usage") {
+				t.Errorf("error = %q", errText(err))
 			}
 		})
 	}
 }
 
-// A read that fails keeps the reading Claude Code cached before, and says
-// why, unless the cache is fresh after all.
+// Only a home this OS user owns, with its config file or the folder that
+// file would be made in, is one Claude Code may be run for.
+func TestClaudeOwned(t *testing.T) {
+	user := t.TempDir()
+	home := filepath.Join(user, "work-claude")
+	file := filepath.Join(home, ".claude.json")
+	if !claudeOwned(file, home) {
+		t.Error("a home not made yet, in a folder this user owns, is not owned")
+	}
+	writeFile(t, file, "{}")
+	if !claudeOwned(file, home) {
+		t.Error("a home this user made is not owned")
+	}
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		return
+	}
+	root := string(filepath.Separator)
+	if claudeOwned(file, root) || claudeOwned(filepath.Join(root, ".claude.json"), home) {
+		t.Error("root's folder is owned")
+	}
+}
+
+// A read that fails, or leaves no new cache, keeps the reading Claude Code
+// cached before, and says why, unless the cache is fresh after all.
 func TestClaudeUsageRefreshFails(t *testing.T) {
 	tests := []struct {
 		usage   string
@@ -456,6 +500,8 @@ func TestClaudeUsageRefreshFails(t *testing.T) {
 		// One that sent /usage to a model is too old to read it.
 		{usage: "old", wantErr: "update", percent: 12},
 		{usage: "write-then-fail", percent: 7},
+		// Claude Code exits 0 when it could not reach the usage.
+		{usage: "no-write", wantErr: "/usage", percent: 12},
 	}
 	for _, tc := range tests {
 		t.Run(tc.usage, func(t *testing.T) {

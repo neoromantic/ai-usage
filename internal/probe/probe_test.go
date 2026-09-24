@@ -242,6 +242,9 @@ func fakeClaudeUsage(mode string, args []string, rec *os.File) int {
 		return 1
 	case "hang":
 		return hangWithChild(rec)
+	case "no-write":
+		fmt.Println("Current session: usage unavailable")
+		return 0
 	}
 	if path := os.Getenv("PROBE_CACHE"); path != "" {
 		body, err := os.ReadFile(path)

@@ -34,3 +34,14 @@ func killGroup(cmd *exec.Cmd) error {
 	}
 	return err
 }
+
+// ownedByUs reports whether this process's effective user owns path. A path
+// it cannot stat is not.
+func ownedByUs(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	return ok && int(st.Uid) == os.Geteuid()
+}
