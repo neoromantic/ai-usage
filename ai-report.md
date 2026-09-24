@@ -121,7 +121,7 @@ What the collector and the relay added for it:
 
 ## Backlog
 
-Recorded on 2026-09-23 with the owner. Not started.
+Recorded on 2026-09-23 with the owner, and brought up to date on 2026-09-24. Not started, except where an item says so.
 
 - **A generated device name.** A device gets a readable name from one small, free LLM call instead of the bare host name. `Mac.localdomain` is the kind of name this replaces.
   - Input: host name, OS user, OS and machine model, whether it runs in a container, and the account labels the harnesses report, emails included. The owner accepts that for this one call these reach the relay and the model in the clear. Everywhere else the labels stay sealed. The product rules say so, and that exception belongs in them.
@@ -137,10 +137,11 @@ Recorded on 2026-09-23 with the owner. Not started.
   - comments that restate the code.
 
   The CLI, the snapshot, the JSON (`schema_version` 3), and the relay protocol stay compatible, and behavior does not change.
-- **Find why an account has no name or no reading.** One Mac in the team (`Mac.localdomain`, on v0.1.1) shows both. The cause comes first; the fix follows from it.
-  - Its Codex usage is filed under `unknown`: 2,875 sessions and 1.2G input tokens, the most of any account. The same device reports `codex initialize: app-server exited without answering`, so the harness never said who is logged in. Find why the app server does not answer there, and whether that history is claimed by the right account once it does.
-  - Its Claude Max account has 90 days of usage but has never had a quota reading. Find where the reading is lost: the harness, its usage cache, or the collector.
-  - Check both again once the device runs the current release.
+- **Find why an account has no reading.** It began with one Mac in the team (then `Mac.localdomain`, on v0.1.1) that showed an account with no name and one with no reading. The cause comes first; the fix follows from it.
+  - Done: its Codex usage was filed under `unknown` (2,875 sessions and 1.2G input tokens) while `codex initialize` got no answer from the app server. Once the device ran the current release on 2026-09-24, the harness named its account, and that history went to it.
+  - Open: its Claude Max account has 90 days of usage but has never had a quota reading. A second Mac in the team shows the same, on v0.2.0. Find where the reading is lost: the harness, its usage cache, or the collector.
+  - Open: a third Mac, on v0.1.4, names its Codex account, but `account/rateLimits/read` gets no answer in time, so its reading ages. Check again once it runs the current release.
+  - The report shows only `?` for a missing reading. Saying why, in the status view's NOTE and in the JSON, would let a teammate's device be diagnosed from the team view instead of on the machine.
 
 ## Implementation status
 
@@ -195,7 +196,8 @@ Done, in short:
 - **Views**: the console report of [design.md](design.md) and versioned JSON (`schema_version` 3). Both include the other devices in the team.
   - The page is ATTENTION (out, over, failing, silent, and outdated devices, and windows past half that will be left mostly unused), SUBSCRIPTIONS (a bar per weekly window with its even-use tick, what is left, the reset, the forecast, and the devices that used the account in this window), the DEVICES × SUBSCRIPTIONS matrix of tokens or estimated share per device and account, or its status view of each device's user, release, last report, harnesses, tokens per period, and what is wrong with it (USAGE on a single device), and this device's PROJECTS, with a dim legend of the marks on screen, one line from 120 columns and as few even lines as fit below that.
   - It is drawn with Lip Gloss, from 80 to 160 columns, dropping columns in a fixed order as it narrows, in color with light and dark themes, or in ASCII. A pipe, `TERM=dumb`, and `--color=never` get no escapes. Golden files cover 80, 120, and 160 columns, color, ASCII, the share mode, 30 days, all projects, and the status view.
-  - When standard input and output are both a terminal, the report opens in an interactive view on Bubble Tea: scrolling, the period (today, 7d, 30d, 90d), the matrix or the status view, tokens or share, matrix scrolling, refresh, and a help panel. `--devices` opens it on the status view. It reloads when the state changes. `--plain`, `--json`, and the first run with its guide print instead, and the installers' first run has no terminal input.
+  - When standard input and output are both a terminal, the report opens in an interactive view on Bubble Tea: scrolling, the period (today, 7d, 30d, 90d), the matrix or the status view, tokens or share, matrix scrolling, refresh, and a help panel. `--devices` opens it on the status view. The head of DEVICES stays at the top while its rows scroll under it. It reloads when the state changes. `--plain`, `--json`, and the first run with its guide print instead, and the installers' first run has no terminal input.
+  - A device on a collector older than v0.2.0 sends only each account's tokens over 90 days. Its 90d shows them, a shorter period it may have used shows `?`, not 0, and a total that misses such a part shows `≥` before the part that is known. USERS counts it by when it last used the account.
   - Tokens by period come from hour buckets: each reader records the hour of every use from the log's timestamps, and what a log gives no time for is spread over the session's timed hours. Each run adds only what a session grew, in the hours its log grew in, so a partial read never counts an hour twice. A session continued under another login keeps each account's hours apart, so each account's days are the tokens it spent.
 - **Short names**: an account shows the part of its email before the @, the first 8 characters of an id, else its label; two that would be the same show their labels. `ai-usage alias` gives an account a name for the whole team. It travels sealed in the snapshot of the device that set it, and the newest wins.
 - **Team key**: Ed25519, and its fingerprint names the team. Joining means `ai-usage team join` with the exported private key.
