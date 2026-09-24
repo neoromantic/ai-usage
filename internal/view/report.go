@@ -239,6 +239,10 @@ type Usage struct {
 	Week    int64 `json:"7d"`
 	Month   int64 `json:"30d"`
 	Quarter int64 `json:"90d"`
+	// Unknown are the periods whose tokens are not all known, as a device's
+	// on a collector older than v0.2.0, which counts only its 90 days. Such
+	// a period holds the tokens that are known: it is at least that.
+	Unknown PeriodSet `json:"unknown,omitempty"`
 }
 
 // Project is usage in one working directory. On this device's list it is
@@ -327,7 +331,9 @@ type TeamAccount struct {
 	Usage    Usage           `json:"usage"`
 	// Users counts the devices with tokens on the account since its main
 	// window began, or in the last 7 days when it has none, what linked
-	// accounts spent through it included. Busiest is the one with the most.
+	// accounts spent through it included; a device on a collector older than
+	// v0.2.0 counts when it used the account since then. Busiest is the one
+	// with the most of those whose tokens are known, or the only one.
 	Users        int           `json:"users"`
 	Busiest      *string       `json:"busiest"`
 	LastActiveAt *time.Time    `json:"last_active_at"`
@@ -374,6 +380,9 @@ type Column struct {
 	// WindowTokens is the team's tokens since the main window began, what
 	// Hermes spent through the login included.
 	WindowTokens int64 `json:"window_tokens"`
+	// WindowUnknown says a device's tokens since the main window began are
+	// not known, so WindowTokens holds only the known ones.
+	WindowUnknown bool `json:"window_unknown,omitempty"`
 }
 
 type Row struct {
@@ -390,9 +399,15 @@ type Cell struct {
 	// WindowTokens is the device's tokens since the column's main window
 	// began.
 	WindowTokens int64 `json:"window_tokens"`
+	// WindowUnknown says they are not known: the device is on a collector
+	// older than v0.2.0 and used the account since the window began.
+	WindowUnknown bool `json:"window_unknown,omitempty"`
 	// Share estimates how much of the column's window the device used, in
 	// percent: its tokens since the window began over the team's, times how
-	// full the window is. A column's shares add up to its Percent.
+	// full the window is. A column's shares add up to its Percent. It is nil
+	// without a Percent, when the team spent nothing since the window began,
+	// and when it is not known: the device's tokens since then are not, or
+	// the team's are not and the device spent some.
 	Share *float64 `json:"share"`
 }
 

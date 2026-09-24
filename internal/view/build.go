@@ -190,13 +190,35 @@ func usageOf(days []int64, shift int) Usage {
 	return Usage{Today: sum(1), Week: sum(7), Month: sum(30), Quarter: sum(90)}
 }
 
+// olderUsage sums an account from a collector older than v0.2.0 into the
+// report's periods. Its snapshot has no days, only inOut, its input plus
+// output over the device's 90 days, which are the report's when shift is 0.
+// A period that began after last, the account's newest activity, is 0. The
+// 90 days are inOut when they are the report's; any other period is not
+// known.
+func olderUsage(inOut int64, last *time.Time, shift int, now time.Time) Usage {
+	var u Usage
+	today := time.Unix(now.Unix()/86400*86400, 0).UTC()
+	for _, p := range Periods {
+		switch {
+		case last != nil && last.Before(today.AddDate(0, 0, 1-p.days())):
+		case p == Quarter && shift == 0:
+			u.Quarter = inOut
+		default:
+			u.Unknown |= p.bit()
+		}
+	}
+	return u
+}
+
 // dayShift is how many UTC days the report's day is past collectedAt's.
 func dayShift(collectedAt, now time.Time) int {
 	return max(int(now.Unix()/86400-collectedAt.Unix()/86400), 0)
 }
 
 func (u Usage) add(v Usage) Usage {
-	return Usage{Today: u.Today + v.Today, Week: u.Week + v.Week, Month: u.Month + v.Month, Quarter: u.Quarter + v.Quarter}
+	return Usage{Today: u.Today + v.Today, Week: u.Week + v.Week, Month: u.Month + v.Month, Quarter: u.Quarter + v.Quarter,
+		Unknown: u.Unknown | v.Unknown}
 }
 
 func orEmpty(days []int64) []int64 {

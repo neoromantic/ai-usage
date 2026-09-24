@@ -37,6 +37,8 @@ const (
 // provider, with totals on the right and at the bottom. The cells are a
 // heat map on a log scale; without color, the largest in each column is
 // bold. The share mode shows each device's estimated share of each window.
+// Tokens that are not all known, as a device's on a collector older than
+// v0.2.0, show as tokens prints them, and a share that is not known is ?.
 func (p *page) grid() []chunks {
 	g := p.g
 	m := p.r.Team.Matrix
@@ -59,6 +61,10 @@ func (p *page) grid() []chunks {
 		if a != b {
 			return a > b
 		}
+		// Tokens that are not known go before none.
+		if ka, kb := per.Known(rows[i].Usage), per.Known(rows[j].Usage); ka != kb {
+			return kb
+		}
 		return rows[i].Device < rows[j].Device
 	})
 	value := func(r Row, c gridCol) float64 {
@@ -75,13 +81,19 @@ func (p *page) grid() []chunks {
 		return float64(per.Of(cell.Usage))
 	}
 	text := func(r Row, c gridCol) string {
-		if share {
-			if c.idx >= len(r.Cells) {
-				return g.none
-			}
-			return p.percent(r.Cells[c.idx].Share)
+		if c.idx >= len(r.Cells) {
+			return g.none
 		}
-		return p.millions(int64(value(r, c)))
+		cell := r.Cells[c.idx]
+		if !share {
+			return p.tokens(per, cell.Usage)
+		}
+		// A window whose tokens are not all known cannot be split, though
+		// how full it is is known.
+		if cell.Share == nil && c.c.Percent != nil && c.c.WindowUnknown {
+			return "?"
+		}
+		return p.percent(cell.Share)
 	}
 	bottom := func(c gridCol) string {
 		if share {
@@ -90,7 +102,7 @@ func (p *page) grid() []chunks {
 			}
 			return p.percent(c.c.Percent)
 		}
-		return p.millions(per.Of(c.c.Usage))
+		return p.tokens(per, c.c.Usage)
 	}
 
 	var top float64
@@ -104,15 +116,15 @@ func (p *page) grid() []chunks {
 		top = max(top, c.top)
 	}
 	nameW := width("TOTAL")
-	var grand int64
+	var grand Usage
 	for _, r := range rows {
 		nameW = max(nameW, min(width(p.txt(r.Device)), deviceName))
-		grand += per.Of(r.Usage)
+		grand = grand.add(r.Usage)
 	}
 	lead := 2 + nameW
 	totalW := 0
 	if !share {
-		totalW = max(gridCell, width(p.millions(grand)))
+		totalW = max(gridCell, width(p.tokens(per, grand)))
 	}
 	// after is how wide the matrix is right of its last column: TOTAL, and
 	// over it the count of the columns off the right edge, if any.
@@ -223,7 +235,7 @@ func (p *page) grid() []chunks {
 		}
 		if totalW > 0 {
 			line = append(line, p.space(2))
-			line = append(line, p.right(p.cell(p.millions(per.Of(r.Usage))), totalW)...)
+			line = append(line, p.right(p.cell(p.tokens(per, r.Usage)), totalW)...)
 		}
 		out = append(out, line)
 	}
@@ -239,7 +251,7 @@ func (p *page) grid() []chunks {
 	}
 	if totalW > 0 {
 		total = append(total, p.space(2))
-		total = append(total, p.right(p.cell(p.millions(grand)), totalW)...)
+		total = append(total, p.right(p.cell(p.tokens(per, grand)), totalW)...)
 	}
 	return append(out, total)
 }
@@ -253,11 +265,17 @@ func (p *page) pill(s string, chosen bool) chunk {
 	return p.muted(strings.Repeat(" ", width(p.g.open)) + s + strings.Repeat(" ", width(p.g.shut)))
 }
 
-// cell is a number in plain text, or the none mark, faint.
+// cell is a number in plain text, the none mark faint, or ? muted.
 func (p *page) cell(s string) chunk {
-	if s == p.g.none {
+	switch {
+	case s == p.g.none:
 		p.mark("none")
 		return p.faint(s)
+	case s == "?":
+		p.mark("unknown")
+		return p.muted(s)
+	case strings.HasPrefix(s, p.g.atLeast):
+		p.mark("atLeast")
 	}
 	return p.plain(s)
 }
@@ -268,6 +286,9 @@ func (p *page) cell(s string) chunk {
 func (p *page) heat(s string, v, colTop, top float64) chunk {
 	if v <= 0 {
 		return p.cell(s)
+	}
+	if strings.HasPrefix(s, p.g.atLeast) {
+		p.mark("atLeast")
 	}
 	if !p.o.Color {
 		if v == colTop {
@@ -358,7 +379,7 @@ func (p *page) usage() []chunks {
 	periods := []Period{Today, Week, Month, Quarter}
 	numW := make([]int, len(periods))
 	for i, per := range periods {
-		numW[i] = max(width(strings.ToUpper(per.String())), width(p.millions(per.Of(sum))), 4)
+		numW[i] = max(width(strings.ToUpper(per.String())), width(p.tokens(per, sum)), 4)
 	}
 	acct := width("TOTAL")
 	for _, r := range rows {
@@ -379,7 +400,7 @@ func (p *page) usage() []chunks {
 	numbers := func(line chunks, u Usage) chunks {
 		for i, per := range periods {
 			line = append(line, p.space(2))
-			line = append(line, p.right(p.cell(p.millions(per.Of(u))), numW[i])...)
+			line = append(line, p.right(p.cell(p.tokens(per, u)), numW[i])...)
 		}
 		return line
 	}

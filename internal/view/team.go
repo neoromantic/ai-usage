@@ -45,6 +45,11 @@ type devAccount struct {
 	usage           Usage
 	days            []int64
 	recent          []snapshot.Recent
+	// inOut is the account's input plus output over 90 days. An account
+	// from a collector older than v0.2.0 is older: it has no days, and inOut
+	// is all that is known of its tokens.
+	inOut int64
+	older bool
 	// last is the account's newest activity on that device.
 	last *time.Time
 	// link is the account a Hermes account bills through on that device.
@@ -164,6 +169,10 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 				byProv[a.Provider][l] = x
 			}
 			usage := usageOf(a.Days, dv.shift)
+			older := fromOlderCollector(a)
+			if older {
+				usage = olderUsage(logs.InOut(a.Tokens), a.LastActiveAt, dv.shift, now)
+			}
 			dev.Usage = dev.Usage.add(usage)
 			x.ta.Devices = append(x.ta.Devices, dv.name)
 			x.ta.Sessions += a.Sessions
@@ -202,8 +211,9 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 			for _, u := range a.Linked {
 				addLinked(linked, a.Provider, l, u.Provider, open(u.Label), dv.name, u)
 			}
-			da := devAccount{provider: a.Provider, label: l, usage: usage, days: a.Days, recent: a.Recent, last: a.LastActiveAt, link: link}
-			dv.accts = append(dv.accts, da.split(through[state.Key(a.Provider, l)], dv.shift)...)
+			da := devAccount{provider: a.Provider, label: l, usage: usage, days: a.Days, recent: a.Recent,
+				older: older, inOut: logs.InOut(a.Tokens), last: a.LastActiveAt, link: link}
+			dv.accts = append(dv.accts, da.split(through[state.Key(a.Provider, l)], dv.shift, now)...)
 		}
 	}
 	// What Hermes spends through a login is that login's use, and its newest
@@ -276,6 +286,14 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 // is a harness: it spends through other logins, or through keys with none.
 func subscription(provider string) bool { return provider != "hermes" }
 
+// fromOlderCollector says a device account comes from a collector older
+// than v0.2.0: it spent input or output tokens in its 90 days but has no
+// days and no tokens since a window began, which a newer collector sends
+// for such an account.
+func fromOlderCollector(a snapshot.Account) bool {
+	return len(a.Days) == 0 && len(a.Recent) == 0 && logs.InOut(a.Tokens) > 0
+}
+
 // deviceError is what fails on a device now: a source's error, named after
 // its provider, else the last run's error when no success followed it.
 func deviceError(d TeamDevice) *string {
@@ -346,16 +364,21 @@ func (x *teamAccount) quota(provider string, now time.Time) *Quota {
 }
 
 // sinceStart is a device account's tokens since start, the beginning of
-// the window named window. The device counted them itself when its reading
-// of the window began then; otherwise they are its days from start's day
-// on, which may count part of that day too many.
-func (a devAccount) sinceStart(window string, start time.Time, collectedAt time.Time) int64 {
+// the window named window, and whether they are known. The device counted
+// them itself when its reading of the window began then; otherwise they are
+// its days from start's day on, which may count part of that day too many.
+// An account from an older collector has no days: its tokens are 0 when its
+// newest activity is before start, and not known otherwise.
+func (a devAccount) sinceStart(window string, start time.Time, collectedAt time.Time) (int64, bool) {
 	if collectedAt.Before(start) {
-		return 0
+		return 0, true
+	}
+	if a.older {
+		return 0, a.last != nil && a.last.Before(start)
 	}
 	for _, r := range a.recent {
 		if r.Window == window && absDuration(r.Start.Sub(start)) <= time.Hour {
-			return r.Tokens
+			return r.Tokens, true
 		}
 	}
 	n := int(collectedAt.Unix()/86400 - start.Unix()/86400)
@@ -363,7 +386,7 @@ func (a devAccount) sinceStart(window string, start time.Time, collectedAt time.
 	for i := 0; i <= n && i < len(a.days); i++ {
 		sum += a.days[i]
 	}
-	return sum
+	return sum, true
 }
 
 func absDuration(d time.Duration) time.Duration {
@@ -375,16 +398,17 @@ func absDuration(d time.Duration) time.Duration {
 
 // split divides a Hermes account on one device among the logins it spent
 // through, in proportion to what the device counted through each. The
-// snapshot does not split the account's days, or its tokens since a window
-// began, by login, so each login gets that share of them, and so does what
-// the device counted through no login, as from before it recorded logins.
-// An account that spent through no login stays whole, on its link.
-func (a devAccount) split(logins []login, shift int) []devAccount {
+// snapshot does not split the account's days, its tokens since a window
+// began, or an older collector's tokens over 90 days, by login, so each
+// login gets that share of them, and so does what the device counted
+// through no login, as from before it recorded logins. An account that
+// spent through no login stays whole, on its link.
+func (a devAccount) split(logins []login, shift int, now time.Time) []devAccount {
 	var parts []devAccount
 	var weights []int64
 	for _, l := range logins {
 		if l.tokens > 0 {
-			parts = append(parts, devAccount{provider: a.provider, label: a.label, last: a.last, link: &l.link})
+			parts = append(parts, devAccount{provider: a.provider, label: a.label, older: a.older, last: a.last, link: &l.link})
 			weights = append(weights, l.tokens)
 		}
 	}
@@ -401,8 +425,14 @@ func (a devAccount) split(logins []login, shift int) []devAccount {
 			parts[i].recent = append(parts[i].recent, snapshot.Recent{Window: r.Window, Start: r.Start, Tokens: v})
 		}
 	}
+	for i, v := range shares(a.inOut, weights) {
+		parts[i].inOut = v
+	}
 	for i := range parts {
 		parts[i].usage = usageOf(parts[i].days, shift)
+		if a.older {
+			parts[i].usage = olderUsage(parts[i].inOut, a.last, shift, now)
+		}
 	}
 	return parts
 }
@@ -438,13 +468,17 @@ func billsTo(a devAccount, byProv map[string]map[string]*teamAccount) *teamAccou
 
 // users counts the devices with tokens on each account of a provider since
 // its main window began, what linked accounts spent through it included,
-// or in the last 7 days without a main window. The busiest is the one with
-// the most.
+// or in the last 7 days without a main window. A device on an older
+// collector, whose tokens then are not known, counts when it used the
+// account since then. The busiest is the one with the most of those whose
+// tokens are known, or the only one, whatever it spent.
 func users(provider string, m map[string]*teamAccount, devs []*device) {
 	for _, x := range m {
 		var best int64
+		var only *string
 		for _, dv := range devs {
 			var n int64
+			known := true
 			for _, a := range dv.accts {
 				own := a.provider == provider && a.label == x.ta.Label
 				through := !subscription(a.provider) && a.link != nil && a.link.Provider == provider && a.link.Label == x.ta.Label
@@ -452,19 +486,24 @@ func users(provider string, m map[string]*teamAccount, devs []*device) {
 					continue
 				}
 				if x.main != "" {
-					n += a.sinceStart(x.main, x.start, dv.collectedAt)
+					since, ok := a.sinceStart(x.main, x.start, dv.collectedAt)
+					n, known = n+since, known && ok
 				} else {
-					n += a.usage.Week
+					n, known = n+a.usage.Week, known && Week.Known(a.usage)
 				}
 			}
-			if n <= 0 {
+			if n <= 0 && known {
 				continue
 			}
 			x.ta.Users++
-			if n > best {
+			only = strPtr(dv.dev.Label)
+			if known && n > best {
 				best = n
 				x.ta.Busiest = strPtr(dv.dev.Label)
 			}
+		}
+		if x.ta.Users == 1 {
+			x.ta.Busiest = only
 		}
 	}
 }
@@ -601,24 +640,36 @@ func matrix(providers []TeamProvider, byProv map[string]map[string]*teamAccount,
 			c := &row.Cells[i]
 			c.Usage = c.Usage.add(a.usage)
 			if x != nil && x.main != "" {
-				c.WindowTokens += a.sinceStart(x.main, x.start, dv.collectedAt)
+				n, known := a.sinceStart(x.main, x.start, dv.collectedAt)
+				c.WindowTokens += n
+				c.WindowUnknown = c.WindowUnknown || !known
 			}
 			row.Usage = row.Usage.add(a.usage)
 		}
 		for i, c := range row.Cells {
 			mx.Columns[i].Usage = mx.Columns[i].Usage.add(c.Usage)
 			mx.Columns[i].WindowTokens += c.WindowTokens
+			mx.Columns[i].WindowUnknown = mx.Columns[i].WindowUnknown || c.WindowUnknown
 		}
 		mx.Rows = append(mx.Rows, row)
 	}
 	for _, row := range mx.Rows {
 		for i := range row.Cells {
-			col := mx.Columns[i]
-			if col.Percent == nil || col.WindowTokens <= 0 {
-				continue
+			col, c := mx.Columns[i], &row.Cells[i]
+			switch {
+			case col.Percent == nil || c.WindowUnknown:
+			case col.WindowUnknown:
+				// The team's tokens since the window began are not all known,
+				// so the window cannot be split: only a device that spent none
+				// has a share, which is none.
+				if c.WindowTokens == 0 {
+					s := 0.0
+					c.Share = &s
+				}
+			case col.WindowTokens > 0:
+				s := float64(c.WindowTokens) / float64(col.WindowTokens) * *col.Percent
+				c.Share = &s
 			}
-			s := float64(row.Cells[i].WindowTokens) / float64(col.WindowTokens) * *col.Percent
-			row.Cells[i].Share = &s
 		}
 	}
 	sort.SliceStable(mx.Rows, func(i, j int) bool {

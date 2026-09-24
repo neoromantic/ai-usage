@@ -163,6 +163,8 @@ The cell reads `157% over`, `81% ok`, or `out`. This replaces the 6-hour pace an
 
 USERS counts the devices with tokens on the account since the window began, and names the busiest. A Hermes bot in its own container is a device.
 
+A device on a collector older than v0.2.0 does not send its tokens since the window began, so it counts when it used the account since then. The busiest is the one with the most tokens among the devices whose tokens are known. When the only user is such a device, it is named all the same; when every one of two or more is, none is named.
+
 ## DEVICES × SUBSCRIPTIONS
 
 A matrix. Each device is a row, sorted by total, largest first. Each subscription is a column, grouped under its provider by a heading with a thin rule. The last column, NO QUOTA, holds tokens that have no subscription. Totals are on the right and at the bottom.
@@ -172,6 +174,9 @@ A matrix. Each device is a row, sorted by total, largest first. Each subscriptio
 - A subscription's name in the header takes its state color, so an `out` column is visible from the matrix too.
 - A mark before the device name gives its state: `●` this device, `×` an error, `~` silent, `↓` an old release. A silent device's error is the one it last reported, so it shows `~`.
 - The share mode (`%`) shows each device's share of the subscription's current window instead. It is the device's tokens since the window began, divided by the team's, times how full the window is. A column then adds up to how full the window is, and the bottom row shows that. The title says the share is an estimate.
+- A device on a collector older than v0.2.0 sends each account's tokens over 90 days, but no days and no tokens since a window began. Its 90d cell is those tokens. A shorter period is `·` when the account was last active on the device before the period began, and `?` otherwise: it is not known, not 0. Such a row sorts by what is known, before the rows with none.
+- A total with a `?` in it never reads as exact. It is `≥` before the part that is known, as `≥68`, or `?` when that part is under a million. The rule is the same for a row's total, a column's, and the grand total, in every period.
+- In the share mode, a window that such a device used since it began cannot be split, since part of the team's tokens are not known. Its share is `?`, and so is the share of every other device that used the window; a device that did not is `·`. The bottom row still shows how full the window is.
 
 Many devices scroll down, and many subscriptions scroll sideways, with the device column and the headers kept in place. The static report prints the columns that fit and ends the header with `+N more`.
 
@@ -189,7 +194,7 @@ The static report ends with a dim legend, listing only the marks on screen, a wo
 ━ used  ─ left  ┃╋ even use  ┈ no reading  ~ stale  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
 ```
 
-With every mark on screen it is one line from 120 columns on. Below that, where one line does not fit, it takes as few lines as it can, of even length: two at 80 columns. The interactive view keeps the legend in `?` help, which says more of each mark.
+With every mark on screen it is one line from 120 columns on. `≥ at least`, which only a device on a collector older than v0.2.0 brings, follows `? unknown`; with it too, the line needs 133 columns. Below that, where one line does not fit, it takes as few lines as it can, of even length: two at 80 columns. The interactive view keeps the legend in `?` help, which says more of each mark.
 
 ## The interactive view
 
@@ -246,6 +251,7 @@ With `--color never`, `NO_COLOR`, or a pipe, the words and marks carry the meani
 | `●` | this device, or logged in here | `*` |
 | `×` `~` `↓` | error, silent or old reading, old release | `x` `~` `v` |
 | `·` | nothing, and separators | `.` |
+| `≥` | at least: a total with a part that is not known | `>=` |
 | `‹›` | the chosen option | `[]` |
 
 ### Text and numbers
@@ -253,7 +259,7 @@ With `--color never`, `NO_COLOR`, or a pipe, the words and marks carry the meani
 - Section titles are bold capitals, followed by counts, with the alarming counts in their state color.
 - Column headers are dim capitals.
 - Durations: `7m`, `34m`, `5d 22h`, `1d 23h`. Clock times are local and 24-hour, with the weekday: `Fri 17:09`.
-- Tokens: whole millions, `<1`, or `·`.
+- Tokens: whole millions, `<1`, or `·`. Tokens that are not known are `?`, and a total with a part that is not known is `≥` before the part that is: `≥68`.
 - Emails show in full in SUBSCRIPTIONS and are cut in the middle when they do not fit. The matrix uses short names.
 
 ### Width

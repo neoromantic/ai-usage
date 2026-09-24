@@ -7,15 +7,22 @@ import (
 
 // TestLegend ends the static page with one line of legend from 120 columns
 // on, with every mark on screen, and with as few lines as fit below that.
+// With the at least mark too, which only a collector older than v0.2.0
+// brings, it is one line from 133 columns on.
 func TestLegend(t *testing.T) {
 	for _, c := range []struct {
 		width, lines int
-	}{{80, 2}, {100, 2}, {119, 2}, {120, 1}, {160, 1}} {
+		atLeast      bool
+	}{{80, 2, false}, {100, 2, false}, {119, 2, false}, {120, 1, false}, {160, 1, false},
+		{80, 2, true}, {131, 2, true}, {133, 1, true}} {
 		for _, ascii := range []bool{false, true} {
 			p := newPage(&Report{}, Options{Width: c.width, ASCII: ascii})
 			for _, k := range []string{"used", "left", "tick", "tickIn", "dotted", "stale", "silent", "unknown", "unread",
 				"dash", "here", "this", "fail", "old", "none", "chosen"} {
 				p.mark(k)
+			}
+			if c.atLeast {
+				p.mark("atLeast")
 			}
 			lines := strings.Split(p.legend(), "\n")
 			if len(lines) != c.lines {

@@ -1249,8 +1249,14 @@ func TestJSONFieldNamesAreStable(t *testing.T) {
 	other := emptyState()
 	other.Sources["codex"] = state.Source{Status: "error", Error: "e"}
 	addAccount(other, "codex", "bob", true, codexQuota(now.Add(-7*time.Hour), 40), 10)
+	// A device on a collector older than v0.2.0, whose tokens are not all
+	// known.
+	older := emptyState()
+	addAccount(older, "codex", "bob", false, nil, 0)
+	spend(older, "codex", "bob", "/w", 10, now.Add(-2*time.Hour))
 	f.in.Team = collect.TeamCache{PulledAt: now, Team: f.key.Fingerprint(), Docs: []snapshot.Doc{
 		otherDoc(t, f.key, "d-other-device", "o", now.Add(-48*time.Hour), other),
+		olderDoc(t, f.key, "d-older-device", "p", now.Add(-time.Hour), older),
 	}}
 	f.in.Config.Aliases = map[string]state.Alias{state.Key("codex", "bob"): {Name: "b", At: now}}
 	f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", now)
@@ -1345,16 +1351,17 @@ team team.devices team.devices.age_seconds team.devices.collected_at team.device
 team.devices.device team.devices.error team.devices.label team.devices.last_error team.devices.last_success_at
 team.devices.old team.devices.os_user team.devices.silent team.devices.sources team.devices.sources.error team.devices.sources.provider
 team.devices.sources.status team.devices.this_device team.devices.usage team.devices.usage.30d team.devices.usage.7d
-team.devices.usage.90d team.devices.usage.today
+team.devices.usage.90d team.devices.usage.today team.devices.usage.unknown
 team.latest_version
 team.matrix team.matrix.columns team.matrix.columns.label team.matrix.columns.name team.matrix.columns.no_quota
 team.matrix.columns.percent team.matrix.columns.provider team.matrix.columns.state team.matrix.columns.usage
 team.matrix.columns.usage.30d team.matrix.columns.usage.7d team.matrix.columns.usage.90d team.matrix.columns.usage.today
-team.matrix.columns.window_tokens
+team.matrix.columns.usage.unknown team.matrix.columns.window_tokens team.matrix.columns.window_unknown
 team.matrix.rows team.matrix.rows.cells team.matrix.rows.cells.share team.matrix.rows.cells.usage
 team.matrix.rows.cells.usage.30d team.matrix.rows.cells.usage.7d team.matrix.rows.cells.usage.90d team.matrix.rows.cells.usage.today
-team.matrix.rows.cells.window_tokens team.matrix.rows.device team.matrix.rows.device_id team.matrix.rows.usage
+team.matrix.rows.cells.usage.unknown team.matrix.rows.cells.window_tokens team.matrix.rows.cells.window_unknown team.matrix.rows.device team.matrix.rows.device_id team.matrix.rows.usage
 team.matrix.rows.usage.30d team.matrix.rows.usage.7d team.matrix.rows.usage.90d team.matrix.rows.usage.today
+team.matrix.rows.usage.unknown
 team.providers team.providers.accounts team.providers.accounts.alias team.providers.accounts.busiest team.providers.accounts.current
 team.providers.accounts.devices team.providers.accounts.label team.providers.accounts.last_active_at
 team.providers.accounts.link team.providers.accounts.link.label team.providers.accounts.link.provider
@@ -1368,7 +1375,7 @@ team.providers.accounts.per_device.device_id team.providers.accounts.per_device.
 team.providers.accounts.per_device.tokens team.providers.accounts.per_device.tokens.cache_read team.providers.accounts.per_device.tokens.cache_write
 team.providers.accounts.per_device.tokens.input team.providers.accounts.per_device.tokens.output
 team.providers.accounts.per_device.usage team.providers.accounts.per_device.usage.30d team.providers.accounts.per_device.usage.7d
-team.providers.accounts.per_device.usage.90d team.providers.accounts.per_device.usage.today
+team.providers.accounts.per_device.usage.90d team.providers.accounts.per_device.usage.today team.providers.accounts.per_device.usage.unknown
 team.providers.accounts.plan team.providers.accounts.quota
 team.providers.accounts.quota.age_seconds team.providers.accounts.quota.device team.providers.accounts.quota.from team.providers.accounts.quota.observed_at
 team.providers.accounts.quota.stale team.providers.accounts.quota.windows
@@ -1381,6 +1388,6 @@ team.providers.accounts.sessions team.providers.accounts.state team.providers.ac
 team.providers.accounts.tokens.cache_read team.providers.accounts.tokens.cache_write team.providers.accounts.tokens.input
 team.providers.accounts.tokens.output
 team.providers.accounts.usage team.providers.accounts.usage.30d team.providers.accounts.usage.7d team.providers.accounts.usage.90d
-team.providers.accounts.usage.today team.providers.accounts.users
+team.providers.accounts.usage.today team.providers.accounts.usage.unknown team.providers.accounts.users
 team.providers.provider team.pulled_at
 `
