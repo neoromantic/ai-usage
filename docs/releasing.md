@@ -16,7 +16,9 @@ The workflow then:
 3. checks that the Linux amd64 binary reports the tag as its version, and that `checksums.txt` lists six files that match it
 4. creates the release as a draft with generated notes, uploads the files, and then publishes it
 
-The draft step keeps `releases/latest` from pointing at a release whose files are still uploading, since installers and running collectors download from it. If the workflow fails after the draft exists, rerun it: it replaces the files and publishes.
+The draft step keeps `releases/latest` from pointing at a release whose files are still uploading. The installers download from `releases/latest/download/`, and running collectors take the tag `releases/latest` redirects to and download from `releases/download/<tag>/`. If the workflow fails after the draft exists, rerun it: it replaces the files and publishes.
+
+Release builds check at every scheduled run, so every collector installs the release within about 15 minutes of its publication and runs it from the run after. A relay change the release needs must be deployed before then; see [Connect collectors to your relay](relay.md#connect-collectors-to-your-relay).
 
 A tag with a suffix, such as `v1.3.0-rc.1`, becomes a prerelease. GitHub's latest release skips prereleases, so the installers and self-update skip it too. Self-update also ignores any version that is not plain `vX.Y.Z`.
 

@@ -106,7 +106,7 @@ func hermetic(t *testing.T) {
 	}))
 	t.Cleanup(guard.Close)
 	newUpdater = func() *selfupdate.Updater {
-		return &selfupdate.Updater{Current: version, API: guard.URL, HTTP: guard.Client(), Exe: filepath.Join(t.TempDir(), "ai-usage")}
+		return &selfupdate.Updater{Current: version, GitHub: guard.URL, HTTP: guard.Client(), Exe: filepath.Join(t.TempDir(), "ai-usage")}
 	}
 }
 
@@ -1320,8 +1320,9 @@ func TestDeviceName(t *testing.T) {
 	}
 }
 
-// fakeRelease serves a v1.3.0 release for this platform. Its binary is this
-// test binary, which starts and reports v1.3.0 as a release would.
+// fakeRelease serves a v1.3.0 release for this platform, laid out as on
+// github.com. Its binary is this test binary, which starts and reports v1.3.0
+// as a release would.
 func fakeRelease(t *testing.T) (*httptest.Server, *int, []byte) {
 	t.Helper()
 	asset := selfupdate.AssetName(runtime.GOOS, runtime.GOARCH)
@@ -1337,18 +1338,17 @@ func fakeRelease(t *testing.T) (*httptest.Server, *int, []byte) {
 	sum := sha256.Sum256(bin)
 	downloads := new(int)
 	var mu sync.Mutex
-	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	releases := "/" + selfupdate.Repo + "/releases"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/repos/" + selfupdate.Repo + "/releases/latest":
-			fmt.Fprintf(w, `{"tag_name":"v1.3.0","assets":[{"name":%q,"browser_download_url":%q},{"name":"checksums.txt","browser_download_url":%q}]}`,
-				asset, srv.URL+"/bin", srv.URL+"/sums")
-		case "/bin":
+		case releases + "/latest":
+			http.Redirect(w, r, releases+"/tag/v1.3.0", http.StatusFound)
+		case releases + "/download/v1.3.0/" + asset:
 			mu.Lock()
 			*downloads++
 			mu.Unlock()
 			_, _ = w.Write(bin)
-		case "/sums":
+		case releases + "/download/v1.3.0/checksums.txt":
 			fmt.Fprintf(w, "%s  %s\n", hex.EncodeToString(sum[:]), asset)
 		default:
 			http.NotFound(w, r)
@@ -1394,8 +1394,8 @@ func TestHousekeepingOnReleaseBuild(t *testing.T) {
 		}
 	}
 
-	// The next check installs the release for the next run.
-	at(7 * time.Hour)
+	// The next scheduled run installs the release for the run after it.
+	at(15 * time.Minute)
 	d.ok("collect", "--quiet", "--offline")
 	st := d.state()
 	if st.Update.Installed != "v1.3.0" || st.Update.Error != "" {
@@ -1410,7 +1410,7 @@ func TestHousekeepingOnReleaseBuild(t *testing.T) {
 
 	// The next run is v1.3.0: nothing is staged any more.
 	version = "v1.3.0"
-	at(8 * time.Hour)
+	at(30 * time.Minute)
 	d.ok("collect", "--quiet", "--offline")
 	if r := d.report(); r.Collector.Update.Staged != nil || r.Collector.Update.Latest == nil || *r.Collector.Update.Latest != "v1.3.0" {
 		t.Fatalf("update = %+v", r.Collector.Update)
@@ -1424,7 +1424,7 @@ func TestHousekeepingOnReleaseBuild(t *testing.T) {
 	// After `schedule remove`, runs do not register again.
 	d.ok("schedule", "remove")
 	writes := cron.writes
-	at(9 * time.Hour)
+	at(45 * time.Minute)
 	d.ok("collect", "--quiet", "--offline")
 	st = d.state()
 	if st.Schedule.Registered || !strings.Contains(st.Schedule.Error, "schedule remove") || cron.writes != writes {
@@ -1450,7 +1450,7 @@ func TestUpdateCommandRecordsResult(t *testing.T) {
 
 	// A failed check is recorded too, and keeps the release it last saw.
 	newUpdater = func() *selfupdate.Updater {
-		return &selfupdate.Updater{Current: version, Exe: exe, API: "http://127.0.0.1:1", HTTP: &http.Client{Timeout: 5 * time.Second}}
+		return &selfupdate.Updater{Current: version, Exe: exe, GitHub: "http://127.0.0.1:1", HTTP: &http.Client{Timeout: 5 * time.Second}}
 	}
 	if r := d.run("", "update"); r.code != 1 {
 		t.Fatalf("failed update = %+v", r)
@@ -1471,7 +1471,7 @@ func releaseBuild(t *testing.T, running string) (exe string, downloads *int, bin
 		t.Fatal(err)
 	}
 	newUpdater = func() *selfupdate.Updater {
-		return &selfupdate.Updater{Current: version, Exe: exe, API: srv.URL, HTTP: srv.Client()}
+		return &selfupdate.Updater{Current: version, Exe: exe, GitHub: srv.URL, HTTP: srv.Client()}
 	}
 	return exe, downloads, bin
 }
@@ -1622,6 +1622,63 @@ func TestUpdateCheckAfterClockRanAhead(t *testing.T) {
 	if st := d.state(); !st.Update.CheckedAt.Equal(t0) || st.Update.Installed != "v1.3.0" || *downloads != 1 {
 		t.Fatalf("update = %+v after %d downloads", st.Update, *downloads)
 	}
+}
+
+// Every scheduled run looks for a release, so one reaches the device within
+// a quarter of an hour. A run a person starts in between, such as the view's
+// r, does not ask GitHub again. A failed check is tried again by the next
+// run, so it shows for one run at most.
+func TestUpdateCheckEveryScheduledRun(t *testing.T) {
+	hermetic(t)
+	version = "v1.3.0"
+	var mu sync.Mutex
+	lookups, busy := 0, false
+	releases := "/" + selfupdate.Repo + "/releases"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != releases+"/latest" {
+			t.Errorf("update check reached %s", r.URL)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		lookups++
+		if busy {
+			http.Error(w, "busy", http.StatusServiceUnavailable)
+			return
+		}
+		http.Redirect(w, r, releases+"/tag/v1.3.0", http.StatusFound)
+	}))
+	t.Cleanup(srv.Close)
+	newUpdater = func() *selfupdate.Updater {
+		return &selfupdate.Updater{Current: version, GitHub: srv.URL, HTTP: srv.Client(), Exe: filepath.Join(t.TempDir(), "ai-usage")}
+	}
+	d := newDevice(t)
+	t0 := time.Now().UTC().Truncate(time.Second)
+	run := func(at time.Duration, fail bool, want int) *state.State {
+		t.Helper()
+		mu.Lock()
+		busy = fail
+		mu.Unlock()
+		clock = func() time.Time { return t0.Add(at) }
+		d.ok("collect", "--quiet", "--offline")
+		mu.Lock()
+		defer mu.Unlock()
+		if lookups != want {
+			t.Fatalf("after the run at %s: %d lookups, want %d", at, lookups, want)
+		}
+		return d.state()
+	}
+	run(0, false, 1)
+	run(15*time.Minute, false, 2)
+	// A run 3 minutes after the last check does not check.
+	run(18*time.Minute, false, 2)
+	run(30*time.Minute, false, 3)
+	if st := run(45*time.Minute, true, 4); !strings.Contains(st.Update.Error, "HTTP 503") {
+		t.Fatalf("update after a failed check = %+v", st.Update)
+	}
+	if st := run(47*time.Minute, false, 5); st.Update.Error != "" || st.Update.Latest != "v1.3.0" {
+		t.Fatalf("update after the check was tried again = %+v", st.Update)
+	}
+	run(50*time.Minute, false, 5)
 }
 
 // A release that cannot read this device's files must still be replaceable

@@ -41,11 +41,14 @@ var (
 	defaultRelay = ""
 )
 
-// updateEvery throttles release checks.
-const updateEvery = 6 * time.Hour
+// updateFloor is the least time between release checks. Scheduled runs are
+// 15 minutes apart, so each of them checks, and a release reaches a device
+// within about a quarter of an hour. Runs a person starts in between, such as
+// the view's r, do not ask GitHub again.
+const updateFloor = 10 * time.Minute
 
 // updateTimeout bounds a release check in a run. A slow link needs minutes
-// for the download.
+// for the download. Finding the latest release has a shorter limit of its own.
 const updateTimeout = 7 * time.Minute
 
 // Tests replace these so they never run a real harness, edit the crontab, or
@@ -409,15 +412,17 @@ func housekeeping(ctx context.Context, d state.Dir, cfg *state.Config, st *state
 	updateIfDue(ctx, st, now)
 }
 
-// updateIfDue checks for a release on a release build at most every
-// updateEvery, and reports whether it did. A check time in the future, left
-// by a clock that once ran ahead, counts as due: otherwise updates would stop
-// until the clock caught up with it.
+// updateIfDue checks for a release on a release build, unless a check
+// succeeded less than updateFloor ago, and reports whether it did. A failed
+// check is tried again by the next run, so a failure that passes shows for
+// one run at most. A check time in the future, left by a clock that once ran
+// ahead, counts as due: otherwise updates would stop until the clock caught
+// up with it.
 func updateIfDue(ctx context.Context, st *state.State, now time.Time) bool {
 	if selfupdate.Dev(version) {
 		return false
 	}
-	if since := now.Sub(st.Update.CheckedAt); since >= 0 && since < updateEvery {
+	if since := now.Sub(st.Update.CheckedAt); st.Update.Error == "" && since >= 0 && since < updateFloor {
 		return false
 	}
 	uctx, cancel := context.WithTimeout(ctx, updateTimeout)

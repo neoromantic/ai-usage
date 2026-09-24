@@ -141,7 +141,7 @@ $env:AI_USAGE_RELAY = 'https://relay.example.com'; irm https://raw.githubusercon
 
 Every machine in a team must use the same relay, since each relay keeps only the snapshots written to it. `AI_USAGE_RELAY` set for a command also overrides the saved relay for that run only. `ai-usage relay clear` goes back to the relay built into the release, if there is one. To build your relay into your own releases, so that new collectors need no setting, see [Default relay](releasing.md#default-relay).
 
-Keep the relay at least as new as the collectors. A relay rejects a snapshot with fields it does not know, as described under [API](#api), and release builds update themselves within about 6 hours of a release. Deploy the relay's update first: on Vercel, pull the upstream repository into your copy and push, or rerun `scripts/deploy-relay.sh` from an updated clone; in Docker, restart the container.
+Keep the relay at least as new as the collectors. A relay rejects a snapshot with fields it does not know, as described under [API](#api), and release builds install a release at their next scheduled run, within about 15 minutes of its publication, and run it from the run after. That leaves no time to catch up afterwards, so deploy the relay's update before the release is published; the relay code a release needs is on `main` before the release is tagged. A collector that updates first gets HTTP 422, keeps its snapshot pending, and sees only itself until the relay catches up. On Vercel, pull the upstream repository into your copy and push, or rerun `scripts/deploy-relay.sh` from an updated clone; in Docker, restart the container.
 
 ## Limits
 

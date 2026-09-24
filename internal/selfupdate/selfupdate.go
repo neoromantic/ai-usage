@@ -9,12 +9,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,19 +31,26 @@ const Repo = "neoromantic/ai-usage"
 type Updater struct {
 	Current string
 	// Exe is the binary to replace. It defaults to the running executable.
-	Exe     string
-	API     string // defaults to https://api.github.com
+	Exe string
+	// GitHub is the site the releases are on, https://github.com by default.
+	GitHub  string
 	HTTP    *http.Client
 	GOOS    string
 	GOARCH  string
 	MaxSize int64
+	// Lookup bounds the request that finds the latest release, so a slow
+	// GitHub holds up a run only this long.
+	Lookup time.Duration
 	// Stall ends a download that receives nothing for this long. There is
 	// no limit on the whole download: the caller's context bounds it, so a
 	// slow link can still finish.
 	Stall time.Duration
 }
 
-var errStalled = errors.New("download stalled")
+var (
+	errStalled = errors.New("download stalled")
+	errSlow    = errors.New("lookup timed out")
+)
 
 // AssetName is the release file for an OS and architecture.
 func AssetName(goos, goarch string) string {
@@ -60,23 +67,17 @@ type Result struct {
 	Installed bool
 }
 
-type release struct {
-	TagName string `json:"tag_name"`
-	Draft   bool   `json:"draft"`
-	Assets  []struct {
-		Name string `json:"name"`
-		URL  string `json:"browser_download_url"`
-	} `json:"assets"`
-}
-
 func (u *Updater) fill() error {
-	if u.API == "" {
-		u.API = "https://api.github.com"
+	if u.GitHub == "" {
+		u.GitHub = "https://github.com"
 	}
 	if u.HTTP == nil {
 		t := http.DefaultTransport.(*http.Transport).Clone()
 		t.ResponseHeaderTimeout = time.Minute
 		u.HTTP = &http.Client{Transport: t}
+	}
+	if u.Lookup == 0 {
+		u.Lookup = 30 * time.Second
 	}
 	if u.Stall == 0 {
 		u.Stall = time.Minute
@@ -119,44 +120,29 @@ func (u *Updater) Check(ctx context.Context) (Result, error) {
 	}
 	cleanupOld(u.Exe)
 
-	var rel release
-	if err := u.getJSON(ctx, u.API+"/repos/"+Repo+"/releases/latest", &rel); err != nil {
+	tag, err := u.latest(ctx)
+	if err != nil {
 		return Result{}, err
 	}
-	res := Result{Latest: rel.TagName}
-	if !Newer(rel.TagName, u.Current) {
+	res := Result{Latest: tag}
+	if !Newer(tag, u.Current) {
 		return res, nil
 	}
 	want := AssetName(u.GOOS, u.GOARCH)
-	var binURL, sumsURL string
-	for _, a := range rel.Assets {
-		switch a.Name {
-		case want:
-			binURL = a.URL
-		case "checksums.txt":
-			sumsURL = a.URL
-		}
-	}
-	if binURL == "" {
-		return res, fmt.Errorf("release %s has no %s", rel.TagName, want)
-	}
-	if sumsURL == "" {
-		return res, fmt.Errorf("release %s has no checksums.txt", rel.TagName)
-	}
 	// A binary in a place this user cannot write, such as a system bin
 	// directory, would download every release and then fail to install it.
 	if err := writable(filepath.Dir(u.Exe)); err != nil {
 		return res, fmt.Errorf("cannot write beside %s: %w", u.Exe, err)
 	}
-	sums, err := u.get(ctx, sumsURL, 1<<20)
+	sums, err := u.download(ctx, tag, "checksums.txt", 1<<20)
 	if err != nil {
 		return res, err
 	}
 	wantSum, ok := checksum(sums, want)
 	if !ok {
-		return res, fmt.Errorf("checksums.txt does not list %s", want)
+		return res, fmt.Errorf("checksums.txt of release %s does not list %s", tag, want)
 	}
-	bin, err := u.get(ctx, binURL, u.MaxSize)
+	bin, err := u.download(ctx, tag, want, u.MaxSize)
 	if err != nil {
 		return res, err
 	}
@@ -171,9 +157,9 @@ func (u *Updater) Check(ctx context.Context) (Result, error) {
 	// The checksum proves the download is what was uploaded, not that it
 	// starts on this machine. A binary that cannot start would never run the
 	// update that replaces it.
-	if err := starts(ctx, tmp, rel.TagName); err != nil {
+	if err := starts(ctx, tmp, tag); err != nil {
 		_ = os.Remove(tmp)
-		return res, fmt.Errorf("release %s does not run here: %w", rel.TagName, err)
+		return res, fmt.Errorf("release %s does not run here: %w", tag, err)
 	}
 	if err := swap(u.Exe, tmp, u.GOOS); err != nil {
 		_ = os.Remove(tmp)
@@ -181,6 +167,55 @@ func (u *Updater) Check(ctx context.Context) (Result, error) {
 	}
 	res.Installed = true
 	return res, nil
+}
+
+// latest is the latest release's tag, read from where releases/latest
+// redirects: releases/tag/<tag>. GitHub skips drafts and prereleases there,
+// as its API does, and redirects to the releases page while there is no
+// release. The page is read rather than the API, which allows 60 requests an
+// hour per address without a token: ten devices behind one address that
+// check at every run would come close to that.
+func (u *Updater) latest(ctx context.Context) (string, error) {
+	releases := u.GitHub + "/" + Repo + "/releases"
+	want, err := url.Parse(releases)
+	if err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeoutCause(ctx, u.Lookup, errSlow)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, releases+"/latest", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "ai-usage/"+u.Current)
+	// The redirect is the answer, so it is not followed.
+	client := *u.HTTP
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := client.Do(req)
+	if err != nil {
+		if errors.Is(context.Cause(ctx), errSlow) {
+			return "", fmt.Errorf("update check: %s did not answer in %s", req.URL.Host, u.Lookup)
+		}
+		return "", fmt.Errorf("update check: %w", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode < 300 || resp.StatusCode > 399 {
+		return "", fmt.Errorf("update check: HTTP %d from %s, not a redirect to the latest release", resp.StatusCode, req.URL.Host)
+	}
+	// A relative Location is resolved against the request.
+	loc, err := resp.Location()
+	if err != nil {
+		return "", fmt.Errorf("update check: HTTP %d from %s with no usable Location: %w", resp.StatusCode, req.URL.Host, err)
+	}
+	tag, ok := strings.CutPrefix(loc.Path, want.Path+"/tag/")
+	switch {
+	case loc.Host == want.Host && ok && tag != "" && !strings.Contains(tag, "/"):
+		return tag, nil
+	case loc.Host == want.Host && strings.TrimSuffix(loc.Path, "/") == want.Path:
+		return "", fmt.Errorf("update check: %s has no release", releases)
+	default:
+		return "", fmt.Errorf("update check: %s redirects to %s, not to a release", req.URL, loc)
+	}
 }
 
 // stage writes the new binary beside the old one, where a rename can swap it
@@ -285,23 +320,16 @@ func checksum(sums []byte, name string) (string, bool) {
 	return "", false
 }
 
-func (u *Updater) getJSON(ctx context.Context, url string, v any) error {
-	b, err := u.get(ctx, url, 4<<20)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(b, v); err != nil {
-		return fmt.Errorf("release list: %w", err)
-	}
-	return nil
-}
-
-func (u *Updater) get(ctx context.Context, url string, limit int64) ([]byte, error) {
+// download fetches the file name of release tag from releases/download/<tag>/,
+// which GitHub redirects to where the file is stored. The installers fetch the
+// same files through releases/latest/download/, which GitHub redirects here.
+func (u *Updater) download(ctx context.Context, tag, name string, limit int64) ([]byte, error) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	stall := time.AfterFunc(u.Stall, func() { cancel(errStalled) })
 	defer stall.Stop()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	file := u.GitHub + "/" + Repo + "/releases/download/" + url.PathEscape(tag) + "/" + url.PathEscape(name)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, file, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -317,8 +345,11 @@ func (u *Updater) get(ctx context.Context, url string, limit int64) ([]byte, err
 		return nil, failed(err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("release %s has no %s", tag, name)
+	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("update check: HTTP %d from %s", resp.StatusCode, req.URL.Host)
+		return nil, fmt.Errorf("update check: HTTP %d from %s", resp.StatusCode, resp.Request.URL.Host)
 	}
 	b, err := io.ReadAll(io.LimitReader(progress{resp.Body, stall, u.Stall}, limit+1))
 	if err != nil {
