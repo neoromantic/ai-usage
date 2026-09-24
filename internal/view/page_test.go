@@ -69,7 +69,8 @@ func TestPageAttentionIsCut(t *testing.T) {
 }
 
 // TestPageSilentDevice: a silent device whose last report had an error says
-// since when, then the error where it fits, and has ~ in the matrix.
+// since when, then the error where it fits, and has ~ in the matrix. A short
+// line drops how long ago before it cuts the error.
 func TestPageSilentDevice(t *testing.T) {
 	r := loadReport(t, "team")
 	since := time.Date(2026, 9, 21, 11, 2, 0, 0, time.UTC)
@@ -82,6 +83,9 @@ func TestPageSilentDevice(t *testing.T) {
 	r.Attention = append(r.Attention, Attention{Kind: AttentionSilent, Devices: []string{"bot-e"}, At: &since, Message: msg})
 	for w, want := range map[int]string{
 		80:  " SILENT  bot-e                no report since Mon 14:02, 2d 3h ago",
+		84:  " SILENT  bot-e                no report since Mon 14:02 · last error: codex: not l…",
+		92:  " SILENT  bot-e                no report since Mon 14:02 · last error: codex: not logged in",
+		96:  " SILENT  bot-e                no report since Mon 14:02 · last error: codex: not logged in",
 		120: " SILENT  bot-e                no report since Mon 14:02, 2d 3h ago · last error: codex: not logged in",
 	} {
 		p := Render(r, Options{Width: w, Loc: sampleZone, Interactive: true})

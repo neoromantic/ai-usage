@@ -314,12 +314,18 @@ func (p *page) attentionText(a Attention, room int) []chunks {
 			s = "no report since " + p.clock(*a.At)
 			long = s + ", " + dur(p.now.Sub(*a.At)) + " ago"
 		}
-		// The error it last reported comes after, cut to the room left.
-		last := g.sep + "last error: "
-		if left := room - width(long+last); a.Message != "" && left >= 12 {
-			return forms(long + last + truncEnd(p.txt(a.Message), left, g.ell))
+		if a.Message == "" {
+			return forms(long, s)
 		}
-		return forms(long, s)
+		// The error it last reported comes after. A short line drops how
+		// long ago first, then cuts the error, then drops it.
+		last := g.sep + "last error: "
+		msg := p.txt(a.Message)
+		out := forms(long+last+msg, s+last+msg)
+		if left := room - width(s+last); left >= 12 {
+			out = append(out, forms(s+last+truncEnd(msg, left, g.ell))...)
+		}
+		return append(out, forms(long, s)...)
 	case AttentionOld:
 		latest := ""
 		if a.Message != "" {
