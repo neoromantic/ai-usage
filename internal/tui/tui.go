@@ -262,7 +262,9 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	case "9":
 		m.setPeriod(view.Quarter)
 	case "%":
-		if m.page.MatrixColumns > 0 {
+		// Share mode can always be left, even when it leaves no column,
+		// as on a team with only NO QUOTA tokens.
+		if m.page.MatrixColumns > 0 || m.opts.Share {
 			m.opts.Share = !m.opts.Share
 			m.draw()
 		}

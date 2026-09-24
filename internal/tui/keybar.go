@@ -103,7 +103,7 @@ func (m Model) items() []item {
 		its = append(its, item{key: sideways, action: "matrix", drop: 3})
 	}
 	its = append(its, item{key: "p", action: "period", pill: m.opts.Period.String(), drop: 4})
-	if m.page.MatrixColumns > 0 {
+	if m.page.MatrixColumns > 0 || m.opts.Share {
 		share := item{key: "%", action: "share", drop: 1}
 		if m.opts.Share {
 			share.action, share.pill = "", "share"

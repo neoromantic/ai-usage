@@ -291,6 +291,21 @@ func TestShare(t *testing.T) {
 	if m = keys(t, m, "%"); m.opts.Share || strings.Contains(bar(m), "%") {
 		t.Fatalf("share without a matrix: %v %q", m.opts.Share, bar(m))
 	}
+	// A matrix of NO QUOTA tokens alone has no column to share; % still
+	// leaves share mode.
+	noQuota := func(r view.Report, o view.Options) view.Page {
+		if o.Share {
+			return fakeRender(100, 0)(r, o)
+		}
+		return fakeRender(100, 1)(r, o)
+	}
+	m = keys(t, model(t, 120, 30, Config{Render: noQuota}), "%")
+	if !m.opts.Share || !strings.Contains(bar(m), "% ‹share›") {
+		t.Fatalf("share of NO QUOTA only: %v %q", m.opts.Share, bar(m))
+	}
+	if m = keys(t, m, "%"); m.opts.Share || !strings.Contains(bar(m), "% share") {
+		t.Fatalf("%% did not leave share mode: %q", bar(m))
+	}
 }
 
 func TestMatrixScroll(t *testing.T) {
