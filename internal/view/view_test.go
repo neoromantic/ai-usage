@@ -782,6 +782,20 @@ func TestRefusalReading(t *testing.T) {
 		}
 		out[a.Account] = a.Window
 	}
+	// Nobody knows how full ann's weekly window is, so the matrix does not
+	// say it is empty.
+	seen := false
+	for _, c := range r.Team.Matrix.Columns {
+		if c.Label == "ann" {
+			seen = true
+			if c.Percent != nil {
+				t.Fatalf("ann's column = %+v", c)
+			}
+		}
+	}
+	if !seen {
+		t.Fatalf("no column for ann: %+v", r.Team.Matrix.Columns)
+	}
 	if len(r.Attention) != 2 || out["ann"] != "7d Opus" || out["kim"] != "" {
 		t.Fatalf("attention = %+v", r.Attention)
 	}

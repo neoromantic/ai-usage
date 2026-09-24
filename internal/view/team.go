@@ -461,7 +461,7 @@ func matrix(providers []TeamProvider, byProv map[string]map[string]*teamAccount,
 			}
 			c := Column{Provider: tp.Provider, Label: a.Label, Name: a.Name, State: a.State}
 			if a.Quota != nil {
-				if mw := mainWindow(a.Quota.Windows); mw != nil && !mw.Reset {
+				if mw := mainWindow(a.Quota.Windows); mw != nil && !mw.Reset && !mw.Unread {
 					p := mw.Percent
 					c.Percent = &p
 				}
