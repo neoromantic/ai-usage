@@ -167,21 +167,19 @@ func TestOlderCollector(t *testing.T) {
 func TestOlderUsage(t *testing.T) {
 	// now is 12:00 UTC: today began 12 hours ago.
 	for _, c := range []struct {
-		name  string
-		last  *time.Time
-		shift int
-		want  Usage
+		name string
+		last *time.Time
+		want Usage
 	}{
-		{"active today", tp(now.Add(-2 * time.Hour)), 0, Usage{Quarter: 100, Unknown: recent}},
-		{"no activity known", nil, 0, Usage{Quarter: 100, Unknown: recent}},
-		{"active 3 days ago", tp(now.Add(-3 * 24 * time.Hour)), 0, Usage{Quarter: 100, Unknown: Week.bit() | Month.bit()}},
-		{"active 40 days ago", tp(now.Add(-40 * 24 * time.Hour)), 0, Usage{Quarter: 100}},
-		{"before the 90 days", tp(now.Add(-100 * 24 * time.Hour)), 0, Usage{}},
-		// The device's 90 days began a day before the report's, so they
-		// are not the report's either.
-		{"collected yesterday", tp(now.Add(-30 * time.Hour)), 1, Usage{Unknown: Week.bit() | Month.bit() | Quarter.bit()}},
+		{"active today", tp(now.Add(-2 * time.Hour)), Usage{Quarter: 100, Unknown: recent}},
+		{"no activity known", nil, Usage{Quarter: 100, Unknown: recent}},
+		// Yesterday, as on a device that last collected then.
+		{"active yesterday", tp(now.Add(-30 * time.Hour)), Usage{Quarter: 100, Unknown: Week.bit() | Month.bit()}},
+		{"active 3 days ago", tp(now.Add(-3 * 24 * time.Hour)), Usage{Quarter: 100, Unknown: Week.bit() | Month.bit()}},
+		{"active 40 days ago", tp(now.Add(-40 * 24 * time.Hour)), Usage{Quarter: 100}},
+		{"before the 90 days", tp(now.Add(-100 * 24 * time.Hour)), Usage{}},
 	} {
-		if got := olderUsage(100, c.last, c.shift, now); got != c.want {
+		if got := olderUsage(100, c.last, now); got != c.want {
 			t.Errorf("%s: %+v, want %+v", c.name, got, c.want)
 		}
 	}
@@ -220,6 +218,68 @@ func TestOlderCollectorSplitsHermesByLogin(t *testing.T) {
 		}
 		if a := findTeamAccount(t, r, "codex", label); a.Users != 1 || a.Busiest == nil || *a.Busiest != "otherbox" {
 			t.Fatalf("%s users = %d %v", label, a.Users, a.Busiest)
+		}
+	}
+}
+
+// pageLine is the page's first line that starts with name, after a
+// device's mark, as it is written.
+func pageLine(t *testing.T, page, name string) string {
+	t.Helper()
+	for _, l := range strings.Split(page, "\n") {
+		if f := strings.Fields(strings.TrimLeft(sgr.ReplaceAllString(l, ""), "●×~↓ ")); len(f) > 0 && f[0] == name {
+			return l
+		}
+	}
+	t.Fatalf("no %s row:\n%s", name, page)
+	return ""
+}
+
+// matrixRow is the tail of the page's first line that starts with name:
+// its cells and its total.
+func matrixRow(t *testing.T, page, name string) string {
+	t.Helper()
+	f := strings.Fields(strings.TrimLeft(sgr.ReplaceAllString(pageLine(t, page, name), ""), "●×~↓ "))
+	return strings.Join(f[1:], " ")
+}
+
+// A device on an older collector that last collected yesterday, or 2 days
+// ago, still shows its tokens at 90 days: they are its own 90 days, which
+// end when it collected.
+func TestOlderCollectorSilent(t *testing.T) {
+	for _, ago := range []time.Duration{30 * time.Hour, 2 * 24 * time.Hour} {
+		st := emptyState()
+		addAccount(st, "claude", "ann@acme.dev", true, nil, 0)
+		spend(st, "claude", "ann@acme.dev", "/w", 3_000_000, now.Add(-time.Hour))
+		f := newFixture(t, st)
+		old := emptyState()
+		addAccount(old, "claude", "ann@acme.dev", false, nil, 0)
+		spend(old, "claude", "ann@acme.dev", "/w", 20_000_000, now.Add(-ago-time.Hour), now.Add(-ago-5*24*time.Hour))
+		r := withTeam(t, f, olderDoc(t, f.key, "d-oldbox", "oldbox", now.Add(-ago), old))
+
+		if u := teamDevice(t, r, "oldbox").Usage; u != (Usage{Quarter: 40_000_000, Unknown: Week.bit() | Month.bit()}) {
+			t.Fatalf("%v ago: oldbox usage = %+v", ago, u)
+		}
+		for _, c := range []struct {
+			per              Period
+			old, this, total string
+		}{
+			// It was last active before today began, so today is known.
+			{Today, "· ·", "3 3", "3 3"},
+			{Week, "? ?", "3 3", "≥3 ≥3"},
+			{Month, "? ?", "3 3", "≥3 ≥3"},
+			{Quarter, "40 40", "3 3", "43 43"},
+		} {
+			page := plainText(r, Options{Width: 120, Loc: time.UTC, Period: c.per})
+			if got := matrixRow(t, page, "oldbox"); got != c.old {
+				t.Errorf("%v ago, %s: oldbox %q, want %q", ago, c.per, got, c.old)
+			}
+			if got := matrixRow(t, page, "thisbox"); got != c.this {
+				t.Errorf("%v ago, %s: thisbox %q, want %q", ago, c.per, got, c.this)
+			}
+			if got := matrixRow(t, page, "TOTAL"); got != c.total {
+				t.Errorf("%v ago, %s: TOTAL %q, want %q", ago, c.per, got, c.total)
+			}
 		}
 	}
 }

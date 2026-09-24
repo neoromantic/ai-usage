@@ -171,7 +171,7 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 			usage := usageOf(a.Days, dv.shift)
 			older := fromOlderCollector(a)
 			if older {
-				usage = olderUsage(logs.InOut(a.Tokens), a.LastActiveAt, dv.shift, now)
+				usage = olderUsage(logs.InOut(a.Tokens), a.LastActiveAt, now)
 			}
 			dev.Usage = dev.Usage.add(usage)
 			x.ta.Devices = append(x.ta.Devices, dv.name)
@@ -431,7 +431,7 @@ func (a devAccount) split(logins []login, shift int, now time.Time) []devAccount
 	for i := range parts {
 		parts[i].usage = usageOf(parts[i].days, shift)
 		if a.older {
-			parts[i].usage = olderUsage(parts[i].inOut, a.last, shift, now)
+			parts[i].usage = olderUsage(parts[i].inOut, a.last, now)
 		}
 	}
 	return parts
