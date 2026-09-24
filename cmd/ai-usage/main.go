@@ -57,59 +57,6 @@ var (
 	newUpdater   = func() *selfupdate.Updater { return &selfupdate.Updater{Current: version} }
 )
 
-const usage = `ai-usage collects AI harness usage on this device and shares it with a team.
-
-Usage:
-  ai-usage [--json] [--offline] [VIEW] [DISPLAY]
-                                         collect now and print the report
-  ai-usage collect [--quiet] [--json] [--offline] [--home DIR] [VIEW] [DISPLAY]
-                                         what the system scheduler runs; --home overrides AI_USAGE_HOME
-  ai-usage report [--json] [VIEW] [DISPLAY]
-                                         print the last collected report, no collection
-  ai-usage status [--json] [DISPLAY]     collector health: version, last success, last error
-  ai-usage team                          show the team fingerprint and devices
-  ai-usage team key                      print the team private key (the only secret)
-  ai-usage team join [KEY]               join a team; the key is read from stdin when omitted
-  ai-usage team forget-device ID         remove a device's snapshot from the relay
-  ai-usage home                          list the harness homes this device reads
-  ai-usage home add PROVIDER DIR... [--quota-from PROVIDER:DIR]
-                                         read more homes; --quota-from names the Codex or
-                                         Grok home whose login these Hermes homes bill through
-  ai-usage home remove PROVIDER DIR... [--forget]
-                                         stop reading homes added before; --forget also drops
-                                         their sessions, for homes another collector reads now
-  ai-usage relay show|set URL|clear      choose the relay this device publishes to
-  ai-usage name show|set NAME|clear      what the team calls this device, instead of its host name
-  ai-usage alias [ACCOUNT NAME | ACCOUNT --clear]
-                                         list or set the short name the whole team sees for an
-                                         account; ACCOUNT is a label, a name, or PROVIDER:LABEL
-  ai-usage relay serve [--addr :8080] [--client-ip-header NAME]
-                                         run a relay (Vercel KV from env, else memory)
-  ai-usage schedule install|remove|status
-  ai-usage schedule run                  collect every 15 minutes in the foreground, where there is
-                                         no system scheduler, as in a container
-  ai-usage update                        check for a release now
-  ai-usage version
-
-View:
-  --projects             every project on this device, not only the busiest
-
-Display:
-  --color=auto|always|never
-                         auto colors a terminal, unless NO_COLOR is set or TERM=dumb
-  --ascii                ASCII glyphs; the default without a UTF-8 locale
-  --width N              columns, 80 to 160; default: the terminal's, else COLUMNS, else 80
-  --plain                print the report; on a terminal, the default is the interactive
-                         view, with every key under ?
-
-Environment:
-  AI_USAGE_HOME          collector directory (default: OS config dir/ai-usage)
-  AI_USAGE_RELAY         relay URL, overrides the configured one
-  AI_USAGE_NAME          this device's name in the team, over the configured one, in runs that see it
-  AI_USAGE_NO_SCHEDULE   set to skip scheduler registration on this run
-  CLAUDE_CONFIG_DIR, CODEX_HOME, GROK_HOME, HERMES_HOME   extra harness homes
-`
-
 func main() {
 	// launchd stops a run it started with SIGTERM; the run still releases its
 	// lock on the way out.
@@ -151,19 +98,21 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	case "version", "-version", "--version":
 		fmt.Fprintln(stdout, version)
 	case "help", "-h", "-help", "--help":
-		fmt.Fprint(stdout, usage)
+		writeHelp(stdout)
 	default:
-		fmt.Fprintf(stderr, "unknown command %q\n\n%s", cmd, usage)
+		fmt.Fprintf(stderr, "unknown command %q\n\n", cmd)
+		writeHelp(stderr)
 		return 2
 	}
 	if errors.Is(err, flag.ErrHelp) {
-		fmt.Fprint(stdout, usage)
+		writeHelp(stdout)
 		return 0
 	}
 	if err != nil {
 		var ue usageError
 		if errors.As(err, &ue) {
-			fmt.Fprintf(stderr, "%s\n\n%s", err, usage)
+			fmt.Fprintf(stderr, "%s\n\n", err)
+			writeHelp(stderr)
 			return 2
 		}
 		fmt.Fprintf(stderr, "ai-usage: %s\n", err)

@@ -142,13 +142,13 @@ func TestAliasRefusals(t *testing.T) {
 		{"alias", "dev", "--bogus"},
 		{"alias", "claude:", "ann"},
 	} {
-		if r := d.run("", args...); r.code != 2 || !strings.Contains(r.stderr, "Usage:") {
+		if r := d.run("", args...); r.code != 2 || !helpShown(r.stderr) {
 			t.Fatalf("%v: exit %d, stderr %q", args, r.code, r.stderr)
 		}
 	}
 	for _, bad := range []string{"", "  ", "an n", "a\tb", "thirteen-long", "日本語日本語日", "evil\x1b[2J", "a\u202eb", "a\u200db"} {
 		r := d.run("", "alias", "claude:dev", bad)
-		if r.code != 2 || !strings.Contains(r.stderr, "Usage:") {
+		if r.code != 2 || !helpShown(r.stderr) {
 			t.Fatalf("name %q: exit %d, stderr %q", bad, r.code, r.stderr)
 		}
 	}
@@ -160,7 +160,7 @@ func TestAliasRefusals(t *testing.T) {
 	// accounts instead of the usage. "unknown" is no one's account.
 	for _, args := range [][]string{{"alias", "nobody", "ann"}, {"alias", "unknown", "ann"}} {
 		r := d.run("", args...)
-		if r.code != 2 || strings.Contains(r.stderr, "Usage:") || !strings.Contains(r.stderr, "dev@example.com") || !strings.Contains(r.stderr, "dev@other.org") {
+		if r.code != 2 || helpShown(r.stderr) || !strings.Contains(r.stderr, "dev@example.com") || !strings.Contains(r.stderr, "dev@other.org") {
 			t.Fatalf("%v: exit %d, stderr %q", args, r.code, r.stderr)
 		}
 		for _, line := range strings.Split(r.stderr, "\n")[1:] {
@@ -170,7 +170,7 @@ func TestAliasRefusals(t *testing.T) {
 		}
 	}
 	r := d.run("", "alias", "dev", "ann")
-	if r.code != 2 || strings.Contains(r.stderr, "Usage:") || !strings.Contains(r.stderr, "dev@example.com") || !strings.Contains(r.stderr, "dev@other.org") {
+	if r.code != 2 || helpShown(r.stderr) || !strings.Contains(r.stderr, "dev@example.com") || !strings.Contains(r.stderr, "dev@other.org") {
 		t.Fatalf("ambiguous: exit %d, stderr %q", r.code, r.stderr)
 	}
 	// A name another account of the provider goes by would tell them apart

@@ -121,7 +121,7 @@ func TestDisplayFlagErrors(t *testing.T) {
 		{"status", "--projects"},
 	} {
 		r := d.run("", args...)
-		if r.code != 2 || !strings.Contains(r.stderr, "Usage:") {
+		if r.code != 2 || !helpShown(r.stderr) {
 			t.Fatalf("%v: exit %d, stderr %q", args, r.code, r.stderr)
 		}
 	}

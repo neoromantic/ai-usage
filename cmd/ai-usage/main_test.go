@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/neoromantic/ai-usage/internal/probe"
 	"github.com/neoromantic/ai-usage/internal/schedule"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
@@ -314,7 +316,7 @@ func TestVersionHelpAndUsageErrors(t *testing.T) {
 		}
 	}
 	for _, args := range [][]string{{"help"}, {"-h"}, {"--help"}, {"report", "-h"}, {"collect", "--help"}} {
-		if out := d.ok(args...); !strings.Contains(out, "Usage:") {
+		if out := d.ok(args...); out != plainHelp() {
 			t.Fatalf("%v printed %q", args, out)
 		}
 	}
@@ -334,7 +336,7 @@ func TestVersionHelpAndUsageErrors(t *testing.T) {
 		{"schedule", "bogus"},
 	} {
 		r := d.run("", args...)
-		if r.code != 2 || !strings.Contains(r.stderr, "Usage:") {
+		if r.code != 2 || !helpShown(r.stderr) {
 			t.Fatalf("%v: exit %d, stderr %q", args, r.code, r.stderr)
 		}
 	}
@@ -343,53 +345,61 @@ func TestVersionHelpAndUsageErrors(t *testing.T) {
 	}
 }
 
-// TestUsageSections: each [SECTION] in a synopsis is a heading of the usage,
-// and the command takes every flag listed under that heading.
+// plainHelp is the help as it is printed out of a terminal: with no
+// escapes, and 80 columns wide.
+func plainHelp() string { return ansi.Strip(helpText(view.Options{Width: 80})) }
+
+// helpShown is whether out ends with the help, after an error.
+func helpShown(out string) bool { return strings.HasSuffix(out, "\n\n"+plainHelp()) }
+
+// TestUsageSections: each [SECTION] in a command is a section of the help,
+// and the command takes every flag listed in that section.
 func TestUsageSections(t *testing.T) {
 	hermetic(t)
 	d := newDevice(t)
 	sections := map[string][]string{}
-	heading := ""
-	flagLine := regexp.MustCompile(`^  (--[a-z-]+)(=[a-z]+| [A-Z]+)?`)
-	for _, l := range strings.Split(usage, "\n") {
-		if h, ok := strings.CutSuffix(l, ":"); ok && !strings.HasPrefix(l, " ") {
-			heading = strings.ToUpper(h)
-		} else if m := flagLine.FindStringSubmatch(l); m != nil {
-			// A flag with a value gets one it takes: the first choice, or 1.
-			f := m[1] + m[2]
-			if strings.HasPrefix(m[2], " ") {
-				f = m[1] + "=1"
+	flagLine := regexp.MustCompile(`^(--[a-z-]+)(=[a-z]+| [A-Z]+)?`)
+	for _, s := range help {
+		for _, l := range s.lines {
+			if m := flagLine.FindStringSubmatch(l.what); m != nil {
+				// A flag with a value gets one it takes: the first choice, or 1.
+				f := m[1] + m[2]
+				if strings.HasPrefix(m[2], " ") {
+					f = m[1] + "=1"
+				}
+				sections[s.title] = append(sections[s.title], f)
 			}
-			sections[heading] = append(sections[heading], f)
 		}
 	}
 	word := regexp.MustCompile(`^[a-z-]+$`)
 	checked := 0
-	for _, l := range strings.Split(usage, "\n") {
-		rest, ok := strings.CutPrefix(l, "  ai-usage")
-		if !ok {
-			continue
-		}
-		var cmd []string
-		for _, f := range strings.Fields(rest) {
-			if !word.MatchString(f) {
-				break
+	for _, s := range help {
+		for _, l := range s.lines {
+			rest, ok := strings.CutPrefix(l.what, "ai-usage")
+			if !ok {
+				continue
 			}
-			cmd = append(cmd, f)
-		}
-		for _, m := range regexp.MustCompile(`\[([A-Z]+)\]`).FindAllStringSubmatch(rest, -1) {
-			flags, ok := sections[m[1]]
-			// KEY is the argument its line explains.
-			if !ok && m[1] != "KEY" {
-				t.Errorf("%q: no heading says what %s is", strings.TrimSpace(l), m[0])
-			}
-			for _, f := range flags {
-				// -h stops the command once its flags are read.
-				if r := d.run("", append(slices.Clone(cmd), f, "-h")...); r.code != 0 {
-					first, _, _ := strings.Cut(r.stderr, "\n")
-					t.Errorf("ai-usage %s: %s", strings.Join(append(cmd, f), " "), first)
+			var cmd []string
+			for _, f := range strings.Fields(rest) {
+				if !word.MatchString(f) {
+					break
 				}
-				checked++
+				cmd = append(cmd, f)
+			}
+			for _, m := range regexp.MustCompile(`\[([A-Z]+)\]`).FindAllStringSubmatch(rest, -1) {
+				flags, ok := sections[m[1]]
+				// KEY is the argument its line explains.
+				if !ok && m[1] != "KEY" {
+					t.Errorf("%q: no section says what %s is", l.what, m[0])
+				}
+				for _, f := range flags {
+					// -h stops the command once its flags are read.
+					if r := d.run("", append(slices.Clone(cmd), f, "-h")...); r.code != 0 {
+						first, _, _ := strings.Cut(r.stderr, "\n")
+						t.Errorf("ai-usage %s: %s", strings.Join(append(cmd, f), " "), first)
+					}
+					checked++
+				}
 			}
 		}
 	}
