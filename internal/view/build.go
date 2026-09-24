@@ -103,7 +103,7 @@ func Build(in Input) Report {
 			a.Name = teamName(r.Team, r.Providers[i].Provider, a.Label)
 		}
 	}
-	r.Attention = attention(r.Team, now)
+	r.Attention = attention(r.Team, r.Collector, now)
 	return r
 }
 

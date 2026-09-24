@@ -607,6 +607,46 @@ func TestAttention(t *testing.T) {
 	}
 }
 
+// The header's failing relay and update check have their errors in
+// ATTENTION, as this device's, although the run that met them read every
+// source and counts as a success.
+func TestHeaderFailuresAreInAttention(t *testing.T) {
+	st := emptyState()
+	st.Relay = state.Relay{LastPushAt: now.Add(-time.Hour), Pending: true, LastError: "relay: service unavailable (HTTP 503)", LastErrorAt: now}
+	st.LastError, st.LastErrorAt = st.Relay.LastError, now
+	st.Update = state.Update{CheckedAt: now, Error: "cannot write beside /opt/bin/ai-usage: permission denied"}
+	f := newFixture(t, st)
+	r := Build(f.in)
+	var got []string
+	for _, a := range r.Attention {
+		got = append(got, a.Kind+" "+strings.Join(a.Devices, ",")+" "+a.Message)
+	}
+	want := []string{
+		"error thisbox relay: service unavailable (HTTP 503)",
+		"error thisbox update: cannot write beside /opt/bin/ai-usage: permission denied",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("attention =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	page := plainText(r, Options{Width: 120, Loc: time.UTC})
+	for _, s := range []string{
+		"● relay failing  ● update check failed\n",
+		"\n ERROR  thisbox  relay: service unavailable (HTTP 503)\n",
+		"\n ERROR  thisbox  update: cannot write beside /opt/bin/ai-usage: permission denied\n",
+	} {
+		if !strings.Contains(page, s) {
+			t.Errorf("the page lacks %q:\n%s", s, page)
+		}
+	}
+
+	// Without a relay, or on a build that does not update, the header shows
+	// no failure, and there is no error.
+	f.in.RelayURL, f.in.Version = "", "dev"
+	if r := Build(f.in); len(r.Attention) != 0 {
+		t.Fatalf("attention = %+v", r.Attention)
+	}
+}
+
 // A device's own error starts with its harness's name, so it is not named
 // twice; a last run that failed after the last success is an error too.
 func TestDeviceErrors(t *testing.T) {
@@ -1083,8 +1123,9 @@ func TestCollectorSection(t *testing.T) {
 		t.Fatalf("staged = %v", c.Update.Staged)
 	}
 	// This device is on an older release than the one its check saw, and a
-	// harness of it fails.
-	if len(r.Attention) != 2 || r.Attention[0].Kind != AttentionError || r.Attention[0].Message != "claude: 2 malformed lines" || r.Attention[1].Kind != AttentionOld {
+	// harness of it and its relay fail.
+	if len(r.Attention) != 3 || r.Attention[0].Kind != AttentionError || r.Attention[0].Message != "claude: 2 malformed lines" ||
+		r.Attention[1].Kind != AttentionError || r.Attention[1].Message != "relay unreachable: refused" || r.Attention[2].Kind != AttentionOld {
 		t.Fatalf("attention = %+v", r.Attention)
 	}
 	status := StatusText(r, "/home/.config/ai-usage", Options{Width: 80, Loc: time.UTC})

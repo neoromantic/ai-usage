@@ -3,6 +3,8 @@ package view
 import (
 	"sort"
 	"time"
+
+	"github.com/neoromantic/ai-usage/internal/selfupdate"
 )
 
 // attentionRank orders the kinds, most urgent first.
@@ -18,7 +20,8 @@ var attentionRank = map[string]int{
 // attention is what needs attention now, most urgent first: windows that
 // are out or will run out, devices that fail or are silent, devices on an
 // older release, and windows past half that will be left mostly unused.
-func attention(t Team, now time.Time) []Attention {
+// This device's relay and update check fail as errors of this device.
+func attention(t Team, c Collector, now time.Time) []Attention {
 	out := []Attention{}
 	for _, p := range t.Providers {
 		for _, a := range p.Accounts {
@@ -66,6 +69,11 @@ func attention(t Team, now time.Time) []Attention {
 		case d.Silent:
 			out = append(out, Attention{Kind: AttentionSilent, Devices: []string{d.Label}, At: timePtr(d.CollectedAt)})
 		}
+		if d.This {
+			for _, e := range collectorErrors(c) {
+				out = append(out, Attention{Kind: AttentionError, Devices: []string{d.Label}, Message: e})
+			}
+		}
 		if d.Old {
 			old = append(old, d.Label)
 		}
@@ -93,6 +101,21 @@ func attention(t Team, now time.Time) []Attention {
 		}
 		return false
 	})
+	return out
+}
+
+// collectorErrors are the errors behind the header's failing relay and
+// update check, each named once. A run that failed is its device's error
+// already; a run whose sources were read counts as a success, whatever its
+// relay or update check did.
+func collectorErrors(c Collector) []string {
+	var out []string
+	if c.Relay.URL != nil && c.Relay.LastError != nil {
+		out = append(out, sourceError("relay", *c.Relay.LastError))
+	}
+	if c.Update.Error != nil && c.Update.Staged == nil && !selfupdate.Dev(c.Version) {
+		out = append(out, sourceError("update", *c.Update.Error))
+	}
 	return out
 }
 
