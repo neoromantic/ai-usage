@@ -226,10 +226,11 @@ type Session struct {
 	// provider, keyed by Key(provider, label). It is also in By.
 	Via map[string]snapshot.Tokens `json:"via,omitempty"`
 	// Hours is the session's input plus output tokens by the UTC hour they
-	// were spent in, keyed by Unix time / 3600: what its log last showed,
-	// or, for a log that records no times, the growth each run saw, at the
-	// hour of the session's last activity. It outlives the log, which a
-	// harness may delete before the ledger forgets the session.
+	// were spent in, keyed by Unix time / 3600: the hours its log showed when
+	// first read, then each run's growth, where the log grew or, for a log
+	// that records no times, at the hour of the session's last activity. It
+	// outlives the log, which a harness may delete before the ledger forgets
+	// the session.
 	Hours map[int64]int64 `json:"h,omitempty"`
 }
 

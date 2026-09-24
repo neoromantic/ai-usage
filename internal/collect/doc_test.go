@@ -347,9 +347,10 @@ func TestDocCarriesDaysRecentAndAliases(t *testing.T) {
 	}
 }
 
-// TestLedgerPlacesHours: a log with times gives the session's hours, a
-// partial read keeps the higher count of each hour, and a log without times
-// has each run's growth at the session's last activity.
+// TestLedgerPlacesHours: a log with times gives the hours of a session read
+// for the first time, a later read adds its growth where the log grew, even
+// when it is partial, and a log without times has each run's growth at the
+// session's last activity.
 func TestLedgerPlacesHours(t *testing.T) {
 	h := t0.Unix() / 3600
 	st := &state.State{Accounts: map[string]*state.Account{}, Sessions: map[string]*state.Session{}}
@@ -359,10 +360,11 @@ func TestLedgerPlacesHours(t *testing.T) {
 	if got := st.Sessions[state.Key("codex", "s1")].Hours; !reflect.DeepEqual(got, map[int64]int64{h - 1: 40, h: 60}) {
 		t.Errorf("hours = %v", got)
 	}
+	// A partial read shows 110 tokens, all in the last hour: 10 more.
 	timed.Tokens.Input, timed.Hours = 100, map[int64]int64{h: 110}
 	attribute(st, "codex", timed, "ann", true, t0, growth)
-	if got := st.Sessions[state.Key("codex", "s1")].Hours; !reflect.DeepEqual(got, map[int64]int64{h - 1: 40, h: 110}) {
-		t.Errorf("hours after a partial read = %v", got)
+	if got := st.Sessions[state.Key("codex", "s1")].Hours; !reflect.DeepEqual(got, map[int64]int64{h - 1: 40, h: 70}) {
+		t.Errorf("hours after a partial read = %v, want the 10 grown added", got)
 	}
 
 	untimed := logs.Session{ID: "s2", Tokens: snapshot.Tokens{Input: 30}, Updated: t0.Add(-2 * time.Hour)}
@@ -371,5 +373,54 @@ func TestLedgerPlacesHours(t *testing.T) {
 	attribute(st, "hermes", untimed, "openrouter", false, t0, growth)
 	if got := st.Sessions[state.Key("hermes", "s2")].Hours; !reflect.DeepEqual(got, map[int64]int64{h - 2: 30, h: 20}) {
 		t.Errorf("untimed hours = %v", got)
+	}
+}
+
+// TestHoursNeverExceedTheTokens: a Claude log spreads the tokens it records
+// no time for over its timed hours, anew as the session grows, and a file
+// that cannot be read keeps every read partial. A session's hours still add
+// up to its tokens, and its account's days count no more than it spent.
+func TestHoursNeverExceedTheTokens(t *testing.T) {
+	h := t0.Unix() / 3600
+	st := &state.State{Accounts: map[string]*state.Account{}, Sessions: map[string]*state.Session{}}
+	growth := map[string]snapshot.Tokens{}
+	// 100 used at h-5, and side calls of 100 spread over that hour.
+	s1 := logs.Session{ID: "s1", Tokens: snapshot.Tokens{Input: 200}, Updated: t0.Add(-5 * time.Hour), Hours: map[int64]int64{h - 5: 200}}
+	attribute(st, "claude", s1, "ann@acme.dev", true, t0, growth)
+	// Resumed for 100 more at h, with the side calls not read this time.
+	s1.Updated, s1.Hours = t0, map[int64]int64{h - 5: 100, h: 100}
+	attribute(st, "claude", s1, "ann@acme.dev", true, t0, growth)
+	if got, want := st.Sessions[state.Key("claude", "s1")].Hours, map[int64]int64{h - 5: 200}; !reflect.DeepEqual(got, want) {
+		t.Errorf("hours of a session that did not grow = %v, want %v", got, want)
+	}
+	// The same with the side calls read: 100 more, spread anew.
+	s2 := logs.Session{ID: "s2", Tokens: snapshot.Tokens{Input: 200}, Updated: t0.Add(-5 * time.Hour), Hours: map[int64]int64{h - 5: 200}}
+	attribute(st, "claude", s2, "ann@acme.dev", true, t0, growth)
+	s2.Tokens.Input, s2.Updated, s2.Hours = 300, t0, map[int64]int64{h - 5: 150, h: 150}
+	attribute(st, "claude", s2, "ann@acme.dev", true, t0, growth)
+	if got, want := st.Sessions[state.Key("claude", "s2")].Hours, map[int64]int64{h - 5: 200, h: 100}; !reflect.DeepEqual(got, want) {
+		t.Errorf("hours = %v, want %v", got, want)
+	}
+	ann := totalsFor(t, st, "claude", "ann@acme.dev")
+	if got := DaysOf(ann.Hours, t0); len(got) != 1 || got[0] != logs.InOut(ann.Tokens) {
+		t.Errorf("days = %v for %d tokens", got, logs.InOut(ann.Tokens))
+	}
+}
+
+// TestGrowthIsNotPlacedInHoursTheLedgerDropped: the log of a session that
+// runs longer than the retention window still shows the hours the ledger
+// dropped. What the session grows by goes to the hours it was spent in.
+func TestGrowthIsNotPlacedInHoursTheLedgerDropped(t *testing.T) {
+	h := func(at time.Time) int64 { return at.Unix() / 3600 }
+	old, yesterday := t0.Add(-state.Retention-24*time.Hour), t0.Add(-24*time.Hour)
+	st := &state.State{Accounts: map[string]*state.Account{}, Sessions: map[string]*state.Session{}}
+	growth := map[string]snapshot.Tokens{}
+	s := logs.Session{ID: "s1", Tokens: snapshot.Tokens{Input: 1100}, Updated: yesterday, Hours: map[int64]int64{h(old): 1000, h(yesterday): 100}}
+	attribute(st, "codex", s, "ann@acme.dev", false, yesterday, growth)
+	prune(st, t0)
+	s.Tokens.Input, s.Updated, s.Hours = 1150, t0, map[int64]int64{h(old): 1000, h(yesterday): 100, h(t0): 50}
+	attribute(st, "codex", s, "ann@acme.dev", false, t0, growth)
+	if got, want := st.Sessions[state.Key("codex", "s1")].Hours, map[int64]int64{h(yesterday): 100, h(t0): 50}; !reflect.DeepEqual(got, want) {
+		t.Errorf("hours = %v, want %v", got, want)
 	}
 }
