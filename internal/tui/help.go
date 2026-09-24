@@ -51,7 +51,7 @@ func (m Model) helpLines() []string {
 	}
 	states := []entry{
 		{view.StateOut, "the window is at 100%"},
-		{view.StateOver, "100% or more: it runs out before it resets"},
+		{view.StateOver, "100% or more: it runs out by its reset"},
 		{view.StateTight, "85% to 99%"},
 		{view.StateOK, "50% to 84%"},
 		{view.StateUnder, "below 50%: room for more work"},

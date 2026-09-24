@@ -89,7 +89,7 @@ Shown only when something is wrong. At most 6 lines, then `+N more`; the interac
 | Badge | When | Says |
 | --- | --- | --- |
 | `OUT` | a window is at 100% | when it comes back |
-| `OVER` | a window will run out before it resets, at its pace so far | when it runs out, and how long before the reset |
+| `OVER` | a window will run out by its reset, at its pace so far | when it runs out, and how long before the reset |
 | `ERROR` | a device's collector or one of its harnesses fails | the device and the error |
 | `SILENT` | a device has not reported for a day | since when, and the error it last reported, if any |
 | `OLD` | devices run an older release | all of them in one line |

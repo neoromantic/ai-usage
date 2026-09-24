@@ -78,7 +78,7 @@ type Update struct {
 // Attention kinds, most urgent first.
 const (
 	AttentionOut    = "out"    // a window is at 100%
-	AttentionOver   = "over"   // a window will run out before it resets
+	AttentionOver   = "over"   // a window will run out by its reset
 	AttentionError  = "error"  // a device's collector or one of its harnesses fails
 	AttentionSilent = "silent" // a device has not reported for a day
 	AttentionOld    = "old"    // devices run an older release
