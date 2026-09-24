@@ -448,13 +448,11 @@ func (p *page) usage() []chunks {
 			head := chunks{p.space(2)}
 			head = append(head, p.left(p.bold(groupName(r.group)), acct)...)
 			if i == 0 {
+				// Every header is dim. The chosen period orders nothing
+				// here, so none stands out.
 				for k, per := range periods {
-					h := p.muted(strings.ToUpper(per.String()))
-					if per == p.o.Period {
-						h = p.plain(strings.ToUpper(per.String()))
-					}
 					head = append(head, p.space(2))
-					head = append(head, p.right(h, numW[k])...)
+					head = append(head, p.right(p.muted(strings.ToUpper(per.String())), numW[k])...)
 				}
 			}
 			out = append(out, head)

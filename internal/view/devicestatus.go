@@ -116,11 +116,9 @@ func (p *page) deviceStatus() []chunks {
 			}
 			return chunks{p.cell(p.tokens(q, u))}
 		})
+		// Every header is dim, the period the rows are in the order of too:
+		// the title names it.
 		c.w = max(c.w, 4)
-		if q == per {
-			// The period the rows are in the order of.
-			c.head = p.plain(c.head.text)
-		}
 		cols = append(cols, c)
 	}
 	note := col("note", "NOTE", "", false, func(_ int, d *TeamDevice) chunks {

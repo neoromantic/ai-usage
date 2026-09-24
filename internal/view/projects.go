@@ -84,12 +84,10 @@ func (p *page) projects() []chunks {
 		p.muted(p.txt(p.r.Collector.DeviceLabel) + g.sep + "by " + per.String() + g.sep + "M tokens in+out")}
 	head := chunks{p.space(2)}
 	head = append(head, p.left(p.muted("PROJECT"), pathW)...)
-	for i, c := range cols {
+	// Every header is dim, the period the table is sorted by too: the title
+	// names it.
+	for _, c := range cols {
 		h := p.muted(c.head)
-		if i == 0 {
-			// The period the table is sorted by.
-			h = p.plain(c.head)
-		}
 		head = append(head, p.space(2))
 		if c.right {
 			head = append(head, p.right(h, c.w)...)

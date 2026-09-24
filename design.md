@@ -214,7 +214,7 @@ DEVICES  13 · 1 error · 2 old · by 7d · M tokens in+out                     
 | VERSION | the collector's release; an older one than the team's newest is dim and followed by `↓` |
 | SEEN | how long ago it last reported, dim; a silent device's in the tight color |
 | VIA | the harnesses it reads, dim; one that fails or reads only in part is in the out color and followed by `×`; `·` for none |
-| TODAY 7D 30D 90D | its input plus output tokens, as the matrix's TOTAL column prints them, with `≥` and `?` for a device on a collector older than v0.2.0; the chosen period's header is plain, the others dim |
+| TODAY 7D 30D 90D | its input plus output tokens, as the matrix's TOTAL column prints them, with `≥` and `?` for a device on a collector older than v0.2.0; their headers are dim, as every header is, and the title names the chosen period, as in `by 7d` |
 | NOTE | for a silent device, `silent since` when it last reported, then the error it last reported, as ATTENTION says it; else what fails on it, in the out color; else `update: latest v1.4.2`; else nothing. Only the error is in color |
 
 The bottom row is TOTAL for each period, by the matrix's rules for `≥` and `?`. With no note on any device, there is no NOTE column.

@@ -275,6 +275,54 @@ func TestPageHeat(t *testing.T) {
 	}
 }
 
+// TestPageHeadersDim: every column header is dim, the chosen period's too,
+// in PROJECTS, the status view, and USAGE, in every period. The title of
+// the first two names the period their rows are in the order of; USAGE has
+// no order by period.
+func TestPageHeadersDim(t *testing.T) {
+	team, single := loadReport(t, "team"), loadReport(t, "single")
+	dim := sgr.FindString(lipglossFg(NewTheme(true).Muted))
+	dimRuns := regexp.MustCompile(regexp.QuoteMeta(dim) + `[^\x1b]*\x1b\[m`)
+	// line is the first body line from the one that starts with from on
+	// whose text starts with prefix, as it is drawn.
+	line := func(p Page, from, prefix string) string {
+		t.Helper()
+		in := false
+		for _, l := range p.Body {
+			text := sgr.ReplaceAllString(l, "")
+			in = in || strings.HasPrefix(text, from)
+			if in && strings.HasPrefix(text, prefix) {
+				return l
+			}
+		}
+		t.Fatalf("no line %q after %q", prefix, from)
+		return ""
+	}
+	for _, per := range Periods {
+		o := Options{Width: 120, Loc: sampleZone, Color: true, Dark: true, Period: per}
+		bold := (&page{o: o}).bold("CLAUDE").st.Render("CLAUDE")
+		head := strings.ToUpper(per.String())
+		for _, c := range []struct {
+			table, prefix, title string
+			p                    Page
+		}{
+			{"PROJECTS", "  PROJECT ", "PROJECTS  annbook · by " + per.String() + " · ", Render(team, o)},
+			{"status", "  DEVICE ", "DEVICES  13 · 1 error · 2 old · by " + per.String() + " · ", Render(team, devices(o))},
+			{"USAGE", "  CLAUDE ", "USAGE  sam-air · M tokens in+out", Render(single, o)},
+		} {
+			l := line(c.p, c.title, c.prefix)
+			if !strings.Contains(l, dim+head+"\x1b[m") {
+				t.Errorf("%s by %s: %s is not dim: %q", c.table, per, head, l)
+			}
+			// Nothing else on the line but spaces, and USAGE's provider in
+			// bold, is outside a dim run.
+			if rest := strings.Replace(dimRuns.ReplaceAllString(l, ""), bold, "", 1); strings.TrimSpace(rest) != "" {
+				t.Errorf("%s by %s: a header that is not dim, %q, in %q", c.table, per, rest, l)
+			}
+		}
+	}
+}
+
 func TestPageHeaderBusy(t *testing.T) {
 	r := loadReport(t, "team")
 	h := sgr.ReplaceAllString(Render(r, Options{Width: 120, Loc: sampleZone, Busy: "⠋"}).Header, "")
