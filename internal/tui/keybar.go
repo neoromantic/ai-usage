@@ -72,6 +72,9 @@ type item struct {
 	// drop is the order a narrow terminal drops it in, the least used
 	// first; 0 is never.
 	drop int
+	// short is the key in fewer columns, which a narrow terminal takes
+	// before it drops any key; nil when it has none.
+	short *item
 }
 
 func (it item) width() int {
@@ -121,10 +124,15 @@ func (m Model) items() []item {
 		its = append(its, item{key: sideways, action: "matrix", drop: 4})
 	}
 	if m.page.DeviceViews {
+		// Short, it names the status view alone, as `%` names share:
+		// `s status`, or `s ‹status›` when it shows.
 		views := item{key: "s", choices: []string{"usage", "status"}, pill: "usage", drop: 3}
+		short := item{key: "s", action: "status", drop: 3}
 		if m.opts.DeviceStatus {
 			views.pill = "status"
+			short.action, short.pill = "", "status"
 		}
+		views.short = &short
 		its = append(its, views)
 	}
 	its = append(its, item{key: "p", action: "period", pill: m.opts.Period.String(), drop: 5})
@@ -153,10 +161,18 @@ func barWidth(its []item) int {
 	return w
 }
 
-// keyBar is the bottom line. On a narrow terminal it drops keys, the least
-// used first, down to `? help` and `q quit`.
+// keyBar is the bottom line. On a narrow terminal it shortens the keys that
+// have a short form, then drops keys, the least used first, down to `? help`
+// and `q quit`.
 func (m Model) keyBar() string {
 	its := m.items()
+	if barWidth(its) > m.width {
+		for i, it := range its {
+			if it.short != nil {
+				its[i] = *it.short
+			}
+		}
+	}
 	for barWidth(its) > m.width {
 		drop := -1
 		for i, it := range its {

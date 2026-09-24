@@ -261,7 +261,7 @@ The key bar follows the common practice of modern TUIs:
 - A key is bold, in the accent color. What it does is dim. Items are separated by a faint `·`.
 - The current period and mode are pills: the chosen one in reverse accent, the others dim, as in `p period ‹7d›` and `‹tokens› share`. The views of DEVICES are pills after their key, as in `s ‹usage› status`.
 - Only keys that do something now appear: `←→ matrix` only when the matrix shows and does not fit, `%` only when the matrix shows, and `s` only on a team of more than one device.
-- On a narrow terminal, the bar drops keys from the least used: `%`, `r`, `s`, `←→`, the period, and scroll. It keeps `?` and `q` last.
+- On a narrow terminal, the bar first names the status view alone, as `%` names share: `s status`, or `s ‹status›` when it shows. Then it drops keys from the least used: `%`, `r`, `s`, `←→`, the period, and scroll. It keeps `?` and `q` last. At 80 columns a team's matrix loses only `%`.
 
 ## Visual system
 

@@ -393,22 +393,57 @@ func TestDeviceViews(t *testing.T) {
 		t.Fatalf("color: %q", got)
 	}
 
-	// A narrow terminal drops share and refresh, then the views, before
-	// the matrix.
+	// A narrow terminal first names the status view alone, as % names
+	// share, then drops share and refresh, then the views, before the
+	// matrix.
 	for _, c := range []struct {
-		width int
-		want  string
+		width  int
+		status bool
+		want   string
 	}{
-		{97, usage},
-		{96, " ↑↓ scroll · ←→ matrix · s ‹usage› status · p period ‹7d› · r refresh · ? help · q quit"},
-		{86, " ↑↓ scroll · ←→ matrix · s ‹usage› status · p period ‹7d› · ? help · q quit"},
-		{75, " ↑↓ scroll · ←→ matrix · s ‹usage› status · p period ‹7d› · ? help · q quit"},
-		{74, " ↑↓ scroll · ←→ matrix · p period ‹7d› · ? help · q quit"},
-		{55, " ↑↓ scroll · p period ‹7d› · ? help · q quit"},
+		{97, false, usage},
+		{96, false, " ↑↓ scroll · ←→ matrix · s status · p period ‹7d› · % share · r refresh · ? help · q quit"},
+		{89, false, " ↑↓ scroll · ←→ matrix · s status · p period ‹7d› · % share · r refresh · ? help · q quit"},
+		{88, false, " ↑↓ scroll · ←→ matrix · s status · p period ‹7d› · r refresh · ? help · q quit"},
+		{67, false, " ↑↓ scroll · ←→ matrix · s status · p period ‹7d› · ? help · q quit"},
+		{66, false, " ↑↓ scroll · ←→ matrix · p period ‹7d› · ? help · q quit"},
+		{55, false, " ↑↓ scroll · p period ‹7d› · ? help · q quit"},
+		{75, true, status},
+		{74, true, " ↑↓ scroll · s ‹status› · p period ‹7d› · r refresh · ? help · q quit"},
+		{68, true, " ↑↓ scroll · s ‹status› · p period ‹7d› · ? help · q quit"},
+		{56, true, " ↑↓ scroll · p period ‹7d› · ? help · q quit"},
 	} {
-		if got := bar(model(t, c.width, 30, Config{Render: viewsRender(100, 12), Refresh: refresher()})); got != c.want {
-			t.Errorf("width %d\n got %q\nwant %q", c.width, got, c.want)
+		o := view.Options{DeviceStatus: c.status}
+		if got := bar(model(t, c.width, 30, Config{Render: viewsRender(100, 12), Refresh: refresher(), Options: o})); got != c.want {
+			t.Errorf("width %d, status %v\n got %q\nwant %q", c.width, c.status, got, c.want)
 		}
+	}
+	// In ASCII the short form is as wide, in brackets.
+	m = model(t, 74, 30, Config{Render: viewsRender(100, 12), Refresh: refresher(), Options: view.Options{ASCII: true, DeviceStatus: true}})
+	if got := bar(m); got != " j k scroll . s [status] . p period [7d] . r refresh . ? help . q quit" {
+		t.Errorf("ascii, short: %q", got)
+	}
+}
+
+// TestDeviceViewsAt80: on the team fixture at 80 columns, the key bar names
+// the status view alone and keeps refresh, dropping only share, and the
+// status view has room for every key it has.
+func TestDeviceViewsAt80(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "view", "testdata", "team.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var r view.Report
+	if err := json.Unmarshal(b, &r); err != nil {
+		t.Fatal(err)
+	}
+	m := model(t, 80, 30, Config{Report: r, Render: view.Render, Refresh: refresher()})
+	if got, want := bar(m), " ↑↓ scroll · ←→ matrix · s status · p period ‹7d› · r refresh · ? help · q quit"; got != want {
+		t.Errorf("usage at 80\n got %q\nwant %q", got, want)
+	}
+	m = keys(t, m, "s")
+	if got, want := bar(m), " ↑↓ scroll · s usage ‹status› · p period ‹7d› · r refresh · ? help · q quit"; got != want {
+		t.Errorf("status at 80\n got %q\nwant %q", got, want)
 	}
 }
 
