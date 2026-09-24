@@ -479,7 +479,7 @@ func TestHelp(t *testing.T) {
 		t.Fatalf("help key bar %q", got)
 	}
 	all := strings.Join(ansiStrip(m.helpLines()), "\n")
-	for _, want := range []string{"MARKS", "━ ─", "┈", "not known", "≥", "●", "×", "↓", "‹ ›", "STATES", "over", "under", "collect now"} {
+	for _, want := range []string{"MARKS", "━ ─", "┈", "not known", "≥", "—", "no forecast", "●", "×", "↓", "‹ ›", "STATES", "over", "under", "collect now"} {
 		if !strings.Contains(all, want) {
 			t.Fatalf("help lacks %q:\n%s", want, all)
 		}

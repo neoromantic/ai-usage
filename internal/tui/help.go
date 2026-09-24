@@ -41,6 +41,7 @@ func (m Model) helpLines() []string {
 		{g("┈", "."), "a window with no reading"},
 		{"?", "not known: how full a window is, or a device's tokens"},
 		{g("≥", ">="), "at least: a total with a part that is not known"},
+		{g("—", "-"), "no forecast: no reading, or too early in the window"},
 		{g("●", "*"), "this device, or an account logged in on it"},
 		{g("×", "x"), "a device that fails"},
 		{"~", "a silent device, or a reading older than 6 hours"},
