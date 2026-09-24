@@ -133,9 +133,11 @@ const (
 	maxPath = 48
 )
 
-// legend is one dim line of the marks on screen, or more of even length
-// where one does not fit in limit.
-func (p *page) legend(limit int) string {
+// legend is one dim line of the marks on screen, a word or two each, so a
+// page 120 wide that shows every mark has it in one line. Where one line
+// does not fit the width, it takes as few lines as it can, of even length.
+// The interactive view's help says more of each mark.
+func (p *page) legend() string {
 	g := p.g
 	var items []string
 	add := func(on bool, s string) {
@@ -148,40 +150,22 @@ func (p *page) legend(limit int) string {
 	add(s["left"], g.left+" left")
 	switch {
 	case s["tick"] && s["tickIn"]:
-		items = append(items, g.tick+g.tickIn+" even use by now")
+		items = append(items, g.tick+g.tickIn+" even use")
 	case s["tick"]:
-		items = append(items, g.tick+" even use by now")
+		items = append(items, g.tick+" even use")
 	case s["tickIn"]:
-		items = append(items, g.tickIn+" even use by now")
+		items = append(items, g.tickIn+" even use")
 	}
 	add(s["dotted"], g.unread+" no reading")
-	switch {
-	case s["stale"] && s["silent"]:
-		items = append(items, g.silent+" old reading, or silent")
-	case s["stale"]:
-		items = append(items, g.silent+" old reading")
-	case s["silent"]:
-		items = append(items, g.silent+" silent")
-	}
-	switch {
-	case s["unknown"] && s["unread"]:
-		items = append(items, "? not known, or not read since a refusal")
-	case s["unknown"]:
-		items = append(items, "? not known")
-	case s["unread"]:
-		items = append(items, "? not read since refusal")
-	}
+	// An old reading and a silent device are both stale.
+	add(s["stale"] || s["silent"], g.silent+" stale")
+	// A window not read since a refusal is not known either.
+	add(s["unknown"] || s["unread"], "? unknown")
 	add(s["dash"], g.dash+" no forecast")
-	switch {
-	case s["here"] && s["this"]:
-		items = append(items, g.here+" this device, or logged in here")
-	case s["here"]:
-		items = append(items, g.here+" logged in here")
-	case s["this"]:
-		items = append(items, g.here+" this device")
-	}
+	// An account logged in here, and this device, are both here.
+	add(s["here"] || s["this"], g.here+" here")
 	add(s["fail"], g.fail+" error")
-	add(s["old"], g.old+" old release")
+	add(s["old"], g.old+" old")
 	add(s["none"], g.none+" none")
 	add(s["chosen"], g.open+g.shut+" chosen")
 	if len(items) == 0 {
@@ -207,7 +191,7 @@ func (p *page) legend(limit int) string {
 	for _, it := range items {
 		widest = max(widest, width(it))
 	}
-	limit = min(max(limit, widest), p.w)
+	limit := p.w
 	// The narrowest limit that needs no more lines, so the last line is not
 	// a lone item.
 	n := len(wrap(limit))

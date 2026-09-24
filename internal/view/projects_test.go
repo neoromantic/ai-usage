@@ -5,6 +5,36 @@ import (
 	"testing"
 )
 
+// TestLegend ends the static page with one line of legend from 120 columns
+// on, with every mark on screen, and with as few lines as fit below that.
+func TestLegend(t *testing.T) {
+	for _, c := range []struct {
+		width, lines int
+	}{{80, 2}, {100, 2}, {119, 2}, {120, 1}, {160, 1}} {
+		for _, ascii := range []bool{false, true} {
+			p := newPage(&Report{}, Options{Width: c.width, ASCII: ascii})
+			for _, k := range []string{"used", "left", "tick", "tickIn", "dotted", "stale", "silent", "unknown", "unread",
+				"dash", "here", "this", "fail", "old", "none", "chosen"} {
+				p.mark(k)
+			}
+			lines := strings.Split(p.legend(), "\n")
+			if len(lines) != c.lines {
+				t.Errorf("at %d, ASCII %v, the legend is %d lines, want %d:\n%s", c.width, ascii, len(lines), c.lines, strings.Join(lines, "\n"))
+			}
+			for _, l := range lines {
+				if width(l) > c.width-1 {
+					t.Errorf("at %d, ASCII %v, a line of the legend is %d wide: %q", c.width, ascii, width(l), l)
+				}
+			}
+		}
+	}
+	// The team's page at 120 shows every kind of mark, and ends with one
+	// line of them.
+	if l := Render(loadReport(t, "team"), Options{Width: 120, Loc: sampleZone}).Legend; strings.Contains(l, "\n") {
+		t.Errorf("the team's legend at 120 is more than one line:\n%s", l)
+	}
+}
+
 // TestProjectPathsArePrintable draws a project whose folder's name carries
 // escapes and a carriage return: none of them reaches the terminal.
 func TestProjectPathsArePrintable(t *testing.T) {

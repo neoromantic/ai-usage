@@ -143,7 +143,7 @@ func Render(r Report, o Options) Page {
 		out.Body[i] = l.String()
 	}
 	if !o.Interactive {
-		out.Legend = p.legend(width)
+		out.Legend = p.legend()
 	}
 	return out
 }

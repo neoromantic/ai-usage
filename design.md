@@ -183,7 +183,13 @@ One table for this device, all accounts together, sorted by the chosen period (7
 
 ## Legend
 
-The static report ends with one dim line of legend, listing only the marks on screen. The interactive view keeps the legend in `?` help.
+The static report ends with a dim legend, listing only the marks on screen, a word or two each:
+
+```
+━ used  ─ left  ┃╋ even use  ┈ no reading  ~ stale  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
+```
+
+With every mark on screen it is one line from 120 columns on. Below that, where one line does not fit, it takes as few lines as it can, of even length: two at 80 columns. The interactive view keeps the legend in `?` help, which says more of each mark.
 
 ## The interactive view
 

@@ -63,8 +63,7 @@ PROJECTS  annbook · by 7d · M tokens in+out
   ~/Library/…/Documents/Notes/Projects/2026          <1    2     1  claude           6d
   + 4 more
 
-━ used  ─ left  ┃╋ even use by now  ┈ no reading  ~ old reading  ? not known
-— no forecast  ● this device, or logged in here  × error  ↓ old release  · none  ‹› chosen
+━ used  ─ left  ┃╋ even use  ┈ no reading  ~ stale  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
 ```
 
 The header names this machine and the team, and says whether collection, the relay, and self-update are healthy; when one of them fails, its error is in ATTENTION. ATTENTION appears only when something is wrong: a subscription that is out, or will run out before it resets at its pace so far; a machine whose collector or one of its tools fails, or that has not reported for a day; machines on an older release; and a subscription past half its window that will be left mostly unused.
