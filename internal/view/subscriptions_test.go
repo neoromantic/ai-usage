@@ -32,3 +32,30 @@ func TestSubscriptionsCountNoReadingByTheMainWindow(t *testing.T) {
 		t.Errorf("title %q, want 2 no reading", title)
 	}
 }
+
+// TestBarTickFollowsTheForecast draws the tick inside the used part just
+// when AT RESET says out or over, also where the used part and the tick
+// fall in one cell.
+func TestBarTickFollowsTheForecast(t *testing.T) {
+	p := newPage(&Report{GeneratedAt: now}, Options{Width: 120})
+	for _, c := range []struct {
+		used, elapsed float64
+		state, bar    string
+	}{
+		{14.6, 0.1625, StateTight, "━━━━┃───────────────────"},
+		{51.5, 0.5, StateOver, "━━━━━━━━━━━╋────────────"},
+		{42, 0.25, StateOver, "━━━━━━╋━━━──────────────"},
+		{12, 0.25, StateUnder, "━━━───┃─────────────────"},
+		{100, 0.7, StateOut, "━━━━━━━━━━━━━━━━╋━━━━━━━"},
+	} {
+		// A week read now, with elapsed of it passed.
+		resets := now.Add(time.Duration((1 - c.elapsed) * float64(week)))
+		w := readWindow(snapshot.Window{Name: "7d", Percent: c.used, ResetsAt: &resets}, now, now)
+		if w.State != c.state {
+			t.Errorf("%v%% used at %v: state %q, want %q", c.used, c.elapsed, w.State, c.state)
+		}
+		if got := p.bar(&w, barCells).String(); got != c.bar {
+			t.Errorf("%v%% used at %v, %s: bar %s, want %s", c.used, c.elapsed, w.State, got, c.bar)
+		}
+	}
+}

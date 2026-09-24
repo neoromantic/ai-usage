@@ -394,6 +394,14 @@ func (p *page) bar(w *Window, n int) chunks {
 	tick := -1
 	if e, ok := elapsed(*w); ok {
 		tick = min(int(e*float64(n)), n-1)
+		// The used part and the tick are rounded to cells, so where both
+		// fall in one cell the tick goes by the forecast: inside the used
+		// part when the window is out or over, after it otherwise.
+		if w.State == StateOut || w.State == StateOver {
+			tick = min(tick, used-1)
+		} else {
+			tick = min(max(tick, used), n-1)
+		}
 	}
 	color := p.th.State(w.State)
 	if w.State == StateUnknown || w.State == "" {
