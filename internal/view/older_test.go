@@ -308,3 +308,24 @@ func TestAtLeastRoundsDown(t *testing.T) {
 		}
 	}
 }
+
+// Without color, a column with a ? in it has no bold, since its largest is
+// not known; the others bold their largest as before.
+func TestOlderColumnHasNoBold(t *testing.T) {
+	r := olderTeam(t)
+	bold := "\x1b[1m"
+	for _, c := range []struct {
+		per          Period
+		device, cell string
+		want         bool
+	}{
+		{Week, "annbook", "8", false},
+		{Week, "srv1", "60", true},
+		{Quarter, "MacBook-Old", "400", true},
+	} {
+		line := pageLine(t, Text(r, Options{Width: 120, Loc: time.UTC, Period: c.per}), c.device)
+		if got := strings.Contains(line, bold+c.cell+"\x1b[m"); got != c.want {
+			t.Errorf("%s: %s's %s bold %v, want %v: %q", c.per, c.device, c.cell, got, c.want, line)
+		}
+	}
+}

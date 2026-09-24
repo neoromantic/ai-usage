@@ -25,6 +25,9 @@ type gridCol struct {
 	w     int
 	x     int // where its cell starts on the line
 	top   float64
+	// known says every value in the column is known, so the largest of
+	// them, top, is the largest in the column.
+	known bool
 }
 
 const (
@@ -36,9 +39,10 @@ const (
 // the period first, and a column per subscription, grouped under its
 // provider, with totals on the right and at the bottom. The cells are a
 // heat map on a log scale; without color, the largest in each column is
-// bold. The share mode shows each device's estimated share of each window.
-// Tokens that are not all known, as a device's on a collector older than
-// v0.2.0, show as tokens prints them, and a share that is not known is ?.
+// bold, unless the column has a value that is not known. The share mode
+// shows each device's estimated share of each window. Tokens that are not
+// all known, as a device's on a collector older than v0.2.0, show as
+// tokens prints them, and a share that is not known is ?.
 func (p *page) grid() []chunks {
 	g := p.g
 	m := p.r.Team.Matrix
@@ -53,7 +57,9 @@ func (p *page) grid() []chunks {
 		if c.NoQuota {
 			grp = ""
 		}
-		cols = append(cols, gridCol{c: c, idx: i, group: grp})
+		// A column in the share mode whose shares are not all known has no
+		// known share above 0 to be bold.
+		cols = append(cols, gridCol{c: c, idx: i, group: grp, known: share || per.Known(c.Usage)})
 	}
 	rows := append([]Row(nil), m.Rows...)
 	sort.SliceStable(rows, func(i, j int) bool {
@@ -230,7 +236,7 @@ func (p *page) grid() []chunks {
 		for _, k := range shown {
 			c := cols[k]
 			line = append(line, p.space(c.x-cur))
-			line = append(line, p.right(p.heat(text(r, c), value(r, c), c.top, top), c.w)...)
+			line = append(line, p.right(p.heat(text(r, c), value(r, c), c, top), c.w)...)
 			cur = c.x + c.w
 		}
 		if totalW > 0 {
@@ -280,10 +286,11 @@ func (p *page) cell(s string) chunk {
 	return p.plain(s)
 }
 
-// heat is a matrix cell. With color it grows brighter with its value, on a
-// log scale against the largest cell, and bold at the top step. Without
-// color, the largest in its column is bold.
-func (p *page) heat(s string, v, colTop, top float64) chunk {
+// heat is a matrix cell in column c. With color it grows brighter with its
+// value, on a log scale against top, the largest cell, and bold at the top
+// step. Without color, the largest in its column is bold, when every value
+// in the column is known.
+func (p *page) heat(s string, v float64, c gridCol, top float64) chunk {
 	if v <= 0 {
 		return p.cell(s)
 	}
@@ -291,7 +298,7 @@ func (p *page) heat(s string, v, colTop, top float64) chunk {
 		p.mark("atLeast")
 	}
 	if !p.o.Color {
-		if v == colTop {
+		if c.known && v == c.top {
 			return p.bold(s)
 		}
 		return p.plain(s)

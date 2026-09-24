@@ -238,7 +238,7 @@ Semantic tokens, never raw colors in the code. Each has a value for dark and for
 | out, over, tight, ok, under | forecast states and their badges |
 | heat 1–5 | the matrix ramp, from faint to bright and bold |
 
-With `--color never`, `NO_COLOR`, or a pipe, the words and marks carry the meaning. In the matrix, the largest value in each column is bold instead of the heat map.
+With `--color never`, `NO_COLOR`, or a pipe, the words and marks carry the meaning. In the matrix, the largest value in each column is bold instead of the heat map. A column with a `?` in it has none bold, since its largest is not known.
 
 ### Glyphs
 
