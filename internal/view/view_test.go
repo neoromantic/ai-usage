@@ -3,6 +3,7 @@ package view
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -306,6 +307,63 @@ func TestAliasThatAnotherAccountGoesBy(t *testing.T) {
 			t.Fatalf("two columns go by %s: %+v", k, r.Team.Matrix.Columns)
 		}
 		seen[k] = true
+	}
+}
+
+// Two accounts the team gave one name go by their full labels on the page
+// too: in SUBSCRIPTIONS, in ATTENTION, and in USAGE on a team of one.
+func TestAliasThatTwoAccountsGoByOnThePage(t *testing.T) {
+	out := func() *state.Quota {
+		return &state.Quota{At: now, Source: "harness", Windows: []snapshot.Window{week7(100, now.Add(48*time.Hour))}}
+	}
+	st := emptyState()
+	addAccount(st, "codex", "ann@acme.dev", true, out(), 10)
+	f := newFixture(t, st)
+	f.in.Config.Aliases = map[string]state.Alias{state.Key("codex", "ann@acme.dev"): {Name: "kim", At: now.Add(-time.Hour)}}
+	f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", now)
+	other := emptyState()
+	addAccount(other, "codex", "sam@mail.test", true, out(), 10)
+	cfg := state.Config{Device: "d-other-device", Aliases: map[string]state.Alias{
+		state.Key("codex", "sam@mail.test"): {Name: "kim", At: now.Add(-2 * time.Hour)},
+	}}
+	two := withTeam(t, f, docWith(t, f.key, cfg, "otherbox", now, other))
+
+	// On one device, the alias came before the account that goes by it.
+	addAccount(st, "codex", "kim@corp.test", false, nil, 10)
+	f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", now)
+	one := withTeam(t, f)
+
+	for _, c := range []struct {
+		r      Report
+		title  string
+		labels []string
+	}{
+		{two, "ATTENTION", []string{"ann@acme.dev", "sam@mail.test"}},
+		{two, "SUBSCRIPTIONS", []string{"ann@acme.dev", "sam@mail.test"}},
+		{one, "USAGE", []string{"ann@acme.dev", "kim@corp.test"}},
+	} {
+		// A section goes on to the next title, the next line that starts
+		// with a capital.
+		var lines []string
+		in := false
+		for _, l := range Render(c.r, Options{Width: 160, Loc: sampleZone}).Body {
+			l = sgr.ReplaceAllString(l, "")
+			if l != "" && l[0] >= 'A' && l[0] <= 'Z' {
+				in = strings.HasPrefix(l, c.title)
+			}
+			if in {
+				lines = append(lines, l)
+			}
+		}
+		text := strings.Join(lines, "\n")
+		for _, l := range c.labels {
+			if !strings.Contains(text, l) {
+				t.Errorf("%s does not name %s:\n%s", c.title, l, text)
+			}
+		}
+		if slices.Contains(strings.Fields(text), "kim") {
+			t.Errorf("%s names an account kim:\n%s", c.title, text)
+		}
 	}
 }
 

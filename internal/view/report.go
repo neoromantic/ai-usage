@@ -303,7 +303,9 @@ type TeamProvider struct {
 type TeamAccount struct {
 	Label string `json:"label"`
 	Name  string `json:"name"`
-	// Alias is the name the team gave the account, when it has one.
+	// Alias is the name the team gave the account, when it has one. The
+	// account goes by it unless another account of the provider goes by it
+	// too; then Name is the full label.
 	Alias *string `json:"alias"`
 	// Subscription is an account with a quota of its own: Claude, Codex, and
 	// Grok. Hermes is a harness: what it spends through a login is that

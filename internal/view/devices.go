@@ -335,7 +335,7 @@ func (p *page) usage() []chunks {
 			label := c.Label
 			if a := p.account(c.Provider, c.Label); a != nil {
 				r.here = a.Current
-				if a.Alias != nil {
+				if a.Alias != nil && a.Name == *a.Alias {
 					label = *a.Alias
 				}
 			}

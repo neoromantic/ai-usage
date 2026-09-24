@@ -94,7 +94,7 @@ func (p *page) subscriptions() []chunks {
 				counts[a.State]++
 			}
 			label := a.Label
-			if a.Alias != nil {
+			if a.Alias != nil && a.Name == *a.Alias {
 				label = *a.Alias
 			}
 			row := subRow{here: a.Current, name: p.txt(shortID(label)), win: main, users: a.Users, last: g.none}

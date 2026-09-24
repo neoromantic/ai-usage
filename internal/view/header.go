@@ -205,7 +205,7 @@ func (p *page) subject(a Attention) chunks {
 	switch a.Kind {
 	case AttentionOut, AttentionOver, AttentionUnder:
 		label := a.Account
-		if acct := p.account(a.Provider, a.Account); acct != nil && acct.Alias != nil {
+		if acct := p.account(a.Provider, a.Account); acct != nil && acct.Alias != nil && acct.Name == *acct.Alias {
 			label = *acct.Alias
 		}
 		label = shortID(label)
