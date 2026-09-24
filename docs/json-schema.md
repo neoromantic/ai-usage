@@ -55,7 +55,7 @@ Conventions:
 
 ### attention
 
-Each entry is one thing that needs attention, from the team's view of each subscription and device. The report lists them most urgent first, by `kind` in the order of this table; within a kind, the earliest `at` first, the lowest forecast first for `under`, and by device for `error`. The fields that apply depend on the kind; the others are absent.
+Each entry is one thing that needs attention, from the team's view of each subscription and device. The report lists them most urgent first, by `kind` in the order of this table; within a kind, the earliest `at` first, which for an `over` without `at` is its `resets_at`, the lowest forecast first for `under`, and by device for `error`. The fields that apply depend on the kind; the others are absent.
 
 | `kind` | When | Fields |
 | --- | --- | --- |
@@ -279,7 +279,7 @@ A cell:
 ## Added within version 3
 
 - `unknown` on the `usage` objects under `team`, and `window_unknown` on a matrix column and cell, for a device on a collector older than v0.2.0. Such a device's periods used to be `0`, even `90d`; it was not among `users`; and its `share` was `0`, so the other devices shared the whole window. Now `90d` has its tokens, and a share that is not known is `null`, which `share` already allowed. Such a device counts in `users` when it used the account since the window began. `busiest` names the only user even when its tokens are not known, and is `null` when none of two or more users has known tokens, which `busiest` already allowed, though `users` is then above 0. No field changed meaning, so the version stays 3. A reader that ignores the new fields takes the known part of a period as all of it, as it took the zeros before.
-- `runs_out_at`, and `at` on an `over` entry, for a forecast that rounds to 100 but is over it before it is rounded, such as 100.4. They were `null` and absent for every forecast of 100, although such a window runs out before it resets.
+- `runs_out_at`, and `at` on an `over` entry, for a forecast that rounds to 100 but is over it before it is rounded, such as 100.4. They were `null` and absent for every forecast of 100, although such a window runs out before it resets. An `over` entry without `at` now comes among the others by its `resets_at`, not after them.
 
 ## Changes from version 2
 

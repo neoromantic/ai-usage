@@ -611,6 +611,43 @@ func TestAttention(t *testing.T) {
 	}
 }
 
+// An OVER window at exactly 100% runs out at its reset, and comes before one
+// that runs out after that reset, although it has no time of its own to run
+// out.
+func TestAttentionOverAtResetOrder(t *testing.T) {
+	st := emptyState()
+	// At 140%, with a day of its week gone: it runs out in 4 days, 2 days
+	// before its own reset.
+	addAccount(st, "codex", "ann@acme.dev", false, &state.Quota{At: now, Windows: []snapshot.Window{week7(20, now.Add(6*24*time.Hour))}}, 10)
+	// At 100%, with half its week gone: it runs out at its reset, in 3.5
+	// days.
+	reset := now.Add(week / 2)
+	addAccount(st, "codex", "kim@mail.test", false, &state.Quota{At: now, Windows: []snapshot.Window{week7(50, reset)}}, 10)
+	r := Build(newFixture(t, st).in)
+	var got []string
+	for _, a := range r.Attention {
+		got = append(got, a.Kind+" "+a.Account)
+	}
+	if want := []string{"over kim@mail.test", "over ann@acme.dev"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("attention = %v, want %v", got, want)
+	}
+	kim, ann := r.Attention[0], r.Attention[1]
+	if kim.At != nil || kim.ResetsAt == nil || !kim.ResetsAt.Equal(reset) || *kim.Percent != 100 {
+		t.Fatalf("kim = %+v", kim)
+	}
+	if ann.At == nil || !ann.At.Equal(now.Add(4*24*time.Hour)) || *ann.Percent != 140 {
+		t.Fatalf("ann = %+v", ann)
+	}
+	lines := pageSection(Render(r, Options{Width: 120, Loc: time.UTC}), "ATTENTION")
+	want := []string{
+		" OVER  codex kim@mail.test  runs out ~Sat 00:00 at this week's pace, at its reset",
+		" OVER  codex ann@acme.dev   runs out ~Sat 12:00 at this week's pace, 2d before reset",
+	}
+	if len(lines) != 3 || !reflect.DeepEqual(lines[1:], want) {
+		t.Fatalf("ATTENTION =\n%s\nwant\n%s", strings.Join(lines, "\n"), strings.Join(want, "\n"))
+	}
+}
+
 // The header's failing relay and update check have their errors in
 // ATTENTION, as this device's, although the run that met them read every
 // source and counts as a success.

@@ -96,8 +96,8 @@ func attention(t Team, c Collector, now time.Time) []Attention {
 		}
 		switch a.Kind {
 		case AttentionOut, AttentionOver, AttentionSilent:
-			if !sameTime(a.At, b.At) {
-				return before(a.At, b.At)
+			if ta, tb := when(a), when(b); !sameTime(ta, tb) {
+				return before(ta, tb)
 			}
 		case AttentionUnder:
 			if *a.Percent != *b.Percent {
@@ -129,6 +129,17 @@ func collectorErrors(c Collector, reported time.Time) []string {
 		out = append(out, sourceError("update", *c.Update.Error))
 	}
 	return out
+}
+
+// when is the time an entry is ordered by within its kind: when an out
+// window resets, when a silent device last reported, and when an over window
+// runs out, which is its reset when it runs out at its reset and has no time
+// of its own.
+func when(a Attention) *time.Time {
+	if a.Kind == AttentionOver && a.At == nil {
+		return a.ResetsAt
+	}
+	return a.At
 }
 
 // before orders times with an unknown one last.
