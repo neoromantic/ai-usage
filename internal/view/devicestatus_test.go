@@ -235,7 +235,13 @@ func TestStatusNote(t *testing.T) {
 		{"bot-e", -1, "silent since Mon 14:02 · last error: codex: not logged in"},
 		{"bot-e", 52, "silent since Mon 14:02 · last error: codex: not log…"},
 		{"bot-e", 48, "silent since Mon 14:02"},
-		{"bot-e", 16, "silent since Mo…"},
+		// Short of room, the note keeps the time whole: since when, then
+		// the day, then only that it is silent.
+		{"bot-e", 21, "since Mon 14:02"},
+		{"bot-e", 16, "since Mon 14:02"},
+		{"bot-e", 14, "since Mon"},
+		{"bot-e", 8, "silent"},
+		{"bot-e", 4, "sil…"},
 		{"bot-f", -1, "hermes: database is locked"},
 		{"bot-f", 16, "hermes: databas…"},
 		// A device that fails and is behind says what fails.
@@ -252,9 +258,21 @@ func TestStatusNote(t *testing.T) {
 	}
 	// A silent device with no error says only since when. Only an error is
 	// in color.
-	r.Team.Devices[slices.IndexFunc(r.Team.Devices, func(d TeamDevice) bool { return d.Label == "bot-e" })].Error = nil
+	botE := &r.Team.Devices[slices.IndexFunc(r.Team.Devices, func(d TeamDevice) bool { return d.Label == "bot-e" })]
+	botE.Error = nil
 	if got := note("bot-e", -1); got != "silent since Mon 14:02" {
 		t.Errorf("silent, no error: %q", got)
+	}
+	if got := note("bot-e", 16); got != "since Mon 14:02" {
+		t.Errorf("silent, no error, in 16: %q", got)
+	}
+	// Silent for more than six days, it says the date, and short of room
+	// the date alone.
+	botE.CollectedAt = time.Date(2026, 9, 14, 11, 2, 0, 0, time.UTC)
+	for w, want := range map[int]string{-1: "silent since 14 Sep 14:02", 18: "since 14 Sep 14:02", 16: "since 14 Sep"} {
+		if got := note("bot-e", w); got != want {
+			t.Errorf("silent since a date, in %d: %q, want %q", w, got, want)
+		}
 	}
 	o.Color = true
 	th := NewTheme(false)
@@ -273,6 +291,13 @@ func TestStatusNote(t *testing.T) {
 	p = Render(troubled(t), devices(Options{Width: 160, Loc: sampleZone, Color: true, Dark: true}))
 	if !strings.Contains(strings.Join(p.Body, "\n"), sgr.FindString(lipglossFg(NewTheme(true).Tight))+"2d 3h") {
 		t.Error("a silent device's age is not in the silent color")
+	}
+	// At 80 columns NOTE is short, and bot-e's says since when, whole.
+	for _, ascii := range []bool{false, true} {
+		p := Render(troubled(t), devices(Options{Width: 80, Loc: sampleZone, ASCII: ascii}))
+		if l := statusLine(t, p, "bot-e"); !strings.HasSuffix(l, "  since Mon 14:02") {
+			t.Errorf("bot-e at 80, ascii %v: %q", ascii, l)
+		}
 	}
 }
 

@@ -219,6 +219,8 @@ DEVICES  13 · 1 error · 2 old · by 7d · M tokens in+out                     
 
 The bottom row is TOTAL for each period, by the matrix's rules for `≥` and `?`. With no note on any device, there is no NOTE column.
 
+A short NOTE cuts an error with `…`, and keeps a silent device's last error only while 12 columns of it fit. It never cuts a time: a silent device's note becomes `since Mon 14:02`, then the day alone, as in `since Mon`, then `silent`. An old release's becomes `latest v1.4.2`.
+
 ## PROJECTS
 
 One table for this device, all accounts together, sorted by the chosen period (7d by default). Columns: the project, the period, 90d, sessions, the providers it used, and the last activity. The static report shows the top 10 and says how many more there are. `--projects` prints all of them.

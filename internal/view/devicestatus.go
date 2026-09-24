@@ -349,7 +349,8 @@ func (p *page) harnesses(d TeamDevice) chunks {
 // device's silence, with the error it last reported, as ATTENTION has it;
 // else what fails on the device, in the error's color; else the release it
 // is behind. The rest is dim. A short column cuts the error, then drops the
-// last one, and says only "latest" of the release.
+// last one, says only "since" of the silence, then only its day, then only
+// "silent", so a time is never cut, and says only "latest" of the release.
 func (p *page) deviceNote(d TeamDevice, w int) chunks {
 	g := p.g
 	fit := func(forms ...chunk) chunks {
@@ -362,15 +363,18 @@ func (p *page) deviceNote(d TeamDevice, w int) chunks {
 	}
 	switch {
 	case d.Silent:
-		s := "silent since " + p.clock(d.CollectedAt)
+		c := p.clock(d.CollectedAt)
+		s := "silent since " + c
+		// The clock without its time is its weekday or its date.
+		silence := []chunk{p.muted(s), p.muted("since " + c), p.muted("since " + c[:strings.LastIndexByte(c, ' ')]), p.muted("silent")}
 		if d.Error == nil {
-			return fit(p.muted(s))
+			return fit(silence...)
 		}
 		last := s + g.sep + "last error: " + p.txt(*d.Error)
 		if w >= width(last)-width(p.txt(*d.Error))+statusCut {
 			return fit(p.muted(last))
 		}
-		return fit(p.muted(last), p.muted(s))
+		return fit(append([]chunk{p.muted(last)}, silence...)...)
 	case d.Error != nil:
 		return fit(p.paint(p.txt(*d.Error), p.th.Out, false, false))
 	case d.Old && p.r.Team.Latest != nil:
