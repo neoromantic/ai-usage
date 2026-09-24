@@ -382,6 +382,27 @@ func TestFirstNamedAccountClaimsUnknownHistory(t *testing.T) {
 	}
 }
 
+// TestClaimTakesTheUnknownHours: the account that claims unknown usage in a
+// session that keeps each account's hours takes the hours it was spent in.
+func TestClaimTakesTheUnknownHours(t *testing.T) {
+	h := logs.HourOf(t0)
+	st := &state.State{Current: map[string]string{}, Accounts: map[string]*state.Account{}, Sessions: map[string]*state.Session{
+		state.Key("codex", "s1"): {Provider: "codex", Project: "/p", Updated: t0,
+			By:      map[string]snapshot.Tokens{UnknownAccount: tok(100), "bo@acme.dev": tok(50)},
+			Hours:   map[int64]int64{h - 5: 110, h: 55},
+			ByHours: map[string]map[int64]int64{UnknownAccount: {h - 5: 110}, "bo@acme.dev": {h: 55}}},
+	}}
+	home := "/home/sam/.codex"
+	res := logs.Result{Sessions: []logs.Session{{ID: "s1", Home: home}}, Homes: map[string]logs.HomeRead{home: {}}}
+	claimUnknown(st, "codex", []string{home}, []answer{{reading: probe.Reading{Account: "ann@acme.dev"}}}, res, map[string]string{home: "ann@acme.dev"}, false)
+	if a := totalsFor(t, st, "codex", "ann@acme.dev"); a.Tokens != tok(100) || !reflect.DeepEqual(a.Hours, map[int64]int64{h - 5: 110}) {
+		t.Errorf("ann = %d tokens in %v, want 110 at h-5", logs.InOut(a.Tokens), a.Hours)
+	}
+	if hasTotals(st, "codex", UnknownAccount) {
+		t.Error("unknown kept its share")
+	}
+}
+
 func TestEachHomeClaimsItsOwnUnknownHistory(t *testing.T) {
 	w, o := newWorld(t)
 	h := w.home(t, "codex")
@@ -1378,14 +1399,20 @@ func TestPruneDropsAnAccountsOldShareOfALiveSession(t *testing.T) {
 		},
 		Sessions: map[string]*state.Session{state.Key("claude", "s1"): {
 			Provider: "claude", Seen: tok(150), Updated: now,
-			By:   map[string]snapshot.Tokens{"old": tok(100), "new": tok(50)},
-			Last: map[string]time.Time{"old": old, "new": now},
+			By:      map[string]snapshot.Tokens{"old": tok(100), "new": tok(50)},
+			Last:    map[string]time.Time{"old": old, "new": now},
+			Hours:   map[int64]int64{logs.HourOf(old): 110, logs.HourOf(now): 55},
+			ByHours: map[string]map[int64]int64{"old": {logs.HourOf(old): 110}, "new": {logs.HourOf(now): 55}},
 		}},
 	}
 	prune(st, now)
 	s := st.Sessions[state.Key("claude", "s1")]
 	if s == nil || s.Seen != tok(150) || !reflect.DeepEqual(s.By, map[string]snapshot.Tokens{"new": tok(50)}) {
 		t.Fatalf("session = %+v", s)
+	}
+	want := map[int64]int64{logs.HourOf(now): 55}
+	if !reflect.DeepEqual(s.Hours, want) || !reflect.DeepEqual(s.ByHours, map[string]map[int64]int64{"new": want}) {
+		t.Fatalf("hours = %v, by account %v", s.Hours, s.ByHours)
 	}
 	if _, ok := st.Accounts[state.Key("claude", "old")]; ok {
 		t.Fatal("idle account kept by a session another account continued")

@@ -801,6 +801,10 @@ func claimUnknown(st *state.State, p string, homes []string, answers []answer, r
 		}
 		s.By[label] = s.By[label].Add(t)
 		delete(s.By, UnknownAccount)
+		if h, ok := s.ByHours[UnknownAccount]; ok {
+			s.ByHours[label] = addHours(s.ByHours[label], h)
+			delete(s.ByHours, UnknownAccount)
+		}
 		if last, ok := s.Last[UnknownAccount]; ok {
 			if last.After(s.Last[label]) {
 				s.Last[label] = last
@@ -878,15 +882,12 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 	if updated.IsZero() || updated.After(now) {
 		updated = now
 	}
-	var spent int64
 	for l, g := range grown {
 		if g.Zero() {
 			delete(grown, l)
-			continue
 		}
-		spent += logs.InOut(g)
 	}
-	placeHours(e, s, spent, updated, now)
+	placeHours(e, s, grown, updated, now)
 	if updated.After(e.Updated) {
 		e.Updated = updated.UTC()
 	}
@@ -904,38 +905,80 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 	return grown
 }
 
-// placeHours adds the hours a session's growth of spent tokens this run went
-// to, before the ledger adds the growth. A log that records times has it in
-// the hours where the log shows more than the ledger placed, in proportion.
-// Taking the log's hours as they are would count some tokens twice: a
-// partial read misses some, and the tokens a log records no time for are
-// spread anew as the session grows. A log without times has it at the
-// session's last activity, which is within the last run's interval. So a
-// session's hours add up to its input plus output.
-func placeHours(e *state.Session, s logs.Session, spent int64, updated, now time.Time) {
+// placeHours adds the hours a session's growth this run went to, before the
+// ledger adds the growth: to the session's hours and, once more than one
+// account spends in it, to the hours of the account each part grew for. A
+// log that records times has it in the hours where the log shows more than
+// the ledger placed, in proportion. Taking the log's hours as they are would
+// count some tokens twice: a partial read misses some, and the tokens a log
+// records no time for are spread anew as the session grows. A log without
+// times has it at the session's last activity, which is within the last
+// run's interval. So a session's hours, and each account's, add up to their
+// input plus output.
+func placeHours(e *state.Session, s logs.Session, grown map[string]snapshot.Tokens, updated, now time.Time) {
+	var had, spent int64
+	for _, t := range e.By {
+		had += logs.InOut(t)
+	}
+	for _, g := range grown {
+		spent += logs.InOut(g)
+	}
 	if len(e.Hours) == 0 && len(s.Hours) > 0 {
 		// A session read for the first time, or kept from before the ledger
-		// recorded hours: the log's times cover its whole history.
-		var had int64
-		for _, t := range e.By {
-			had += logs.InOut(t)
-		}
+		// recorded hours: the log's times cover its whole history, which its
+		// accounts share as they share its tokens.
 		e.Hours = maps.Clone(s.Hours)
 		logs.ScaleHours(e.Hours, had+spent)
+		e.ByHours = nil
 		return
 	}
 	if spent <= 0 {
 		return
 	}
-	if len(e.Hours) == 0 {
-		// A session kept from before the ledger recorded hours, whose log
-		// records no times: each account's share is where the report put it,
-		// at the hour the share last grew.
-		for l, t := range e.By {
-			logs.AddHour(&e.Hours, lastActive(e, l), logs.InOut(t))
+	many := spenders(e, grown) > 1
+	if e.ByHours == nil && (many || len(e.Hours) == 0) {
+		// Each account's hours start where the report put them. A session
+		// kept from before the ledger recorded hours, whose log records no
+		// times, has each account's share at the hour the share last grew.
+		by := accountHours(e)
+		e.Hours = nil
+		for _, h := range by {
+			e.Hours = addHours(e.Hours, h)
+		}
+		if many {
+			e.ByHours = by
 		}
 	}
-	e.Hours = addHours(e.Hours, grownHours(e.Hours, s.Hours, spent, updated, now))
+	add := grownHours(e.Hours, s.Hours, spent, updated, now)
+	for l, g := range grown {
+		n := logs.InOut(g)
+		if n <= 0 {
+			continue
+		}
+		part := maps.Clone(add)
+		logs.ScaleHours(part, n)
+		e.Hours = addHours(e.Hours, part)
+		if e.ByHours != nil {
+			e.ByHours[l] = addHours(e.ByHours[l], part)
+		}
+	}
+}
+
+// spenders is how many accounts spent input or output tokens in a session,
+// with this run's growth.
+func spenders(e *state.Session, grown map[string]snapshot.Tokens) int {
+	n := 0
+	for l, t := range e.By {
+		if logs.InOut(t)+logs.InOut(grown[l]) > 0 {
+			n++
+		}
+	}
+	for l, g := range grown {
+		if _, ok := e.By[l]; !ok && logs.InOut(g) > 0 {
+			n++
+		}
+	}
+	return n
 }
 
 // grownHours is where a session's growth of spent tokens went: the hours in
@@ -961,6 +1004,15 @@ func grownHours(placed, log map[int64]int64, spent int64, updated, now time.Time
 // hour ended at cutoff or later.
 func hourKept(h int64, cutoff time.Time) bool {
 	return !logs.HourStart(h + 1).Before(cutoff)
+}
+
+// dropHours drops the hours the ledger no longer keeps.
+func dropHours(hours map[int64]int64, cutoff time.Time) {
+	for h := range hours {
+		if !hourKept(h, cutoff) {
+			delete(hours, h)
+		}
+	}
 }
 
 // fitGrowth scales grown down, field by field and in proportion, so that it
@@ -1347,10 +1399,9 @@ func prune(st *state.State, now time.Time) {
 			delete(st.Sessions, k)
 			continue
 		}
-		for h := range s.Hours {
-			if !hourKept(h, cutoff) {
-				delete(s.Hours, h)
-			}
+		dropHours(s.Hours, cutoff)
+		for _, hours := range s.ByHours {
+			dropHours(hours, cutoff)
 		}
 		for l := range s.By {
 			// An account's share of a session another account continued
@@ -1358,6 +1409,14 @@ func prune(st *state.State, now time.Time) {
 			if last, ok := s.Last[l]; ok && last.Before(cutoff) {
 				delete(s.By, l)
 				delete(s.Last, l)
+				for h, n := range s.ByHours[l] {
+					if s.Hours[h] > n {
+						s.Hours[h] -= n
+					} else {
+						delete(s.Hours, h)
+					}
+				}
+				delete(s.ByHours, l)
 				continue
 			}
 			used[state.Key(s.Provider, l)] = true

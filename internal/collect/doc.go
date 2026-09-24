@@ -2,6 +2,7 @@ package collect
 
 import (
 	"encoding/json"
+	"maps"
 	"sort"
 	"time"
 
@@ -188,11 +189,17 @@ func Projects(st *state.State) []ProjectTotals {
 	return out
 }
 
-// labelHours is label's part of a session's hours: its share of the
-// session's input plus output, spread over the hours as the session's own
-// are. A session whose hours are not known, as one the ledger kept from
-// before it recorded them, has the part at the hour label's share last grew.
+// labelHours is label's part of a session's hours. Once a second account
+// spends in a session, each keeps its own; until then they are all the one
+// account's. A ledger from before accounts kept their own gives each its
+// share of the session's input plus output, spread over the hours as the
+// session's are. A session whose hours are not known, as one the ledger kept
+// from before it recorded them, has the part at the hour label's share last
+// grew.
 func labelHours(s *state.Session, label string) map[int64]int64 {
+	if s.ByHours != nil {
+		return s.ByHours[label]
+	}
 	own := logs.InOut(s.By[label])
 	if own <= 0 {
 		return nil
@@ -207,13 +214,21 @@ func labelHours(s *state.Session, label string) map[int64]int64 {
 	if sum <= 0 {
 		return map[int64]int64{logs.HourOf(lastActive(s, label)): own}
 	}
-	out := make(map[int64]int64, len(s.Hours))
-	for h, n := range s.Hours {
-		if own != all {
-			n = int64(float64(n) * float64(own) / float64(all))
-		}
-		if n > 0 {
-			out[h] = n
+	if own == all {
+		return s.Hours
+	}
+	out := maps.Clone(s.Hours)
+	logs.ScaleHours(out, int64(float64(sum)*float64(own)/float64(all)))
+	return out
+}
+
+// accountHours is each account's part of a session's hours, as labelHours
+// gives it.
+func accountHours(s *state.Session) map[string]map[int64]int64 {
+	out := map[string]map[int64]int64{}
+	for l := range s.By {
+		if h := labelHours(s, l); len(h) > 0 {
+			out[l] = maps.Clone(h)
 		}
 	}
 	return out

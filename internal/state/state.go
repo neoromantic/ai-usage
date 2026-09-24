@@ -232,6 +232,10 @@ type Session struct {
 	// outlives the log, which a harness may delete before the ledger forgets
 	// the session.
 	Hours map[int64]int64 `json:"h,omitempty"`
+	// ByHours splits Hours by account once a second account spends in the
+	// session, so each keeps the hours it spent in. Until then, Hours are
+	// the one account's.
+	ByHours map[string]map[int64]int64 `json:"bh,omitempty"`
 }
 
 // Relay is the last exchange with the team store.
