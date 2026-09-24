@@ -100,8 +100,17 @@ func TestDisplayFlags(t *testing.T) {
 
 	// --json ignores the display flags.
 	var r view.Report
-	if err := json.Unmarshal([]byte(d.ok("report", "--json", "--color=always", "--projects", "--width", "120")), &r); err != nil || r.SchemaVersion != 3 {
+	if err := json.Unmarshal([]byte(d.ok("report", "--json", "--color=always", "--projects", "--devices", "--width", "120")), &r); err != nil || r.SchemaVersion != 3 {
 		t.Fatalf("--json with display flags: %v", err)
+	}
+	// A team of one device has USAGE, not the two views of DEVICES, so
+	// --devices changes nothing; it goes with --projects, and a quiet
+	// collection prints nothing with it.
+	if a, b := d.ok("report"), d.ok("report", "--devices", "--projects"); a != b || !strings.Contains(b, "\nUSAGE  ") {
+		t.Fatalf("--devices on one device:\n%s\nwithout:\n%s", b, a)
+	}
+	if out := d.ok("collect", "--quiet", "--offline", "--devices"); out != "" {
+		t.Fatalf("collect --quiet --devices printed %q", out)
 	}
 
 	st := d.ok("status", "--color=always", "--ascii", "--width", "100")
@@ -115,18 +124,22 @@ func TestDisplayFlagErrors(t *testing.T) {
 	d := newDevice(t)
 	for _, args := range [][]string{
 		{"report", "--projects", "--tokens"},
-		{"--offline", "--devices", "--projects"},
+		{"--offline", "--tokens"},
 		{"report", "--color=sometimes"},
 		{"report", "--width", "-3"},
 		{"status", "--projects"},
+		// status draws no DEVICES.
+		{"status", "--devices"},
+		{"status", "--json", "--devices"},
+		{"report", "--devices=sometimes"},
 	} {
 		r := d.run("", args...)
 		if r.code != 2 || !helpShown(r.stderr) {
 			t.Fatalf("%v: exit %d, stderr %q", args, r.code, r.stderr)
 		}
 	}
-	// Bad flags are refused before anything is collected. --tokens and
-	// --devices are gone: the matrix replaced them.
+	// Bad flags are refused before anything is collected. --tokens is
+	// gone: the matrix replaced it.
 	if _, err := os.Stat(d.dir); !os.IsNotExist(err) {
 		t.Fatalf("a refused run wrote to %s: %v", d.dir, err)
 	}

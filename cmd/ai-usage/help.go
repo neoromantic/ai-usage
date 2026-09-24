@@ -67,6 +67,7 @@ var help = []helpSection{
 	}},
 	{"VIEW", []helpLine{
 		{"--projects", "every project on this device, not only the busiest"},
+		{"--devices", "DEVICES as each device's status; `s` switches views in the interactive view"},
 	}},
 	{"DISPLAY", []helpLine{
 		{"--color=auto|always|never", "auto colors a terminal, unless `NO_COLOR` is set or `TERM=dumb`"},

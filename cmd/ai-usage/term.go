@@ -20,6 +20,9 @@ type display struct {
 	ascii    bool
 	width    int
 	projects bool
+	// devices draws DEVICES as its status view, and opens the interactive
+	// view there.
+	devices bool
 	// plain prints the static report on a terminal too, rather than open
 	// the interactive view.
 	plain bool
@@ -34,6 +37,7 @@ func displayFlags(fs *flag.FlagSet, views bool) *display {
 	fs.BoolVar(&d.plain, "plain", false, "")
 	if views {
 		fs.BoolVar(&d.projects, "projects", false, "")
+		fs.BoolVar(&d.devices, "devices", false, "")
 	}
 	return d
 }
@@ -56,11 +60,12 @@ func (d *display) check() error {
 // terminal be asked, as the static report does.
 func (d *display) options(stdout io.Writer, ask bool) view.Options {
 	o := view.Options{
-		Width:       termWidth(d.width, stdout),
-		Color:       d.profile(stdout) >= colorprofile.ANSI,
-		Dark:        true,
-		ASCII:       d.ascii || !utf8Locale(),
-		AllProjects: d.projects,
+		Width:        termWidth(d.width, stdout),
+		Color:        d.profile(stdout) >= colorprofile.ANSI,
+		Dark:         true,
+		ASCII:        d.ascii || !utf8Locale(),
+		AllProjects:  d.projects,
+		DeviceStatus: d.devices,
 	}
 	if o.Color {
 		o.Dark = darkBackground(stdout, ask)

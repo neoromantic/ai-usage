@@ -837,6 +837,15 @@ func TestTwoDevicesShareATeam(t *testing.T) {
 	if out := a.ok("status"); !strings.Contains(out, "✓ "+srv.URL) {
 		t.Fatalf("status printed:\n%s", out)
 	}
+	// Two devices have the matrix, and --devices prints the status of each
+	// instead, this device's marked.
+	if out := a.ok("report"); !strings.Contains(out, "\nDEVICES × SUBSCRIPTIONS  2 · 7d") {
+		t.Fatalf("report printed:\n%s", out)
+	}
+	out := a.ok("report", "--devices", "--width", "120")
+	if !strings.Contains(out, "\nDEVICES  2 · by 7d") || strings.Contains(out, "DEVICES × SUBSCRIPTIONS") || !regexp.MustCompile(`\n  DEVICE +USER +VERSION +SEEN +VIA +TODAY +7D +30D +90D\n● `).MatchString(out) {
+		t.Fatalf("report --devices printed:\n%s", out)
+	}
 
 	// Forgetting B takes it off the relay; A's next read has only itself.
 	a.ok("team", "forget-device", b.config().Device)

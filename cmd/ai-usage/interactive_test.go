@@ -65,6 +65,18 @@ func TestViewConfig(t *testing.T) {
 	if c := viewConfig(state.Dir(d.dir), res, "", &display{color: "always"}, true, io.Discard); c.Options.Dark {
 		t.Fatalf("with a light COLORFGBG, the view starts with %+v", c.Options)
 	}
+	// --devices opens it on the status view of DEVICES; without, the matrix.
+	fs := flags("report")
+	disp := displayFlags(fs, true)
+	if err := parse(fs, []string{"--devices", "--projects"}); err != nil {
+		t.Fatal(err)
+	}
+	if c := viewConfig(state.Dir(d.dir), res, "", disp, true, io.Discard); !c.Options.DeviceStatus || !c.Options.AllProjects {
+		t.Fatalf("--devices --projects: the view starts with %+v", c.Options)
+	}
+	if c := viewConfig(state.Dir(d.dir), res, "", &display{}, true, io.Discard); c.Options.DeviceStatus {
+		t.Fatalf("without --devices, the view starts with %+v", c.Options)
+	}
 
 	// The view is written with the escapes the static report would be.
 	t.Setenv("NO_COLOR", "1")
