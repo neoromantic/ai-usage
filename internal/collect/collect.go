@@ -927,6 +927,14 @@ func placeHours(e *state.Session, s logs.Session, spent int64, updated, now time
 	if spent <= 0 {
 		return
 	}
+	if len(e.Hours) == 0 {
+		// A session kept from before the ledger recorded hours, whose log
+		// records no times: each account's share is where the report put it,
+		// at the hour the share last grew.
+		for l, t := range e.By {
+			logs.AddHour(&e.Hours, lastActive(e, l), logs.InOut(t))
+		}
+	}
 	e.Hours = addHours(e.Hours, grownHours(e.Hours, s.Hours, spent, updated, now))
 }
 

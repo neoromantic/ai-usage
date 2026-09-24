@@ -376,6 +376,29 @@ func TestLedgerPlacesHours(t *testing.T) {
 	}
 }
 
+// TestUntimedHistoryFromBeforeHoursStays: a session the ledger kept from
+// before it recorded hours has its tokens at the hour its share last grew.
+// When its log, which records no times, shows it grow, that history stays in
+// its day beside the growth.
+func TestUntimedHistoryFromBeforeHoursStays(t *testing.T) {
+	day := 24 * time.Hour
+	for _, parts := range []map[string]snapshot.Tokens{nil, {"openrouter": {Input: 510}}} {
+		st := &state.State{Accounts: map[string]*state.Account{}, Sessions: map[string]*state.Session{
+			state.Key("hermes", "s2"): {Provider: "hermes", Project: "/srv1", Seen: snapshot.Tokens{Input: 500}, Updated: t0.Add(-2 * day),
+				By: map[string]snapshot.Tokens{"openrouter": {Input: 500}}, Last: map[string]time.Time{"openrouter": t0.Add(-2 * day)}},
+		}}
+		if got := DaysOf(totalsFor(t, st, "hermes", "openrouter").Hours, t0); !reflect.DeepEqual(got, []int64{0, 0, 500}) {
+			t.Fatalf("days before = %v", got)
+		}
+		s := logs.Session{ID: "s2", Project: "/srv1", Tokens: snapshot.Tokens{Input: 510}, Updated: t0, Account: "openrouter", Parts: parts}
+		attribute(st, "hermes", s, "openrouter", false, t0, map[string]snapshot.Tokens{})
+		a := totalsFor(t, st, "hermes", "openrouter")
+		if got := DaysOf(a.Hours, t0); a.Tokens.Input != 510 || !reflect.DeepEqual(got, []int64{10, 0, 500}) {
+			t.Errorf("parts %v: days after = %v for %d tokens, want [10 0 500]", parts, got, a.Tokens.Input)
+		}
+	}
+}
+
 // TestHoursNeverExceedTheTokens: a Claude log spreads the tokens it records
 // no time for over its timed hours, anew as the session grows, and a file
 // that cannot be read keeps every read partial. A session's hours still add
