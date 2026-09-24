@@ -108,7 +108,8 @@ type Attention struct {
 	Percent *float64 `json:"percent,omitempty"`
 	// ReadingAge is how old the reading is, in seconds, when it is stale.
 	ReadingAge int64 `json:"reading_age_seconds,omitempty"`
-	// Message is an error's text, or the newest release for old devices.
+	// Message is an error's text, the error a silent device last reported,
+	// or the newest release for old devices.
 	Message string `json:"message,omitempty"`
 }
 

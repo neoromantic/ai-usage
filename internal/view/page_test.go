@@ -68,6 +68,36 @@ func TestPageAttentionIsCut(t *testing.T) {
 	}
 }
 
+// TestPageSilentDevice: a silent device whose last report had an error says
+// since when, then the error where it fits, and has ~ in the matrix.
+func TestPageSilentDevice(t *testing.T) {
+	r := loadReport(t, "team")
+	since := time.Date(2026, 9, 21, 11, 2, 0, 0, time.UTC)
+	msg := "codex: not logged in"
+	for i := range r.Team.Devices {
+		if d := &r.Team.Devices[i]; d.Label == "bot-e" {
+			d.Silent, d.Error, d.CollectedAt = true, &msg, since
+		}
+	}
+	r.Attention = append(r.Attention, Attention{Kind: AttentionSilent, Devices: []string{"bot-e"}, At: &since, Message: msg})
+	for w, want := range map[int]string{
+		80:  " SILENT  bot-e                no report since Mon 14:02, 2d 3h ago",
+		120: " SILENT  bot-e                no report since Mon 14:02, 2d 3h ago · last error: codex: not logged in",
+	} {
+		p := Render(r, Options{Width: w, Loc: sampleZone, Interactive: true})
+		if lines := pageSection(p, "ATTENTION"); lines[len(lines)-1] != want {
+			t.Errorf("at %d: %q, want %q", w, lines[len(lines)-1], want)
+		}
+		found := false
+		for _, l := range pageSection(p, "DEVICES") {
+			found = found || strings.HasPrefix(l, "~ bot-e ")
+		}
+		if !found {
+			t.Errorf("at %d: bot-e is not marked silent:\n%s", w, strings.Join(pageSection(p, "DEVICES"), "\n"))
+		}
+	}
+}
+
 // TestPageOverLine: an OVER line that is short of room drops the pace
 // first, then the reading's age, and keeps how long before the reset.
 func TestPageOverLine(t *testing.T) {

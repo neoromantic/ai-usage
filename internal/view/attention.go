@@ -64,10 +64,16 @@ func attention(t Team, c Collector, now time.Time) []Attention {
 	var old []string
 	for _, d := range t.Devices {
 		switch {
+		case d.Silent:
+			// A silent device's error is the one it last reported, not what
+			// fails on it now.
+			at := Attention{Kind: AttentionSilent, Devices: []string{d.Label}, At: timePtr(d.CollectedAt)}
+			if d.Error != nil {
+				at.Message = *d.Error
+			}
+			out = append(out, at)
 		case d.Error != nil:
 			out = append(out, Attention{Kind: AttentionError, Devices: []string{d.Label}, Message: *d.Error})
-		case d.Silent:
-			out = append(out, Attention{Kind: AttentionSilent, Devices: []string{d.Label}, At: timePtr(d.CollectedAt)})
 		}
 		if d.This {
 			for _, e := range collectorErrors(c) {

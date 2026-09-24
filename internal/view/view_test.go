@@ -552,7 +552,9 @@ func TestAttention(t *testing.T) {
 
 	broken := emptyState()
 	broken.Sources["codex"] = state.Source{Status: "error", Error: "app-server exited without answering"}
+	// A silent device's error is the one it last reported.
 	quiet := emptyState()
+	quiet.Sources["codex"] = state.Source{Status: "partial", Error: "codex: not logged in"}
 	r := withTeam(t, f,
 		otherDoc(t, f.key, "d-broken-device", "Mac.localdomain", now.Add(-10*time.Minute), broken),
 		otherDoc(t, f.key, "d-quiet-device", "leebook", now.Add(-50*time.Hour), quiet),
@@ -592,7 +594,7 @@ func TestAttention(t *testing.T) {
 	if e := r.Attention[3]; e.Message != "codex: app-server exited without answering" {
 		t.Fatalf("error = %+v", e)
 	}
-	if s := r.Attention[4]; s.At == nil || !s.At.Equal(now.Add(-50*time.Hour)) {
+	if s := r.Attention[4]; s.At == nil || !s.At.Equal(now.Add(-50*time.Hour)) || s.Message != "codex: not logged in" {
 		t.Fatalf("silent = %+v", s)
 	}
 	if o := r.Attention[5]; o.Message != "v1.2.3" {

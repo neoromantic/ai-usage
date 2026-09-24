@@ -91,7 +91,7 @@ Shown only when something is wrong. At most 6 lines, then `+N more`; the interac
 | `OUT` | a window is at 100% | when it comes back |
 | `OVER` | a window will run out before it resets, at its pace so far | when it runs out, and how long before the reset |
 | `ERROR` | a device's collector or one of its harnesses fails | the device and the error |
-| `SILENT` | a device has not reported for a day | since when |
+| `SILENT` | a device has not reported for a day | since when, and the error it last reported, if any |
 | `OLD` | devices run an older release | all of them in one line |
 | `UNDER` | past half of a window, its forecast is under 50% | how much of the window will go unused |
 
@@ -170,7 +170,7 @@ A matrix. Each device is a row, sorted by total, largest first. Each subscriptio
 - A cell is input plus output tokens in the chosen period, in whole millions: `603` or `1210`. It is `<1` under a million and `·` with no use. Cache is left out.
 - The cells form a heat map. A cell grows brighter, and at the top step bold, as its value grows, on a log scale relative to the largest cell. The largest consumers stand out without reading a number.
 - A subscription's name in the header takes its state color, so an `out` column is visible from the matrix too.
-- A mark before the device name gives its state: `●` this device, `×` an error, `~` silent, `↓` an old release.
+- A mark before the device name gives its state: `●` this device, `×` an error, `~` silent, `↓` an old release. A silent device's error is the one it last reported, so it shows `~`.
 - The share mode (`%`) shows each device's share of the subscription's current window instead. It is the device's tokens since the window began, divided by the team's, times how full the window is. A column then adds up to how full the window is, and the bottom row shows that. The title says the share is an estimate.
 
 Many devices scroll down, and many subscriptions scroll sideways, with the device column and the headers kept in place. The static report prints the columns that fit and ends the header with `+N more`.

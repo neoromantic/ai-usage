@@ -278,8 +278,9 @@ func heatStep(v, top float64) int {
 	return clamp(5-int(math.Floor(math.Log10(top/v)*2)), 1, 5)
 }
 
-// rowMark is a device's state before its name: this device, an error, a
-// silence, or an old release.
+// rowMark is a device's state before its name: this device, a silence, an
+// error, or an old release. A silent device's error is the one it last
+// reported, so its silence shows, as in ATTENTION.
 func (p *page) rowMark(r Row) chunk {
 	g := p.g
 	d := p.device(r.DeviceID, r.Device)
@@ -289,12 +290,12 @@ func (p *page) rowMark(r Row) chunk {
 	case d.This:
 		p.mark("this")
 		return p.accent(g.here)
-	case d.Error != nil:
-		p.mark("fail")
-		return p.paint(g.fail, p.th.Out, false, false)
 	case d.Silent:
 		p.mark("silent")
 		return p.paint(g.silent, p.th.Tight, false, false)
+	case d.Error != nil:
+		p.mark("fail")
+		return p.paint(g.fail, p.th.Out, false, false)
 	case d.Old:
 		p.mark("old")
 		return p.muted(g.old)
