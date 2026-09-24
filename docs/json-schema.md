@@ -2,7 +2,7 @@
 
 `ai-usage --json`, `ai-usage collect --json`, and `ai-usage report --json` print one report object. `ai-usage status --json` prints a smaller object, described at the end.
 
-A field changes meaning only with a new `schema_version`. New fields can appear within a version, so ignore the ones you do not know. [Changes from version 2](#changes-from-version-2) lists what version 3 added and removed.
+A field changes meaning only with a new `schema_version`. New fields can appear within a version, so ignore the ones you do not know. [Changes from version 2](#changes-from-version-2) lists what version 3 added and removed, and [Added within version 3](#added-within-version-3) what it added since.
 
 Conventions:
 
@@ -278,7 +278,7 @@ A cell:
 
 ## Added within version 3
 
-- `unknown` on the `usage` objects under `team`, and `window_unknown` on a matrix column and cell, for a device on a collector older than v0.2.0. Such a device's periods used to be `0`, even `90d`; it was not among `users`; and its `share` was `0`, so the other devices shared the whole window. Now `90d` has its tokens, and a share that is not known is `null`, which `share` already allowed. No field changed meaning, so the version stays 3. A reader that ignores the new fields takes the known part of a period as all of it, as it took the zeros before.
+- `unknown` on the `usage` objects under `team`, and `window_unknown` on a matrix column and cell, for a device on a collector older than v0.2.0. Such a device's periods used to be `0`, even `90d`; it was not among `users`; and its `share` was `0`, so the other devices shared the whole window. Now `90d` has its tokens, and a share that is not known is `null`, which `share` already allowed. Such a device counts in `users` when it used the account since the window began. `busiest` names the only user even when its tokens are not known, and is `null` when none of two or more users has known tokens, which `busiest` already allowed, though `users` is then above 0. No field changed meaning, so the version stays 3. A reader that ignores the new fields takes the known part of a period as all of it, as it took the zeros before.
 
 ## Changes from version 2
 
