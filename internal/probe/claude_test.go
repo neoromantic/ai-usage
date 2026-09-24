@@ -198,6 +198,11 @@ func TestClaudeConfigDir(t *testing.T) {
 
 const claudeCache = `{"oauthAccount":{"accountUuid":"acct-1"},"cachedUsageUtilization":{"fetchedAtMs":1790000000000,"accountUuid":"acct-1","utilization":{"limits":[{"kind":"session","percent":12}]}}}`
 
+// claudeCacheAt is claudeCache, fetched at at.
+func claudeCacheAt(at time.Time) string {
+	return strings.Replace(claudeCache, "1790000000000", fmt.Sprint(at.UnixMilli()), 1)
+}
+
 func writeFile(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -366,22 +371,33 @@ func TestClaudeTimeout(t *testing.T) {
 }
 
 // A claude.ai subscription whose cache is stale has Claude Code read the
-// usage again, as auth status runs, and the reading is what it cached.
+// usage again, as auth status runs, and the reading is what it cached. A
+// cache from a clock that ran ahead is stale too, and a use since it is not
+// needed, as for a cache that is missing.
 func TestClaudeRefreshesUsage(t *testing.T) {
-	for _, name := range []string{".claude", "work-claude"} {
-		t.Run(name, func(t *testing.T) {
+	future := claudeCacheAt(time.Now().Add(24 * time.Hour))
+	for _, tc := range []struct {
+		name, home, cache string
+		idle              time.Duration
+	}{
+		{name: "default home", home: ".claude", cache: claudeCache},
+		{name: "another home", home: "work-claude", cache: claudeCache},
+		{name: "no cache", home: ".claude", cache: `{"oauthAccount":{"accountUuid":"acct-1"}}`, idle: 50 * time.Minute},
+		{name: "cache from the future", home: ".claude", cache: future, idle: time.Minute},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			env, record := fakeEnv(t, "claude-ok", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "DISABLE_AUTOUPDATER=0")
 			env.Now = time.Now
-			home := filepath.Join(env.HomeDir, name)
+			home := filepath.Join(env.HomeDir, tc.home)
 			file := filepath.Join(home, ".claude.json")
-			if name == ".claude" {
+			if tc.home == ".claude" {
 				file = filepath.Join(env.HomeDir, ".claude.json")
 			}
-			writeFile(t, file, claudeCache)
+			writeFile(t, file, tc.cache)
 			env.Environ = append(env.Environ, "PROBE_CACHE="+file)
 			start := time.Now()
 
-			r, err := Claude(WithLastUse(context.Background(), start), env, home)
+			r, err := Claude(WithLastUse(context.Background(), start.Add(-tc.idle)), env, home)
 			if err != nil {
 				t.Fatalf("error: %v", err)
 			}
@@ -418,24 +434,31 @@ func TestClaudeRefreshesUsage(t *testing.T) {
 
 // Claude Code is not asked to read the usage when its cache is fresh, for a
 // login without usage limits, or with nobody logged in. Nor for a home not
-// used since its cache, or never, whose login it would keep alive. Nor when
-// its config cannot be read, since Claude Code would meet the same file,
-// nor in a home another OS user owns, whose files it would take over. A
-// skipped read is no problem. The Claude app's agent-mode homes are not probed at all:
-// collect's TestClaudeAppSessionsGoToTheirRecordedAccount covers them.
+// used in the last hour, or not since its cache, whose login it would keep
+// alive. Nor when its config names no account, since the cache Claude Code
+// writes there is not read, or cannot be read at all, since Claude Code
+// would meet the same file. Nor in a home another OS user owns, whose files
+// it would take over. A skipped read is no problem. The Claude app's
+// agent-mode homes are not probed at all: collect's
+// TestClaudeAppSessionsGoToTheirRecordedAccount covers them.
 func TestClaudeSkipsUsageRefresh(t *testing.T) {
-	fresh := fmt.Sprintf(`{"oauthAccount":{"accountUuid":"acct-1"},"cachedUsageUtilization":{"fetchedAtMs":%d,"accountUuid":"acct-1","utilization":{"limits":[{"kind":"session","percent":12}]}}}`,
-		testNow.Add(-5*time.Minute).UnixMilli())
+	cache := func(age time.Duration) string { return claudeCacheAt(testNow.Add(-age)) }
 	tests := []struct {
 		name, mode, config string
 		othersHome         bool
-		// unused is how long before the cache the home was last used, or
-		// -1 for never.
-		unused time.Duration
+		// idle is how long before now the home was last used, or -1 for
+		// never.
+		idle time.Duration
 	}{
-		{name: "fresh cache", mode: "claude-ok", config: fresh},
-		{name: "not used since the cache", mode: "claude-ok", config: claudeCache, unused: time.Second},
-		{name: "never used", mode: "claude-ok", config: claudeCache, unused: -1},
+		{name: "fresh cache", mode: "claude-ok", config: cache(5 * time.Minute)},
+		{name: "not used since the cache", mode: "claude-ok", config: cache(30 * time.Minute), idle: 40 * time.Minute},
+		{name: "never used", mode: "claude-ok", config: claudeCache, idle: -1},
+		{name: "no cache, used over an hour ago", mode: "claude-ok", config: `{"oauthAccount":{"accountUuid":"acct-1"}}`, idle: 61 * time.Minute},
+		{name: "another account's cache, used 80 days ago", mode: "claude-ok", config: strings.Replace(claudeCache, `"acct-1"}`, `"acct-2"}`, 1), idle: 80 * 24 * time.Hour},
+		{name: "cache older than a use over an hour ago", mode: "claude-ok", config: cache(40 * 24 * time.Hour), idle: 30 * 24 * time.Hour},
+		// A config reset while the login stays: Claude Code caches the usage
+		// without an account.
+		{name: "config names no account", mode: "claude-ok", config: `{}`},
 		{name: "config not JSON", mode: "claude-ok", config: `{`},
 		{name: "console login", mode: "claude-console", config: claudeCache},
 		{name: "api key", mode: "claude-no-email", config: claudeCache},
@@ -451,12 +474,11 @@ func TestClaudeSkipsUsageRefresh(t *testing.T) {
 				claudeOwned = func(string, string) bool { return false }
 			}
 			env, record := fakeEnv(t, tc.mode)
-			writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), tc.config)
-			used := testNow
-			switch {
-			case tc.unused > 0:
-				used = time.UnixMilli(fetchedAtMs).Add(-tc.unused)
-			case tc.unused < 0:
+			file := filepath.Join(env.HomeDir, ".claude.json")
+			writeFile(t, file, tc.config)
+			env.Environ = append(env.Environ, "PROBE_CACHE="+file)
+			used := testNow.Add(-tc.idle)
+			if tc.idle < 0 {
 				used = time.Time{}
 			}
 			_, err := Claude(WithLastUse(context.Background(), used), env, filepath.Join(env.HomeDir, ".claude"))
@@ -467,6 +489,38 @@ func TestClaudeSkipsUsageRefresh(t *testing.T) {
 				t.Errorf("error = %q", errText(err))
 			}
 		})
+	}
+}
+
+// A read that leaves no new reading, as Claude Code's does offline, is made
+// again at each run while the home is in use, and not once the home has been
+// idle for an hour.
+func TestClaudeStopsAskingOnceTheHomeIsIdle(t *testing.T) {
+	env, record := fakeEnv(t, "claude-ok", "PROBE_USAGE=no-write")
+	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
+	used := testNow
+	ctx := WithLastUse(context.Background(), used)
+	runs := 0
+	for _, tc := range []struct {
+		after time.Duration
+		ask   bool
+	}{
+		{15 * time.Minute, true},
+		{time.Hour, true},
+		{time.Hour + 15*time.Minute, false},
+		{59 * 24 * time.Hour, false},
+	} {
+		now := used.Add(tc.after)
+		env.Now = func() time.Time { return now }
+		_, err := Claude(ctx, env, filepath.Join(env.HomeDir, ".claude"))
+		n := len(readRuns(t, record))
+		if asked := n-runs == 2; asked != tc.ask {
+			t.Errorf("%v after the last use: asked %v", tc.after, asked)
+		}
+		runs = n
+		if got := strings.Contains(errText(err), "no new reading"); got != tc.ask {
+			t.Errorf("%v after the last use: error = %q", tc.after, errText(err))
+		}
 	}
 }
 

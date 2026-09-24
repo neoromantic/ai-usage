@@ -5,8 +5,8 @@
 // files where the harness already cached that answer. It never opens a
 // credential file, never starts a conversation, and never runs a login,
 // logout, or token-refresh command. Claude Code, asked for the usage of a
-// home in use, renews its own expired login on the way, as any of its
-// sessions does.
+// home used in the last hour, renews its own expired login on the way, as
+// any of its sessions does.
 package probe
 
 import (

@@ -20,10 +20,11 @@ import (
 // says is logged in.
 //
 // Claude Code writes that cache only when it reads the usage, as its /usage
-// dialog does. So for a claude.ai subscription whose cache is missing or
-// older than claudeFresh, in a home this OS user owns and used since that
-// cache, Claude Code is first asked to read it again. The cache is as fresh
-// as Claude Code last made it. Its age is reported.
+// dialog does. So for a claude.ai subscription whose config names its
+// account and whose cache is missing or older than claudeFresh, in a home
+// this OS user owns and used in the last claudeInUse and since that cache,
+// Claude Code is first asked to read it again. The cache is as fresh as
+// Claude Code last made it. Its age is reported.
 func Claude(ctx context.Context, env Env, home string) (Reading, error) {
 	var r Reading
 	var errs []error
@@ -38,7 +39,7 @@ func Claude(ctx context.Context, env Env, home string) (Reading, error) {
 			errs = append(errs, err)
 		}
 		r.Account, r.Plan = st.label(), st.SubscriptionType
-		if st.subscription() && claudeUsedSince(file, LastUse(ctx)) && claudeOwned(file, home) && claudeStale(file, env.now()) {
+		if st.subscription() && claudeHasAccount(file) && claudeUsedSince(file, LastUse(ctx), env.now()) && claudeOwned(file, home) && claudeStale(file, env.now()) {
 			err := claudeRefresh(ctx, env, bin, configDir)
 			// The read is judged by the cache it leaves, not by how Claude
 			// Code exits: one that could not reach the usage, as offline,
@@ -297,13 +298,20 @@ func LastUse(ctx context.Context) time.Time {
 	return t
 }
 
-// claudeUsedSince reports whether the home was used after the cache in the
-// config file at path was fetched, or at all when there is none. Claude
-// Code renews an expired login when it reads the usage, so it is asked only
-// for a home in use, whose own sessions keep that login alive anyway. It
-// never keeps an idle login alive, and an idle home has spent nothing since.
-func claudeUsedSince(path string, used time.Time) bool {
-	if used.IsZero() {
+// claudeInUse is how recently a home must have been used for Claude Code to
+// be asked to read its usage. Runs every 15 minutes ask within it, and a
+// read that keeps failing stops being made soon after the home goes idle.
+const claudeInUse = time.Hour
+
+// claudeUsedSince reports whether the home was used in the last claudeInUse,
+// and after the cache in the config file at path was fetched when there is
+// one. A cache fetched after now counts as none, as it does to Claude Code.
+// Claude Code renews an expired login when it reads the usage, so it is
+// asked only for a home in use, whose own sessions keep that login alive
+// anyway. An idle login is left to expire, and an idle home has spent
+// nothing since.
+func claudeUsedSince(path string, used, now time.Time) bool {
+	if used.IsZero() || now.Sub(used) > claudeInUse {
 		return false
 	}
 	cfg, err := readClaudeConfig(path)
@@ -311,7 +319,20 @@ func claudeUsedSince(path string, used time.Time) bool {
 		return false
 	}
 	c := cfg.cache()
-	return c == nil || used.After(time.UnixMilli(c.FetchedAtMs))
+	if c == nil {
+		return true
+	}
+	fetched := time.UnixMilli(c.FetchedAtMs)
+	return fetched.After(now) || used.After(fetched)
+}
+
+// claudeHasAccount reports whether the config file at path names the account
+// logged in. Claude Code tags the usage it caches with that account, and a
+// cache without one is not read. So for a config that names none, as one
+// reset while the login stays, a read would leave no reading, every run.
+func claudeHasAccount(path string) bool {
+	cfg, err := readClaudeConfig(path)
+	return err == nil && cfg.OAuthAccount != nil && cfg.OAuthAccount.AccountUUID != ""
 }
 
 // claudeOwned reports whether this OS user owns the home and the config
