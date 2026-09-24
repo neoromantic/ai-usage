@@ -169,6 +169,9 @@ func TestTerminalDetection(t *testing.T) {
 	profiles(colorprofile.ANSI256, colorprofile.ANSI256, colorprofile.NoTTY)
 	t.Setenv("NO_COLOR", "1")
 	profiles(colorprofile.ASCII, colorprofile.ANSI256, colorprofile.NoTTY)
+	// Any value counts, as no-color.org has it.
+	t.Setenv("NO_COLOR", "yes")
+	profiles(colorprofile.ASCII, colorprofile.ANSI256, colorprofile.NoTTY)
 	// A dumb terminal takes nothing unless asked.
 	t.Setenv("TERM", "dumb")
 	profiles(colorprofile.NoTTY, colorprofile.ANSI, colorprofile.NoTTY)

@@ -75,22 +75,26 @@ func (d *display) writer(stdout io.Writer) io.Writer {
 }
 
 // profile is what stdout takes. A pipe, TERM=dumb, and --color=never take
-// no escapes; NO_COLOR takes bold and reverse video but no color; and
-// --color=always takes color anywhere, NO_COLOR or not.
+// no escapes; NO_COLOR, set to anything, takes bold and reverse video but no
+// color; and --color=always takes color anywhere, NO_COLOR or not.
 func (d *display) profile(stdout io.Writer) colorprofile.Profile {
-	env := os.Environ()
+	// colorprofile reads NO_COLOR as a boolean, so any value is passed on as 1.
+	var env []string
+	for _, kv := range os.Environ() {
+		if v, ok := strings.CutPrefix(kv, "NO_COLOR="); ok {
+			if v == "" || d.color == "always" {
+				continue
+			}
+			kv = "NO_COLOR=1"
+		}
+		env = append(env, kv)
+	}
 	var p colorprofile.Profile
 	switch d.color {
 	case "never":
 		p = colorprofile.NoTTY
 	case "always":
-		asked := env[:0:0]
-		for _, kv := range env {
-			if !strings.HasPrefix(kv, "NO_COLOR=") {
-				asked = append(asked, kv)
-			}
-		}
-		p = max(colorprofile.Env(asked), colorprofile.ANSI)
+		p = max(colorprofile.Env(env), colorprofile.ANSI)
 	default:
 		p = colorprofile.Detect(stdout, env)
 	}
