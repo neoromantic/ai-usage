@@ -14,6 +14,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/neoromantic/ai-usage/internal/view"
@@ -28,6 +29,9 @@ type Config struct {
 	// starts. The view sets Interactive, MatrixScroll, and Busy itself, and
 	// Dark once the terminal says what its background is.
 	Options view.Options
+	// Profile is the escapes the terminal is written with, as the static
+	// report would write them; Unknown lets Bubble Tea detect them.
+	Profile colorprofile.Profile
 	// Load rebuilds the report from disk as of now, without collecting.
 	Load func(now time.Time) (view.Report, error)
 	// Refresh collects now; nil leaves `r` out.
@@ -82,8 +86,12 @@ func Run(ctx context.Context, c Config, in io.Reader, out io.Writer) error {
 	defer cancel()
 	m := New(c)
 	m.jobs = &jobs{ctx: ctx}
+	opts := []tea.ProgramOption{tea.WithContext(ctx), tea.WithInput(in), tea.WithOutput(out)}
+	if c.Profile != colorprofile.Unknown {
+		opts = append(opts, tea.WithColorProfile(c.Profile))
+	}
 	// Bubble Tea restores the terminal on its way out, after a panic too.
-	_, err := tea.NewProgram(m, tea.WithContext(ctx), tea.WithInput(in), tea.WithOutput(out)).Run()
+	_, err := tea.NewProgram(m, opts...).Run()
 	cancel()
 	if m.jobs.stop() && c.Stopping != nil {
 		c.Stopping()

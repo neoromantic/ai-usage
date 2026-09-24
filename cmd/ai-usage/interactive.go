@@ -40,9 +40,11 @@ func showView(ctx context.Context, d state.Dir, res *collect.Result, endpoint st
 	return tui.Run(ctx, viewConfig(d, res, endpoint, disp, offline, stdout), os.Stdin, stdout)
 }
 
-// viewConfig is the interactive view of res on stdout. It does not ask the
-// terminal for its background before it opens: Bubble Tea asks once it
-// reads the terminal, so the keys typed meanwhile reach the view.
+// viewConfig is the interactive view of res on stdout. It is written with
+// the escapes the static report would be, so --color and NO_COLOR mean the
+// same in both. It does not ask the terminal for its background before it
+// opens: Bubble Tea asks once it reads the terminal, so the keys typed
+// meanwhile reach the view.
 func viewConfig(d state.Dir, res *collect.Result, endpoint string, disp *display, offline bool, stdout io.Writer) tui.Config {
 	o := disp.options(stdout, false)
 	// The view follows the terminal's width unless --width fixes it.
@@ -50,6 +52,7 @@ func viewConfig(d state.Dir, res *collect.Result, endpoint string, disp *display
 	return tui.Config{
 		Report:  reportAt(d, res, endpoint, clock().UTC()),
 		Options: o,
+		Profile: disp.profile(stdout),
 		Load: func(now time.Time) (view.Report, error) {
 			res, err := loadResult(d)
 			if err != nil {

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/colorprofile"
+
 	"github.com/neoromantic/ai-usage/internal/state"
 )
 
@@ -50,6 +52,21 @@ func TestViewConfig(t *testing.T) {
 	}
 	if c := viewConfig(state.Dir(d.dir), res, "", &display{color: "always"}, true, io.Discard); !c.Options.Color || !c.Options.Dark {
 		t.Fatalf("the view starts with %+v", c.Options)
+	}
+
+	// The view is written with the escapes the static report would be.
+	t.Setenv("NO_COLOR", "1")
+	t.Setenv("TTY_FORCE", "1")
+	t.Setenv("TERM", "xterm-256color")
+	for flag, want := range map[string]colorprofile.Profile{
+		"always": colorprofile.ANSI256,
+		"auto":   colorprofile.ASCII,
+		"never":  colorprofile.NoTTY,
+	} {
+		c := viewConfig(state.Dir(d.dir), res, "", &display{color: flag}, true, io.Discard)
+		if c.Profile != want || c.Options.Color != (want >= colorprofile.ANSI) {
+			t.Errorf("--color=%s with NO_COLOR: profile %v, color %v", flag, c.Profile, c.Options.Color)
+		}
 	}
 }
 
