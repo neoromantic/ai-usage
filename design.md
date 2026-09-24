@@ -2,7 +2,7 @@
 
 The design of the console report, static and interactive. Decided on 2026-09-23 with the owner. [ai-report.md](ai-report.md) has the product requirements. Its section "Next: report redesign" lists what the collector and the relay must add for this design.
 
-Nothing here is built yet.
+Built on 2026-09-24 for v0.2.0. Where the build decides what this text leaves open, the golden files in `internal/view/testdata/` show the result: the matrix rows go by total, and OVER lines by when they run out.
 
 ## What the report answers
 

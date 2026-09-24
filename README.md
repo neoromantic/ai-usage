@@ -5,57 +5,71 @@ ai-usage shows how much of your Claude Code, Codex, Grok, and Hermes quota you h
 It is one small binary for macOS, Linux, and Windows. The system scheduler runs it every 15 minutes. Each run reads what those tools already record on disk, asks the installed tools for your account and quota, and exits. A run can also publish an encrypted summary for this machine to a small relay, and read the summaries of the other machines in your team.
 
 ```
-ai-usage · annbook · team qmvrtzpa                     ● collected 7m ago  ● relay 7m ago  ● up to date
+ai-usage · annbook · team qmvrtzpa                                  ● collected 7m ago  ● relay 7m ago  ● up to date
 
 ATTENTION
- OUT    codex ann@acme.dev          back Fri 17:09, in 1d 23h
- OUT    claude ann · Fable          back Sun 01:00, in 3d 7h
- OVER   codex sam@mail.test         runs out ~Sat 06:54 at this week's pace, 2d 13h before reset
- OVER   claude ann@acme.dev         runs out ~Thu 01:17 at this week's pace · reading 1d old
- ERROR  Mac.localdomain             codex: app-server exited without answering
- OLD    2 devices on v0.1.1         Mac.localdomain, MacBook-Pro-Kim · latest v0.1.3
+ OUT    codex ann@acme.dev   back Fri 17:09, in 1d 23h
+ OUT    claude ann · Fable   back Sun 01:00, in 3d 7h
+ OVER   claude ann@acme.dev  runs out ~Thu 01:17 at this week's pace, 2d 23h before reset · reading 1d old
+ OVER   codex sam@mail.test  runs out ~Sat 06:54 at this week's pace, 2d 13h before reset
+ ERROR  Mac.localdomain      codex: app-server exited without answering
+ OLD    2 devices on v1.4.0  Mac.localdomain, MacBook-Pro-Kim · latest v1.4.2
 
 SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
 
-  CLAUDE                 PLAN        THIS WEEK                  LEFT  RESETS               AT RESET  USERS                LAST
-● ann@acme.dev           max         ━━━━━━━━━╋━━━━━━────────   ~33%  3d 7h  Sun 01:00   ~174% over   2  annbook             7m
-    Fable                            ━━━━━━━━━╋━━━━━━━━━━━━━━     0%  3d 7h  Sun 01:00          out
-  kim@corp.test          max         ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈      ?                              —   1  Mac.localdomain     1h
+  CLAUDE         PLAN        THIS WEEK                 LEFT  RESETS              AT RESET  USERS                LAST
+● ann@acme.dev   max         ━━━━━━━━━╋━━━━━━────────  ~33%  3d 7h  Sun 01:00  ~174% over   2  annbook            7m
+    Fable                    ━━━━━━━━━━━━╋━━━━━━━━━━━    0%  3d 7h  Sun 01:00         out
+  kim@corp.test  max         ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  Mac.localdomain    1h
 
   CODEX
-● ann@acme.dev           pro         ━━━━━━━━━━━━━━━━━╋━━━━━━     0%  1d 23h Fri 17:09          out   2  annbook             1h
-  sam@mail.test          prolite     ━━━━━━╋━━━──────────────    58%  5d 2h  Mon 20:12    157% over   1  MacBook-Pro-Kim     3h
-● lee@corp.test          pro         ━━━─┃───────────────────    88%  5d 22h Tue 16:30       81% ok  10  srv1               34m
-  unknown                            ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈      ?                              —   1  Mac.localdomain    16m
+● ann@acme.dev   pro         ━━━━━━━━━━━━━━━━━╋━━━━━━    0%  1d 23h Fri 17:09         out   2  annbook            1h
+  sam@mail.test  prolite     ━━━━━━╋━━━──────────────   58%  5d 2h  Mon 20:12   157% over   1  MacBook-Pro-Kim    3h
+● lee@corp.test  pro         ━━━┃────────────────────   88%  5d 22h Tue 16:30      81% ok  10  srv1              34m
+  unknown                    ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  Mac.localdomain   16m
 
   GROK
-● a4c2e917               SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈      ?                              —   1  annbook            11h
+● a4c2e917       SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  annbook           11h
 
-DEVICES × SUBSCRIPTIONS  13 · 7d · M tokens in+out
-                      CLAUDE ─────────  CODEX ────────────────────────────  GROK     NO QUOTA
-                          ann      kim      ann      sam      lee  unknown a4c2e917   hermes   TOTAL
-● annbook                  19        ·      180        ·        ·        ·        3        ·     202
-  srv1                      2        ·       12        ·      240        ·        ·        8     262
-× Mac.localdomain           ·       10        ·        ·        ·       95        ·        ·     105
-↓ MacBook-Pro-Kim           ·        ·        ·       60        ·        ·        ·        ·      60
-  bot-a                     ·        ·        ·        ·       30        ·        ·        ·      30
-  bot-b                     ·        ·        ·        ·       25        ·        ·        1      26
-  ⋮
-  TOTAL                    21       10      192       60      345       95        3       10     736
+DEVICES × SUBSCRIPTIONS  13 · 7d · M tokens in+out                                     ‹tokens›  share
+                   CLAUDE ──────────  CODEX ─────────────────────────────  GROK ───  NO QUOTA
+                        ann      kim       ann      sam      lee  unknown  a4c2e917    hermes     TOTAL
+  srv1                    2        ·        12        ·      240        ·         ·         8       262
+● annbook                19        ·       180        ·        ·        ·         3         ·       202
+× Mac.localdomain         ·       10         ·        ·        ·       95         ·         ·       105
+↓ MacBook-Pro-Kim         ·        ·         ·       60        ·        ·         ·         ·        60
+  bot-a                   ·        ·         ·        ·       30        ·         ·         ·        30
+  bot-b                   ·        ·         ·        ·       25        ·         ·         1        26
+  bot-c                   ·        ·         ·        ·       16        ·         ·        <1        17
+  bot-d                   ·        ·         ·        ·       12        ·         ·         ·        12
+  bot-e                   ·        ·         ·        ·        9        ·         ·         ·         9
+  bot-f                   ·        ·         ·        ·        7        ·         ·         ·         7
+  bot-g                   ·        ·         ·        ·        4        ·         ·         ·         4
+  bot-h                   ·        ·         ·        ·        2        ·         ·         ·         2
+  bot-i                   ·        ·         ·        ·       <1        ·         ·         ·        <1
+  TOTAL                  21       10       192       60      345       95         3        10       736
 
 PROJECTS  annbook · by 7d · M tokens in+out
-  PROJECT                             7D   90D  SESS  VIA            LAST
-  ~/src/acme/app                      60   162    43  codex, claude    1h
-  ~/Vault                             22    52    56  codex            3h
-  ~/src/site                           9    30     6  codex            2d
-  ~/src/ai-usage                       8     8     3  claude, grok     7m
-  ~/src/acme/os                        3    10     3  claude, grok    11h
-  + 237 more
+  PROJECT                                            7D  90D  SESS  VIA            LAST
+  ~/src/acme/app                                    118  420    43  codex, claude    1h
+  ~/Vault                                            43  130    56  codex            3h
+  ~/src/site                                         18   62     6  codex            2d
+  ~/src/ai-usage                                     11   11     3  claude, grok     7m
+  ~/src/acme/os                                       4   12     3  claude, grok    11h
+  ~/src/acme/relay                                    3    9     2  codex            1d
+  ~/dotfiles                                          2    5     4  codex, claude    4d
+  ~/scratch                                           1    3     5  claude           5d
+  ~/src/acme/landing                                 <1    7     2  codex            6d
+  ~/Library/…/Documents/Notes/Projects/2026          <1    2     1  claude           6d
+  + 4 more
+
+━ used  ─ left  ┃╋ even use by now  ┈ no reading  ~ old reading  ? not known
+— no forecast  ● this device, or logged in here  × error  ↓ old release  · none  ‹› chosen
 ```
 
 The header names this machine and the team, and says whether collection, the relay, and self-update are healthy. ATTENTION appears only when something is wrong: a subscription that is out, or will run out before it resets at its pace so far; a machine whose collector or one of its tools fails, or that has not reported for a day; machines on an older release; and a subscription past half its window that will be left mostly unused.
 
-SUBSCRIPTIONS has one row per Claude, Codex, and Grok account, grouped by tool, the worst first. The bar is the weekly window: the heavy line is what has been used, and the tick how much would be used by now if the window were spent evenly. LEFT is what is left, RESETS when it resets, and AT RESET how full it will be then at its average pace since the window began: `over` at 100% or more, which means it runs out first, `tight` from 85%, `ok` from 50%, and `under` below that. A window that limits the account more than the weekly one, such as a model's window or a full 5-hour window, gets an indented row of its own. `~` marks a reading over 6 hours old, and `?` an account with no reading or a window that has reset since it was read. USERS counts the machines that used the account in this window and names the busiest. Hermes is a tool, not a subscription: what it spends through a Codex or Grok login counts as that login's use.
+SUBSCRIPTIONS has one row per Claude, Codex, and Grok account, grouped by tool, the worst first. The bar is the weekly window: the heavy line is what has been used, and the tick how much would be used by now if the window were spent evenly. LEFT is what is left, RESETS when it resets, and AT RESET how full it will be then at its average pace since the window began: `over` at 100% or more, which means it runs out first, `tight` from 85%, `ok` from 50%, and `under` below that. A window that limits the account more than the weekly one, such as a model's window or a full 5-hour window, gets an indented row of its own. `~` marks a reading over 6 hours old, unless the window is full, since a full window stays full until it resets. `?` marks an account with no reading, a window that has reset since it was read, or a Claude weekly window that a refused request did not read. USERS counts the machines that used the account in this window and names the busiest. Hermes is a tool, not a subscription: what it spends through a Codex or Grok login counts as that login's use.
 
 DEVICES × SUBSCRIPTIONS is every machine against every subscription, in millions of input plus output tokens over the last 7 days, cache left out. NO QUOTA holds the tokens no subscription covers, such as Hermes on an API key. With only this machine, the section is USAGE instead: a row per subscription, with today, 7 days, 30 days, and 90 days. PROJECTS lists this machine's top projects over every account; `--projects` lists all of them. A dim legend at the bottom explains only the marks on screen.
 

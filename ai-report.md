@@ -90,7 +90,7 @@ These PitStop behaviors are out, even though the project does them:
 
 ## Next: usage over time
 
-Decided on 2026-09-23 with the owner:
+Decided on 2026-09-23 with the owner. The day buckets, the 64 KB snapshot, the 50-device cap, and the periods came with the report redesign below; the day and week tables and the utilization history are still to do.
 
 - A consumer is a host: a person and their machine are the same thing here. A bot in its own container runs its own collector, so it is a host too. There is no separate "person".
 - 90 days of history is enough.
@@ -107,11 +107,11 @@ Sketch:
 - New views: `--days` and `--weeks` tables, and a utilization view per account. JSON carries the same data.
 - An account switch is placed at the run that first saw the new login, which is within 15 minutes. Placing it more exactly, from the quota jump in Codex's rollout, is not worth it.
 
-## Next: report redesign
+## Report redesign (done)
 
-Decided on 2026-09-23 with the owner. The design is in [design.md](design.md): what the report shows and in which order, the forecast of each quota window, the device matrix, the interactive view, and the visual rules. It takes the periods from "Next: usage over time" and two items that were later: the matrix of who uses what, and an interactive view. The day tables, the week tables, and the utilization history stay in "Next: usage over time".
+Decided on 2026-09-23 with the owner, and built on 2026-09-24 for v0.2.0. The design is in [design.md](design.md): what the report shows and in which order, the forecast of each quota window, the device matrix, the interactive view, and the visual rules. It takes the periods from "Next: usage over time" and two items that were later: the matrix of who uses what, and an interactive view. The day tables, the week tables, and the utilization history stay in "Next: usage over time".
 
-What the collector and the relay must add for it:
+What the collector and the relay added for it:
 
 - The collector splits tokens by day, per account and per project, using the timestamps in the harness logs. The 90 days are there from the first run of the new release, as far back as the logs go.
 - The snapshot carries each account's tokens per day, and its tokens since the start of each of its quota windows. The snapshot cap grows to 64 KB, and the device cap falls to 50 so that a team read still fits in one response.
@@ -144,7 +144,7 @@ Recorded on 2026-09-23 with the owner. Not started.
 
 ## Implementation status
 
-Status as of 2026-09-23. The Go code in this repository implements version 1. See `README.md` for use and `docs/` for the JSON schema, the relay, and releasing. Everything above is covered except the items listed below. After it was built, the code went through an adversarial review against this document, and the confirmed findings were fixed. A real end-to-end run with two devices and a local relay passed: token sums, a quota that is not summed, the offline backlog, and `forget-device`.
+Status as of 2026-09-24. The Go code in this repository implements version 1. See `README.md` for use and `docs/` for the JSON schema, the relay, and releasing. Everything above is covered except the items listed below. After it was built, the code went through an adversarial review against this document, and the confirmed findings were fixed. A real end-to-end run with two devices and a local relay passed: token sums, a quota that is not summed, the offline backlog, and `forget-device`.
 
 Done, in short:
 
@@ -181,16 +181,22 @@ Done, in short:
   - Hermes: `state.db` is read in place, read-only (a database Hermes has open through its `-wal` and `-shm`, one nobody has open as immutable), never copied except for an odd leftover. One read is one transaction, so a commit between its queries cannot split a session wrongly; a database that a writer opens during an immutable read is read again live. A symlinked `state.db` is read where it points. Tokens come from `session_model_usage` split by billing provider, auxiliary calls included. A time stored as an ISO string instead of REAL seconds is read too. A gateway session with no working directory is listed under its Hermes home, so each agent on a server is its own project.
 - **Accounts and quota**
   - Accounts are tracked across switches. Token growth goes to the account logged in at that sample. Each account keeps its last good quota and shows how old it is.
-  - Samples are taken every 15 minutes and kept for 90 days. Pace predicts when a window fills before its reset.
-  - The headline is the fullest window that has not reset since the reading. If every window has reset, or there is no reading, it shows "unknown". Marks appear at 75% and 90%.
+  - Samples are taken every 15 minutes and kept for 90 days.
+  - Each window gets a forecast: how full it will be at its reset at its average pace since it began, as a whole percent up to 999%, and when it runs out when that is over 100%. The state follows from it: out, over, tight, ok, or under. Before a tenth of the window has passed, only a forecast that is already over shows. A window that has reset since its reading is unknown; a reading older than 6 hours is marked old, except a full window, which stays full until it resets.
+  - An account's main window is the weekly one. Another window is shown under it when it limits more: it is out, over, or fuller. A Claude reading without a weekly window comes from a refused request, and the weekly window then shows as not known.
 - **Names and containers**
   - A machine goes by its host name unless it is named. On macOS that is the local host name from Sharing settings, since the network's name for a Mac changes from one network to the next, and a Mac without one reads as `Mac.localdomain`. Naming: `ai-usage name set NAME` (at most 64 characters), `AI_USAGE_NAME` at install, or `AI_USAGE_NAME` in the environment, which overrides the saved name in the runs that see it. A container's `schedule run` sees the container's environment. launchd and cron do not see a shell's, so a variable set only in a shell profile names the device in the runs started by hand but not in the scheduled ones, and `ai-usage name` says so. The name is the sealed device label, so the team sees a rename after the machine's next run.
   - `ai-usage schedule run` is the scheduler where there is none, as in a container: it collects at once and then at every quarter hour, each time in a new process of the binary on disk, so a self-update takes effect at the next collection. It holds a lock file (`schedule.lock`) while it runs. A run that finds it held records the schedule as foreground and never registers with cron or launchd, and `status` and the report call the schedule stopped once the lock is free. A missing `crontab` now says to use `schedule run`.
   - `docs/containers.md` covers the rest: keep the user's home on a volume, so the device, key, ledger, and binary last; install as the bot's user; run `schedule run` from the entrypoint or as an s6-overlay service.
 - **Hermes on a subscription** (`openai-codex`, `xai-oauth`) is linked to the Codex or Grok account it is assumed to bill through: the one logged in to the home `--quota-from` names for that Hermes home (one per harness, paths matched after resolving symlinks), else to `~/.codex` or `~/.grok`. The Hermes row shows that account's own reading, marked as borrowed, and the snapshot says so in `quota_from`. The linked account shows what Hermes spent on it, session by session, without adding it to its own tokens; the snapshot carries that in `linked`, so the team view credits each login with what went through it.
-- **Views**: console text and versioned JSON (`schema_version` 2). Both include the other devices in the team. The console was redesigned for teams of a dozen accounts and a couple of dozen machines: accounts grouped by provider with a bar, both windows and the reading's age, a USED BY column, a DEVICES section that folds healthy machines past 12, and a legend that lists only the marks on screen. It fits 80 columns and uses more from 100. Golden files cover 80, 100, 120, and 140 columns, with and without color.
+- **Views**: the console report of [design.md](design.md) and versioned JSON (`schema_version` 3). Both include the other devices in the team.
+  - The page is ATTENTION (out, over, failing, silent, and outdated devices, and windows past half that will be left mostly unused), SUBSCRIPTIONS (a bar per weekly window with its even-use tick, what is left, the reset, the forecast, and the devices that used the account in this window), the DEVICES × SUBSCRIPTIONS matrix of tokens or estimated share per device and account (USAGE on a single device), and this device's PROJECTS, with a one-line legend of the marks on screen.
+  - It is drawn with Lip Gloss, from 80 to 160 columns, dropping columns in a fixed order as it narrows, in color with light and dark themes, or in ASCII. A pipe, `TERM=dumb`, and `--color=never` get no escapes. Golden files cover 80, 120, and 160 columns, color, ASCII, the share mode, 30 days, and all projects.
+  - When standard input and output are both a terminal, the report opens in an interactive view on Bubble Tea: scrolling, the period (today, 7d, 30d, 90d), tokens or share, matrix scrolling, refresh, and a help panel. It reloads when the state changes. `--plain`, `--json`, and the first run with its guide print instead, and the installers' first run has no terminal input.
+  - Tokens by period come from hour buckets: each reader records the hour of every use from the log's timestamps, and what a log gives no time for is spread over the session's timed hours.
+- **Short names**: an account shows the part of its email before the @, the first 8 characters of an id, else its label; two that would be the same show their labels. `ai-usage alias` gives an account a name for the whole team. It travels sealed in the snapshot of the device that set it, and the newest wins.
 - **Team key**: Ed25519, and its fingerprint names the team. Joining means `ai-usage team join` with the exported private key.
-- **Snapshot**: fixed-shape, strict JSON of 32 KB or less.
+- **Snapshot**: fixed-shape, strict JSON of 64 KB or less. It carries each account's tokens per day for 90 days and since the start of each quota window, and the short names this device set. A collector older than this format drops a snapshot with members it does not know until it updates itself.
   - Counts, percents, timestamps, and provider and window names are plain.
   - Device label, OS user, account label, project paths, and error text are sealed with the team key.
   - Every write is signed.
