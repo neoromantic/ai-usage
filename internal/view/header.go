@@ -121,7 +121,7 @@ func (p *page) health() []healthItem {
 		v := p.txt(*up.Staged)
 		out = append(out, healthItem{t.Accent, v + " runs next time", v + " next run", false})
 	case up.Error != nil:
-		out = append(out, healthItem{t.Tight, "update check failed", "update failed", false})
+		out = append(out, healthItem{t.Out, "update check failed", "update failed", false})
 	case up.CheckedAt == nil:
 		out = append(out, healthItem{t.Faint, "update not checked", "not checked", false})
 	case up.Latest != nil && selfupdate.Newer(*up.Latest, c.Version):

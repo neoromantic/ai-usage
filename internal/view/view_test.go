@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/neoromantic/ai-usage/internal/collect"
 	"github.com/neoromantic/ai-usage/internal/logs"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
@@ -638,6 +640,15 @@ func TestHeaderFailuresAreInAttention(t *testing.T) {
 	} {
 		if !strings.Contains(page, s) {
 			t.Errorf("the page lacks %q:\n%s", s, page)
+		}
+	}
+	// Each failure turns its dot red, the color of its ERROR.
+	th := NewTheme(true)
+	dot := lipgloss.NewStyle().Foreground(th.Out).Render("●")
+	h := Render(r, Options{Width: 120, Loc: time.UTC, Color: true, Dark: true}).Header
+	for _, s := range []string{"relay failing", "update check failed"} {
+		if want := dot + " " + lipgloss.NewStyle().Foreground(th.Muted).Render(s); !strings.Contains(h, want) {
+			t.Errorf("the dot before %q is not red: %q", s, h)
 		}
 	}
 
