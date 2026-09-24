@@ -3,6 +3,8 @@ package view
 import (
 	"strconv"
 	"strings"
+
+	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
 // projects is where this device's tokens go: its projects over every
@@ -38,7 +40,10 @@ func (p *page) projects() []chunks {
 	pathW := width("PROJECT")
 	paths := make([]string, len(ps))
 	for i, pr := range ps {
-		paths[i] = p.txt(p.path(pr.Path))
+		// A path is as a harness logged it, and a folder's name may hold any
+		// byte but NUL and a slash. Its control characters are spaces here,
+		// so none reaches the terminal.
+		paths[i] = p.txt(snapshot.Printable(p.path(pr.Path)))
 		pathW = max(pathW, min(width(paths[i]), maxPath))
 		cols[0].cells = append(cols[0].cells, p.millions(per.Of(pr.Usage)))
 		if per != Quarter {
