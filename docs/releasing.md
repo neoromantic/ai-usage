@@ -18,7 +18,7 @@ The workflow then:
 
 The draft step keeps `releases/latest` from pointing at a release whose files are still uploading. The installers download from `releases/latest/download/`, and running collectors take the tag `releases/latest` redirects to and download from `releases/download/<tag>/`. If the workflow fails after the draft exists, rerun it: it replaces the files and publishes.
 
-Release builds check at every scheduled run, so every collector installs the release within about 15 minutes of its publication and runs it from the run after. A relay change the release needs must be deployed before then; see [Connect collectors to your relay](relay.md#connect-collectors-to-your-relay).
+Release builds check at every scheduled run, so every collector installs the release within about 15 minutes of its publication and runs it from the run after. A relay change the release needs must be deployed before then; see [Connect collectors to your relay](relay.md#connect-collectors-to-your-relay). A release a collector downloads and cannot install, for example one that does not start on its machine, is downloaded there again only after 6 hours, so fix it with a new tag, which collectors install at their next run.
 
 A tag with a suffix, such as `v1.3.0-rc.1`, becomes a prerelease. GitHub's latest release skips prereleases, so the installers and self-update skip it too. Self-update also ignores any version that is not plain `vX.Y.Z`.
 

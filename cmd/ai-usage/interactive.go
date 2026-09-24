@@ -96,7 +96,7 @@ func collectNow(d state.Dir, offline bool) func(context.Context) error {
 		defer func() {
 			// A collection stopped because the view closed failed at nothing.
 			if err != nil && !housekept && ctx.Err() == nil {
-				rescue(ctx, d, err)
+				rescue(ctx, d, err, false)
 			}
 		}()
 		cfg, err := d.LoadConfig()
@@ -111,7 +111,7 @@ func collectNow(d state.Dir, offline bool) func(context.Context) error {
 			OSUser:   osUser(),
 			Now:      clock,
 			After: func(ctx context.Context, cfg *state.Config, st *state.State) {
-				housekeeping(ctx, d, cfg, st)
+				housekeeping(ctx, d, cfg, st, false)
 				housekept = true
 			},
 			Wait:    lockWait,

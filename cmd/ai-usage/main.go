@@ -51,6 +51,11 @@ const updateFloor = 10 * time.Minute
 // for the download. Finding the latest release has a shorter limit of its own.
 const updateTimeout = 7 * time.Minute
 
+// retryFailed is how long a release that was downloaded and did not install,
+// such as one that does not start here, is not downloaded again. Runs still
+// look up the latest release, so a newer one is installed at once.
+const retryFailed = 6 * time.Hour
+
 // Tests replace these so they never run a real harness, edit the crontab, or
 // call GitHub.
 var (
@@ -255,7 +260,7 @@ func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) (e
 	housekept := false
 	defer func() {
 		if err != nil && !housekept && ctx.Err() == nil {
-			rescue(ctx, d, err)
+			rescue(ctx, d, err, *quiet)
 		}
 	}()
 	cfg, err := d.LoadConfig()
@@ -272,7 +277,7 @@ func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) (e
 		OSUser:   osUser(),
 		Now:      clock,
 		After: func(ctx context.Context, cfg *state.Config, st *state.State) {
-			housekeeping(ctx, d, cfg, st)
+			housekeeping(ctx, d, cfg, st, *quiet)
 			housekept = true
 			// The guide waits for a report a person reads, even when the
 			// scheduler collected first.
@@ -355,7 +360,7 @@ func runCollect(ctx context.Context, o collect.Options) (res *collect.Result, er
 // rescue runs when a collection failed before its housekeeping: it keeps a
 // panic as the last error and still checks for a release. A state.json that
 // does not load is left as it is, and the check is then not throttled.
-func rescue(ctx context.Context, d state.Dir, cause error) {
+func rescue(ctx context.Context, d state.Dir, cause error, scheduled bool) {
 	var pe *panicError
 	panicked := errors.As(cause, &pe)
 	if !panicked && selfupdate.Dev(version) {
@@ -382,7 +387,7 @@ func rescue(ctx context.Context, d state.Dir, cause error) {
 		st.LastError, st.LastErrorAt = msg, now
 		changed = true
 	}
-	if updateIfDue(ctx, st, now) {
+	if updateIfDue(ctx, st, now, scheduled) {
 		changed = true
 	}
 	if loaded && changed {
@@ -391,8 +396,9 @@ func rescue(ctx context.Context, d state.Dir, cause error) {
 }
 
 // housekeeping registers with the scheduler and applies self-update, both
-// inside the run lock. A development build does neither on its own.
-func housekeeping(ctx context.Context, d state.Dir, cfg *state.Config, st *state.State) {
+// inside the run lock. A development build does neither on its own. scheduled
+// says the scheduler started the run, with collect --quiet.
+func housekeeping(ctx context.Context, d state.Dir, cfg *state.Config, st *state.State, scheduled bool) {
 	now := clock().UTC()
 	// The release staged by an earlier run is this binary now, or was replaced.
 	if st.Update.Installed != "" && !selfupdate.Newer(st.Update.Installed, version) {
@@ -409,25 +415,34 @@ func housekeeping(ctx context.Context, d state.Dir, cfg *state.Config, st *state
 		st.Schedule.Registered, st.Schedule.Foreground = false, false
 		st.Schedule.Error = "removed by `ai-usage schedule remove`"
 	}
-	updateIfDue(ctx, st, now)
+	updateIfDue(ctx, st, now, scheduled)
 }
 
-// updateIfDue checks for a release on a release build, unless a check
-// succeeded less than updateFloor ago, and reports whether it did. A failed
-// check is tried again by the next run, so a failure that passes shows for
-// one run at most. A check time in the future, left by a clock that once ran
-// ahead, counts as due: otherwise updates would stop until the clock caught
-// up with it.
-func updateIfDue(ctx context.Context, st *state.State, now time.Time) bool {
+// updateIfDue checks for a release on a release build, unless the last check
+// was less than updateFloor ago, and reports whether it did. A scheduled run
+// tries a failed check again, so a failure that passes shows for one run at
+// most. A run a person starts, such as the view's r, does not, so it never
+// asks GitHub twice within updateFloor. A check time in the future, left by a
+// clock that once ran ahead, counts as due: otherwise updates would stop
+// until the clock caught up with it.
+func updateIfDue(ctx context.Context, st *state.State, now time.Time, scheduled bool) bool {
 	if selfupdate.Dev(version) {
 		return false
 	}
-	if since := now.Sub(st.Update.CheckedAt); st.Update.Error == "" && since >= 0 && since < updateFloor {
+	if since := now.Sub(st.Update.CheckedAt); since >= 0 && since < updateFloor && (st.Update.Error == "" || !scheduled) {
 		return false
+	}
+	u := newUpdater()
+	// A release that was downloaded and did not install would most likely
+	// fail the same way at every run.
+	if f := st.Update.Failed; f != nil {
+		if since := now.Sub(f.At); since >= 0 && since < retryFailed {
+			u.Skip = f.Tag
+		}
 	}
 	uctx, cancel := context.WithTimeout(ctx, updateTimeout)
 	defer cancel()
-	res, err := newUpdater().Check(uctx)
+	res, err := u.Check(uctx)
 	if err != nil && ctx.Err() != nil {
 		// A check the run's stop cut short is left for the next run.
 		return false
@@ -443,8 +458,18 @@ func noteUpdate(st *state.State, now time.Time, res selfupdate.Result, err error
 		st.Update.Latest = res.Latest
 	}
 	st.Update.Error = ""
-	if err != nil {
+	switch {
+	case errors.Is(err, selfupdate.ErrSkipped) && st.Update.Failed != nil:
+		// The latest release is still the one that failed, for the same
+		// reason as far as anyone knows.
+		st.Update.Error = st.Update.Failed.Error
+	case err != nil:
 		st.Update.Error = err.Error()
+		if res.Downloaded {
+			st.Update.Failed = &state.FailedRelease{Tag: res.Latest, At: now, Error: err.Error()}
+		}
+	default:
+		st.Update.Failed = nil
 	}
 	if res.Installed {
 		st.Update.Installed = res.Latest

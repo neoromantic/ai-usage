@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -52,6 +53,9 @@ const releases = "/" + Repo + "/releases"
 type fakeGitHub struct {
 	tag    string
 	assets map[string][]byte
+	// repo is where the release is, Repo unless set. Repo's releases/latest
+	// then redirects there, as for a repository that was renamed or moved.
+	repo string
 	// status answers a path with an HTTP error.
 	status map[string]int
 	// pace sends a binary in eight pieces with this pause between them.
@@ -67,6 +71,10 @@ type fakeGitHub struct {
 func (f *fakeGitHub) start(t *testing.T) *httptest.Server {
 	t.Helper()
 	f.hits = map[string]int{}
+	if f.repo == "" {
+		f.repo = Repo
+	}
+	served := "/" + f.repo + "/releases"
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -78,9 +86,11 @@ func (f *fakeGitHub) start(t *testing.T) *httptest.Server {
 			return
 		}
 		switch {
+		case r.URL.Path == served+"/latest":
+			http.Redirect(w, r, srv.URL+served+"/tag/"+f.tag, http.StatusFound)
 		case r.URL.Path == releases+"/latest":
-			http.Redirect(w, r, srv.URL+releases+"/tag/"+f.tag, http.StatusFound)
-		case strings.HasPrefix(r.URL.Path, releases+"/download/"+f.tag+"/"):
+			http.Redirect(w, r, served+"/latest", http.StatusMovedPermanently)
+		case strings.HasPrefix(r.URL.Path, served+"/download/"+f.tag+"/"):
 			name := path.Base(r.URL.Path)
 			if _, ok := f.assets[name]; !ok {
 				http.NotFound(w, r)
@@ -202,7 +212,7 @@ func TestCheckInstallsNewerRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res != (Result{Latest: "v1.3.0", Installed: true}) {
+	if res != (Result{Latest: "v1.3.0", Installed: true, Downloaded: true}) {
 		t.Fatalf("Check = %+v", res)
 	}
 	if read(t, exe) != string(bin) {
@@ -261,33 +271,35 @@ func TestCheckRefusesBadReleases(t *testing.T) {
 		// want is what the error must name: the release and the missing file,
 		// the HTTP code, the version the binary reported, or the stall limit.
 		want []string
+		// downloaded says the binary arrived before the check failed.
+		downloaded bool
 	}{
-		{"no binary for this platform", func(t *testing.T, f *fakeGitHub, u *Updater) { u.GOARCH = "riscv64" }, []string{"v1.3.0", "ai-usage_linux_riscv64"}},
+		{"no binary for this platform", func(t *testing.T, f *fakeGitHub, u *Updater) { u.GOARCH = "riscv64" }, []string{"v1.3.0", "ai-usage_linux_riscv64"}, false},
 		// checksums.txt lists the binary, but the release has no such file.
-		{"binary missing", func(t *testing.T, f *fakeGitHub, u *Updater) { delete(f.assets, "ai-usage_linux_amd64") }, []string{"v1.3.0", "ai-usage_linux_amd64"}},
-		{"no checksums", func(t *testing.T, f *fakeGitHub, u *Updater) { delete(f.assets, "checksums.txt") }, []string{"v1.3.0", "checksums.txt"}},
+		{"binary missing", func(t *testing.T, f *fakeGitHub, u *Updater) { delete(f.assets, "ai-usage_linux_amd64") }, []string{"v1.3.0", "ai-usage_linux_amd64"}, false},
+		{"no checksums", func(t *testing.T, f *fakeGitHub, u *Updater) { delete(f.assets, "checksums.txt") }, []string{"v1.3.0", "checksums.txt"}, false},
 		{"checksums skip the binary", func(t *testing.T, f *fakeGitHub, u *Updater) {
 			f.assets["checksums.txt"] = []byte(sumsFor(map[string][]byte{"ai-usage_darwin_arm64": []byte("other")}))
-		}, []string{"checksums.txt"}},
+		}, []string{"checksums.txt"}, false},
 		{"checksum mismatch", func(t *testing.T, f *fakeGitHub, u *Updater) {
 			f.assets["ai-usage_linux_amd64"] = []byte("tampered binary")
-		}, []string{"checksum"}},
-		{"oversize binary", func(t *testing.T, f *fakeGitHub, u *Updater) { u.MaxSize = int64(len(bin) - 1) }, []string{"larger"}},
+		}, []string{"checksum"}, true},
+		{"oversize binary", func(t *testing.T, f *fakeGitHub, u *Updater) { u.MaxSize = int64(len(bin) - 1) }, []string{"larger"}, true},
 		{"binary download fails", func(t *testing.T, f *fakeGitHub, u *Updater) {
 			f.status = map[string]int{"/storage/ai-usage_linux_amd64": http.StatusBadGateway}
-		}, []string{"HTTP 502"}},
+		}, []string{"HTTP 502"}, false},
 		// Checksums prove the download is what was uploaded, not that it
 		// starts here: a wrong build must not replace a working binary.
 		{"binary does not start", func(t *testing.T, f *fakeGitHub, u *Updater) {
 			f.assets["ai-usage_linux_amd64"] = []byte("not a program")
 			f.resum()
-		}, []string{"does not run"}},
+		}, []string{"does not run"}, true},
 		{"binary reports another version", func(t *testing.T, f *fakeGitHub, u *Updater) {
 			t.Setenv("AIU_FAKE_RELEASE", "v1.2.9")
-		}, []string{"v1.2.9"}},
+		}, []string{"v1.2.9"}, true},
 		{"download stalls", func(t *testing.T, f *fakeGitHub, u *Updater) {
 			f.hang, u.Stall = true, 100*time.Millisecond
-		}, []string{"100ms"}},
+		}, []string{"100ms"}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			gh := newRelease(bin)
@@ -304,8 +316,8 @@ func TestCheckRefusesBadReleases(t *testing.T) {
 					t.Fatalf("Check error = %v, want it to name %q", err, w)
 				}
 			}
-			if res.Installed {
-				t.Fatal("reported an install")
+			if res.Installed || res.Downloaded != tc.downloaded {
+				t.Fatalf("Check = %+v", res)
 			}
 			if read(t, exe) != "old binary" {
 				t.Fatal("binary changed")
@@ -315,11 +327,86 @@ func TestCheckRefusesBadReleases(t *testing.T) {
 	}
 }
 
+// A release that was downloaded and did not install is not downloaded again
+// while it is the latest. A newer one is.
+func TestCheckSkipsFailedRelease(t *testing.T) {
+	bin := runnable(t, "v1.3.0")
+	gh := newRelease(bin)
+	srv := gh.start(t)
+	exe := installed(t, "ai-usage")
+	u := updater(srv, exe, "v1.2.9")
+	u.Skip = "v1.3.0"
+	res, err := u.Check(context.Background())
+	if !errors.Is(err, ErrSkipped) || res != (Result{Latest: "v1.3.0"}) {
+		t.Fatalf("Check = %+v, %v", res, err)
+	}
+	for p := range gh.hits {
+		if strings.Contains(p, "/download/") {
+			t.Fatalf("downloaded %s", p)
+		}
+	}
+
+	u.Skip = "v1.2.10"
+	if res, err := u.Check(context.Background()); err != nil || !res.Installed {
+		t.Fatalf("Check past an older failed release = %+v, %v", res, err)
+	}
+}
+
+// A process that runs for long, such as the interactive view, finds a
+// release that a scheduled run already installed, and does not download it
+// again.
+func TestCheckFindsReleaseAlreadyInPlace(t *testing.T) {
+	bin := runnable(t, "v1.3.0")
+	gh := newRelease(bin)
+	srv := gh.start(t)
+	exe := installed(t, "ai-usage")
+	if err := os.WriteFile(exe, bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	res, err := updater(srv, exe, "v1.2.9").Check(context.Background())
+	if err != nil || res != (Result{Latest: "v1.3.0", Installed: true}) {
+		t.Fatalf("Check = %+v, %v", res, err)
+	}
+	for p := range gh.hits {
+		if strings.Contains(p, "/download/") {
+			t.Fatalf("downloaded %s", p)
+		}
+	}
+	onlyFiles(t, filepath.Dir(exe), "ai-usage")
+}
+
+// A repository that was renamed or moved redirects its releases/latest to
+// the new name, and the release is downloaded from there.
+func TestCheckInstallsFromMovedRepository(t *testing.T) {
+	bin := runnable(t, "v1.3.0")
+	gh := newRelease(bin)
+	gh.repo = "example-org/ai-usage"
+	srv := gh.start(t)
+	exe := installed(t, "ai-usage")
+	res, err := updater(srv, exe, "v1.2.9").Check(context.Background())
+	if err != nil || !res.Installed {
+		t.Fatalf("Check = %+v, %v", res, err)
+	}
+	if read(t, exe) != string(bin) {
+		t.Fatal("binary was not replaced")
+	}
+	if gh.hits["/example-org/ai-usage/releases/download/v1.3.0/ai-usage_linux_amd64"] != 1 {
+		t.Fatalf("requests: %v", gh.hits)
+	}
+}
+
 // The latest release is the tag releases/latest redirects to, and the
-// redirect is not followed. Any other answer is an error that says what came
+// redirect is not followed. A redirect to releases/latest of a repository's
+// new name is, a few times. Any other answer is an error that says what came
 // back.
 func TestLatestRelease(t *testing.T) {
 	tag := releases + "/tag/v1.3.0"
+	// Where a renamed repository's releases/latest leads, and one whose new
+	// name leads back to the old one.
+	moved := map[string]string{
+		"/example-org/ai-usage/releases/latest": "/example-org/ai-usage/releases/tag/v1.3.0",
+		"/example-org/circle/releases/latest":   releases + "/latest",
+	}
 	for _, tc := range []struct {
 		name string
 		code int
@@ -332,6 +419,11 @@ func TestLatestRelease(t *testing.T) {
 		{"absolute", http.StatusFound, "SRV" + tag, "v1.3.0", true},
 		{"relative to the site", http.StatusFound, tag, "v1.3.0", true},
 		{"relative to the request", http.StatusMovedPermanently, "tag/v1.3.0", "v1.3.0", true},
+		// Owner and repository names are not case-sensitive.
+		{"another case", http.StatusFound, "/NeoRomantic/AI-Usage/releases/tag/v1.3.0", "v1.3.0", true},
+		{"moved", http.StatusMovedPermanently, "/example-org/ai-usage/releases/latest", "v1.3.0", true},
+		{"moved in a circle", http.StatusMovedPermanently, "/example-org/circle/releases/latest", "not to a release", false},
+		{"moved to another site", http.StatusMovedPermanently, "https://example.invalid/example-org/ai-usage/releases/latest", "example.invalid", false},
 		{"no release", http.StatusFound, "SRV" + releases, "has no release", false},
 		{"elsewhere on the site", http.StatusFound, "/login", "/login", false},
 		{"a page under a release", http.StatusFound, tag + "/assets", "/assets", false},
@@ -343,6 +435,10 @@ func TestLatestRelease(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var srv *httptest.Server
 			srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if to, ok := moved[r.URL.Path]; ok {
+					http.Redirect(w, r, to, http.StatusFound)
+					return
+				}
 				if r.URL.Path != releases+"/latest" {
 					t.Errorf("followed the redirect to %s", r.URL)
 					return

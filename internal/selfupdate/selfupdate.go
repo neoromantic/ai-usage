@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -45,12 +46,35 @@ type Updater struct {
 	// no limit on the whole download: the caller's context bounds it, so a
 	// slow link can still finish.
 	Stall time.Duration
+	// Skip is a release that an earlier check downloaded and could not
+	// install. Check does not download it again: it reports it as the latest
+	// with ErrSkipped.
+	Skip string
 }
 
+// ErrSkipped is Check's answer when the latest release is Updater.Skip.
+var ErrSkipped = errors.New("the latest release did not install at an earlier check")
+
 var (
-	errStalled = errors.New("download stalled")
-	errSlow    = errors.New("lookup timed out")
+	errStalled  = errors.New("download stalled")
+	errSlow     = errors.New("lookup timed out")
+	errTooLarge = errors.New("update check: download is larger than expected")
 )
+
+// Pages on the site: a repository's releases/latest, which a repository that
+// was renamed or moved redirects to under its new name; a release's page,
+// where releases/latest redirects; and the releases page, where it redirects
+// while there is no release. Owner and repository names on GitHub use only
+// these characters, in any case.
+var (
+	latestPage   = regexp.MustCompile(`^/[\w.-]+/[\w.-]+/releases/latest$`)
+	tagPage      = regexp.MustCompile(`^/([\w.-]+/[\w.-]+)/releases/tag/([^/]+)/?$`)
+	releasesPage = regexp.MustCompile(`^/[\w.-]+/[\w.-]+/releases/?$`)
+)
+
+// maxMoves is how many times the repository can have moved on the way to
+// its latest release.
+const maxMoves = 3
 
 // AssetName is the release file for an OS and architecture.
 func AssetName(goos, goarch string) string {
@@ -65,6 +89,9 @@ func AssetName(goos, goarch string) string {
 type Result struct {
 	Latest    string
 	Installed bool
+	// Downloaded says the check downloaded the release's binary, whether or
+	// not it then installed it.
+	Downloaded bool
 }
 
 func (u *Updater) fill() error {
@@ -120,7 +147,7 @@ func (u *Updater) Check(ctx context.Context) (Result, error) {
 	}
 	cleanupOld(u.Exe)
 
-	tag, err := u.latest(ctx)
+	repo, tag, err := u.latest(ctx)
 	if err != nil {
 		return Result{}, err
 	}
@@ -128,13 +155,22 @@ func (u *Updater) Check(ctx context.Context) (Result, error) {
 	if !Newer(tag, u.Current) {
 		return res, nil
 	}
+	// A process that runs for long, such as the interactive view, can find a
+	// release that a scheduled run has already put in its place.
+	if v, err := reports(ctx, u.Exe); err == nil && !Dev(v) && !Newer(tag, v) {
+		res.Installed = true
+		return res, nil
+	}
+	if tag == u.Skip {
+		return res, ErrSkipped
+	}
 	want := AssetName(u.GOOS, u.GOARCH)
 	// A binary in a place this user cannot write, such as a system bin
 	// directory, would download every release and then fail to install it.
 	if err := writable(filepath.Dir(u.Exe)); err != nil {
 		return res, fmt.Errorf("cannot write beside %s: %w", u.Exe, err)
 	}
-	sums, err := u.download(ctx, tag, "checksums.txt", 1<<20)
+	sums, err := u.download(ctx, repo, tag, "checksums.txt", 1<<20)
 	if err != nil {
 		return res, err
 	}
@@ -142,7 +178,9 @@ func (u *Updater) Check(ctx context.Context) (Result, error) {
 	if !ok {
 		return res, fmt.Errorf("checksums.txt of release %s does not list %s", tag, want)
 	}
-	bin, err := u.download(ctx, tag, want, u.MaxSize)
+	bin, err := u.download(ctx, repo, tag, want, u.MaxSize)
+	// A binary larger than the limit was downloaded as far as the limit.
+	res.Downloaded = err == nil || errors.Is(err, errTooLarge)
 	if err != nil {
 		return res, err
 	}
@@ -174,48 +212,51 @@ func (u *Updater) Check(ctx context.Context) (Result, error) {
 // as its API does, and redirects to the releases page while there is no
 // release. The page is read rather than the API, which allows 60 requests an
 // hour per address without a token: ten devices behind one address that
-// check at every run would come close to that.
-func (u *Updater) latest(ctx context.Context) (string, error) {
-	releases := u.GitHub + "/" + Repo + "/releases"
-	want, err := url.Parse(releases)
-	if err != nil {
-		return "", err
-	}
+// check at every run would come close to that. repo is the repository the
+// release is in, which is Repo unless that was renamed or moved.
+func (u *Updater) latest(ctx context.Context) (repo, tag string, err error) {
+	page := u.GitHub + "/" + Repo + "/releases/latest"
 	ctx, cancel := context.WithTimeoutCause(ctx, u.Lookup, errSlow)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, releases+"/latest", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, page, nil)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	req.Header.Set("User-Agent", "ai-usage/"+u.Current)
-	// The redirect is the answer, so it is not followed.
+	// The redirect to the release is the answer, so it is not followed. A
+	// redirect to releases/latest under a new name, on the same site, is.
 	client := *u.HTTP
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	client.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+		if len(via) <= maxMoves && next.URL.Host == req.URL.Host && latestPage.MatchString(next.URL.Path) {
+			return nil
+		}
+		return http.ErrUseLastResponse
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		if errors.Is(context.Cause(ctx), errSlow) {
-			return "", fmt.Errorf("update check: %s did not answer in %s", req.URL.Host, u.Lookup)
+			return "", "", fmt.Errorf("update check: %s did not answer in %s", req.URL.Host, u.Lookup)
 		}
-		return "", fmt.Errorf("update check: %w", err)
+		return "", "", fmt.Errorf("update check: %w", err)
 	}
 	_ = resp.Body.Close()
 	if resp.StatusCode < 300 || resp.StatusCode > 399 {
-		return "", fmt.Errorf("update check: HTTP %d from %s, not a redirect to the latest release", resp.StatusCode, req.URL.Host)
+		return "", "", fmt.Errorf("update check: HTTP %d from %s, not a redirect to the latest release", resp.StatusCode, req.URL.Host)
 	}
 	// A relative Location is resolved against the request.
 	loc, err := resp.Location()
 	if err != nil {
-		return "", fmt.Errorf("update check: HTTP %d from %s with no usable Location: %w", resp.StatusCode, req.URL.Host, err)
+		return "", "", fmt.Errorf("update check: HTTP %d from %s with no usable Location: %w", resp.StatusCode, req.URL.Host, err)
 	}
-	tag, ok := strings.CutPrefix(loc.Path, want.Path+"/tag/")
-	switch {
-	case loc.Host == want.Host && ok && tag != "" && !strings.Contains(tag, "/"):
-		return tag, nil
-	case loc.Host == want.Host && strings.TrimSuffix(loc.Path, "/") == want.Path:
-		return "", fmt.Errorf("update check: %s has no release", releases)
-	default:
-		return "", fmt.Errorf("update check: %s redirects to %s, not to a release", req.URL, loc)
+	if loc.Host == req.URL.Host {
+		if m := tagPage.FindStringSubmatch(loc.Path); m != nil {
+			return m[1], m[2], nil
+		}
+		if releasesPage.MatchString(loc.Path) {
+			return "", "", fmt.Errorf("update check: %s has no release", strings.TrimSuffix(loc.String(), "/"))
+		}
 	}
+	return "", "", fmt.Errorf("update check: %s redirects to %s, not to a release", page, loc)
 }
 
 // stage writes the new binary beside the old one, where a rename can swap it
@@ -242,16 +283,22 @@ func stage(exe string, bin []byte, goos string) (string, error) {
 	return tmp.Name(), nil
 }
 
-// starts runs the staged binary's version command, which touches no state,
-// and requires it to report the release it came from.
-func starts(ctx context.Context, bin, tag string) error {
+// reports is the version a binary gives from its version command, which
+// touches no state.
+func reports(ctx context.Context, bin string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, bin, "version").Output()
+	return strings.TrimSpace(string(out)), err
+}
+
+// starts runs the staged binary and requires it to report the release it
+// came from.
+func starts(ctx context.Context, bin, tag string) error {
+	v, err := reports(ctx, bin)
 	if err != nil {
 		return err
 	}
-	v := strings.TrimSpace(string(out))
 	got, ok1 := parse(v)
 	want, ok2 := parse(tag)
 	if !ok1 || !ok2 || got != want {
@@ -320,15 +367,16 @@ func checksum(sums []byte, name string) (string, bool) {
 	return "", false
 }
 
-// download fetches the file name of release tag from releases/download/<tag>/,
-// which GitHub redirects to where the file is stored. The installers fetch the
-// same files through releases/latest/download/, which GitHub redirects here.
-func (u *Updater) download(ctx context.Context, tag, name string, limit int64) ([]byte, error) {
+// download fetches the file name of release tag from the repository's
+// releases/download/<tag>/, which GitHub redirects to where the file is
+// stored. The installers fetch the same files through
+// releases/latest/download/, which GitHub redirects here.
+func (u *Updater) download(ctx context.Context, repo, tag, name string, limit int64) ([]byte, error) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	stall := time.AfterFunc(u.Stall, func() { cancel(errStalled) })
 	defer stall.Stop()
-	file := u.GitHub + "/" + Repo + "/releases/download/" + url.PathEscape(tag) + "/" + url.PathEscape(name)
+	file := u.GitHub + "/" + repo + "/releases/download/" + url.PathEscape(tag) + "/" + url.PathEscape(name)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, file, nil)
 	if err != nil {
 		return nil, err
@@ -356,7 +404,7 @@ func (u *Updater) download(ctx context.Context, tag, name string, limit int64) (
 		return nil, failed(err)
 	}
 	if int64(len(b)) > limit {
-		return nil, errors.New("update check: download is larger than expected")
+		return nil, errTooLarge
 	}
 	return b, nil
 }

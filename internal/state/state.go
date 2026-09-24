@@ -254,6 +254,17 @@ type Update struct {
 	Latest    string    `json:"latest,omitempty"`
 	Installed string    `json:"installed,omitempty"`
 	Error     string    `json:"error,omitempty"`
+	// Failed is the last release that was downloaded and did not install,
+	// which runs do not download again for a while.
+	Failed *FailedRelease `json:"failed,omitempty"`
+}
+
+// FailedRelease is a release that was downloaded and did not install: when,
+// and why.
+type FailedRelease struct {
+	Tag   string    `json:"tag"`
+	At    time.Time `json:"at"`
+	Error string    `json:"error"`
 }
 
 // Schedule is whether the system scheduler runs the collector.

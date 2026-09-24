@@ -1625,9 +1625,10 @@ func TestUpdateCheckAfterClockRanAhead(t *testing.T) {
 }
 
 // Every scheduled run looks for a release, so one reaches the device within
-// a quarter of an hour. A run a person starts in between, such as the view's
-// r, does not ask GitHub again. A failed check is tried again by the next
-// run, so it shows for one run at most.
+// a quarter of an hour. A run a person starts less than updateFloor after a
+// check, such as the view's r, does not ask GitHub again, even after a failed
+// check. The next scheduled run tries a failed check again, so a failure
+// shows for one run at most.
 func TestUpdateCheckEveryScheduledRun(t *testing.T) {
 	hermetic(t)
 	version = "v1.3.0"
@@ -1653,13 +1654,18 @@ func TestUpdateCheckEveryScheduledRun(t *testing.T) {
 	}
 	d := newDevice(t)
 	t0 := time.Now().UTC().Truncate(time.Second)
-	run := func(at time.Duration, fail bool, want int) *state.State {
+	const scheduled, byHand = true, false
+	run := func(at time.Duration, scheduled, fail bool, want int) *state.State {
 		t.Helper()
 		mu.Lock()
 		busy = fail
 		mu.Unlock()
 		clock = func() time.Time { return t0.Add(at) }
-		d.ok("collect", "--quiet", "--offline")
+		if scheduled {
+			d.ok("collect", "--quiet", "--offline")
+		} else {
+			d.ok("collect", "--offline")
+		}
 		mu.Lock()
 		defer mu.Unlock()
 		if lookups != want {
@@ -1667,18 +1673,141 @@ func TestUpdateCheckEveryScheduledRun(t *testing.T) {
 		}
 		return d.state()
 	}
-	run(0, false, 1)
-	run(15*time.Minute, false, 2)
+	run(0, scheduled, false, 1)
+	run(15*time.Minute, scheduled, false, 2)
 	// A run 3 minutes after the last check does not check.
-	run(18*time.Minute, false, 2)
-	run(30*time.Minute, false, 3)
-	if st := run(45*time.Minute, true, 4); !strings.Contains(st.Update.Error, "HTTP 503") {
+	run(18*time.Minute, byHand, false, 2)
+	run(30*time.Minute, scheduled, false, 3)
+	if st := run(45*time.Minute, scheduled, true, 4); !strings.Contains(st.Update.Error, "HTTP 503") {
 		t.Fatalf("update after a failed check = %+v", st.Update)
 	}
-	if st := run(47*time.Minute, false, 5); st.Update.Error != "" || st.Update.Latest != "v1.3.0" {
+	// Runs by hand keep to the floor after a failed check too.
+	run(47*time.Minute, byHand, false, 4)
+	if st := run(50*time.Minute, byHand, false, 4); !strings.Contains(st.Update.Error, "HTTP 503") {
+		t.Fatalf("update after runs by hand = %+v", st.Update)
+	}
+	run(56*time.Minute, byHand, true, 5)
+	// The next scheduled run tries again, although the failed check was 4
+	// minutes before it.
+	if st := run(60*time.Minute, scheduled, false, 6); st.Update.Error != "" || st.Update.Latest != "v1.3.0" {
 		t.Fatalf("update after the check was tried again = %+v", st.Update)
 	}
-	run(50*time.Minute, false, 5)
+	run(62*time.Minute, byHand, false, 6)
+}
+
+// A release that was downloaded and did not install is not downloaded again
+// for retryFailed, while every scheduled run still looks up the latest
+// release. Its error stays shown. ai-usage update tries it at once, and a
+// newer release is installed at the next run.
+func TestFailedReleaseIsNotDownloadedAgain(t *testing.T) {
+	hermetic(t)
+	version = "v1.2.0"
+	asset := selfupdate.AssetName(runtime.GOOS, runtime.GOARCH)
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin, err := os.ReadFile(self)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(bin)
+	var mu sync.Mutex
+	tag, busy, lookups, downloads := "v1.3.0", false, 0, 0
+	releases := "/" + selfupdate.Repo + "/releases"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch r.URL.Path {
+		case releases + "/latest":
+			lookups++
+			if busy {
+				http.Error(w, "busy", http.StatusServiceUnavailable)
+				return
+			}
+			http.Redirect(w, r, releases+"/tag/"+tag, http.StatusFound)
+		case releases + "/download/" + tag + "/" + asset:
+			downloads++
+			_, _ = w.Write(bin)
+		case releases + "/download/" + tag + "/checksums.txt":
+			// v1.3.0 was uploaded broken: its binary does not match.
+			if tag == "v1.3.0" {
+				fmt.Fprintf(w, "%s  %s\n", strings.Repeat("0", 64), asset)
+				return
+			}
+			fmt.Fprintf(w, "%s  %s\n", hex.EncodeToString(sum[:]), asset)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	exe := filepath.Join(t.TempDir(), "ai-usage")
+	if err := os.WriteFile(exe, []byte("old binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	newUpdater = func() *selfupdate.Updater {
+		return &selfupdate.Updater{Current: version, Exe: exe, GitHub: srv.URL, HTTP: srv.Client()}
+	}
+	d := newDevice(t)
+	t0 := time.Now().UTC().Truncate(time.Second)
+	at := func(d time.Duration) { clock = func() time.Time { return t0.Add(d) } }
+	run := func(when time.Duration, fail bool, wantLookups, wantDownloads int) *state.State {
+		t.Helper()
+		mu.Lock()
+		busy = fail
+		mu.Unlock()
+		at(when)
+		d.ok("collect", "--quiet", "--offline")
+		mu.Lock()
+		defer mu.Unlock()
+		if lookups != wantLookups || downloads != wantDownloads {
+			t.Fatalf("after the run at %s: %d lookups and %d downloads, want %d and %d", when, lookups, downloads, wantLookups, wantDownloads)
+		}
+		return d.state()
+	}
+	broken := func(st *state.State) {
+		t.Helper()
+		if !strings.Contains(st.Update.Error, "checksum") || st.Update.Latest != "v1.3.0" || st.Update.Installed != "" {
+			t.Fatalf("update = %+v", st.Update)
+		}
+	}
+
+	st := run(0, false, 1, 1)
+	broken(st)
+	if f := st.Update.Failed; f == nil || f.Tag != "v1.3.0" || !f.At.Equal(t0) {
+		t.Fatalf("failed release = %+v", f)
+	}
+	broken(run(15*time.Minute, false, 2, 1))
+	// A failed lookup shows its own error, and the release's error comes
+	// back once the lookup finds the release again.
+	if st := run(30*time.Minute, true, 3, 1); !strings.Contains(st.Update.Error, "HTTP 503") {
+		t.Fatalf("update after a failed lookup = %+v", st.Update)
+	}
+	broken(run(45*time.Minute, false, 4, 1))
+	broken(run(retryFailed, false, 5, 2))
+	broken(run(retryFailed+15*time.Minute, false, 6, 2))
+
+	at(retryFailed + 20*time.Minute)
+	if r := d.run("", "update"); r.code != 1 || !strings.Contains(r.stderr, "checksum") {
+		t.Fatalf("update = %+v", r)
+	}
+	mu.Lock()
+	if downloads != 3 {
+		t.Fatalf("update downloaded %d times in all", downloads)
+	}
+	mu.Unlock()
+
+	mu.Lock()
+	tag = "v1.3.1"
+	mu.Unlock()
+	t.Setenv("AIU_FAKE_RELEASE", "v1.3.1")
+	st = run(retryFailed+30*time.Minute, false, 8, 4)
+	if st.Update.Installed != "v1.3.1" || st.Update.Error != "" || st.Update.Failed != nil {
+		t.Fatalf("update after a newer release = %+v", st.Update)
+	}
+	if b, _ := os.ReadFile(exe); !bytes.Equal(b, bin) {
+		t.Fatal("binary was not replaced")
+	}
 }
 
 // A release that cannot read this device's files must still be replaceable
@@ -1824,7 +1953,7 @@ func TestStoppedHousekeeping(t *testing.T) {
 	cancel()
 	st := &state.State{Schedule: state.Schedule{Registered: true, CheckedAt: time.Unix(1e9, 0).UTC()}}
 	want := *st
-	if updateIfDue(ctx, st, time.Now()) || !reflect.DeepEqual(st.Update, want.Update) {
+	if updateIfDue(ctx, st, time.Now(), true) || !reflect.DeepEqual(st.Update, want.Update) {
 		t.Errorf("a stopped release check: %+v", st.Update)
 	}
 	ensureSchedule(ctx, state.Dir(d.dir), st, time.Now())
