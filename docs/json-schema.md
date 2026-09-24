@@ -143,7 +143,7 @@ A window:
 | `observed_at` | time | when this window was read. In the team view the windows of one account can come from different devices and readings |
 | `stale` | bool | this window's reading is more than 6 hours old and the window was not full. A full window stays full until it resets, however old the reading |
 | `reset` | bool | the window has reset since it was read, so how full it is now is not known; its `state` is `unknown` and `forecast` is `null` |
-| `unread` | bool | a Claude weekly window the newest reading does not cover, because a request refused for a full window reads that window alone. Its `percent` is 0, `resets_at` and `forecast` are `null`, and its `state` is `unknown`. Absent when `false` |
+| `unread` | bool | a Claude 5-hour or weekly window the newest reading does not cover, because a request refused for a full window reads that window alone. Its `percent` is 0, `resets_at` and `forecast` are `null`, and its `state` is `unknown`. Absent when `false` |
 | `state` | string | see [states](#states) |
 | `forecast` | object | how full the window will be at its reset if it is used from now on at its average pace so far; see below. `null` when the length or the reset time is unknown, when it has reset, and in its first tenth unless it is over already |
 

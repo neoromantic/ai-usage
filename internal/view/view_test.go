@@ -730,37 +730,62 @@ func TestWindowThatHasResetIsUnknown(t *testing.T) {
 }
 
 // A request refused for a full window reads that window alone. The window
-// stays full until it resets, however old the reading, and the weekly
-// window the refusal says nothing of is not known.
+// stays full until it resets, however old the reading, and the 5-hour and
+// weekly windows the refusal says nothing of are not known.
 func TestRefusalReading(t *testing.T) {
 	st := emptyState()
 	addAccount(st, "claude", "ann", true, &state.Quota{At: now.Add(-10 * time.Hour), Source: collect.RejectionSource, Windows: []snapshot.Window{
 		{Name: "7d Opus", Percent: 100, Minutes: 10080, ResetsAt: tp(now.Add(72 * time.Hour))},
+	}}, 0)
+	addAccount(st, "claude", "kim", false, &state.Quota{At: now.Add(-10 * time.Hour), Source: collect.RejectionSource, Windows: []snapshot.Window{
+		{Name: "7d", Percent: 100, Minutes: 10080, ResetsAt: tp(now.Add(48 * time.Hour))},
 	}}, 0)
 	addAccount(st, "codex", "bob", false, &state.Quota{At: now.Add(-time.Hour), Source: "harness", Windows: []snapshot.Window{
 		{Name: "5h", Percent: 30, Minutes: 300, ResetsAt: tp(now.Add(2 * time.Hour))},
 	}}, 0)
 	r := Build(newFixture(t, st).in)
 
+	unread := func(w Window, name string, main bool) bool {
+		return w.Name == name && w.Unread && w.Main == main && w.State == StateUnknown && w.Forecast == nil && w.Percent == 0
+	}
 	for _, q := range []*Quota{findAccount(t, r, "claude", "ann").Quota, findTeamAccount(t, r, "claude", "ann").Quota} {
-		if q.Stale || len(q.Windows) != 2 {
+		if q.Stale || len(q.Windows) != 3 {
 			t.Fatalf("ann's quota = %+v", q)
 		}
-		opus, week := q.Windows[0], q.Windows[1]
-		if opus.Stale || opus.State != StateOut || opus.Main {
-			t.Fatalf("refused window = %+v", opus)
+		if w := q.Windows[0]; !unread(w, "5h", false) {
+			t.Fatalf("5-hour window = %+v", w)
 		}
-		if week.Name != "7d" || !week.Unread || !week.Main || week.State != StateUnknown || week.Forecast != nil {
-			t.Fatalf("weekly window = %+v", week)
+		if w := q.Windows[1]; !unread(w, "7d", true) {
+			t.Fatalf("weekly window = %+v", w)
+		}
+		if w := q.Windows[2]; w.Name != "7d Opus" || w.Stale || w.State != StateOut || w.Main {
+			t.Fatalf("refused window = %+v", w)
 		}
 	}
 	if a := findTeamAccount(t, r, "claude", "ann"); a.State != StateOut {
 		t.Fatalf("ann = %s", a.State)
 	}
-	if len(r.Attention) != 1 || r.Attention[0].Kind != AttentionOut || r.Attention[0].Window != "7d Opus" || r.Attention[0].ReadingAge != 0 {
+	// A refused weekly window is the main one, full and not stale, and the
+	// 5-hour window beside it is not known.
+	for _, q := range []*Quota{findAccount(t, r, "claude", "kim").Quota, findTeamAccount(t, r, "claude", "kim").Quota} {
+		if q.Stale || len(q.Windows) != 2 || !unread(q.Windows[0], "5h", false) {
+			t.Fatalf("kim's quota = %+v", q)
+		}
+		if w := q.Windows[1]; w.Name != "7d" || w.Unread || !w.Main || w.Stale || w.State != StateOut {
+			t.Fatalf("kim's weekly window = %+v", w)
+		}
+	}
+	out := map[string]string{}
+	for _, a := range r.Attention {
+		if a.Kind != AttentionOut || a.ReadingAge != 0 {
+			t.Fatalf("attention = %+v", r.Attention)
+		}
+		out[a.Account] = a.Window
+	}
+	if len(r.Attention) != 2 || out["ann"] != "7d Opus" || out["kim"] != "" {
 		t.Fatalf("attention = %+v", r.Attention)
 	}
-	// Only Claude always has a weekly window.
+	// Only Claude always has a 5-hour and a weekly window.
 	if ws := findAccount(t, r, "codex", "bob").Quota.Windows; len(ws) != 1 || !ws[0].Main {
 		t.Fatalf("bob's windows = %+v", ws)
 	}

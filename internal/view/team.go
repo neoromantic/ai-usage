@@ -303,7 +303,7 @@ func (x *teamAccount) quota(provider string, now time.Time) *Quota {
 	}
 	q := quotaView(newest.at, "", newest.dev, now)
 	q.From = newest.from
-	q.Windows, x.ta.State = readQuota(weekly(provider, rs), now)
+	q.Windows, x.ta.State = readQuota(withUnread(provider, rs), now)
 	q.Stale = anyStale(q.Windows)
 	return q
 }

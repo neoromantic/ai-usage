@@ -208,9 +208,9 @@ type Window struct {
 	// Reset says the window reset since it was read, so how full it is now
 	// is not known.
 	Reset bool `json:"reset"`
-	// Unread is a weekly window the newest reading does not cover: a request
-	// refused for a full window reads that window alone, and says nothing of
-	// the weekly one since.
+	// Unread is a Claude 5-hour or weekly window the newest reading does not
+	// cover: a request refused for a full window reads that window alone,
+	// and says nothing of the others since.
 	Unread   bool      `json:"unread,omitempty"`
 	State    string    `json:"state"`
 	Forecast *Forecast `json:"forecast"`

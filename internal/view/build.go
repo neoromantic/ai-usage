@@ -77,7 +77,7 @@ func Build(in Input) Report {
 			}
 			if a.Quota != nil {
 				acct.Quota = quotaView(a.Quota.At, a.Quota.Source, "", now)
-				acct.Quota.Windows, acct.State = readQuota(weekly(p, readings(a.Quota.Windows, a.Quota.At)), now)
+				acct.Quota.Windows, acct.State = readQuota(withUnread(p, readings(a.Quota.Windows, a.Quota.At)), now)
 				acct.Quota.Stale = anyStale(acct.Quota.Windows)
 				acct.Quota.From = a.QuotaFrom
 			}

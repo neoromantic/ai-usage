@@ -1,7 +1,10 @@
 package view
 
 import (
+	"cmp"
 	"math"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/snapshot"
@@ -168,24 +171,36 @@ type reading struct {
 	Unread bool
 }
 
-// weekly adds an unread weekly window to a Claude reading without one.
-// Claude always has a weekly window, so a reading without it came from a
+// claudeWindows are the windows every Claude account has.
+var claudeWindows = []snapshot.Window{{Name: "5h", Minutes: 5 * 60}, {Name: "7d", Minutes: 7 * 24 * 60}}
+
+// withUnread adds, unread, the windows a Claude reading lacks. Claude always
+// has a 5-hour and a weekly window, so a reading without one came from a
 // request refused for a full window, which reads that window alone. The
-// weekly window then is not known, which is not the same as none.
-func weekly(provider string, rs []reading) []reading {
+// window it lacks then is not known, which is not the same as none.
+func withUnread(provider string, rs []reading) []reading {
 	if provider != "claude" || len(rs) == 0 {
 		return rs
 	}
 	at := rs[0].At
 	for _, r := range rs {
-		if r.Name == "7d" {
-			return rs
-		}
 		if r.At.After(at) {
 			at = r.At
 		}
 	}
-	return append(rs, reading{Window: snapshot.Window{Name: "7d", Minutes: 7 * 24 * 60}, At: at, Unread: true})
+	// Clipped, so what is added never lands in the caller's array.
+	rs, n := slices.Clip(rs), len(rs)
+	for _, w := range claudeWindows {
+		if !slices.ContainsFunc(rs[:n], func(r reading) bool { return r.Name == w.Name }) {
+			rs = append(rs, reading{Window: w, At: at, Unread: true})
+		}
+	}
+	if len(rs) > n {
+		slices.SortStableFunc(rs, func(a, b reading) int {
+			return cmp.Or(cmp.Compare(a.Minutes, b.Minutes), strings.Compare(a.Name, b.Name))
+		})
+	}
+	return rs
 }
 
 // readings are the windows of one reading taken at at.
