@@ -92,8 +92,9 @@ type Env struct {
 	// test's Env leaves them empty.
 	AppDirs []string
 	// ClaudeManaged are the files where an organization sets Claude Code's
-	// settings for the whole machine. DefaultEnv fills them; a test's Env
-	// leaves them empty.
+	// settings for the whole machine, each with a managed-settings.d
+	// folder beside it. DefaultEnv fills them; a test's Env leaves them
+	// empty.
 	ClaudeManaged []string
 	Now           func() time.Time
 	Timeout       time.Duration
@@ -109,7 +110,7 @@ func DefaultEnv() Env {
 		HomeDir:       home,
 		SystemBinDirs: systemBinDirs(),
 		AppDirs:       appDirs(),
-		ClaudeManaged: claudeManaged(),
+		ClaudeManaged: claudeManaged(runtime.GOOS),
 		Now:           time.Now,
 		Timeout:       20 * time.Second,
 	}
@@ -311,15 +312,16 @@ func appDirs() []string {
 }
 
 // claudeManaged are the files where an organization manages Claude Code's
-// settings.
-func claudeManaged() []string {
-	switch runtime.GOOS {
+// settings on goos. On Windows, Claude Code reads its own path, whatever
+// %ProgramFiles% says.
+func claudeManaged(goos string) []string {
+	switch goos {
 	case "darwin":
 		return []string{"/Library/Application Support/ClaudeCode/managed-settings.json"}
-	case "linux":
-		return []string{"/etc/claude-code/managed-settings.json"}
+	case "windows":
+		return []string{`C:\Program Files\ClaudeCode\managed-settings.json`}
 	}
-	return nil
+	return []string{"/etc/claude-code/managed-settings.json"}
 }
 
 // bins are the binaries of a harness to try in turn: the one find locates,

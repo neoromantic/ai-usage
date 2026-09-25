@@ -267,6 +267,10 @@ func fakeClaudeUsage(mode string, args []string, rec *os.File) int {
 		// 2.1.191 always.
 		fmt.Print(claudeHeadlineOut + claudeContributing)
 		return 0
+	case "overage-offline":
+		// The same, on extra usage.
+		fmt.Print("You are currently using your overages to power your Claude Code usage. We will automatically switch you back to your subscription rate limits when they reset\n\n" + claudeContributing)
+		return 0
 	case "shows":
 		// 2.1.193 to 2.1.207: the usage, and no cache.
 		fmt.Print(claudeHeadlineOut + claudeUsageOut + claudeContributing)

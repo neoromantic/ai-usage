@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -321,12 +322,12 @@ func (r claudeRun) why(version string) (why, said string) {
 	case slices.ContainsFunc(r.out, func(l string) bool { return strings.HasPrefix(l, "Total cost:") }):
 		return "no new reading: Claude Code sees no claude.ai plan", ""
 	case slices.ContainsFunc(r.out, func(l string) bool { return strings.Contains(l, claudeHeadline) }):
-		// Claude Code could not reach the usage, or, for one older than
-		// claudeCaching, did not try.
-		if version == "" {
-			return "no new reading: could not read the usage: network, login scope, nonessential traffic off, or a Claude Code before " + claudeCaching, ""
-		}
-		return "no new reading: could not read the usage: network, login scope, or nonessential traffic off", ""
+		// Claude Code could not reach the usage: offline, with a login
+		// without the profile scope, or with nonessential traffic off where
+		// claudeNoTraffic does not look. Or, older than claudeCaching, it did
+		// not try. The likely causes are left to the docs, so that two homes'
+		// reasons fit in a source's error.
+		return "no new reading: could not read the usage", ""
 	case r.err != nil:
 		// Its errors, or what it printed that says it is an error.
 		said := errorOf(r.errOut)
@@ -340,9 +341,10 @@ func (r claudeRun) why(version string) (why, said string) {
 	return "no new reading", ""
 }
 
-// claudeHeadline is how /usage starts for a claude.ai subscription, whether
-// or not it then reads the usage.
-const claudeHeadline = "using your subscription to power your Claude Code usage"
+// claudeHeadline ends the line /usage starts with for a claude.ai
+// subscription, on its own limits or on extra usage, whether or not it then
+// reads the usage.
+const claudeHeadline = "to power your Claude Code usage"
 
 // claudeCannotRead reports whether a line says that this Claude Code has no
 // /usage to run: it does not know the command or an option, it has no /usage
@@ -420,13 +422,17 @@ var claudeVersionName = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 // claudeVersion is the version of the Claude Code at bin, as its install
 // tells without running it, or "" when it does not. With links resolved,
 // that is the nearest of the file and the few folders above it that is named
-// as a version, as a native install's versions/X.Y.Z and Homebrew's
+// as a version where Claude Code's own installs keep their versions, as a
+// native install's claude/versions/X.Y.Z and Homebrew's
 // Caskroom/claude-code/X.Y.Z/claude are, or that holds the package.json of
 // an npm install. On Windows, npm puts that package beside its claude.cmd.
+// Another tool's folder named as a version tells nothing, as a version
+// manager's shim resolves to the manager's own binary in its own version's
+// folder.
 func claudeVersion(bin string) string {
 	path := realPath(bin)
 	for range 4 {
-		if name := filepath.Base(path); claudeVersionName.MatchString(name) {
+		if name := filepath.Base(path); claudeVersionName.MatchString(name) && claudeVersionsFolder(filepath.Dir(path)) {
 			return name
 		}
 		if v := claudePackageVersion(filepath.Join(path, "package.json")); v != "" {
@@ -439,6 +445,17 @@ func claudeVersion(bin string) string {
 		path = parent
 	}
 	return claudePackageVersion(filepath.Join(filepath.Dir(bin), "node_modules", "@anthropic-ai", "claude-code", "package.json"))
+}
+
+// claudeVersionsFolder reports whether dir is where an install of Claude
+// Code keeps its versions: a native install's claude/versions, or
+// Homebrew's claude-code or claude-code@channel.
+func claudeVersionsFolder(dir string) bool {
+	name := filepath.Base(dir)
+	if name == "versions" {
+		return filepath.Base(filepath.Dir(dir)) == "claude"
+	}
+	return name == "claude-code" || strings.HasPrefix(name, "claude-code@")
 }
 
 // claudePackageVersion is the version in the package.json at path when that
@@ -458,34 +475,81 @@ func claudePackageVersion(path string) string {
 // claudeNoTraffic reports whether Claude Code's settings turn off its
 // nonessential traffic, without which it does not read the usage, in the env
 // they give its sessions. Removing the variable from its own environment
-// does not undo that. The settings are an organization's, then those of the
-// project it starts in, which is the user's home, then home's own, and the
-// first to set the variable decides. Nothing else is taken from them.
+// does not undo that. The settings are an organization's, the files in the
+// managed-settings.d beside its file over that file, then those of the
+// project it starts in, which is the user's home, then the user settings in
+// home, and the first to set the variable decides. Nothing else is taken
+// from them.
 func claudeNoTraffic(env Env, home string) bool {
-	files := slices.Clone(env.ClaudeManaged)
+	var files []string
+	for _, managed := range env.ClaudeManaged {
+		files = append(files, claudeDropIns(filepath.Join(filepath.Dir(managed), "managed-settings.d"))...)
+		files = append(files, managed)
+	}
 	if env.HomeDir != "" {
 		project := filepath.Join(env.HomeDir, ".claude")
 		files = append(files, filepath.Join(project, "settings.local.json"), filepath.Join(project, "settings.json"))
 	}
-	files = append(files, filepath.Join(home, "settings.local.json"), filepath.Join(home, "settings.json"))
+	files = append(files, filepath.Join(home, "settings.json"))
 	for _, f := range files {
-		body, err := os.ReadFile(f)
-		if err != nil {
-			continue
-		}
-		var s struct {
-			Env struct {
-				Off json.RawMessage `json:"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"`
-			} `json:"env"`
-		}
-		if json.Unmarshal(body, &s) != nil {
-			continue
-		}
-		if v := strings.TrimSpace(string(s.Env.Off)); v != "" && v != "null" {
+		if v, ok := claudeSettingsEnv(f, "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"); ok {
 			return v != `""` && v != "false"
 		}
 	}
 	return false
+}
+
+// claudeDropIns are the settings files in dir, those named .json and not
+// hidden, the last by name first: Claude Code applies them in name order,
+// each over the ones before.
+func claudeDropIns(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, e := range slices.Backward(entries) {
+		name := e.Name()
+		if strings.HasSuffix(name, ".json") && !strings.HasPrefix(name, ".") && (e.Type().IsRegular() || e.Type()&os.ModeSymlink != 0) {
+			files = append(files, filepath.Join(dir, name))
+		}
+	}
+	return files
+}
+
+// claudeSettingsEnv is the value, as JSON, that the settings file at path
+// gives the variable name in its "env", and whether it gives one. Keys match
+// as Claude Code reads them: "env" exactly, and the variable as the OS names
+// variables. Of several that match, the last is set last. A null sets nothing.
+func claudeSettingsEnv(path, name string) (string, bool) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	var settings map[string]json.RawMessage
+	if json.Unmarshal(body, &settings) != nil {
+		return "", false
+	}
+	dec := json.NewDecoder(bytes.NewReader(settings["env"]))
+	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
+		return "", false
+	}
+	var value json.RawMessage
+	for dec.More() {
+		t, err := dec.Token()
+		if err != nil {
+			return "", false
+		}
+		var v json.RawMessage
+		if dec.Decode(&v) != nil {
+			return "", false
+		}
+		if key, _ := t.(string); sameEnvName(key, name) {
+			value = v
+		}
+	}
+	v := strings.TrimSpace(string(value))
+	return v, v != "" && v != "null"
 }
 
 type claudeConfig struct {

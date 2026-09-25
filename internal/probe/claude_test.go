@@ -2,6 +2,7 @@ package probe
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -630,7 +631,8 @@ func TestClaudeUsageRefreshSaysWhy(t *testing.T) {
 		{"no-option", update},
 		{"old", update},
 		{"shows", "no new reading: Claude Code showed the usage but did not cache it; update it (cache 1d old)"},
-		{"offline", "no new reading: could not read the usage: network, login scope, nonessential traffic off, or a Claude Code before 2.1.208 (cache 1d old)"},
+		{"offline", "no new reading: could not read the usage (cache 1d old)"},
+		{"overage-offline", "no new reading: could not read the usage (cache 1d old)"},
 		{"cost", "no new reading: Claude Code sees no claude.ai plan (cache 1d old)"},
 		{"silent", "no new reading: it printed nothing (cache 1d old)"},
 		{"fail", "exit status 1 (cache 1d old): Error: usage is unavailable right now"},
@@ -714,6 +716,30 @@ func TestClaudeVersion(t *testing.T) {
 			link(t, bin, filepath.Join(dir, "bin", "claude"))
 			return filepath.Join(dir, "bin", "claude")
 		}, "2.1.150"},
+		{"homebrew cask of the latest", func(t *testing.T, dir string) string {
+			bin := filepath.Join(dir, "Caskroom", "claude-code@latest", "2.1.283", "claude")
+			writeExe(t, bin)
+			link(t, bin, filepath.Join(dir, "bin", "claude"))
+			return filepath.Join(dir, "bin", "claude")
+		}, "2.1.283"},
+		// A version manager's shim is its own binary, in a folder named
+		// after the manager's version.
+		{"volta shim", func(t *testing.T, dir string) string {
+			bin := filepath.Join(dir, "Cellar", "volta", "2.0.2", "bin", "volta-shim")
+			writeExe(t, bin)
+			link(t, bin, filepath.Join(dir, ".volta", "bin", "claude"))
+			return filepath.Join(dir, ".volta", "bin", "claude")
+		}, ""},
+		{"mise shim", func(t *testing.T, dir string) string {
+			bin := filepath.Join(dir, "Cellar", "mise", "2025.9.10", "bin", "mise")
+			writeExe(t, bin)
+			link(t, bin, filepath.Join(dir, ".local", "share", "mise", "shims", "claude"))
+			return filepath.Join(dir, ".local", "share", "mise", "shims", "claude")
+		}, ""},
+		{"another tool's versions", func(t *testing.T, dir string) string {
+			writeExe(t, filepath.Join(dir, ".nodenv", "versions", "22.1.0", "bin", "claude"))
+			return filepath.Join(dir, ".nodenv", "versions", "22.1.0", "bin", "claude")
+		}, ""},
 		{"npm", func(t *testing.T, dir string) string {
 			// Under a node whose folder is named as a version, too.
 			pkgDir := filepath.Join(dir, "node", "22.1.0", "lib", "node_modules", "@anthropic-ai", "claude-code")
@@ -757,8 +783,8 @@ func TestClaudeOldVersionIsNotAsked(t *testing.T) {
 	}{
 		{"2.1.207", "claude /usage: Claude Code 2.1.207 does not cache the usage; update it to 2.1.208 or later (cache 1d old)"},
 		{"1.0.128", "claude /usage: Claude Code 1.0.128 does not cache the usage; update it to 2.1.208 or later (cache 1d old)"},
-		{"2.1.208", "claude /usage: no new reading: could not read the usage: network, login scope, or nonessential traffic off (Claude Code 2.1.208, cache 1d old)"},
-		{"9.9.9", "claude /usage: no new reading: could not read the usage: network, login scope, or nonessential traffic off (Claude Code 9.9.9, cache 1d old)"},
+		{"2.1.208", "claude /usage: no new reading: could not read the usage (Claude Code 2.1.208, cache 1d old)"},
+		{"9.9.9", "claude /usage: no new reading: could not read the usage (Claude Code 9.9.9, cache 1d old)"},
 	} {
 		t.Run(tc.version, func(t *testing.T) {
 			env, record := fakeEnv(t, "claude-ok", "PROBE_USAGE=offline")
@@ -788,13 +814,92 @@ func TestClaudeOldVersionIsNotAsked(t *testing.T) {
 	}
 }
 
+// A version manager's shim tells nothing of Claude Code's version, however
+// the manager's own folder is named, so Claude Code is asked.
+func TestClaudeBehindAShimIsAsked(t *testing.T) {
+	env, record := fakeEnv(t, "claude-ok", "PROBE_USAGE=offline")
+	shim := filepath.Join(env.HomeDir, "Cellar", "volta", "2.0.2", "bin", "volta-shim")
+	writeExe(t, shim)
+	bin := filepath.Join(env.HomeDir, ".volta", "bin", "claude")
+	link(t, shim, bin)
+	env.LookPath = func(string) (string, error) { return bin, nil }
+	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
+	_, err := Claude(WithLastUse(context.Background(), testNow), env, filepath.Join(env.HomeDir, ".claude"))
+	if want := "claude /usage: no new reading: could not read the usage (cache 1d old)"; errText(err) != want {
+		t.Errorf("error = %q\nwant    %q", errText(err), want)
+	}
+	if runs := readRuns(t, record); len(runs) != 2 {
+		t.Errorf("ran %d commands", len(runs))
+	}
+}
+
+// Each reason fits twice in the 300 bytes a source's error keeps, each after
+// its home, so that two homes that fail differently are both told in full,
+// with the longest cache state and a version. A line an error printed comes
+// last, to be cut first.
+func TestClaudeUsageErrorFitsTwice(t *testing.T) {
+	budget := (300 - len("~/.claude-work: ; ~/.claude: ")) / 2
+	dir := t.TempDir()
+	file := filepath.Join(dir, ".claude.json")
+	writeFile(t, file, strings.Replace(claudeCache, `"acct-1"}`, `"acct-2"}`, 1))
+	var msgs []string
+	for _, version := range []string{"", "2.1.281"} {
+		for _, run := range []claudeRun{
+			{timedOut: true},
+			{out: []string{"Unknown skill: usage"}},
+			{out: []string{"Current session: 7% used"}},
+			{out: []string{"Total cost:            $0.0000"}},
+			{out: []string{"You are currently using your subscription to power your Claude Code usage"}},
+			{out: []string{"You are currently using your overages to power your Claude Code usage. We will automatically switch you back to your subscription rate limits when they reset"}},
+			{err: errors.New("exit status 1")},
+			{},
+			{out: []string{"Something unexpected happened"}},
+		} {
+			why, _ := run.why(version)
+			msgs = append(msgs, errText(claudeUsageError(why, version, file, testNow, "")))
+		}
+	}
+	// The reasons Claude Code is not run for, which run nothing.
+	env := Env{HomeDir: dir, Now: func() time.Time { return testNow }}
+	old := filepath.Join(dir, "Caskroom", "claude-code", "2.1.207", "claude")
+	writeExe(t, old)
+	msgs = append(msgs, errText(claudeReadUsage(context.Background(), env, old, "", filepath.Join(dir, ".claude"), file)))
+	writeFile(t, filepath.Join(dir, ".claude", "settings.json"), `{"env":{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":"1"}}`)
+	current := filepath.Join(dir, "Caskroom", "claude-code", "2.1.281", "claude")
+	writeExe(t, current)
+	msgs = append(msgs, errText(claudeReadUsage(context.Background(), env, current, "", filepath.Join(dir, ".claude"), file)))
+	for _, msg := range msgs {
+		if !strings.HasPrefix(msg, "claude /usage: ") || !strings.Contains(msg, "cache of another account") {
+			t.Errorf("error = %q", msg)
+		}
+		if len(msg) > budget {
+			t.Errorf("error = %q, %d bytes, over %d", msg, len(msg), budget)
+		}
+	}
+}
+
+// An organization's settings are where Claude Code reads them on each OS.
+func TestClaudeManaged(t *testing.T) {
+	for goos, want := range map[string]string{
+		"darwin":  "/Library/Application Support/ClaudeCode/managed-settings.json",
+		"linux":   "/etc/claude-code/managed-settings.json",
+		"windows": `C:\Program Files\ClaudeCode\managed-settings.json`,
+	} {
+		if got := claudeManaged(goos); !slices.Equal(got, []string{want}) {
+			t.Errorf("%s: got %q, want %q", goos, got, want)
+		}
+	}
+}
+
 // Claude Code whose settings turn nonessential traffic off does not read the
 // usage, whatever its own environment, so it is not asked, and the error
 // says so at every run. The settings that win decide, and nothing else in
-// them reaches the error.
+// them reaches the error. Only the files Claude Code reads count, and only
+// the key it reads: "env" exactly, and the variable as the OS names it.
 func TestClaudeNoTrafficIsNotAsked(t *testing.T) {
 	on := `{"env":{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":"1","ANTHROPIC_API_KEY":"sk-fake-secret-7"}}`
 	off := `{"env":{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":"","ANTHROPIC_API_KEY":"sk-fake-secret-7"}}`
+	windows := runtime.GOOS == "windows"
 	tests := []struct {
 		name  string
 		files map[string]string // relative to the user's home
@@ -804,18 +909,32 @@ func TestClaudeNoTrafficIsNotAsked(t *testing.T) {
 		{name: "user settings", files: map[string]string{".claude/settings.json": on}, home: ".claude"},
 		{name: "project local settings", files: map[string]string{".claude/settings.local.json": on}, home: ".claude"},
 		{name: "another home's settings", files: map[string]string{"work-claude/settings.json": on}, home: "work-claude"},
-		{name: "managed settings", files: map[string]string{"managed.json": `{"env":{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":1}}`}, home: ".claude"},
-		{name: "managed over local", files: map[string]string{"managed.json": on, ".claude/settings.local.json": off}, home: ".claude"},
+		// Claude Code reads no local settings in its config folder, only in
+		// the project's .claude.
+		{name: "another home's local settings", files: map[string]string{"work-claude/settings.local.json": on}, home: "work-claude", asked: true},
+		{name: "managed settings", files: map[string]string{"managed/managed-settings.json": `{"env":{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":1}}`}, home: ".claude"},
+		{name: "managed over local", files: map[string]string{"managed/managed-settings.json": on, ".claude/settings.local.json": off}, home: ".claude"},
+		{name: "managed drop-in", files: map[string]string{"managed/managed-settings.d/50-traffic.json": on}, home: ".claude"},
+		{name: "drop-in over managed", files: map[string]string{"managed/managed-settings.json": off, "managed/managed-settings.d/50-traffic.json": on}, home: ".claude"},
+		{name: "later drop-in over earlier", files: map[string]string{"managed/managed-settings.d/10-a.json": on, "managed/managed-settings.d/20-b.json": off}, home: ".claude", asked: true},
+		{name: "hidden or not JSON drop-ins", files: map[string]string{"managed/managed-settings.d/.50-traffic.json": on, "managed/managed-settings.d/50-traffic.txt": on}, home: ".claude", asked: true},
 		{name: "local over user", files: map[string]string{".claude/settings.local.json": off, ".claude/settings.json": on}, home: ".claude", asked: true},
 		{name: "null sets nothing", files: map[string]string{".claude/settings.local.json": `{"env":{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":null}}`, ".claude/settings.json": on}, home: ".claude"},
 		{name: "empty", files: map[string]string{".claude/settings.json": off}, home: ".claude", asked: true},
 		{name: "other variables", files: map[string]string{".claude/settings.json": `{"env":{"ANTHROPIC_API_KEY":"sk-fake-secret-7"}}`}, home: ".claude", asked: true},
 		{name: "not JSON", files: map[string]string{".claude/settings.json": `{"env":`}, home: ".claude", asked: true},
+		{name: "env in another case", files: map[string]string{".claude/settings.json": `{"ENV":{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":"1"}}`}, home: ".claude", asked: true},
+		// Only Windows ignores the case of a variable's name, and there the
+		// last of a name's spellings is set last.
+		{name: "variable in another case", files: map[string]string{".claude/settings.json": `{"env":{"claude_code_disable_nonessential_traffic":"1"}}`}, home: ".claude", asked: !windows},
+		{name: "variable in two cases", files: map[string]string{".claude/settings.json": `{"env":{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":"","Claude_Code_Disable_Nonessential_Traffic":"1"}}`}, home: ".claude", asked: !windows},
+		{name: "variable in two cases, turned on last", files: map[string]string{".claude/settings.json": `{"env":{"Claude_Code_Disable_Nonessential_Traffic":"1","CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":""}}`}, home: ".claude", asked: true},
+		{name: "variable twice", files: map[string]string{".claude/settings.json": `{"env":{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":"1","CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":""}}`}, home: ".claude", asked: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			env, record := fakeEnv(t, "claude-ok", "PROBE_USAGE=offline")
-			env.ClaudeManaged = []string{filepath.Join(env.HomeDir, "managed.json")}
+			env.ClaudeManaged = []string{filepath.Join(env.HomeDir, "managed", "managed-settings.json")}
 			for name, body := range tc.files {
 				writeFile(t, filepath.Join(env.HomeDir, filepath.FromSlash(name)), body)
 			}
@@ -829,9 +948,9 @@ func TestClaudeNoTrafficIsNotAsked(t *testing.T) {
 				_, err := Claude(WithLastUse(context.Background(), testNow), env, home)
 				want := "claude /usage: nonessential traffic is off in Claude Code's settings (cache 1d old)"
 				if tc.asked {
-					want = "claude /usage: no new reading: could not read the usage"
+					want = "claude /usage: no new reading: could not read the usage (cache 1d old)"
 				}
-				if !strings.HasPrefix(errText(err), want) || strings.Contains(errText(err), "secret") {
+				if errText(err) != want || strings.Contains(errText(err), "secret") {
 					t.Errorf("error = %q, want %q", errText(err), want)
 				}
 			}
