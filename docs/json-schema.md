@@ -63,7 +63,7 @@ Each entry is one thing that needs attention, from the team's view of each subsc
 | `over` | a window of a subscription will run out by its reset, at its pace so far | `provider`, `account`, `name`, `window`; `at` is when it runs out, absent when it runs out at its reset, `resets_at` when it resets, `percent` its forecast |
 | `error` | a device's collector or one of its tools fails; on this device, also a run a bug stopped before it could report, its relay, or its update check; on an `old` device that is not silent, its update check | `devices` names the device; `message` is the error, which starts with `relay` or `update` when it is theirs |
 | `silent` | a device has not reported for a day, with or without an error in its last report | `devices` names the device; `at` is when it last reported; `message` is the error it last reported, if it had one |
-| `old` | devices run an older release than the team's newest | `devices` lists every one of them; `message` is the newest release; `at` is the earliest `behind_since` among them, absent when none has one |
+| `old` | devices run an older release than the team's newest | `devices` lists every one of them; `message` is the newest release; `at` is the earliest `behind_since` among those that have reported for 7 hours since it and are not `silent`, absent when none has |
 | `under` | past half of a subscription's main window, its forecast is under 50% | `provider`, `account`, `name`; `resets_at` is when it resets, `percent` its forecast |
 
 A window is the account's main one or one that limits it more; see the account's `state`. An `out`, `over`, or `under` entry has `reading_age_seconds` when its window's reading is stale.
@@ -212,7 +212,7 @@ A device:
 | `error` | string | what fails on the device now: a tool's error, named after its provider, else the last run's error when it is newer than the last success; `null` when nothing does |
 | `silent` | bool | it has not reported for a day |
 | `old` | bool | it runs an older release than `latest_version` |
-| `behind_since` | time | for an `old` device, when this device's reads of the team first found it on the release it runs, which is how long it has not updated itself at least; `null` otherwise, and until a read finds it so |
+| `behind_since` | time | for an `old` device, its first run on the release it runs that this device's reads of the team found while a newer one was out, made since the read before, so that time it did not run, as a laptop asleep, does not count. The device has not updated itself for at least that long; once it has reported for 7 hours since, it had the runs to. `null` otherwise, until a read finds such a run, and once the device has not reported for a day, until it reports again |
 | `usage` | object | its input plus output tokens in each period, over every account. A device's days count from the UTC day it collected on, so one that last reported three days ago adds nothing to `today` |
 
 A device on a collector older than v0.2.0 sends each account's `tokens` over its 90 days, but no days and no tokens since a window began. The report takes another device's account as such when it has input or output tokens but neither of those. Its `usage` in `90d` is the input plus output of its `tokens`: its own 90 days, the report's as nearly as that collector counts them. They end when the device collected, 2 days early for one that last collected 2 days before the report's UTC day, and they hold a session whole while it was active in them. A shorter period is `0` when the account was last active on the device before the period began, and not known otherwise. A period that is not known is `0` and named in `unknown`. The sums over such an account, as its device's `usage`, the team account's, and a matrix column's or row's, add the known part and name the period in `unknown` too.
@@ -351,7 +351,7 @@ A shortened report from a team of two:
       "resets_at": "2026-09-04T12:00:00Z",
       "percent": 140
     },
-    { "kind": "old", "devices": ["bo-laptop"], "at": "2026-09-01T09:17:00Z", "message": "v1.3.0" }
+    { "kind": "old", "devices": ["bo-laptop"], "at": "2026-08-31T16:40:00Z", "message": "v1.3.0" }
   ],
   "providers": [
     {
@@ -454,7 +454,7 @@ A shortened report from a team of two:
         "error": null,
         "silent": false,
         "old": true,
-        "behind_since": "2026-09-01T09:17:00Z",
+        "behind_since": "2026-08-31T16:40:00Z",
         "usage": { "today": 900000, "7d": 6100000, "30d": 21000000, "90d": 48000000 }
       }
     ],

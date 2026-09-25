@@ -113,7 +113,8 @@ func TestRelayPushAndPull(t *testing.T) {
 }
 
 // Each read carries over since when a device has run an older release than
-// the team's newest, and starts it again once the device runs another.
+// the team's newest, from its first run a read found new, and starts it
+// again once the device runs another, or after it was silent for a day.
 func TestBehindSinceCarriesOverReads(t *testing.T) {
 	w, o := newWorld(t)
 	h := w.home(t, "claude")
@@ -125,10 +126,14 @@ func TestBehindSinceCarriesOverReads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// This device runs v1.2.3, the newest.
-	behind := func(release string) Behind {
+	// This device runs v1.2.3, the newest. The other runs release at hours
+	// after t0, or not at all for "".
+	behind := func(hours int, release string) Behind {
 		t.Helper()
-		publishRelease(t, r, w, key, "d-other-device", release, ledger(), w.now)
+		w.now = t0.Add(time.Duration(hours) * time.Hour)
+		if release != "" {
+			publishRelease(t, r, w, key, "d-other-device", release, ledger(), w.now)
+		}
 		run(t, o)
 		cache, err := LoadTeamCache(o.Dir)
 		if err != nil {
@@ -139,20 +144,25 @@ func TestBehindSinceCarriesOverReads(t *testing.T) {
 		}
 		return cache.Behind["d-other-device"]
 	}
-	if b := behind("v1.2.0"); b != (Behind{"v1.2.0", t0}) {
-		t.Fatalf("first read: %+v", b)
-	}
-	w.now = t0.Add(2 * time.Hour)
-	if b := behind("v1.2.0"); b != (Behind{"v1.2.0", t0}) {
-		t.Fatalf("a later read on the same release: %+v", b)
-	}
-	w.now = t0.Add(4 * time.Hour)
-	if b := behind("v1.2.1"); b != (Behind{"v1.2.1", w.now}) {
-		t.Fatalf("another older release: %+v", b)
-	}
-	w.now = t0.Add(6 * time.Hour)
-	if b := behind("v1.2.3"); b != (Behind{}) {
-		t.Fatalf("caught up: %+v", b)
+	for _, c := range []struct {
+		name    string
+		hours   int
+		release string
+		want    Behind
+	}{
+		{"the first read, which cannot tell a run since", 0, "v1.2.0", Behind{}},
+		{"no run since the read before, as a laptop asleep", 1, "", Behind{}},
+		{"its first run found", 2, "v1.2.0", Behind{"v1.2.0", t0.Add(2 * time.Hour)}},
+		{"a later run on the same release", 4, "v1.2.0", Behind{"v1.2.0", t0.Add(2 * time.Hour)}},
+		{"no run since, but found before", 5, "", Behind{"v1.2.0", t0.Add(2 * time.Hour)}},
+		{"another older release", 6, "v1.2.1", Behind{"v1.2.1", t0.Add(6 * time.Hour)}},
+		{"silent for more than a day", 31, "", Behind{}},
+		{"back", 32, "v1.2.1", Behind{"v1.2.1", t0.Add(32 * time.Hour)}},
+		{"caught up", 33, "v1.2.3", Behind{}},
+	} {
+		if b := behind(c.hours, c.release); b != c.want {
+			t.Fatalf("%s: %+v, want %+v", c.name, b, c.want)
+		}
 	}
 }
 

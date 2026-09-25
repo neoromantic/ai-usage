@@ -92,7 +92,7 @@ Shown only when something is wrong. At most 6 lines, then `+N more`; the interac
 | `OVER` | a window will run out by its reset, at its pace so far | when it runs out, and how long before the reset |
 | `ERROR` | a device's collector or one of its harnesses fails, or the release check of a device on an older release | the device and the error |
 | `SILENT` | a device has not reported for a day | since when, and the error it last reported, if any |
-| `OLD` | devices run an older release | all of them in one line, and, once one has not updated for 7 hours, for how long the longest has not |
+| `OLD` | devices run an older release | all of them in one line, and, once one that is not silent has run its release for 7 hours without updating, for how long the longest has not updated |
 | `UNDER` | past half of an account's weekly window, its forecast is under 50% | how much of the window will go unused |
 
 A badge is its word in reverse video, colored by its state. `UNDER` is a hint rather than a problem: that subscription has room for more work.
@@ -215,7 +215,7 @@ DEVICES  13 · 1 error · 2 old · by 7d · M tokens in+out                     
 | SEEN | how long ago it last reported, dim; a silent device's in the tight color |
 | VIA | the harnesses it reads, dim; one that fails or reads only in part is in the out color and followed by `×`; `·` for none |
 | TODAY 7D 30D 90D | its input plus output tokens, as the matrix's TOTAL column prints them, with `≥` and `?` for a device on a collector older than v0.2.0; their headers are dim, as every header is, and the title names the chosen period, as in `by 7d` |
-| NOTE | for a silent device, `silent since` when it last reported, then the error it last reported, as ATTENTION says it; else what fails on it, in the out color; else, on an old release, `update failing:` and why its release check failed, in the out color; `not updated for 1d · latest v1.4.2`, in the tight color, once this device's reads of the team have found it on that release for 7 hours, longer than v0.2.0 takes to update itself; else `update: latest v1.4.2`; else, on a current release, `update check failing:` and why; else nothing. Only an error, and an update not made, are in color |
+| NOTE | for a silent device, `silent since` when it last reported, then the error it last reported, as ATTENTION says it; else what fails on it, in the out color; else, on an old release, `update failing:` and why its release check failed, in the out color; `not updated for 1d · latest v1.4.2`, in the tight color, once this device's reads of the team have found it reporting on that release for 7 hours, longer than v0.2.0 takes to update itself, counted from its first run they found after a newer release was out, so a machine asleep meanwhile is not counted; else `update: latest v1.4.2`; else, on a current release, `update check failing:` and why; else nothing. Only an error, and an update not made, are in color |
 
 The bottom row is TOTAL for each period, by the matrix's rules for `≥` and `?`. With no note on any device, there is no NOTE column.
 

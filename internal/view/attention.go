@@ -89,9 +89,9 @@ func attention(t Team, c Collector, now time.Time) []Attention {
 		}
 		if d.Old {
 			old = append(old, d.Label)
-			if d.BehindSince != nil && (behind == nil || d.BehindSince.Before(*behind)) {
-				behind = d.BehindSince
-			}
+		}
+		if notUpdating(d) && (behind == nil || d.BehindSince.Before(*behind)) {
+			behind = d.BehindSince
 		}
 	}
 	if len(old) > 0 && t.Latest != nil {
@@ -118,6 +118,13 @@ func attention(t Team, c Collector, now time.Time) []Attention {
 		return false
 	})
 	return out
+}
+
+// notUpdating is an old device that does not update itself: it has
+// reported on its release for BehindAfter since its BehindSince, so it had
+// the runs to update. A silent device is silent instead.
+func notUpdating(d TeamDevice) bool {
+	return d.Old && !d.Silent && d.BehindSince != nil && d.CollectedAt.Sub(*d.BehindSince) >= BehindAfter
 }
 
 // collectorErrors are the errors behind the header's failed run, failing

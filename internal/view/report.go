@@ -20,9 +20,9 @@ const (
 	StaleAfter = 6 * time.Hour
 	// SilentAfter marks a device that has not reported for a day.
 	SilentAfter = 24 * time.Hour
-	// BehindAfter marks an old device that has not updated itself for
-	// longer than updating takes: v0.2.0 checks for a release every 6 hours,
-	// and the next run is the update.
+	// BehindAfter marks an old device that has run its release for longer
+	// than updating takes without updating itself: v0.2.0 checks for a
+	// release every 6 hours, and the next run is the update.
 	BehindAfter = 7 * time.Hour
 )
 
@@ -105,7 +105,7 @@ type Attention struct {
 	Devices []string `json:"devices,omitempty"`
 	// At is when an out window resets, when an over window runs out before
 	// its reset, when a silent device last reported, or the earliest
-	// BehindSince of old devices.
+	// BehindSince of old devices that do not update themselves.
 	At *time.Time `json:"at,omitempty"`
 	// ResetsAt is when an over or under window resets.
 	ResetsAt *time.Time `json:"resets_at,omitempty"`
@@ -296,8 +296,10 @@ type TeamDevice struct {
 	Silent bool `json:"silent"`
 	// Old is a device on an older release than the team's newest.
 	Old bool `json:"old"`
-	// BehindSince is when this device's reads of the team first found an
-	// old device on the release it runs.
+	// BehindSince is, for an old device, its first run on the release it
+	// runs that this device's reads of the team found after a newer one was
+	// out: its run since the read before, so the time it did not run, as a
+	// laptop asleep, does not count.
 	BehindSince *time.Time `json:"behind_since"`
 	Usage       Usage      `json:"usage"`
 }

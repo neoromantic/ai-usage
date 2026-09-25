@@ -302,9 +302,10 @@ func TestStatusNote(t *testing.T) {
 }
 
 // TestStatusNoteUpdate: an old device whose release check fails says why,
-// in the error's color, and is an error in ATTENTION; one that has not
-// updated for longer than updating takes says for how long, in the tight
-// color, and so does OLD; a failing check on a device that is not old is a
+// in the error's color, and is an error in ATTENTION; one that has run its
+// release for longer than updating takes says for how long it has not
+// updated, in the tight color, and so does OLD, but not one that has not
+// run since, or is silent; a failing check on a device that is not old is a
 // dim note alone. A short NOTE keeps some of why a check fails.
 func TestStatusNoteUpdate(t *testing.T) {
 	r := loadReport(t, "team")
@@ -328,10 +329,38 @@ func TestStatusNoteUpdate(t *testing.T) {
 	if l := statusLine(t, Render(r, devices(Options{Width: 120, Loc: sampleZone})), "srv1"); !strings.Contains(l, "failing: github.com") {
 		t.Errorf("srv1 at 120: %q", l)
 	}
-	r.Attention = attention(r.Team, r.Collector, r.GeneratedAt)
-	if got := pageSection(Render(r, Options{Width: 120}), "ATTENTION"); !slices.Contains(got, " OLD    2 devices on v1.4.0  Mac.localdomain, MacBook-Pro-Kim · latest v1.4.2 · not updated for up to 1d") {
-		t.Errorf("ATTENTION:\n%s", strings.Join(got, "\n"))
+	old := func() string {
+		t.Helper()
+		r.Attention = attention(r.Team, r.Collector, r.GeneratedAt)
+		got := pageSection(Render(r, Options{Width: 120}), "ATTENTION")
+		if i := slices.IndexFunc(got, func(l string) bool { return strings.HasPrefix(l, " OLD ") }); i >= 0 {
+			return got[i]
+		}
+		t.Fatalf("no OLD in ATTENTION:\n%s", strings.Join(got, "\n"))
+		return ""
 	}
+	if got := old(); got != " OLD    2 devices on v1.4.0  Mac.localdomain, MacBook-Pro-Kim · latest v1.4.2 · not updated for up to 1d" {
+		t.Errorf("OLD: %q", got)
+	}
+	// A silent device is silent: OLD does not count its days.
+	mac := slices.IndexFunc(r.Team.Devices, func(d TeamDevice) bool { return d.Label == "Mac.localdomain" })
+	was, macSince := r.Team.Devices[mac], r.GeneratedAt.Add(-72*time.Hour)
+	r.Team.Devices[mac].Silent, r.Team.Devices[mac].CollectedAt, r.Team.Devices[mac].BehindSince = true, r.GeneratedAt.Add(-48*time.Hour), &macSince
+	if got := old(); !strings.HasSuffix(got, " · not updated for up to 1d") {
+		t.Errorf("OLD with a silent device: %q", got)
+	}
+	r.Team.Devices[mac] = was
+	// Found behind 10 hours ago, but last run 9 hours ago, as a laptop
+	// asleep, it has had no run to update in.
+	collected := r.Team.Devices[kim].CollectedAt
+	r.Team.Devices[kim].CollectedAt, behind = r.GeneratedAt.Add(-9*time.Hour), r.GeneratedAt.Add(-10*time.Hour)
+	if got := note(kim, -1); got != "update: latest v1.4.2" {
+		t.Errorf("not run since: %q", got)
+	}
+	if got := old(); strings.Contains(got, "not updated") {
+		t.Errorf("OLD, not run since: %q", got)
+	}
+	r.Team.Devices[kim].CollectedAt, behind = collected, r.GeneratedAt.Add(-26*time.Hour)
 
 	rateLimited := "update check: HTTP 429 from github.com: Too Many Requests"
 	r.Team.Devices[kim].UpdateError = &rateLimited

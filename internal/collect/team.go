@@ -23,18 +23,23 @@ type TeamCache struct {
 	ReadError string         `json:"read_error,omitempty"`
 	Bodies    [][]byte       `json:"bodies"`
 	Docs      []snapshot.Doc `json:"-"`
-	// Behind is, by device id, since when the reads have found each device
-	// on an older release than the team's newest, and that release. Each
-	// read carries it over, and starts a device again once it runs another.
+	// Behind is, by device id, since when each device has run an older
+	// release than the team's newest, as the reads found it, and that
+	// release. Each read carries it over, and starts a device again once it
+	// runs another, or after it has not reported for a day.
 	Behind map[string]Behind `json:"behind,omitempty"`
 }
 
-// Behind is a device's release when a read first found it older than the
-// team's newest, and when that was.
+// Behind is a device's release older than the team's newest, and its first
+// run on it that a read found, made since the read before.
 type Behind struct {
 	Version string    `json:"version"`
 	Since   time.Time `json:"since"`
 }
+
+// silentAfter is how long a device goes without reporting before the views
+// call it silent. Such a device cannot update itself.
+const silentAfter = 24 * time.Hour
 
 const teamCacheFile = "team-cache.json"
 
@@ -165,11 +170,12 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 			seen = append(seen, d.Doc)
 		}
 	}
-	prev := cache.Behind
+	prev, after := cache.Behind, cache.PulledAt
 	if cache.Team != next.Team {
-		prev = nil
+		// With no read of this team before, no snapshot is known to be new.
+		prev, after = nil, now
 	}
-	next.Behind = behindSince(prev, seen, st.Update.Latest, now)
+	next.Behind = behindSince(prev, seen, st.Update.Latest, after, now)
 	if bad > 0 {
 		next.ReadError = "relay returned documents that do not verify with the team key"
 	}
@@ -191,8 +197,13 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 
 // behindSince is, for each device in docs on an older release than the
 // newest any of them runs or checked is, what prev says of it while it runs
-// the release prev names; else that release, since now.
-func behindSince(prev map[string]Behind, docs []snapshot.Doc, checked string, now time.Time) map[string]Behind {
+// the release prev names; else that release, since the device's snapshot
+// when that is a run made after the read before, at after. A device that
+// did not run since, such as a laptop asleep when a release came out, starts
+// with its next run, so the time it did not run does not count as time it
+// did not update. One that has not reported for a day is left out, and
+// starts again when it reports.
+func behindSince(prev map[string]Behind, docs []snapshot.Doc, checked string, after, now time.Time) map[string]Behind {
 	versions := []string{checked}
 	for _, d := range docs {
 		versions = append(versions, d.CollectorVersion)
@@ -200,12 +211,15 @@ func behindSince(prev map[string]Behind, docs []snapshot.Doc, checked string, no
 	latest := selfupdate.Newest(versions...)
 	var out map[string]Behind
 	for _, d := range docs {
-		if !selfupdate.Newer(latest, d.CollectorVersion) {
+		if !selfupdate.Newer(latest, d.CollectorVersion) || now.Sub(d.CollectedAt) > silentAfter {
 			continue
 		}
 		b, ok := prev[d.Device]
 		if !ok || b.Version != d.CollectorVersion {
-			b = Behind{Version: d.CollectorVersion, Since: now}
+			if !d.CollectedAt.After(after) {
+				continue
+			}
+			b = Behind{Version: d.CollectorVersion, Since: d.CollectedAt}
 		}
 		if out == nil {
 			out = map[string]Behind{}

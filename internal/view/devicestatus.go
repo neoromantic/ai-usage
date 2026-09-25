@@ -405,7 +405,7 @@ func (p *page) deviceNote(d TeamDevice, w int) chunks {
 		return update(color(p.th.Out), "update failing", "update")
 	case d.Old && p.r.Team.Latest != nil:
 		latest := "latest " + p.txt(*p.r.Team.Latest)
-		if d.BehindSince != nil && p.now.Sub(*d.BehindSince) >= BehindAfter {
+		if notUpdating(d) {
 			tight, a := color(p.th.Tight), age(p.now.Sub(*d.BehindSince))
 			return fit(tight("not updated for "+a+g.sep+latest), tight("not updated for "+a), tight("not updated "+a))
 		}
