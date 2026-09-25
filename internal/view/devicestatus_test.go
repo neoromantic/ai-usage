@@ -305,7 +305,7 @@ func TestStatusNote(t *testing.T) {
 // in the error's color, and is an error in ATTENTION; one that has not
 // updated for longer than updating takes says for how long, in the tight
 // color, and so does OLD; a failing check on a device that is not old is a
-// dim note alone.
+// dim note alone. A short NOTE keeps some of why a check fails.
 func TestStatusNoteUpdate(t *testing.T) {
 	r := loadReport(t, "team")
 	kim := slices.IndexFunc(r.Team.Devices, func(d TeamDevice) bool { return d.Label == "MacBook-Pro-Kim" })
@@ -320,10 +320,13 @@ func TestStatusNoteUpdate(t *testing.T) {
 			t.Errorf("behind, in %d: %q, want %q", w, got, want)
 		}
 	}
-	for w, want := range map[int]string{-1: "update check failing: github.com did not answer in 30s", 30: "update check failing", 19: "check failing"} {
+	for w, want := range map[int]string{-1: "update check failing: github.com did not answer in 30s", 30: "check failing: github.com did…", 19: "check failing"} {
 		if got := note(srv, w); got != want {
 			t.Errorf("a failing check on a current device, in %d: %q, want %q", w, got, want)
 		}
+	}
+	if l := statusLine(t, Render(r, devices(Options{Width: 120, Loc: sampleZone})), "srv1"); !strings.Contains(l, "failing: github.com") {
+		t.Errorf("srv1 at 120: %q", l)
 	}
 	r.Attention = attention(r.Team, r.Collector, r.GeneratedAt)
 	if got := pageSection(Render(r, Options{Width: 120}), "ATTENTION"); !slices.Contains(got, " OLD    2 devices on v1.4.0  Mac.localdomain, MacBook-Pro-Kim · latest v1.4.2 · not updated for up to 1d") {
@@ -332,7 +335,7 @@ func TestStatusNoteUpdate(t *testing.T) {
 
 	rateLimited := "update check: HTTP 429 from github.com: Too Many Requests"
 	r.Team.Devices[kim].UpdateError = &rateLimited
-	for w, want := range map[int]string{-1: "update failing: HTTP 429 from github.com: Too Many Requests", 30: "update failing: HTTP 429 from…", 20: "update failing"} {
+	for w, want := range map[int]string{-1: "update failing: HTTP 429 from github.com: Too Many Requests", 30: "update failing: HTTP 429 from…", 20: "update: HTTP 429 fr…", 14: "update failing"} {
 		if got := note(kim, w); got != want {
 			t.Errorf("failing, in %d: %q, want %q", w, got, want)
 		}

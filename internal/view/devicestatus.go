@@ -353,8 +353,9 @@ func (p *page) harnesses(d TeamDevice) chunks {
 // The rest is dim. A short column cuts the error, then drops the last one,
 // says only "since" of the silence, then only its day, then only "silent",
 // so a time is never cut, and says only "latest" of the release. It keeps a
-// release check's error while 12 columns of it fit, and how long a device
-// has not updated, but not the release.
+// release check's error while 12 columns of it fit, after a shorter form of
+// what failed if need be, and how long a device has not updated, but not the
+// release.
 func (p *page) deviceNote(d TeamDevice, w int) chunks {
 	g := p.g
 	fit := func(forms ...chunk) chunks {
@@ -365,12 +366,15 @@ func (p *page) deviceNote(d TeamDevice, w int) chunks {
 		}
 		return chunks{forms[len(forms)-1]}.cut(w, g.ell)
 	}
-	// update is what of a failed release check fits: its error, cut, while
-	// 12 columns of it do, else only what failed, in one of its forms.
+	// update is what of a failed release check fits: its error, cut, after
+	// the longest form of what failed that leaves 12 columns of it, else
+	// only what failed, in one of its forms.
 	update := func(paint func(string) chunk, what ...string) chunks {
 		msg := p.txt(strings.TrimPrefix(*d.UpdateError, "update check: "))
-		if w < 0 || w >= width(what[0]+": ")+statusCut {
-			return fit(paint(what[0] + ": " + msg))
+		for _, s := range what {
+			if w < 0 || w >= width(s+": ")+statusCut {
+				return fit(paint(s + ": " + msg))
+			}
 		}
 		var forms []chunk
 		for _, s := range what {
@@ -398,7 +402,7 @@ func (p *page) deviceNote(d TeamDevice, w int) chunks {
 	case d.Error != nil:
 		return fit(p.paint(p.txt(*d.Error), p.th.Out, false, false))
 	case d.Old && d.UpdateError != nil:
-		return update(color(p.th.Out), "update failing")
+		return update(color(p.th.Out), "update failing", "update")
 	case d.Old && p.r.Team.Latest != nil:
 		latest := "latest " + p.txt(*p.r.Team.Latest)
 		if d.BehindSince != nil && p.now.Sub(*d.BehindSince) >= BehindAfter {

@@ -219,7 +219,7 @@ DEVICES  13 · 1 error · 2 old · by 7d · M tokens in+out                     
 
 The bottom row is TOTAL for each period, by the matrix's rules for `≥` and `?`. With no note on any device, there is no NOTE column.
 
-A short NOTE cuts an error with `…`, and keeps a silent device's last error, and why a release check failed, only while 12 columns of it fit; the check's note then says `update failing`, or `update check failing`, then `check failing`. It never cuts a time: a silent device's note becomes `since Mon 14:02`, then the day alone, as in `since Mon`, then `silent`. An old release's becomes `latest v1.4.2`, and an update not made `not updated for 1d`, then `not updated 1d`.
+A short NOTE cuts an error with `…`, and keeps a silent device's last error, and why a release check failed, only while 12 columns of it fit. The check's note shortens what failed first, to keep why: `update:` for `update failing:`, `check failing:` for `update check failing:`; then it says only `update failing`, or `update check failing`, then `check failing`. It never cuts a time: a silent device's note becomes `since Mon 14:02`, then the day alone, as in `since Mon`, then `silent`. An old release's becomes `latest v1.4.2`, and an update not made `not updated for 1d`, then `not updated 1d`.
 
 ## PROJECTS
 
