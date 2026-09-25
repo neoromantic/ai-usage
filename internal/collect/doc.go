@@ -348,12 +348,14 @@ const maxUpdateError = 160
 
 // lastError is what last_error carries: the last run's error on one line,
 // then, while the last release check failed and no newer release waits for
-// the next run, snapshot.UpdateLine and why. Sealing keeps the end of a long
-// one, so the check's error stays whole.
+// the next run, snapshot.UpdateLine and why, without the IP addresses a
+// network error names. Sealing keeps the end of a long one, so the check's
+// error stays whole.
 func lastError(st *state.State, version string) string {
 	s := strings.ReplaceAll(st.LastError, "\n", " ")
 	if e := st.Update.Error; e != "" && !selfupdate.Dev(version) && !selfupdate.Newer(st.Update.Installed, version) {
-		s += snapshot.UpdateLine + truncate(strings.Join(strings.Fields(snapshot.Printable(e)), " "), maxUpdateError)
+		e = strings.Join(strings.Fields(selfupdate.WithoutAddresses(snapshot.Printable(e))), " ")
+		s += snapshot.UpdateLine + truncate(e, maxUpdateError)
 	}
 	return s
 }

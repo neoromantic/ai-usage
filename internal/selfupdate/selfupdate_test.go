@@ -474,6 +474,8 @@ func TestRefusalReason(t *testing.T) {
 		{"page", "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\">\n<title>Too Many Requests &middot; GitHub</title></head><body>no</body></html>",
 			": Too Many Requests · GitHub"},
 		{"text", "blocked\nfor 2001:db8::1 at 10:30:00\n", ": blocked for (IP address) at 10:30:00"},
+		{"joined", "denied for IP:203.0.113.7, blocked:203.0.113.7:8080 and ip.2001:db8::1",
+			": denied for IP:(IP address), blocked:(IP address) and ip.(IP address)"},
 		{"long", long, ": " + long[:maxReason-len("…")] + "…"},
 		{"markup", "<html><body>no</body></html>", ""},
 	} {

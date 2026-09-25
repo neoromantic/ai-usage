@@ -452,18 +452,9 @@ func reason(body io.Reader) string {
 	case !bytes.HasPrefix(bytes.TrimSpace(b), []byte("<")):
 		s = string(b)
 	}
-	s = strings.Join(strings.FieldsFunc(strings.ToValidUTF8(s, ""), func(r rune) bool {
+	s = WithoutAddresses(strings.Join(strings.FieldsFunc(strings.ToValidUTF8(s, ""), func(r rune) bool {
 		return unicode.IsSpace(r) || unicode.IsControl(r)
-	}), " ")
-	s = addrLike.ReplaceAllStringFunc(s, func(m string) string {
-		a := strings.TrimRight(m, ".:")
-		if _, err := netip.ParseAddr(a); err != nil {
-			if _, err := netip.ParseAddrPort(a); err != nil {
-				return m
-			}
-		}
-		return "(IP address)" + m[len(a):]
-	})
+	}), " "))
 	if len(s) > maxReason {
 		cut := maxReason - len("…")
 		for cut > 0 && !utf8.RuneStart(s[cut]) {
@@ -475,6 +466,28 @@ func reason(body io.Reader) string {
 		return ""
 	}
 	return ": " + s
+}
+
+// WithoutAddresses is s with "(IP address)" in place of each IP address in
+// it, with or without a port, such as the one GitHub names when this
+// address is over its limit, or the two a network error names. An address
+// joined to a word, as in "IP:203.0.113.7", starts after its colon or dot.
+func WithoutAddresses(s string) string {
+	return addrLike.ReplaceAllStringFunc(s, func(m string) string {
+		for i := range len(m) {
+			if i > 0 && m[i-1] != ':' && m[i-1] != '.' {
+				continue
+			}
+			a := strings.TrimRight(m[i:], ".:")
+			if _, err := netip.ParseAddr(a); err != nil {
+				if _, err := netip.ParseAddrPort(a); err != nil {
+					continue
+				}
+			}
+			return m[:i] + "(IP address)" + m[i+len(a):]
+		}
+		return m
+	})
 }
 
 // progress pushes the stall deadline back whenever bytes arrive.

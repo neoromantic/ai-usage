@@ -222,6 +222,12 @@ func TestLastErrorCarriesTheUpdateError(t *testing.T) {
 	if run, update, _ := lastError(st); run != "" || update != st.Update.Error {
 		t.Fatalf("last_error = %q, %q", run, update)
 	}
+	// A network error names this device's own address.
+	st.Update.Error = `update check: Get "https://github.com/neoromantic/ai-usage/releases/latest": read tcp 192.0.2.10:60512->198.51.100.4:443: read: connection reset by peer`
+	if _, update, _ := lastError(st); strings.Contains(update, "192.0.2.10") || strings.Contains(update, "198.51.100.4") ||
+		!strings.HasSuffix(update, "read tcp (IP address)->(IP address): read: connection reset by peer") {
+		t.Fatalf("update error = %q", update)
+	}
 }
 
 func TestBuildDocFitsTheSizeLimit(t *testing.T) {

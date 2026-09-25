@@ -207,7 +207,7 @@ A device:
 | `age_seconds` | number | the snapshot's age |
 | `last_success_at` | time | its last run without an error |
 | `last_error` | string | its last error |
-| `update_error` | string | why its last release check failed, while no newer release waits for its next run. It reaches the team one run after the check, and `null` for this device, whose own is `collector.update.error`, and for a collector before this field |
+| `update_error` | string | why its last release check failed, without IP addresses, while no newer release waits for its next run. It reaches the team one run after the check, and `null` for this device, whose own is `collector.update.error`, and for a collector before this field |
 | `sources` | list | `{provider, status, error}` for each tool on that device |
 | `error` | string | what fails on the device now: a tool's error, named after its provider, else the last run's error when it is newer than the last success; `null` when nothing does |
 | `silent` | bool | it has not reported for a day |
