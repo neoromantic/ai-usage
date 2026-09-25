@@ -1,0 +1,120 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- How a team's numbers travel, for posts. shots.ts photographs .frame. -->
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;700&display=block" rel="stylesheet">
+<style>
+:root{--bg:#0f1115;--fg:#d7dae0;--dim:#6c7280;--card:#161920;--border:#2b2f37;--blue:#5fafff;--green:#87d75f;--yellow:#ffd75f;--red:#ff5f5f;--violet:#d787ff;--cyan:#5fd7d7}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.4 Inter,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+.frame{display:inline-block;padding:56px 60px;background:linear-gradient(135deg,#1e2a4a 0%,#3b1f4a 55%,#4a2a1f 100%)}
+.board{width:1460px;background:var(--bg);border:1px solid var(--border);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,.35);padding:34px 38px 30px}
+h1{font-size:26px;font-weight:700;letter-spacing:-.01em}
+h1 b{font-family:"JetBrains Mono",monospace;color:var(--blue)}
+.lede{color:var(--dim);margin-top:4px;font-size:15px}
+.flow{display:grid;grid-template-columns:300px 1fr 350px 1fr 318px;align-items:center;margin-top:30px}
+.col h2{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:10px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 13px;margin-bottom:9px}
+.card .name{font:700 14px "JetBrains Mono",monospace}
+.card .where{font-size:12.5px;color:var(--dim);margin-left:6px}
+.chips{margin-top:6px;display:flex;flex-wrap:wrap;gap:5px}
+.chip{font:12px "JetBrains Mono",monospace;padding:1px 7px;border-radius:5px;border:1px solid var(--border)}
+.c{color:#ffaf87}.x{color:var(--green)}.g{color:var(--cyan)}.h{color:var(--violet)}
+.note{font-size:13px;color:var(--dim);margin-top:4px}
+.arrow{position:relative;height:120px;display:flex;flex-direction:column;justify-content:center;padding:0 8px}
+.arrow .line{height:2px;background:linear-gradient(90deg,var(--border),var(--blue));position:relative;margin:10px 0}
+.arrow .line:after{content:"";position:absolute;right:-2px;top:-6px;border:7px solid transparent;border-left:10px solid var(--blue);border-right:0}
+.arrow .top{font-size:13.5px;font-weight:600;text-align:center;white-space:nowrap}
+.arrow .bottom{font-size:12.5px;color:var(--dim);text-align:center}
+.relay{background:var(--card);border:1px solid var(--blue);border-radius:12px;padding:16px 18px}
+.relay .title{font:700 17px "JetBrains Mono",monospace;color:var(--blue)}
+.relay .sub{font-size:12.5px;color:var(--dim);margin-top:2px}
+.relay h3{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin:14px 0 5px}
+.relay ul{list-style:none;font-size:13.5px}
+.relay li{padding-left:18px;position:relative;margin:2px 0}
+.relay li:before{position:absolute;left:0;font-family:"JetBrains Mono",monospace}
+.plain h3{color:var(--green)}.plain li:before{content:"✓";color:var(--green)}
+.sealed h3{color:var(--yellow)}.sealed li:before{content:"■";color:var(--yellow);font-size:11px;top:2px}
+.sealed li span{background:#2b2f37;color:#2b2f37;border-radius:3px;padding:0 4px;margin-left:4px;font:11px "JetBrains Mono",monospace}
+.relay .foot{font-size:12.5px;color:var(--dim);margin-top:12px;border-top:1px solid var(--border);padding-top:9px}
+.term{background:#0b0d10;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.term .bar{height:26px;background:#1a1d23;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;padding:0 10px}
+.term .bar i{width:10px;height:10px;border-radius:50%;display:block}
+.term pre{font:12px/1.45 "JetBrains Mono",monospace;padding:10px 12px;white-space:pre;color:var(--fg)}
+.b{font-weight:700}.d{color:var(--dim)}.r{color:var(--red)}.y{color:var(--yellow)}.gr{color:var(--green)}.bl{color:var(--blue)}
+.foot2{display:flex;gap:26px;margin-top:24px;padding-top:16px;border-top:1px solid var(--border);font-size:13.5px;color:var(--dim)}
+.foot2 b{color:var(--fg);font-weight:600}
+</style>
+<body><div class="frame"><div class="board">
+<h1><b>ai-usage</b> for a team: one relay, no one reads your names</h1>
+<div class="lede">Every machine sends a small signed snapshot; every machine gets the whole team back and opens it with the team key.</div>
+
+<div class="flow">
+  <div class="col">
+    <h2>each machine, every 15 min</h2>
+    <div class="card"><span class="name">mira-mbp</span><span class="where">macOS · launchd</span>
+      <div class="chips"><span class="chip c">claude</span><span class="chip x">codex</span><span class="chip g">grok</span></div></div>
+    <div class="card"><span class="name">leo-air</span><span class="where">macOS · launchd</span>
+      <div class="chips"><span class="chip c">claude</span><span class="chip x">codex</span></div></div>
+    <div class="card"><span class="name">build-01</span><span class="where">Linux · cron</span>
+      <div class="chips"><span class="chip x">codex</span><span class="chip c">claude</span><span class="chip h">hermes</span></div></div>
+    <div class="card"><span class="name">9 bots</span><span class="where">containers · schedule run</span>
+      <div class="chips"><span class="chip h">hermes → codex bots@</span></div></div>
+    <div class="note">reads the logs the tools already keep, and asks each tool for its quota</div>
+  </div>
+
+  <div class="arrow">
+    <div class="top">signed snapshot, ≤ 64 KB</div>
+    <div class="line"></div>
+    <div class="bottom">names, emails, paths sealed<br>with the team key</div>
+  </div>
+
+  <div class="relay">
+    <div class="title">relay</div>
+    <div class="sub">one snapshot per machine · hosted, Vercel + Upstash, <span style="font-family:'JetBrains Mono',monospace">relay serve</span>, or Docker</div>
+    <div class="plain"><h3>sees</h3><ul>
+      <li>tools and plans</li>
+      <li>quota %, reset times</li>
+      <li>token counts and when</li>
+    </ul></div>
+    <div class="sealed"><h3>cannot read</h3><ul>
+      <li>machine and user names<span>aGx0b2</span></li>
+      <li>emails, account names<span>Zm9vYm</span></li>
+      <li>project paths, errors<span>cGF0aA</span></li>
+    </ul></div>
+    <div class="foot">checks the signature and the shape; stores nothing else</div>
+  </div>
+
+  <div class="arrow">
+    <div class="top">the whole team</div>
+    <div class="line"></div>
+    <div class="bottom">signatures checked, sealed<br>fields opened on the machine</div>
+  </div>
+
+  <div class="col">
+    <h2>any machine in the team</h2>
+    <div class="term"><div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+<pre><span class="bl b">$</span> ai-usage
+<span class="b">ATTENTION</span>
+ <span class="r b">OUT </span>  claude mira · 5h
+ <span class="r b">OVER</span>  codex bots@studio.dev
+       <span class="d">runs out ~Fri 08:59</span>
+ <span class="y b">SILENT</span> courier <span class="d">1d 5h</span>
+
+<span class="b">DEVICES × SUBSCRIPTIONS</span> <span class="d">7d</span>
+             mira   bots  <span class="b">TOTAL</span>
+  build-01     26    141    167
+<span class="gr">●</span> mira-mbp    104      ·    162
+  scout         ·     49     49
+  <span class="d">… 10 more</span></pre></div>
+  </div>
+</div>
+
+<div class="foot2">
+  <span><b>Ed25519</b> signatures</span>
+  <span><b>AES-256-GCM</b> sealed fields</span>
+  <span><b>one key</b> = one team, up to 50 machines</span>
+  <span><b>no relay?</b> it reports on this machine alone</span>
+</div>
+</div></div>
+<script>document.fonts.ready.then(()=>document.body.classList.add("ready"))</script>

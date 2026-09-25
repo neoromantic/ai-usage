@@ -4,7 +4,9 @@
 // report, so its forecasts, attention, and matrix agree with its readings
 // and tokens. `ai-usage report --from FILE` shows one.
 //
-//	go run ./scripts/demo docs/demo
+//	go run ./scripts/demo docs/demo    # write the reports
+//	go run ./scripts/demo guide 110     # print the solo page as a first run does
+//	go run ./scripts/demo snapshot      # print what the solo device sends the relay
 package main
 
 import (
@@ -14,6 +16,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
@@ -38,6 +41,18 @@ func main() {
 	if len(os.Args) > 1 {
 		out = os.Args[1]
 	}
+	switch out {
+	case "guide":
+		firstRun()
+		return
+	case "snapshot":
+		b, err := json.MarshalIndent(soloDevice(now.Add(-4*time.Minute)).doc(demoKey()), "", "  ")
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(string(b))
+		return
+	}
 	for name, build := range map[string]func() view.Report{"solo": solo, "team": teamReport} {
 		b, err := json.MarshalIndent(build(), "", "  ")
 		if err != nil {
@@ -54,16 +69,38 @@ func main() {
 // solo is one developer on one laptop with three subscriptions: Claude
 // runs out before its reset, Codex has room, and Grok sits nearly unused.
 func solo() view.Report {
+	return soloDevice(now.Add(-4 * time.Minute)).report(nil)
+}
+
+// firstRun prints the solo page as the installer's first run does: the
+// report as of the run, then the guide. The width is the argument after
+// guide, and COLORFGBG says whether the terminal is light.
+func firstRun() {
+	width := 110
+	if len(os.Args) > 2 {
+		if _, err := fmt.Sscan(os.Args[2], &width); err != nil {
+			panic(err)
+		}
+	}
+	d := soloDevice(now)
+	d.st.Update.Latest = ""
+	o := view.Options{Width: width, Color: true, Dark: !strings.HasSuffix(os.Getenv("COLORFGBG"), ";15")}
+	r := d.report(nil)
+	fmt.Print(view.Text(r, o) + "\n" + view.Guide(r, "launchd", o))
+}
+
+// soloDevice is solo's laptop, last collected at at.
+func soloDevice(at time.Time) *device {
 	rng := rand.New(rand.NewPCG(1, 1))
-	d := newDevice(rng, "d-demo-solo", "mira-mbp", "mira", "/Users/mira", latest, now.Add(-4*time.Minute), "claude", "codex", "grok")
-	d.account("claude", "mira@studio.dev", "max", true, now.Add(-4*time.Minute),
+	d := newDevice(rng, "d-demo-solo", "mira-mbp", "mira", "/Users/mira", latest, at, "claude", "codex", "grok")
+	d.account("claude", "mira@studio.dev", "max", true, at,
 		window("5h", 35, 5*time.Hour, 2*time.Hour+10*time.Minute),
 		window("7d", 71, week, 2*24*time.Hour+9*time.Hour+20*time.Minute),
 		window("7d Fable", 93, week, 2*24*time.Hour+9*time.Hour+20*time.Minute))
-	d.account("codex", "mira@studio.dev", "pro", true, now.Add(-4*time.Minute),
+	d.account("codex", "mira@studio.dev", "pro", true, at,
 		window("5h", 6, 5*time.Hour, 3*time.Hour+45*time.Minute),
 		window("7d", 22, week, 4*24*time.Hour+19*time.Hour))
-	d.account("grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64", "SuperGrok", true, now.Add(-4*time.Minute),
+	d.account("grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64", "SuperGrok", true, at,
 		window("7d", 9, week, 1*24*time.Hour+22*time.Hour))
 	d.work("claude", "mira@studio.dev", "/Users/mira/src/orbit/web", 16, 90)
 	d.work("claude", "mira@studio.dev", "/Users/mira/src/orbit/api", 9, 60)
@@ -73,7 +110,7 @@ func solo() view.Report {
 	d.workTo(now.Add(-26*time.Hour), "codex", "mira@studio.dev", "/Users/mira/src/ml-playground", 2, 20)
 	d.workTo(now.Add(-3*24*time.Hour), "grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64", "/Users/mira/src/ml-playground", 0.6, 30)
 	d.workTo(now.Add(-4*24*time.Hour), "claude", "mira@studio.dev", "/Users/mira/dotfiles", 0.4, 90)
-	return d.report(nil)
+	return d
 }
 
 // teamReport is a small studio: two laptops, a Linux server, and nine

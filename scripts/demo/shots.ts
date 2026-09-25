@@ -37,6 +37,9 @@ type Shot = {
   rows?: number;
   // Only lines [first, last) of the printed report.
   lines?: [number, number];
+  // Only the section from the line that starts with the first text to the
+  // line before the one that starts with the second.
+  cut?: [string, string];
   // A shell line run instead of ai-usage, with $AI_USAGE as the binary.
   shell?: string;
   theme?: Theme;
@@ -50,15 +53,35 @@ const shots: Shot[] = [
   { name: "team-devices", from: "team.json", cols: 124, typed: "ai-usage --devices", args: ["--devices"] },
   { name: "team-80", from: "team.json", cols: 80, typed: "ai-usage" },
   { name: "team-attention", from: "team.json", cols: 124, typed: "ai-usage", lines: [0, 25], social: true },
+  { name: "team-matrix", from: "team.json", cols: 124, typed: "ai-usage", cut: ["DEVICES", "PROJECTS"], social: true },
   { name: "team-bots", from: "team.json", cols: 124, keys: ["%"], rows: 52, social: true },
   { name: "team-status", from: "team.json", cols: 124, keys: ["s"], rows: 52 },
   { name: "team-help", from: "team.json", cols: 124, keys: ["?"], rows: 40 },
   { name: "solo", from: "solo.json", cols: 110, typed: "ai-usage", social: true },
   { name: "solo-forecast", from: "solo.json", cols: 110, typed: "ai-usage", lines: [0, 19], social: true },
   {
+    name: "install",
+    from: "solo.json",
+    cols: 110,
+    typed: "curl -fsSL https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.sh | sh",
+    shell: `printf '%s\n' 'ai-usage install: downloading ai-usage_darwin_arm64' \
+      'ai-usage install: installed v0.2.4 to /Users/mira/.local/bin/ai-usage' \
+      'ai-usage install: first run: collecting and registering with the system scheduler'
+      go run ./scripts/demo guide 110`,
+    social: true,
+  },
+  {
+    name: "relay-view",
+    from: "solo.json",
+    cols: 100,
+    typed: "# what the relay keeps for mira-mbp, trimmed",
+    shell: `go run ./scripts/demo snapshot | jq -C '{collector_version, device_label, os_user, account: .accounts[0] | {provider, label, plan, windows: [.windows[] | {name, percent}], sessions, projects: [.projects[0:2][].path]}}'`,
+    social: true,
+  },
+  {
     name: "json",
     from: "team.json",
-    cols: 104,
+    cols: 122,
     typed: `ai-usage --json | jq -c '.team.providers[] | .provider as $p | .accounts[] | select(.subscription) | {$p, name, state}'`,
     shell: `"$AI_USAGE" report --from docs/demo/team.json --json | jq -C -c '.team.providers[] | .provider as $p | .accounts[] | select(.subscription) | {$p, name, state}'`,
     social: true,
@@ -234,6 +257,13 @@ async function printed(s: Shot, theme: Theme): Promise<string> {
     text = await $`${bin} report --from ${join(out, s.from)} --width ${s.cols} --color always --plain ${s.args ?? []}`.env(e).text();
   }
   if (s.lines) text = text.split("\n").slice(...s.lines).join("\n");
+  if (s.cut) {
+    const lines = text.split("\n");
+    const plain = lines.map((l) => l.replace(/\x1b\[[0-9;]*m/g, ""));
+    const first = plain.findIndex((l) => l.startsWith(s.cut![0]));
+    const last = plain.findIndex((l, i) => i > first && l.startsWith(s.cut![1]));
+    text = lines.slice(first, last < 0 ? undefined : last).join("\n");
+  }
   return text;
 }
 
@@ -299,6 +329,13 @@ async function shootTour() {
   console.log([mp4, gif].map((p) => p.replace(root + "/", "")).join("\n"));
 }
 
+// diagram photographs scripts/demo/diagram.html, the architecture.
+async function diagram() {
+  const path = join(out, "social", "architecture.png");
+  await photograph(join(import.meta.dir, "diagram.html"), [{ selector: ".frame", path }]);
+  console.log(path.replace(root + "/", ""));
+}
+
 const only = process.argv.slice(2);
 const wanted = (name: string) => only.length === 0 || only.some((o) => name.startsWith(o));
 try {
@@ -307,6 +344,7 @@ try {
   mkdirSync(join(out, "social"), { recursive: true });
   await browser("set", "viewport", "1600", "2400", "2");
   for (const s of shots) if (wanted(s.name)) await shoot(s);
+  if (wanted("architecture")) await diagram();
   if (wanted("tour")) await shootTour();
 } finally {
   await tmux("kill-server");
