@@ -460,6 +460,37 @@ func TestLatestRelease(t *testing.T) {
 	}
 }
 
+// A refusal's error says why, as its body does: on one line, without the IP
+// address GitHub names, and with nothing of a page's markup.
+func TestRefusalReason(t *testing.T) {
+	long := strings.Repeat("slow down ", 20)
+	for _, tc := range []struct {
+		name, body string
+		// want is what the error ends with after the host.
+		want string
+	}{
+		{"api", `{"message":"API rate limit exceeded for 203.0.113.7. (But here's the good news: more.)","documentation_url":"https://docs.github.com/rest"}`,
+			": API rate limit exceeded for (IP address). (But here's the good news: more.)"},
+		{"page", "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\">\n<title>Too Many Requests &middot; GitHub</title></head><body>no</body></html>",
+			": Too Many Requests · GitHub"},
+		{"text", "blocked\nfor 2001:db8::1 at 10:30:00\n", ": blocked for (IP address) at 10:30:00"},
+		{"long", long, ": " + long[:maxReason-len("…")] + "…"},
+		{"markup", "<html><body>no</body></html>", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			t.Cleanup(srv.Close)
+			_, err := updater(srv, installed(t, "ai-usage"), "v1.2.9").Check(context.Background())
+			if want := "update check: HTTP 403 from " + strings.TrimPrefix(srv.URL, "http://") + tc.want; err == nil || err.Error() != want {
+				t.Fatalf("Check error = %v\nwant %s", err, want)
+			}
+		})
+	}
+}
+
 // A slow GitHub holds up a run only as long as Lookup.
 func TestLookupTimeout(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

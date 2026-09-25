@@ -9,11 +9,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"io/fs"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"os/exec"
@@ -23,6 +26,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Repo is where releases are published.
@@ -239,8 +244,11 @@ func (u *Updater) latest(ctx context.Context) (repo, tag string, err error) {
 		}
 		return "", "", fmt.Errorf("update check: %w", err)
 	}
-	_ = resp.Body.Close()
-	if resp.StatusCode < 300 || resp.StatusCode > 399 {
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return "", "", fmt.Errorf("update check: HTTP %d from %s%s", resp.StatusCode, req.URL.Host, reason(resp.Body))
+	}
+	if resp.StatusCode < 300 {
 		return "", "", fmt.Errorf("update check: HTTP %d from %s, not a redirect to the latest release", resp.StatusCode, req.URL.Host)
 	}
 	// A relative Location is resolved against the request.
@@ -397,7 +405,11 @@ func (u *Updater) download(ctx context.Context, repo, tag, name string, limit in
 		return nil, fmt.Errorf("release %s has no %s", tag, name)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("update check: HTTP %d from %s", resp.StatusCode, resp.Request.URL.Host)
+		why := ""
+		if resp.StatusCode >= 400 {
+			why = reason(resp.Body)
+		}
+		return nil, fmt.Errorf("update check: HTTP %d from %s%s", resp.StatusCode, resp.Request.URL.Host, why)
 	}
 	b, err := io.ReadAll(io.LimitReader(progress{resp.Body, stall, u.Stall}, limit+1))
 	if err != nil {
@@ -407,6 +419,62 @@ func (u *Updater) download(ctx context.Context, repo, tag, name string, limit in
 		return nil, errTooLarge
 	}
 	return b, nil
+}
+
+// maxReason is the most of a refusal's reason an error keeps.
+const maxReason = 120
+
+var (
+	// titled is an HTML page's title, or the message of an XML error, as a
+	// file store sends.
+	titled = regexp.MustCompile(`(?is)<(?:title|message)(?:\s[^>]*)?>([^<]*)<`)
+	// addrLike is a run of characters an IP address, with or without a port,
+	// is made of.
+	addrLike = regexp.MustCompile(`[0-9A-Fa-f.:]*[.:][0-9A-Fa-f.:]*`)
+)
+
+// reason is ": " and why a refusal says it refused, from the start of its
+// body: a JSON error's message, as GitHub's API sends, an HTML page's title,
+// or the text, on one line. An IP address in it, such as the one GitHub
+// names when this address is over its limit, is left out, since the team
+// sees the error. It is empty when the body says nothing readable.
+func reason(body io.Reader) string {
+	b, _ := io.ReadAll(io.LimitReader(body, 16<<10))
+	var j struct {
+		Message string `json:"message"`
+	}
+	s := ""
+	switch m := titled.FindSubmatch(b); {
+	case json.Unmarshal(b, &j) == nil:
+		s = j.Message
+	case m != nil:
+		s = html.UnescapeString(string(m[1]))
+	case !bytes.HasPrefix(bytes.TrimSpace(b), []byte("<")):
+		s = string(b)
+	}
+	s = strings.Join(strings.FieldsFunc(strings.ToValidUTF8(s, ""), func(r rune) bool {
+		return unicode.IsSpace(r) || unicode.IsControl(r)
+	}), " ")
+	s = addrLike.ReplaceAllStringFunc(s, func(m string) string {
+		a := strings.TrimRight(m, ".:")
+		if _, err := netip.ParseAddr(a); err != nil {
+			if _, err := netip.ParseAddrPort(a); err != nil {
+				return m
+			}
+		}
+		return "(IP address)" + m[len(a):]
+	})
+	if len(s) > maxReason {
+		cut := maxReason - len("…")
+		for cut > 0 && !utf8.RuneStart(s[cut]) {
+			cut--
+		}
+		s = s[:cut] + "…"
+	}
+	if s == "" {
+		return ""
+	}
+	return ": " + s
 }
 
 // progress pushes the stall deadline back whenever bytes arrive.
