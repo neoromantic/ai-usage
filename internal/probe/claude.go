@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/logs"
+	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
@@ -25,7 +28,8 @@ import (
 // account and whose cache is missing or older than claudeFresh, in a home
 // this OS user owns and used in the last claudeInUse and since that cache,
 // Claude Code is first asked to read it again. The cache is as fresh as
-// Claude Code last made it. Its age is reported.
+// Claude Code last made it. Its age is reported, and when the read leaves it
+// stale, why.
 func Claude(ctx context.Context, env Env, home string) (Reading, error) {
 	var r Reading
 	var errs []error
@@ -41,16 +45,7 @@ func Claude(ctx context.Context, env Env, home string) (Reading, error) {
 		}
 		r.Account, r.Plan = st.label(), st.SubscriptionType
 		if st.subscription() && claudeHasAccount(file) && claudeUsedSince(file, LastUse(ctx), env.now()) && claudeOwned(file, home) && claudeStale(file, env.now()) {
-			err := claudeRefresh(ctx, env, bin, configDir)
-			// The read is judged by the cache it leaves, not by how Claude
-			// Code exits: one that could not reach the usage, as offline,
-			// still exits 0. And one that failed is no problem when the
-			// cache is fresh anyway, as when Claude Code wrote it before it
-			// failed, or the person's own session did meanwhile.
-			if claudeStale(file, env.now()) {
-				if err == nil {
-					err = errors.New("claude /usage: no new reading")
-				}
+			if err := claudeReadUsage(ctx, env, bin, configDir, home, file); err != nil {
 				errs = append(errs, err)
 			}
 		}
@@ -198,15 +193,67 @@ func claudeModelMissing(l string) bool {
 		(strings.Contains(l, "may not exist") || strings.Contains(l, "not found") || strings.Contains(l, "not_found"))
 }
 
+// claudeCaching is the first Claude Code that caches the usage it reads.
+// An older one shows the usage at most, so asking it leaves no reading.
+const claudeCaching = "2.1.208"
+
+// claudeReadUsage has Claude Code read the usage into its cache, and says
+// why the cache is still stale afterwards. The read is judged by the cache
+// it leaves, not by how Claude Code exits: one that could not reach the
+// usage, as offline, still exits 0. And one that failed is no problem when
+// the cache is fresh anyway, as when Claude Code wrote it before it failed,
+// or the person's own session did meanwhile.
+//
+// Claude Code is not run when it cannot cache the usage: when it is too old
+// to, or its settings turn off the traffic the read needs. Neither goes away
+// by itself, so it is said at every run instead.
+func claudeReadUsage(ctx context.Context, env Env, bin, configDir, home, file string) error {
+	version := claudeVersion(bin)
+	if version != "" && selfupdate.Newer(claudeCaching, version) {
+		why := fmt.Sprintf("Claude Code %s does not cache the usage; update it to %s or later", version, claudeCaching)
+		return claudeUsageError(why, "", file, env.now(), "")
+	}
+	if claudeNoTraffic(env, home) {
+		return claudeUsageError("nonessential traffic is off in Claude Code's settings", version, file, env.now(), "")
+	}
+	run := claudeRefresh(ctx, env, bin, configDir)
+	if !claudeStale(file, env.now()) {
+		return nil
+	}
+	why, said := run.why(version)
+	return claudeUsageError(why, version, file, env.now(), said)
+}
+
+// claudeUsageError says why a read left no new reading, then which Claude
+// Code it was when that is known and what cache there is, and last a line of
+// what it printed, if any, so that an error cut short loses that first.
+func claudeUsageError(why, version, file string, now time.Time, said string) error {
+	var about []string
+	if version != "" {
+		about = append(about, "Claude Code "+version)
+	}
+	if c := claudeCacheState(file, now); c != "" {
+		about = append(about, c)
+	}
+	msg := "claude /usage: " + why
+	if len(about) > 0 {
+		msg += " (" + strings.Join(about, ", ") + ")"
+	}
+	if said != "" {
+		msg += ": " + said
+	}
+	return errors.New(msg)
+}
+
 // claudeRefresh has Claude Code read the account's usage and cache it, as
 // its /usage dialog does. In print mode /usage is a local command: it calls
 // no model, and --no-session-persistence leaves no session behind. The
 // person's hooks and the updater are off; hooks an organization manages
 // still run. Nonessential traffic is left on, since without it Claude Code
 // does not read the usage. Like any of its sessions, Claude Code renews its
-// own login on the way when that has expired. Only the last line of what it
-// prints is kept, for the error of a read that failed.
-func claudeRefresh(ctx context.Context, env Env, bin, configDir string) error {
+// own login on the way when that has expired. Only the start of what it
+// prints and the end of its errors are kept, to tell why a read failed.
+func claudeRefresh(ctx context.Context, env Env, bin, configDir string) claudeRun {
 	ctx, cancel := context.WithTimeout(ctx, claudeUsageTimeout)
 	defer cancel()
 	cmd := env.command(ctx, bin, "-p", "/usage", "--no-session-persistence",
@@ -215,25 +262,230 @@ func claudeRefresh(ctx context.Context, env Env, bin, configDir string) error {
 	cmd.Env = env.pathFor(child.harnessEnv("DISABLE_AUTOUPDATER", "1"), bin)
 	// The null device: there is no prompt to wait for.
 	cmd.Stdin = nil
-	var said lastLine
-	cmd.Stdout, cmd.Stderr = &said, &said
+	var out firstBytes
+	var errOut lastLine
+	cmd.Stdout, cmd.Stderr = &out, &errOut
 	cmd.WaitDelay = time.Second
 	err := cmd.Run()
-	// The model catalog's warning is no error, even as the last line.
-	lines := slices.DeleteFunc(said.lines(), func(l string) bool { return strings.Contains(l, "model catalog") })
+	return claudeRun{
+		err:      err,
+		timedOut: ctx.Err() != nil,
+		out:      claudePrinted(printedLines(out.String())),
+		errOut:   claudePrinted(errOut.lines()),
+	}
+}
+
+// claudeRun is what one `claude -p /usage` did.
+type claudeRun struct {
+	err      error
+	timedOut bool
+	// out and errOut are the lines it printed and its errors, as
+	// claudePrinted keeps them.
+	out, errOut []string
+}
+
+// claudePrinted is lines without what /usage adds after the usage: the
+// skills, subagents, plugins, and MCP servers that contribute to it, which
+// are the person's own and never passed on. Nor is the model catalog's
+// warning about claudeGuardModel, which is no error.
+func claudePrinted(lines []string) []string {
+	var out []string
+	for _, l := range lines {
+		if strings.Contains(l, "contributing to your limits") {
+			break
+		}
+		if !strings.Contains(l, "model catalog") {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// why says in a few words why a read left the cache stale, from how it ended
+// and the forms of what it printed that tell a cause, and gives the line of
+// an error it does not know, cut short. Nothing else it printed is passed
+// on: not the usage, when its windows reset, or in which time zone.
+func (r claudeRun) why(version string) (why, said string) {
+	all := append(slices.Clone(r.out), r.errOut...)
 	switch {
-	case err == nil:
-		return nil
-	case ctx.Err() != nil:
-		return errors.New("claude /usage: no answer in time")
-	case slices.ContainsFunc(lines, claudeModelMissing):
-		return errors.New("claude /usage: not supported by this Claude Code; update it")
+	case r.timedOut:
+		return "no answer in time", ""
+	case slices.ContainsFunc(all, claudeCannotRead):
+		return "no new reading: this Claude Code cannot read the usage; update it", ""
+	case slices.ContainsFunc(r.out, claudeShowsUsage):
+		// One older than claudeCaching shows the usage and caches none.
+		if version == "" {
+			return "no new reading: Claude Code showed the usage but did not cache it; update it", ""
+		}
+		return "no new reading: Claude Code showed the usage but did not cache it", ""
+	case slices.ContainsFunc(r.out, func(l string) bool { return strings.HasPrefix(l, "Total cost:") }):
+		return "no new reading: Claude Code sees no claude.ai plan", ""
+	case slices.ContainsFunc(r.out, func(l string) bool { return strings.Contains(l, claudeHeadline) }):
+		// Claude Code could not reach the usage, or, for one older than
+		// claudeCaching, did not try.
+		if version == "" {
+			return "no new reading: could not read the usage: network, login scope, nonessential traffic off, or a Claude Code before " + claudeCaching, ""
+		}
+		return "no new reading: could not read the usage: network, login scope, or nonessential traffic off", ""
+	case r.err != nil:
+		// Its errors, or what it printed that says it is an error.
+		said := errorOf(r.errOut)
+		if said == "" {
+			said = errorOf(slices.DeleteFunc(slices.Clone(r.out), func(l string) bool { return !errorLine.MatchString(l) }))
+		}
+		return shortErr(r.err), truncate(said, 100)
+	case len(all) == 0:
+		return "no new reading: it printed nothing", ""
 	}
-	msg := "claude /usage: " + shortErr(err)
-	if l := errorOf(lines); l != "" {
-		msg += ": " + l
+	return "no new reading", ""
+}
+
+// claudeHeadline is how /usage starts for a claude.ai subscription, whether
+// or not it then reads the usage.
+const claudeHeadline = "using your subscription to power your Claude Code usage"
+
+// claudeCannotRead reports whether a line says that this Claude Code has no
+// /usage to run: it does not know the command or an option, it has no /usage
+// in print mode, or it sent /usage to the model, which does not exist.
+func claudeCannotRead(l string) bool {
+	for _, p := range []string{"Unknown skill", "Unknown slash command", "Unknown command"} {
+		if strings.HasPrefix(l, p) {
+			return true
+		}
 	}
-	return errors.New(msg)
+	return strings.Contains(l, "isn't available in this environment") || strings.Contains(l, "unknown option") || claudeModelMissing(l)
+}
+
+// claudeShowsUsage reports whether a line is one of the usage /usage shows.
+func claudeShowsUsage(l string) bool {
+	return strings.HasPrefix(l, "Current session") || strings.HasPrefix(l, "Current week")
+}
+
+// firstBytes keeps the first claudeOutMax bytes written to it, where /usage
+// says what it found.
+type firstBytes struct {
+	mu   sync.Mutex
+	head []byte
+}
+
+const claudeOutMax = 16 << 10
+
+func (f *firstBytes) Write(p []byte) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if room := claudeOutMax - len(f.head); room > 0 {
+		f.head = append(f.head, p[:min(room, len(p))]...)
+	}
+	return len(p), nil
+}
+
+func (f *firstBytes) String() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return string(f.head)
+}
+
+// claudeCacheState says in a few words what usage cache the config file at
+// path holds for the account logged in: none, another account's, or one of
+// what age. It says nothing of a config that cannot be read, whose error is
+// reported when the cache is read.
+func claudeCacheState(path string, now time.Time) string {
+	cfg, err := readClaudeConfig(path)
+	if err != nil {
+		return ""
+	}
+	c := cfg.Cached
+	switch {
+	case c == nil || c.FetchedAtMs <= 0:
+		return "no cache"
+	case cfg.cache() == nil:
+		return "cache of another account"
+	}
+	age := now.Sub(time.UnixMilli(c.FetchedAtMs))
+	switch {
+	case age < 0:
+		return "cache from the future"
+	case age < time.Hour:
+		return fmt.Sprintf("cache %dm old", int(age.Minutes()))
+	case age < 24*time.Hour:
+		return fmt.Sprintf("cache %dh old", int(age.Hours()))
+	}
+	return fmt.Sprintf("cache %dd old", int(age.Hours()/24))
+}
+
+// claudeVersionName matches a version as Claude Code's installs name their
+// folders and files.
+var claudeVersionName = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
+
+// claudeVersion is the version of the Claude Code at bin, as its install
+// tells without running it, or "" when it does not. With links resolved,
+// that is the nearest of the file and the few folders above it that is named
+// as a version, as a native install's versions/X.Y.Z and Homebrew's
+// Caskroom/claude-code/X.Y.Z/claude are, or that holds the package.json of
+// an npm install. On Windows, npm puts that package beside its claude.cmd.
+func claudeVersion(bin string) string {
+	path := realPath(bin)
+	for range 4 {
+		if name := filepath.Base(path); claudeVersionName.MatchString(name) {
+			return name
+		}
+		if v := claudePackageVersion(filepath.Join(path, "package.json")); v != "" {
+			return v
+		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			break
+		}
+		path = parent
+	}
+	return claudePackageVersion(filepath.Join(filepath.Dir(bin), "node_modules", "@anthropic-ai", "claude-code", "package.json"))
+}
+
+// claudePackageVersion is the version in the package.json at path when that
+// is Claude Code's, or "".
+func claudePackageVersion(path string) string {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var pkg struct{ Name, Version string }
+	if json.Unmarshal(body, &pkg) != nil || pkg.Name != "@anthropic-ai/claude-code" || !claudeVersionName.MatchString(pkg.Version) {
+		return ""
+	}
+	return pkg.Version
+}
+
+// claudeNoTraffic reports whether Claude Code's settings turn off its
+// nonessential traffic, without which it does not read the usage, in the env
+// they give its sessions. Removing the variable from its own environment
+// does not undo that. The settings are an organization's, then those of the
+// project it starts in, which is the user's home, then home's own, and the
+// first to set the variable decides. Nothing else is taken from them.
+func claudeNoTraffic(env Env, home string) bool {
+	files := slices.Clone(env.ClaudeManaged)
+	if env.HomeDir != "" {
+		project := filepath.Join(env.HomeDir, ".claude")
+		files = append(files, filepath.Join(project, "settings.local.json"), filepath.Join(project, "settings.json"))
+	}
+	files = append(files, filepath.Join(home, "settings.local.json"), filepath.Join(home, "settings.json"))
+	for _, f := range files {
+		body, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		var s struct {
+			Env struct {
+				Off json.RawMessage `json:"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"`
+			} `json:"env"`
+		}
+		if json.Unmarshal(body, &s) != nil {
+			continue
+		}
+		if v := strings.TrimSpace(string(s.Env.Off)); v != "" && v != "null" {
+			return v != `""` && v != "false"
+		}
+	}
+	return false
 }
 
 type claudeConfig struct {

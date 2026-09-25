@@ -246,9 +246,39 @@ func fakeClaudeUsage(mode string, args []string, rec *os.File) int {
 		return 1
 	case "hang":
 		return hangWithChild(rec)
-	case "no-write":
-		fmt.Println("Current session: usage unavailable")
+	case "unknown-skill":
+		// 2.1.40 to 2.1.110.
+		fmt.Println("Unknown skill: usage")
 		return 0
+	case "unknown-command":
+		// 2.1.0.
+		fmt.Println("Unknown slash command: usage")
+		return 0
+	case "unavailable":
+		// 2.1.111 to 2.1.117.
+		fmt.Println("/usage isn't available in this environment.")
+		return 0
+	case "no-option":
+		// 2.0.0.
+		fmt.Fprintln(os.Stderr, "error: unknown option '--no-session-persistence'")
+		return 1
+	case "offline":
+		// From 2.1.208 when the usage cannot be fetched, and 2.1.118 to
+		// 2.1.191 always.
+		fmt.Print(claudeHeadlineOut + claudeContributing)
+		return 0
+	case "shows":
+		// 2.1.193 to 2.1.207: the usage, and no cache.
+		fmt.Print(claudeHeadlineOut + claudeUsageOut + claudeContributing)
+		return 0
+	case "cost":
+		fmt.Print("Total cost:            $0.0000\nTotal duration (API):  0s\nUsage:                 0 input, 0 output\n" + claudeContributing)
+		return 0
+	case "silent":
+		return 0
+	case "odd-fail":
+		fmt.Print("Something unexpected happened\n\n" + claudeContributing)
+		return 1
 	case "catalog-fail":
 		// The model catalog's warning is the last line.
 		fmt.Fprintln(os.Stderr, catalog)
@@ -274,9 +304,17 @@ func fakeClaudeUsage(mode string, args []string, rec *os.File) int {
 	if mode == "write-then-fail" {
 		return 1
 	}
-	fmt.Println("Current session: 7% used")
+	fmt.Print(claudeHeadlineOut + claudeUsageOut + claudeContributing)
 	return 0
 }
+
+// What /usage prints: its headline, the usage, and what contributes to it,
+// with names only a person's own setup has.
+const (
+	claudeHeadlineOut  = "You are currently using your subscription to power your Claude Code usage\n\n"
+	claudeUsageOut     = "Current session: 7% used · resets 3:40pm (Europe/Berlin)\nCurrent week (all models): 40% used · resets Oct 1, 9am (Europe/Berlin)\n\n"
+	claudeContributing = "What's contributing to your limits usage?\n  Skills       zebra-quill-skill   12%\n  Subagents    heron-drafts        4%\n  MCP servers  otter-lantern-mcp   3%\n  error-walrus-plugin              1%\n"
+)
 
 // fakeCodex speaks the app-server's newline JSON-RPC on stdio.
 func fakeCodex(mode string, rec *os.File) int {

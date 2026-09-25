@@ -2,9 +2,10 @@
 // quota windows are.
 //
 // It runs only one-shot commands that print identity or quota, and reads only
-// files where the harness already cached that answer. It never opens a
-// credential file, never starts a conversation, and never runs a login,
-// logout, or token-refresh command. Claude Code, asked for the usage of a
+// files where the harness already cached that answer, and in Claude Code's
+// settings, whether they turn off the traffic its usage read needs. It never
+// opens a credential file, never starts a conversation, and never runs a
+// login, logout, or token-refresh command. Claude Code, asked for the usage of a
 // home used in the last hour, renews its own expired login on the way, as
 // any of its sessions does.
 package probe
@@ -90,8 +91,12 @@ type Env struct {
 	// on macOS, for a harness an app bundles. DefaultEnv fills them; a
 	// test's Env leaves them empty.
 	AppDirs []string
-	Now     func() time.Time
-	Timeout time.Duration
+	// ClaudeManaged are the files where an organization sets Claude Code's
+	// settings for the whole machine. DefaultEnv fills them; a test's Env
+	// leaves them empty.
+	ClaudeManaged []string
+	Now           func() time.Time
+	Timeout       time.Duration
 }
 
 // DefaultEnv is the real environment.
@@ -104,6 +109,7 @@ func DefaultEnv() Env {
 		HomeDir:       home,
 		SystemBinDirs: systemBinDirs(),
 		AppDirs:       appDirs(),
+		ClaudeManaged: claudeManaged(),
 		Now:           time.Now,
 		Timeout:       20 * time.Second,
 	}
@@ -300,6 +306,18 @@ func isExecutable(path string) bool {
 func appDirs() []string {
 	if runtime.GOOS == "darwin" {
 		return []string{"/Applications"}
+	}
+	return nil
+}
+
+// claudeManaged are the files where an organization manages Claude Code's
+// settings.
+func claudeManaged() []string {
+	switch runtime.GOOS {
+	case "darwin":
+		return []string{"/Library/Application Support/ClaudeCode/managed-settings.json"}
+	case "linux":
+		return []string{"/etc/claude-code/managed-settings.json"}
 	}
 	return nil
 }
