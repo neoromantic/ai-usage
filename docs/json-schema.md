@@ -2,7 +2,7 @@
 
 `ai-usage --json`, `ai-usage collect --json`, and `ai-usage report --json` print one report object. `ai-usage status --json` prints a smaller object, described at the end.
 
-A field changes meaning only with a new `schema_version`. New fields can appear within a version, so ignore the ones you do not know. [Changes from version 3](#changes-from-version-3) lists what version 4 changed. [Changes from version 2](#changes-from-version-2) lists what version 3 added and removed, and [Added within version 3](#added-within-version-3) what it added since.
+A field changes meaning only with a new `schema_version`. New fields can appear within a version, so ignore the ones you do not know. [Changes from version 3](#changes-from-version-3) lists what version 4 changed, and [Added within version 4](#added-within-version-4) what it added since. [Changes from version 2](#changes-from-version-2) lists what version 3 added and removed, and [Added within version 3](#added-within-version-3) what it added since.
 
 Conventions:
 
@@ -61,9 +61,9 @@ Each entry is one thing that needs attention, from the team's view of each subsc
 | --- | --- | --- |
 | `out` | a window of a subscription is at 100% | `provider`, `account`, `name`, `window`; `at` is when it resets |
 | `over` | a window of a subscription will run out by its reset, at its pace so far | `provider`, `account`, `name`, `window`; `at` is when it runs out, absent when it runs out at its reset, `resets_at` when it resets, `percent` its forecast |
-| `error` | a device's collector or one of its tools fails; on this device, also a run a bug stopped before it could report, its relay, or its update check | `devices` names the device; `message` is the error, which starts with `relay` or `update` when it is theirs |
+| `error` | a device's collector or one of its tools fails; on this device, also a run a bug stopped before it could report, its relay, or its update check; on an `old` device that is not silent, its update check | `devices` names the device; `message` is the error, which starts with `relay` or `update` when it is theirs |
 | `silent` | a device has not reported for a day, with or without an error in its last report | `devices` names the device; `at` is when it last reported; `message` is the error it last reported, if it had one |
-| `old` | devices run an older release than the team's newest | `devices` lists every one of them; `message` is the newest release |
+| `old` | devices run an older release than the team's newest | `devices` lists every one of them; `message` is the newest release; `at` is the earliest `behind_since` among them, absent when none has one |
 | `under` | past half of a subscription's main window, its forecast is under 50% | `provider`, `account`, `name`; `resets_at` is when it resets, `percent` its forecast |
 
 A window is the account's main one or one that limits it more; see the account's `state`. An `out`, `over`, or `under` entry has `reading_age_seconds` when its window's reading is stale.
@@ -207,10 +207,12 @@ A device:
 | `age_seconds` | number | the snapshot's age |
 | `last_success_at` | time | its last run without an error |
 | `last_error` | string | its last error |
+| `update_error` | string | why its last release check failed, while no newer release waits for its next run. It reaches the team one run after the check, and `null` for this device, whose own is `collector.update.error`, and for a collector before this field |
 | `sources` | list | `{provider, status, error}` for each tool on that device |
 | `error` | string | what fails on the device now: a tool's error, named after its provider, else the last run's error when it is newer than the last success; `null` when nothing does |
 | `silent` | bool | it has not reported for a day |
 | `old` | bool | it runs an older release than `latest_version` |
+| `behind_since` | time | for an `old` device, when this device's reads of the team first found it on the release it runs, which is how long it has not updated itself at least; `null` otherwise, and until a read finds it so |
 | `usage` | object | its input plus output tokens in each period, over every account. A device's days count from the UTC day it collected on, so one that last reported three days ago adds nothing to `today` |
 
 A device on a collector older than v0.2.0 sends each account's `tokens` over its 90 days, but no days and no tokens since a window began. The report takes another device's account as such when it has input or output tokens but neither of those. Its `usage` in `90d` is the input plus output of its `tokens`: its own 90 days, the report's as nearly as that collector counts them. They end when the device collected, 2 days early for one that last collected 2 days before the report's UTC day, and they hold a session whole while it was active in them. A shorter period is `0` when the account was last active on the device before the period began, and not known otherwise. A period that is not known is `0` and named in `unknown`. The sums over such an account, as its device's `usage`, the team account's, and a matrix column's or row's, add the known part and name the period in `unknown` too.
@@ -283,6 +285,10 @@ A cell:
 - A matrix row has a `share` of the team's tokens in each period.
 - `status --json` has the same `schema_version`, and did not change.
 
+## Added within version 4
+
+- `update_error` and `behind_since` on a team device, so that the team can see why a device does not update itself, and for how long it has not. An `error` entry in `attention` for an `old` device whose update check fails, and `at` on the `old` entry. No field changed meaning, so the version stays 4.
+
 ## Added within version 3
 
 - `unknown` on the `usage` objects under `team`, and `window_unknown` on a matrix column and cell, for a device on a collector older than v0.2.0. Such a device's periods used to be `0`, even `90d`; it was not among `users`; and its `share` was `0`, so the other devices shared the whole window. Now `90d` has its tokens, and a share that is not known is `null`, which `share` already allowed. Such a device counts in `users` when it used the account since the window began. `busiest` names the only user even when its tokens are not known, and is `null` when none of two or more users has known tokens, which `busiest` already allowed, though `users` is then above 0. No field changed meaning, so the version stays 3. A reader that ignores the new fields takes the known part of a period as all of it, as it took the zeros before.
@@ -345,7 +351,7 @@ A shortened report from a team of two:
       "resets_at": "2026-09-04T12:00:00Z",
       "percent": 140
     },
-    { "kind": "old", "devices": ["bo-laptop"], "message": "v1.3.0" }
+    { "kind": "old", "devices": ["bo-laptop"], "at": "2026-09-01T09:17:00Z", "message": "v1.3.0" }
   ],
   "providers": [
     {
@@ -440,6 +446,7 @@ A shortened report from a team of two:
         "age_seconds": 780,
         "last_success_at": "2026-09-01T11:51:00Z",
         "last_error": null,
+        "update_error": null,
         "sources": [
           { "provider": "claude", "status": "ok", "error": null },
           { "provider": "codex", "status": "ok", "error": null }
@@ -447,6 +454,7 @@ A shortened report from a team of two:
         "error": null,
         "silent": false,
         "old": true,
+        "behind_since": "2026-09-01T09:17:00Z",
         "usage": { "today": 900000, "7d": 6100000, "30d": 21000000, "90d": 48000000 }
       }
     ],

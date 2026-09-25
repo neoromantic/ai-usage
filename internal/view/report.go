@@ -20,6 +20,10 @@ const (
 	StaleAfter = 6 * time.Hour
 	// SilentAfter marks a device that has not reported for a day.
 	SilentAfter = 24 * time.Hour
+	// BehindAfter marks an old device that has not updated itself for
+	// longer than updating takes: v0.2.0 checks for a release every 6 hours,
+	// and the next run is the update.
+	BehindAfter = 7 * time.Hour
 )
 
 // Report is everything both views show. The console draws it as one page:
@@ -100,7 +104,8 @@ type Attention struct {
 	// old release.
 	Devices []string `json:"devices,omitempty"`
 	// At is when an out window resets, when an over window runs out before
-	// its reset, or when a silent device last reported.
+	// its reset, when a silent device last reported, or the earliest
+	// BehindSince of old devices.
 	At *time.Time `json:"at,omitempty"`
 	// ResetsAt is when an over or under window resets.
 	ResetsAt *time.Time `json:"resets_at,omitempty"`
@@ -278,7 +283,11 @@ type TeamDevice struct {
 	AgeSeconds       int64      `json:"age_seconds"`
 	LastSuccessAt    *time.Time `json:"last_success_at"`
 	LastError        *string    `json:"last_error"`
-	Sources          []Source   `json:"sources"`
+	// UpdateError is why the device's last release check failed, while no
+	// newer release waits for its next run. It is nil for this device, whose
+	// own update the header shows, and for a collector that does not say.
+	UpdateError *string  `json:"update_error"`
+	Sources     []Source `json:"sources"`
 	// Error is what fails on the device now: a source's error, named after
 	// its provider, else the last run's error when it is newer than the
 	// last success.
@@ -286,8 +295,11 @@ type TeamDevice struct {
 	// Silent is a device that has not reported for a day.
 	Silent bool `json:"silent"`
 	// Old is a device on an older release than the team's newest.
-	Old   bool  `json:"old"`
-	Usage Usage `json:"usage"`
+	Old bool `json:"old"`
+	// BehindSince is when this device's reads of the team first found an
+	// old device on the release it runs.
+	BehindSince *time.Time `json:"behind_since"`
+	Usage       Usage      `json:"usage"`
 }
 
 type Source struct {

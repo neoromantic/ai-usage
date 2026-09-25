@@ -75,21 +75,25 @@ type device struct {
 func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 	t := Team{Devices: []TeamDevice{}, Providers: []TeamProvider{}, Matrix: Matrix{Columns: []Column{}, Rows: []Row{}}}
 	docs := []snapshot.Doc{in.Doc}
+	var behind map[string]collect.Behind
 	if in.Team.Team == in.Key.Fingerprint() {
 		t.PulledAt = timePtr(in.Team.PulledAt)
+		behind = in.Team.Behind
 		for _, d := range in.Team.Docs {
 			if d.Device != in.Doc.Device {
 				docs = append(docs, d)
 			}
 		}
 	}
-	open := func(s string) string {
+	// raw is a sealed string as it was sealed, line breaks and all.
+	raw := func(s string) string {
 		v, err := in.Key.Open(s)
 		if err != nil {
 			return "(unreadable)"
 		}
-		return snapshot.Printable(v)
+		return v
 	}
+	open := func(s string) string { return snapshot.Printable(raw(s)) }
 	// This device knows its links even when the linked account has no
 	// reading to match on the wire.
 	localLinks := map[string]*Link{}
@@ -105,6 +109,7 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 	aliasBy := map[string]string{}
 	for _, d := range docs {
 		label := open(d.DeviceLabel)
+		lastErr, updateErr := snapshot.SplitLastError(raw(d.LastError))
 		dev := &TeamDevice{
 			Device:           d.Device,
 			Label:            label,
@@ -114,9 +119,13 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 			CollectedAt:      d.CollectedAt,
 			AgeSeconds:       int64(now.Sub(d.CollectedAt).Seconds()),
 			LastSuccessAt:    timePtr(d.LastSuccessAt),
-			LastError:        strPtr(open(d.LastError)),
+			LastError:        strPtr(snapshot.Printable(lastErr)),
 			Sources:          []Source{},
 			Silent:           now.Sub(d.CollectedAt) > SilentAfter,
+		}
+		// This device's own update shows in the header and ATTENTION.
+		if !dev.This {
+			dev.UpdateError = strPtr(snapshot.Printable(updateErr))
 		}
 		for _, s := range d.Sources {
 			dev.Sources = append(dev.Sources, Source{Provider: s.Provider, Status: s.Status, Error: strPtr(open(s.Error))})
@@ -232,6 +241,9 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 	for _, dv := range devs {
 		d := dv.dev
 		d.Old = t.Latest != nil && selfupdate.Newer(*t.Latest, d.CollectorVersion)
+		if b, ok := behind[d.Device]; ok && d.Old && b.Version == d.CollectorVersion {
+			d.BehindSince = timePtr(b.Since)
+		}
 	}
 
 	for _, p := range collect.Providers {
@@ -324,17 +336,11 @@ func sourceError(p, msg string) string {
 // latestVersion is the newest release this device's update check or any
 // device knows.
 func latestVersion(checked string, devs []*device) string {
-	best := ""
-	consider := func(v string) {
-		if !selfupdate.Dev(v) && (best == "" || selfupdate.Newer(v, best)) {
-			best = v
-		}
-	}
-	consider(checked)
+	versions := []string{checked}
 	for _, d := range devs {
-		consider(d.dev.CollectorVersion)
+		versions = append(versions, d.dev.CollectorVersion)
 	}
-	return best
+	return selfupdate.Newest(versions...)
 }
 
 // active makes at the team account's newest activity when it is newer.

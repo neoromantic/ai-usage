@@ -43,7 +43,13 @@ func (r *testRelay) client(w *world) *relay.Client {
 // publishOther stores a snapshot for another device of the same team.
 func publishOther(t *testing.T, r *testRelay, w *world, key *team.Key, device string, st *state.State, at time.Time) {
 	t.Helper()
-	doc := BuildDoc(st, key, state.Config{Device: device}, "otherbox", "kim", "v1.2.3", at)
+	publishRelease(t, r, w, key, device, "v1.2.3", st, at)
+}
+
+// publishRelease stores a snapshot for another device on a release.
+func publishRelease(t *testing.T, r *testRelay, w *world, key *team.Key, device, version string, st *state.State, at time.Time) {
+	t.Helper()
+	doc := BuildDoc(st, key, state.Config{Device: device}, "otherbox", "kim", version, at)
 	body, err := json.Marshal(doc)
 	if err != nil {
 		t.Fatal(err)
@@ -103,6 +109,50 @@ func TestRelayPushAndPull(t *testing.T) {
 	}
 	if info, err := os.Stat(o.Dir.Path(teamCacheFile)); err != nil || info.Size() == 0 {
 		t.Fatalf("team-cache.json: %v", err)
+	}
+}
+
+// Each read carries over since when a device has run an older release than
+// the team's newest, and starts it again once the device runs another.
+func TestBehindSinceCarriesOverReads(t *testing.T) {
+	w, o := newWorld(t)
+	h := w.home(t, "claude")
+	w.login("claude", h, "ann", nil)
+	w.sessions("claude", h, sess("s1", "/p", 100, t0))
+	r := newRelay(t, w)
+	o.Relay = r.client(w)
+	key, _, err := LoadKey(o.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// This device runs v1.2.3, the newest.
+	behind := func(release string) Behind {
+		t.Helper()
+		publishRelease(t, r, w, key, "d-other-device", release, ledger(), w.now)
+		run(t, o)
+		cache, err := LoadTeamCache(o.Dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(cache.Behind) > 1 {
+			t.Fatalf("behind = %+v", cache.Behind)
+		}
+		return cache.Behind["d-other-device"]
+	}
+	if b := behind("v1.2.0"); b != (Behind{"v1.2.0", t0}) {
+		t.Fatalf("first read: %+v", b)
+	}
+	w.now = t0.Add(2 * time.Hour)
+	if b := behind("v1.2.0"); b != (Behind{"v1.2.0", t0}) {
+		t.Fatalf("a later read on the same release: %+v", b)
+	}
+	w.now = t0.Add(4 * time.Hour)
+	if b := behind("v1.2.1"); b != (Behind{"v1.2.1", w.now}) {
+		t.Fatalf("another older release: %+v", b)
+	}
+	w.now = t0.Add(6 * time.Hour)
+	if b := behind("v1.2.3"); b != (Behind{}) {
+		t.Fatalf("caught up: %+v", b)
 	}
 }
 

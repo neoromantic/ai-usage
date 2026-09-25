@@ -192,6 +192,48 @@ func TestUnreadableLabels(t *testing.T) {
 	}
 }
 
+// TestTeamDeviceUpdate: another device's failed release check comes apart
+// from its last run's error, a last_error from an older collector stays
+// whole, and an old device says since when this device's reads have found
+// it on its release.
+func TestTeamDeviceUpdate(t *testing.T) {
+	st := emptyState()
+	st.Update.Error = "update check: HTTP 502 from github.com"
+	f := newFixture(t, st)
+	f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", now)
+	other := emptyState()
+	other.LastError = "codex: not logged in"
+	other.Update.Error = "update check: HTTP 429 from github.com: Too Many Requests"
+	// A collector from before the update line sealed last_error as it was.
+	older := otherDoc(t, f.key, "d-older-device", "olderbox", now, emptyState())
+	older.LastError = f.key.Seal("claude: 2 malformed lines; update: none")
+	f.in.Team = collect.TeamCache{PulledAt: now, Team: f.key.Fingerprint(), Docs: []snapshot.Doc{
+		otherDoc(t, f.key, "d-other-device", "otherbox", now, other), older,
+	}, Behind: map[string]collect.Behind{
+		"d-other-device": {Version: "v1.2.0", Since: now.Add(-30 * time.Hour)},
+		"d-older-device": {Version: "v1.1.0", Since: now.Add(-30 * time.Hour)},
+	}}
+	devs := map[string]TeamDevice{}
+	for _, d := range Build(f.in).Team.Devices {
+		devs[d.Device] = d
+	}
+	this, o, old := devs["d-this-device"], devs["d-other-device"], devs["d-older-device"]
+	if this.UpdateError != nil || this.LastError != nil || this.BehindSince != nil {
+		t.Errorf("this device: update error %v, last error %v, behind since %v", this.UpdateError, this.LastError, this.BehindSince)
+	}
+	if o.LastError == nil || *o.LastError != other.LastError || o.UpdateError == nil || *o.UpdateError != other.Update.Error {
+		t.Errorf("other device: last error %v, update error %v", o.LastError, o.UpdateError)
+	}
+	if !o.Old || o.BehindSince == nil || !o.BehindSince.Equal(now.Add(-30*time.Hour)) {
+		t.Errorf("other device: old %v since %v", o.Old, o.BehindSince)
+	}
+	// Found behind on another release, it has run this one for no time
+	// that is known.
+	if old.LastError == nil || *old.LastError != "claude: 2 malformed lines; update: none" || old.UpdateError != nil || !old.Old || old.BehindSince != nil {
+		t.Errorf("older device: last error %v, update error %v, old %v since %v", old.LastError, old.UpdateError, old.Old, old.BehindSince)
+	}
+}
+
 func TestShortNames(t *testing.T) {
 	st := emptyState()
 	addAccount(st, "claude", "sam@mail.test", true, nil, 10)
@@ -1402,10 +1444,10 @@ providers.accounts.tokens.cache_write providers.accounts.tokens.input providers.
 providers.accounts.usage providers.accounts.usage.30d providers.accounts.usage.7d providers.accounts.usage.90d providers.accounts.usage.today
 providers.error providers.homes providers.provider providers.status
 schema_version
-team team.devices team.devices.age_seconds team.devices.collected_at team.devices.collector_version
+team team.devices team.devices.age_seconds team.devices.behind_since team.devices.collected_at team.devices.collector_version
 team.devices.device team.devices.error team.devices.label team.devices.last_error team.devices.last_success_at
 team.devices.old team.devices.os_user team.devices.silent team.devices.sources team.devices.sources.error team.devices.sources.provider
-team.devices.sources.status team.devices.this_device team.devices.usage team.devices.usage.30d team.devices.usage.7d
+team.devices.sources.status team.devices.this_device team.devices.update_error team.devices.usage team.devices.usage.30d team.devices.usage.7d
 team.devices.usage.90d team.devices.usage.today team.devices.usage.unknown
 team.latest_version
 team.matrix team.matrix.columns team.matrix.columns.label team.matrix.columns.name team.matrix.columns.no_quota

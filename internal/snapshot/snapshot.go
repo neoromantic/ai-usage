@@ -62,6 +62,21 @@ type Doc struct {
 	Aliases []Alias `json:"aliases,omitempty"`
 }
 
+// UpdateLine starts the last line of a last_error that says why the device's
+// last release check failed, which it carries while no newer release waits
+// for its next run. The rest of last_error has no line break.
+const UpdateLine = "\nupdate: "
+
+// SplitLastError splits an opened last_error into the last run's error and
+// why the last release check failed. An older collector sends no release
+// check's error.
+func SplitLastError(s string) (run, update string) {
+	if i := strings.LastIndex(s, UpdateLine); i >= 0 {
+		return s[:i], s[i+len(UpdateLine):]
+	}
+	return s, ""
+}
+
 // Alias is a short name for an account, set on one device for the whole
 // team. Label and Name are sealed. A cleared name has no Name, so that the
 // clearing outranks an older name set on another device.

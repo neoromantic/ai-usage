@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/relay"
@@ -22,6 +23,17 @@ type TeamCache struct {
 	ReadError string         `json:"read_error,omitempty"`
 	Bodies    [][]byte       `json:"bodies"`
 	Docs      []snapshot.Doc `json:"-"`
+	// Behind is, by device id, since when the reads have found each device
+	// on an older release than the team's newest, and that release. Each
+	// read carries it over, and starts a device again once it runs another.
+	Behind map[string]Behind `json:"behind,omitempty"`
+}
+
+// Behind is a device's release when a read first found it older than the
+// team's newest, and when that was.
+type Behind struct {
+	Version string    `json:"version"`
+	Since   time.Time `json:"since"`
 }
 
 const teamCacheFile = "team-cache.json"
@@ -144,10 +156,20 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 	}
 	st.Relay.LastPullAt = now
 	next := TeamCache{PulledAt: now, Team: o.Relay.Key.Fingerprint()}
+	// This device is as this run built it, whatever the relay holds for it.
+	seen := []snapshot.Doc{*doc}
 	for _, d := range devices {
 		next.Bodies = append(next.Bodies, d.Body)
 		next.Docs = append(next.Docs, d.Doc)
+		if d.Doc.Device != device {
+			seen = append(seen, d.Doc)
+		}
 	}
+	prev := cache.Behind
+	if cache.Team != next.Team {
+		prev = nil
+	}
+	next.Behind = behindSince(prev, seen, st.Update.Latest, now)
 	if bad > 0 {
 		next.ReadError = "relay returned documents that do not verify with the team key"
 	}
@@ -165,4 +187,30 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 		return
 	}
 	st.Relay.LastError = ""
+}
+
+// behindSince is, for each device in docs on an older release than the
+// newest any of them runs or checked is, what prev says of it while it runs
+// the release prev names; else that release, since now.
+func behindSince(prev map[string]Behind, docs []snapshot.Doc, checked string, now time.Time) map[string]Behind {
+	versions := []string{checked}
+	for _, d := range docs {
+		versions = append(versions, d.CollectorVersion)
+	}
+	latest := selfupdate.Newest(versions...)
+	var out map[string]Behind
+	for _, d := range docs {
+		if !selfupdate.Newer(latest, d.CollectorVersion) {
+			continue
+		}
+		b, ok := prev[d.Device]
+		if !ok || b.Version != d.CollectorVersion {
+			b = Behind{Version: d.CollectorVersion, Since: now}
+		}
+		if out == nil {
+			out = map[string]Behind{}
+		}
+		out[d.Device] = b
+	}
+	return out
 }

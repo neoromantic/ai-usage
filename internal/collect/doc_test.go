@@ -180,6 +180,50 @@ func TestBuildDocWithEmptyState(t *testing.T) {
 	}
 }
 
+// A failed release check reaches the team as the last line of last_error,
+// one line and cut short, and stays whole behind a long run error, while no
+// newer release waits for the next run.
+func TestLastErrorCarriesTheUpdateError(t *testing.T) {
+	key := mustKey(t)
+	lastError := func(st *state.State) (run, update string, found bool) {
+		t.Helper()
+		doc, _ := encodeDecode(t, BuildDoc(st, key, state.Config{Device: "d-0123456789"}, "workbox", "sam", "v1.2.3", t0))
+		if len(doc.LastError) > snapshot.MaxSealed {
+			t.Fatalf("last_error is %d bytes sealed", len(doc.LastError))
+		}
+		plain, err := key.Open(doc.LastError)
+		if err != nil {
+			t.Fatal(err)
+		}
+		run, update = snapshot.SplitLastError(plain)
+		return run, update, strings.Contains(plain, snapshot.UpdateLine)
+	}
+	st := ledger()
+	st.LastError = strings.Repeat("codex: read /Users/анна/.codex: permission denied; ", 12) + "\nsecond line"
+	st.Update.Error = "update check: HTTP 429 from github.com:\n" + strings.Repeat("slow down ", 30)
+	run, update, _ := lastError(st)
+	if strings.Contains(run, "\n") || !strings.HasSuffix(run, "second line") {
+		t.Fatalf("run error = %q", run)
+	}
+	if !strings.HasPrefix(update, "update check: HTTP 429 from github.com: slow down") || strings.Contains(update, "\n") ||
+		len(update) > maxUpdateError || !utf8.ValidString(update) {
+		t.Fatalf("update error = %q", update)
+	}
+
+	st.Update.Installed = "v1.3.0"
+	if run, _, found := lastError(st); found || !strings.HasSuffix(run, "second line") {
+		t.Fatalf("a staged release still sends the update error, or loses the run's: %q", run)
+	}
+	st.Update.Installed, st.Update.Error = "", ""
+	if _, _, found := lastError(st); found {
+		t.Fatal("no update error, but an update line")
+	}
+	st.LastError, st.Update.Error = "", "cannot write beside /usr/local/bin/ai-usage: permission denied"
+	if run, update, _ := lastError(st); run != "" || update != st.Update.Error {
+		t.Fatalf("last_error = %q, %q", run, update)
+	}
+}
+
 func TestBuildDocFitsTheSizeLimit(t *testing.T) {
 	key := mustKey(t)
 	st := &state.State{

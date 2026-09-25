@@ -21,7 +21,7 @@ var attentionRank = map[string]int{
 // are out or will run out, devices that fail or are silent, devices on an
 // older release, and windows past half that will be left mostly unused.
 // This device's failed run, relay, and update check are errors of this
-// device.
+// device, and another's failed update check is its error while it is old.
 func attention(t Team, c Collector, now time.Time) []Attention {
 	out := []Attention{}
 	for _, p := range t.Providers {
@@ -63,6 +63,7 @@ func attention(t Team, c Collector, now time.Time) []Attention {
 		}
 	}
 	var old []string
+	var behind *time.Time
 	for _, d := range t.Devices {
 		switch {
 		case d.Silent:
@@ -81,13 +82,21 @@ func attention(t Team, c Collector, now time.Time) []Attention {
 				out = append(out, Attention{Kind: AttentionError, Devices: []string{d.Label}, Message: e})
 			}
 		}
+		// On a device that is not old, a failed release check is only a
+		// note in the status view.
+		if d.Old && d.UpdateError != nil && !d.Silent {
+			out = append(out, Attention{Kind: AttentionError, Devices: []string{d.Label}, Message: sourceError("update", *d.UpdateError)})
+		}
 		if d.Old {
 			old = append(old, d.Label)
+			if d.BehindSince != nil && (behind == nil || d.BehindSince.Before(*behind)) {
+				behind = d.BehindSince
+			}
 		}
 	}
 	if len(old) > 0 && t.Latest != nil {
 		sort.Strings(old)
-		out = append(out, Attention{Kind: AttentionOld, Devices: old, Message: *t.Latest})
+		out = append(out, Attention{Kind: AttentionOld, Devices: old, Message: *t.Latest, At: timeOf(behind)})
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]

@@ -339,8 +339,19 @@ func (p *page) attentionText(a Attention, room int) []chunks {
 		for _, d := range a.Devices {
 			names = append(names, p.txt(d))
 		}
-		// The names give way to a count, so the latest release keeps its place.
-		return forms(nameList(names, nil, max(room-width(latest), 12), g.ell) + latest)
+		// The names give way to a count, so the latest release keeps its
+		// place, and so does how long the device longest on an old release
+		// has not updated, once that is longer than updating takes, until
+		// even the count leaves no room for it.
+		list := func(tail string) string { return nameList(names, nil, max(room-width(tail), 12), g.ell) + tail }
+		if a.At != nil && p.now.Sub(*a.At) >= BehindAfter {
+			up := ""
+			if len(a.Devices) > 1 {
+				up = "up to "
+			}
+			return forms(list(latest+g.sep+"not updated for "+up+age(p.now.Sub(*a.At))), list(latest))
+		}
+		return forms(list(latest))
 	}
 	return forms(p.txt(a.Message))
 }

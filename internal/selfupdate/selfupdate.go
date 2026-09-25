@@ -492,6 +492,17 @@ func (p progress) Read(b []byte) (int, error) {
 	return n, err
 }
 
+// Newest is the latest release of versions; empty when none is a release.
+func Newest(versions ...string) string {
+	best := ""
+	for _, v := range versions {
+		if !Dev(v) && (best == "" || Newer(v, best)) {
+			best = v
+		}
+	}
+	return best
+}
+
 // Newer reports whether tag is a later version than cur. Both look like v1.2.3.
 func Newer(tag, cur string) bool {
 	a, ok1 := parse(tag)

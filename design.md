@@ -90,9 +90,9 @@ Shown only when something is wrong. At most 6 lines, then `+N more`; the interac
 | --- | --- | --- |
 | `OUT` | a window is at 100% | when it comes back |
 | `OVER` | a window will run out by its reset, at its pace so far | when it runs out, and how long before the reset |
-| `ERROR` | a device's collector or one of its harnesses fails | the device and the error |
+| `ERROR` | a device's collector or one of its harnesses fails, or the release check of a device on an older release | the device and the error |
 | `SILENT` | a device has not reported for a day | since when, and the error it last reported, if any |
-| `OLD` | devices run an older release | all of them in one line |
+| `OLD` | devices run an older release | all of them in one line, and, once one has not updated for 7 hours, for how long the longest has not |
 | `UNDER` | past half of an account's weekly window, its forecast is under 50% | how much of the window will go unused |
 
 A badge is its word in reverse video, colored by its state. `UNDER` is a hint rather than a problem: that subscription has room for more work.
@@ -215,11 +215,11 @@ DEVICES  13 · 1 error · 2 old · by 7d · M tokens in+out                     
 | SEEN | how long ago it last reported, dim; a silent device's in the tight color |
 | VIA | the harnesses it reads, dim; one that fails or reads only in part is in the out color and followed by `×`; `·` for none |
 | TODAY 7D 30D 90D | its input plus output tokens, as the matrix's TOTAL column prints them, with `≥` and `?` for a device on a collector older than v0.2.0; their headers are dim, as every header is, and the title names the chosen period, as in `by 7d` |
-| NOTE | for a silent device, `silent since` when it last reported, then the error it last reported, as ATTENTION says it; else what fails on it, in the out color; else `update: latest v1.4.2`; else nothing. Only the error is in color |
+| NOTE | for a silent device, `silent since` when it last reported, then the error it last reported, as ATTENTION says it; else what fails on it, in the out color; else, on an old release, `update failing:` and why its release check failed, in the out color; `not updated for 1d · latest v1.4.2`, in the tight color, once this device's reads of the team have found it on that release for 7 hours, longer than v0.2.0 takes to update itself; else `update: latest v1.4.2`; else, on a current release, `update check failing:` and why; else nothing. Only an error, and an update not made, are in color |
 
 The bottom row is TOTAL for each period, by the matrix's rules for `≥` and `?`. With no note on any device, there is no NOTE column.
 
-A short NOTE cuts an error with `…`, and keeps a silent device's last error only while 12 columns of it fit. It never cuts a time: a silent device's note becomes `since Mon 14:02`, then the day alone, as in `since Mon`, then `silent`. An old release's becomes `latest v1.4.2`.
+A short NOTE cuts an error with `…`, and keeps a silent device's last error, and why a release check failed, only while 12 columns of it fit; the check's note then says `update failing`, or `update check failing`, then `check failing`. It never cuts a time: a silent device's note becomes `since Mon 14:02`, then the day alone, as in `since Mon`, then `silent`. An old release's becomes `latest v1.4.2`, and an update not made `not updated for 1d`, then `not updated 1d`.
 
 ## PROJECTS
 

@@ -301,6 +301,72 @@ func TestStatusNote(t *testing.T) {
 	}
 }
 
+// TestStatusNoteUpdate: an old device whose release check fails says why,
+// in the error's color, and is an error in ATTENTION; one that has not
+// updated for longer than updating takes says for how long, in the tight
+// color, and so does OLD; a failing check on a device that is not old is a
+// dim note alone.
+func TestStatusNoteUpdate(t *testing.T) {
+	r := loadReport(t, "team")
+	kim := slices.IndexFunc(r.Team.Devices, func(d TeamDevice) bool { return d.Label == "MacBook-Pro-Kim" })
+	srv := slices.IndexFunc(r.Team.Devices, func(d TeamDevice) bool { return d.Label == "srv1" })
+	behind, timeout := r.GeneratedAt.Add(-26*time.Hour), "update check: github.com did not answer in 30s"
+	r.Team.Devices[kim].BehindSince = &behind
+	r.Team.Devices[srv].UpdateError = &timeout
+	o := Options{Width: 160, Loc: sampleZone}
+	note := func(i, w int) string { return newPage(&r, o).deviceNote(r.Team.Devices[i], w).String() }
+	for w, want := range map[int]string{-1: "not updated for 1d · latest v1.4.2", 20: "not updated for 1d", 16: "not updated 1d"} {
+		if got := note(kim, w); got != want {
+			t.Errorf("behind, in %d: %q, want %q", w, got, want)
+		}
+	}
+	for w, want := range map[int]string{-1: "update check failing: github.com did not answer in 30s", 30: "update check failing", 19: "check failing"} {
+		if got := note(srv, w); got != want {
+			t.Errorf("a failing check on a current device, in %d: %q, want %q", w, got, want)
+		}
+	}
+	r.Attention = attention(r.Team, r.Collector, r.GeneratedAt)
+	if got := pageSection(Render(r, Options{Width: 120}), "ATTENTION"); !slices.Contains(got, " OLD    2 devices on v1.4.0  Mac.localdomain, MacBook-Pro-Kim · latest v1.4.2 · not updated for up to 1d") {
+		t.Errorf("ATTENTION:\n%s", strings.Join(got, "\n"))
+	}
+
+	rateLimited := "update check: HTTP 429 from github.com: Too Many Requests"
+	r.Team.Devices[kim].UpdateError = &rateLimited
+	for w, want := range map[int]string{-1: "update failing: HTTP 429 from github.com: Too Many Requests", 30: "update failing: HTTP 429 from…", 20: "update failing"} {
+		if got := note(kim, w); got != want {
+			t.Errorf("failing, in %d: %q, want %q", w, got, want)
+		}
+	}
+	var errs []string
+	for _, a := range attention(r.Team, r.Collector, r.GeneratedAt) {
+		if a.Kind == AttentionError {
+			errs = append(errs, a.Devices[0]+": "+a.Message)
+		}
+	}
+	if want := []string{"Mac.localdomain: codex: app-server exited without answering", "MacBook-Pro-Kim: " + rateLimited}; !slices.Equal(errs, want) {
+		t.Errorf("errors %q, want %q", errs, want)
+	}
+	// Behind for less than updating takes, it only says the latest.
+	behind = r.GeneratedAt.Add(-3 * time.Hour)
+	r.Team.Devices[kim].UpdateError = nil
+	if got := note(kim, -1); got != "update: latest v1.4.2" {
+		t.Errorf("behind for 3h: %q", got)
+	}
+
+	o.Color = true
+	th := NewTheme(false)
+	r.Team.Devices[kim].UpdateError = &rateLimited
+	for i, c := range map[int]color.Color{kim: th.Out, srv: th.Muted} {
+		if got := note(i, -1); !strings.HasPrefix(got, sgr.FindString(lipglossFg(c))) {
+			t.Errorf("%s not in its color: %q", r.Team.Devices[i].Label, got)
+		}
+	}
+	behind, r.Team.Devices[kim].UpdateError = r.GeneratedAt.Add(-26*time.Hour), nil
+	if got := note(kim, -1); !strings.HasPrefix(got, sgr.FindString(lipglossFg(th.Tight))) {
+		t.Errorf("not updated, not in the tight color: %q", got)
+	}
+}
+
 // lipglossFg is the escape a text in color c starts with.
 func lipglossFg(c color.Color) string {
 	p := &page{o: Options{Color: true}}

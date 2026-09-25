@@ -1,6 +1,7 @@
 package view
 
 import (
+	"image/color"
 	"strconv"
 	"strings"
 )
@@ -345,10 +346,15 @@ func (p *page) harnesses(d TeamDevice) chunks {
 
 // deviceNote is NOTE within w columns, or all of it for w below 0: a silent
 // device's silence, with the error it last reported, as ATTENTION has it;
-// else what fails on the device, in the error's color; else the release it
-// is behind. The rest is dim. A short column cuts the error, then drops the
-// last one, says only "since" of the silence, then only its day, then only
-// "silent", so a time is never cut, and says only "latest" of the release.
+// else what fails on the device, in the error's color; else, on an old
+// release, why its release check failed, in the error's color, how long it
+// has not updated once that is longer than updating takes, in the tight
+// color, or the release it is behind; else why its release check failed.
+// The rest is dim. A short column cuts the error, then drops the last one,
+// says only "since" of the silence, then only its day, then only "silent",
+// so a time is never cut, and says only "latest" of the release. It keeps a
+// release check's error while 12 columns of it fit, and how long a device
+// has not updated, but not the release.
 func (p *page) deviceNote(d TeamDevice, w int) chunks {
 	g := p.g
 	fit := func(forms ...chunk) chunks {
@@ -358,6 +364,22 @@ func (p *page) deviceNote(d TeamDevice, w int) chunks {
 			}
 		}
 		return chunks{forms[len(forms)-1]}.cut(w, g.ell)
+	}
+	// update is what of a failed release check fits: its error, cut, while
+	// 12 columns of it do, else only what failed, in one of its forms.
+	update := func(paint func(string) chunk, what ...string) chunks {
+		msg := p.txt(strings.TrimPrefix(*d.UpdateError, "update check: "))
+		if w < 0 || w >= width(what[0]+": ")+statusCut {
+			return fit(paint(what[0] + ": " + msg))
+		}
+		var forms []chunk
+		for _, s := range what {
+			forms = append(forms, paint(s))
+		}
+		return fit(forms...)
+	}
+	color := func(c color.Color) func(string) chunk {
+		return func(s string) chunk { return p.paint(s, c, false, false) }
 	}
 	switch {
 	case d.Silent:
@@ -375,9 +397,17 @@ func (p *page) deviceNote(d TeamDevice, w int) chunks {
 		return fit(append([]chunk{p.muted(last)}, silence...)...)
 	case d.Error != nil:
 		return fit(p.paint(p.txt(*d.Error), p.th.Out, false, false))
+	case d.Old && d.UpdateError != nil:
+		return update(color(p.th.Out), "update failing")
 	case d.Old && p.r.Team.Latest != nil:
 		latest := "latest " + p.txt(*p.r.Team.Latest)
+		if d.BehindSince != nil && p.now.Sub(*d.BehindSince) >= BehindAfter {
+			tight, a := color(p.th.Tight), age(p.now.Sub(*d.BehindSince))
+			return fit(tight("not updated for "+a+g.sep+latest), tight("not updated for "+a), tight("not updated "+a))
+		}
 		return fit(p.muted("update: "+latest), p.muted(latest))
+	case d.UpdateError != nil:
+		return update(p.muted, "update check failing", "check failing")
 	}
 	return nil
 }

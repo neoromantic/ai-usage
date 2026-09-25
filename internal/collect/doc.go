@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"maps"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/logs"
+	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
@@ -340,6 +342,22 @@ func SortAccounts(out []AccountTotals) {
 // maxSealedPlain keeps a sealed string under snapshot.MaxSealed.
 const maxSealedPlain = 300
 
+// maxUpdateError is the most of a failed release check's error last_error
+// carries.
+const maxUpdateError = 160
+
+// lastError is what last_error carries: the last run's error on one line,
+// then, while the last release check failed and no newer release waits for
+// the next run, snapshot.UpdateLine and why. Sealing keeps the end of a long
+// one, so the check's error stays whole.
+func lastError(st *state.State, version string) string {
+	s := strings.ReplaceAll(st.LastError, "\n", " ")
+	if e := st.Update.Error; e != "" && !selfupdate.Dev(version) && !selfupdate.Newer(st.Update.Installed, version) {
+		s += snapshot.UpdateLine + truncate(strings.Join(strings.Fields(snapshot.Printable(e)), " "), maxUpdateError)
+	}
+	return s
+}
+
 // BuildDoc makes this device's snapshot with every name and path sealed.
 func BuildDoc(st *state.State, key *team.Key, cfg state.Config, hostname, osUser, version string, now time.Time) snapshot.Doc {
 	seal := func(s string) string { return key.Seal(clip(s, maxSealedPlain)) }
@@ -352,7 +370,7 @@ func BuildDoc(st *state.State, key *team.Key, cfg state.Config, hostname, osUser
 		CollectorVersion: orUnknown(snapshot.PlainLabel(version)),
 		CollectedAt:      now,
 		LastSuccessAt:    st.LastSuccessAt,
-		LastError:        seal(st.LastError),
+		LastError:        seal(lastError(st, version)),
 		Accounts:         []snapshot.Account{},
 		Sources:          []snapshot.Source{},
 	}
