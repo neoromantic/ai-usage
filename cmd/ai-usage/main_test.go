@@ -521,7 +521,7 @@ func TestCollectOfflineThenViews(t *testing.T) {
 		t.Fatalf("--quiet printed %q", out)
 	}
 	r := d.report()
-	if r.SchemaVersion != 3 || r.Collector.Version != "dev" || r.Collector.Device != d.config().Device {
+	if r.SchemaVersion != 4 || r.Collector.Version != "dev" || r.Collector.Device != d.config().Device {
 		t.Fatalf("collector = %+v", r.Collector)
 	}
 	if r.Collector.Relay.URL != nil || r.Collector.LastSuccessAt == nil {
@@ -585,7 +585,7 @@ func TestCollectOfflineThenViews(t *testing.T) {
 		t.Fatalf("bare run printed:\n%s", out)
 	}
 	var fresh view.Report
-	if err := json.Unmarshal([]byte(d.ok("collect", "--offline", "--json")), &fresh); err != nil || fresh.SchemaVersion != 3 {
+	if err := json.Unmarshal([]byte(d.ok("collect", "--offline", "--json")), &fresh); err != nil || fresh.SchemaVersion != 4 {
 		t.Fatalf("collect --json: %v %+v", err, fresh.SchemaVersion)
 	}
 
@@ -608,7 +608,7 @@ func TestCollectOfflineThenViews(t *testing.T) {
 			Status   string `json:"status"`
 		} `json:"sources"`
 	}
-	if err := json.Unmarshal([]byte(d.ok("status", "--json")), &sj); err != nil || sj.SchemaVersion != 3 || len(sj.Sources) != 4 || sj.Sources[0].Provider != "claude" || sj.Sources[0].Status != "ok" {
+	if err := json.Unmarshal([]byte(d.ok("status", "--json")), &sj); err != nil || sj.SchemaVersion != 4 || len(sj.Sources) != 4 || sj.Sources[0].Provider != "claude" || sj.Sources[0].Status != "ok" {
 		t.Fatalf("status --json = %+v, %v", sj, err)
 	}
 

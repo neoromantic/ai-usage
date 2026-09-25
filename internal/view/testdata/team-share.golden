@@ -24,23 +24,23 @@ SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
   GROK
 ● a4c2e917       SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  annbook           11h
 
-DEVICES × SUBSCRIPTIONS  13 · % of each window, estimated  ‹usage›  status    tokens  ‹share›
-                   CLAUDE ──────────  CODEX ─────────────────────────────  GROK ───
-                        ann      kim       ann      sam      lee  unknown  a4c2e917
-  srv1                    7        ·         6        ·        8        ·         ·
-● annbook                60        ·        94        ·        ·        ·         ·
-× Mac.localdomain         ·        ·         ·        ·        ·        ·         ·
-↓ MacBook-Pro-Kim         ·        ·         ·       42        ·        ·         ·
-  bot-a                   ·        ·         ·        ·        1        ·         ·
-  bot-b                   ·        ·         ·        ·       <1        ·         ·
-  bot-c                   ·        ·         ·        ·       <1        ·         ·
-  bot-d                   ·        ·         ·        ·       <1        ·         ·
-  bot-e                   ·        ·         ·        ·       <1        ·         ·
-  bot-f                   ·        ·         ·        ·       <1        ·         ·
-  bot-g                   ·        ·         ·        ·       <1        ·         ·
-  bot-h                   ·        ·         ·        ·       <1        ·         ·
-  bot-i                   ·        ·         ·        ·       <1        ·         ·
-  TOTAL                  67        ?       100       42       12        ?         ?
+DEVICES × SUBSCRIPTIONS  13 · 7d · % of column total                 ‹usage›  status    tokens  ‹share›
+                   CLAUDE ──────────  CODEX ─────────────────────────────  GROK ───  NO QUOTA
+                        ann      kim       ann      sam      lee  unknown  a4c2e917    hermes     TOTAL
+  srv1                   10        ·         6        ·       69        ·         ·        83        36
+● annbook                90        ·        94        ·        ·        ·       100         ·        27
+× Mac.localdomain         ·      100         ·        ·        ·      100         ·         ·        14
+↓ MacBook-Pro-Kim         ·        ·         ·      100        ·        ·         ·         ·         8
+  bot-a                   ·        ·         ·        ·        9        ·         ·         ·         4
+  bot-b                   ·        ·         ·        ·        7        ·         ·        11         4
+  bot-c                   ·        ·         ·        ·        5        ·         ·         6         2
+  bot-d                   ·        ·         ·        ·        3        ·         ·         ·         2
+  bot-e                   ·        ·         ·        ·        3        ·         ·         ·         1
+  bot-f                   ·        ·         ·        ·        2        ·         ·         ·        <1
+  bot-g                   ·        ·         ·        ·        1        ·         ·         ·        <1
+  bot-h                   ·        ·         ·        ·       <1        ·         ·         ·        <1
+  bot-i                   ·        ·         ·        ·       <1        ·         ·         ·        <1
+  TOTAL                 100      100       100      100      100      100       100       100       100
 
 PROJECTS  annbook · by 7d · M tokens in+out
   PROJECT                                            7D  90D  SESS  VIA            LAST

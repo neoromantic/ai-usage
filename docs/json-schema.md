@@ -1,8 +1,8 @@
-# JSON output, schema version 3
+# JSON output, schema version 4
 
 `ai-usage --json`, `ai-usage collect --json`, and `ai-usage report --json` print one report object. `ai-usage status --json` prints a smaller object, described at the end.
 
-A field changes meaning only with a new `schema_version`. New fields can appear within a version, so ignore the ones you do not know. [Changes from version 2](#changes-from-version-2) lists what version 3 added and removed, and [Added within version 3](#added-within-version-3) what it added since.
+A field changes meaning only with a new `schema_version`. New fields can appear within a version, so ignore the ones you do not know. [Changes from version 3](#changes-from-version-3) lists what version 4 changed. [Changes from version 2](#changes-from-version-2) lists what version 3 added and removed, and [Added within version 3](#added-within-version-3) what it added since.
 
 Conventions:
 
@@ -19,7 +19,7 @@ Conventions:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `schema_version` | number | `3` |
+| `schema_version` | number | `4` |
 | `generated_at` | time | when the report was made |
 | `collector` | object | this collector's health; see [collector](#collector) |
 | `attention` | list | what needs attention now, most urgent first; see [attention](#attention) |
@@ -266,6 +266,7 @@ A row:
 | `device_id` | string | its id |
 | `cells` | list | one per column, in the order of `columns` |
 | `usage` | object | the device's tokens over every column, in each period |
+| `share` | object | the device's part of the team's tokens over every column, in percent, in each period; see the cell's `share`. The rows' shares add up to 100 |
 
 A cell:
 
@@ -274,7 +275,13 @@ A cell:
 | `usage` | object | the device's input plus output tokens on the column in each period |
 | `window_tokens` | number | the device's input plus output tokens since the column's main window began |
 | `window_unknown` | bool | `true` when those are not known: the device is on a collector older than v0.2.0, and the account's last activity on it is not known to be before the window began. `window_tokens` is then `0`. Absent otherwise |
-| `share` | number | an estimate of how much of the column's window the device used, in percent: its `window_tokens` over the column's, times the column's `percent`. A column's shares add up to its `percent`. `null` when the column has no `percent`, when the team spent nothing on it since the window began, and when the share is not known: the cell's `window_unknown` is `true`, or the column's is and the device spent some since the window began. Otherwise a device that spent none since then has `0` |
+| `share` | object | the device's part of the column's tokens, in percent, in each period: `today`, `7d`, `30d`, and `90d`, as in `usage`. It is the cell's `usage` over the column's, so a column's shares add up to 100. A period's is `null` when the team spent nothing on the column in it, and when it is not known: the period is in the column's `usage.unknown`, and the device spent some in it or its own tokens then are not known. A device that spent none has `0`. It says how the tokens split, not how much of the quota the device used |
+
+## Changes from version 3
+
+- A matrix cell's `share` is an object with a value for each period, the device's part of the column's tokens in it. It was a number, an estimate of how much of the column's main window the device used: its `window_tokens` over the column's, times the column's `percent`, which a reader can still work out from those fields.
+- A matrix row has a `share` of the team's tokens in each period.
+- `status --json` has the same `schema_version`, and did not change.
 
 ## Added within version 3
 
@@ -306,7 +313,7 @@ A shortened report from a team of two:
 
 ```json
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "generated_at": "2026-09-01T12:04:00Z",
   "collector": {
     "version": "v1.3.0",
@@ -527,19 +534,37 @@ A shortened report from a team of two:
           "device": "ann-mbp",
           "device_id": "d-3f9c2a51b7e04d18a6c90e12",
           "cells": [
-            { "usage": { "today": 2100000, "7d": 25000000, "30d": 27800000, "90d": 27800000 }, "window_tokens": 13500000, "share": 80 },
-            { "usage": { "today": 0, "7d": 0, "30d": 0, "90d": 0 }, "window_tokens": 0, "share": 0 }
+            {
+              "usage": { "today": 2100000, "7d": 25000000, "30d": 27800000, "90d": 27800000 },
+              "window_tokens": 13500000,
+              "share": { "today": 100, "7d": 100, "30d": 100, "90d": 100 }
+            },
+            {
+              "usage": { "today": 0, "7d": 0, "30d": 0, "90d": 0 },
+              "window_tokens": 0,
+              "share": { "today": 0, "7d": 0, "30d": 0, "90d": 0 }
+            }
           ],
-          "usage": { "today": 2100000, "7d": 25000000, "30d": 27800000, "90d": 27800000 }
+          "usage": { "today": 2100000, "7d": 25000000, "30d": 27800000, "90d": 27800000 },
+          "share": { "today": 70, "7d": 85.61643835616438, "30d": 85.01529051987767, "90d": 85.01529051987767 }
         },
         {
           "device": "bo-laptop",
           "device_id": "d-8e41d07c5a2b93f6e1d4c7a0",
           "cells": [
-            { "usage": { "today": 0, "7d": 0, "30d": 0, "90d": 0 }, "window_tokens": 0, "share": 0 },
-            { "usage": { "today": 900000, "7d": 4200000, "30d": 4900000, "90d": 4900000 }, "window_tokens": 3600000, "share": 40 }
+            {
+              "usage": { "today": 0, "7d": 0, "30d": 0, "90d": 0 },
+              "window_tokens": 0,
+              "share": { "today": 0, "7d": 0, "30d": 0, "90d": 0 }
+            },
+            {
+              "usage": { "today": 900000, "7d": 4200000, "30d": 4900000, "90d": 4900000 },
+              "window_tokens": 3600000,
+              "share": { "today": 100, "7d": 100, "30d": 100, "90d": 100 }
+            }
           ],
-          "usage": { "today": 900000, "7d": 4200000, "30d": 4900000, "90d": 4900000 }
+          "usage": { "today": 900000, "7d": 4200000, "30d": 4900000, "90d": 4900000 },
+          "share": { "today": 30, "7d": 14.383561643835616, "30d": 14.984709480122325, "90d": 14.984709480122325 }
         }
       ]
     }
@@ -553,6 +578,6 @@ A shortened report from a team of two:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `schema_version` | number | `3` |
+| `schema_version` | number | `4` |
 | `collector` | object | as in the report |
 | `sources` | list | `{provider, status, error, homes}` for each tool, as in the report's `providers` without the accounts |

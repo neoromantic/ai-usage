@@ -32,7 +32,7 @@ func TestMatrixMore(t *testing.T) {
 	if heads := pageSection(p, "DEVICES")[1]; p.MatrixShown != 5 || strings.Contains(heads, "more") {
 		t.Errorf("scrolled to the end, shown %d, heading %q", p.MatrixShown, heads)
 	}
-	// Share has no TOTAL, and still room for the count.
+	// Share has the same columns, and room for the count.
 	p = Render(r, Options{Width: 80, Loc: sampleZone, Share: true})
 	if heads := pageSection(p, "DEVICES")[1]; !strings.HasSuffix(heads, "  +"+strconv.Itoa(p.MatrixColumns-p.MatrixShown)+" more") {
 		t.Errorf("share at 80, shown %d of %d, heading %q", p.MatrixShown, p.MatrixColumns, heads)

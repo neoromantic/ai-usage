@@ -48,6 +48,20 @@ func (p Period) Of(u Usage) int64 {
 	}
 }
 
+// share is the period's part in s.
+func (p Period) share(s Share) *float64 {
+	switch p {
+	case Today:
+		return s.Today
+	case Month:
+		return s.Month
+	case Quarter:
+		return s.Quarter
+	default:
+		return s.Week
+	}
+}
+
 // Known says the period's tokens in u are all known.
 func (p Period) Known(u Usage) bool { return u.Unknown&p.bit() == 0 }
 
@@ -128,8 +142,8 @@ type Options struct {
 	Loc *time.Location
 	// Period is the span of the matrix, USAGE, and PROJECTS.
 	Period Period
-	// Share shows each device's share of a subscription's window in the
-	// matrix, instead of its tokens.
+	// Share shows each value in the matrix as a part of its column's total,
+	// instead of tokens.
 	Share bool
 	// AllProjects lists every project, not the top 10.
 	AllProjects bool
@@ -372,14 +386,16 @@ func (p *page) tokens(per Period, u Usage) string {
 	return p.g.atLeast + strconv.FormatInt(n/1_000_000, 10)
 }
 
-// percent prints a share of a window in whole percents, <1 under one, and
-// the none mark for nothing.
+// percent prints a share in whole percents, <1 under one, >99 over 99 and
+// under all of it, and the none mark for nothing.
 func (p *page) percent(v *float64) string {
 	switch {
 	case v == nil || *v <= 0:
 		return p.g.none
 	case *v < 1:
 		return "<1"
+	case *v > 99 && *v < 100:
+		return ">99"
 	default:
 		return strconv.Itoa(int(math.Round(*v)))
 	}

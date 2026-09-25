@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "generated_at": "2026-09-23T14:38:00Z",
   "collector": {
     "version": "v1.4.2",
@@ -996,7 +996,12 @@
                 "90d": 140000000
               },
               "window_tokens": 8520000,
-              "share": 55
+              "share": {
+                "today": 100,
+                "7d": 100,
+                "30d": 100,
+                "90d": 100
+              }
             },
             {
               "usage": {
@@ -1006,7 +1011,12 @@
                 "90d": 60000000
               },
               "window_tokens": 360000,
-              "share": 30
+              "share": {
+                "today": null,
+                "7d": 100,
+                "30d": 100,
+                "90d": 100
+              }
             },
             {
               "usage": {
@@ -1016,7 +1026,12 @@
                 "90d": 95000000
               },
               "window_tokens": 4980000,
-              "share": 20
+              "share": {
+                "today": 100,
+                "7d": 100,
+                "30d": 100,
+                "90d": 100
+              }
             },
             {
               "usage": {
@@ -1026,7 +1041,12 @@
                 "90d": 12000000
               },
               "window_tokens": 0,
-              "share": null
+              "share": {
+                "today": null,
+                "7d": null,
+                "30d": null,
+                "90d": 100
+              }
             },
             {
               "usage": {
@@ -1036,7 +1056,12 @@
                 "90d": 5000000
               },
               "window_tokens": 0,
-              "share": null
+              "share": {
+                "today": null,
+                "7d": 100,
+                "30d": 100,
+                "90d": 100
+              }
             },
             {
               "usage": {
@@ -1046,7 +1071,12 @@
                 "90d": 20000000
               },
               "window_tokens": 0,
-              "share": null
+              "share": {
+                "today": 100,
+                "7d": 100,
+                "30d": 100,
+                "90d": 100
+              }
             }
           ],
           "usage": {
@@ -1054,6 +1084,12 @@
             "7d": 26600000,
             "30d": 97299999,
             "90d": 332000000
+          },
+          "share": {
+            "today": 100,
+            "7d": 100,
+            "30d": 100,
+            "90d": 100
           }
         }
       ]

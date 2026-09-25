@@ -270,8 +270,8 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	case "9":
 		m.setPeriod(view.Quarter)
 	case "%":
-		// Share mode can always be left, even when it leaves no column,
-		// as on a team with only NO QUOTA tokens. The status view has no
+		// Share mode can always be left, even when the matrix is gone,
+		// as after a refresh that left one device. The status view has no
 		// share; the mode waits for the matrix.
 		if m.shareKey() {
 			m.opts.Share = !m.opts.Share

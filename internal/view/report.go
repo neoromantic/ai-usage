@@ -13,7 +13,7 @@ import (
 
 // SchemaVersion is the agent JSON contract. A field may change meaning only
 // with a new version.
-const SchemaVersion = 3
+const SchemaVersion = 4
 
 const (
 	// StaleAfter marks a quota reading as old in both views.
@@ -372,8 +372,7 @@ type Column struct {
 	NoQuota bool   `json:"no_quota"`
 	State   string `json:"state"`
 	// Percent is how full the subscription's main window is, when that is
-	// known and it has not reset since; the share mode splits it between
-	// the devices.
+	// known and it has not reset since.
 	Percent *float64 `json:"percent"`
 	// Usage is the team's tokens on the subscription, what Hermes spent
 	// through the login included.
@@ -393,6 +392,9 @@ type Row struct {
 	// Cells has one entry per column.
 	Cells []Cell `json:"cells"`
 	Usage Usage  `json:"usage"`
+	// Share is the device's part of the team's tokens, over every column. The
+	// rows' shares add up to 100.
+	Share Share `json:"share"`
 }
 
 type Cell struct {
@@ -403,13 +405,19 @@ type Cell struct {
 	// WindowUnknown says they are not known: the device is on a collector
 	// older than v0.2.0 and used the account since the window began.
 	WindowUnknown bool `json:"window_unknown,omitempty"`
-	// Share estimates how much of the column's window the device used, in
-	// percent: its tokens since the window began over the team's, times how
-	// full the window is. A column's shares add up to its Percent. It is nil
-	// without a Percent, when the team spent nothing since the window began,
-	// and when it is not known: the device's tokens since then are not, or
-	// the team's are not and the device spent some.
-	Share *float64 `json:"share"`
+	// Share is the device's part of the column's tokens: its tokens over
+	// the team's. A column's shares add up to 100.
+	Share Share `json:"share"`
+}
+
+// Share is a part of a whole in each period, in percent. A period's is nil
+// when the whole has no tokens in it, and when it is not known: the part's
+// tokens then are not, or the whole's are not and the part has some.
+type Share struct {
+	Today   *float64 `json:"today"`
+	Week    *float64 `json:"7d"`
+	Month   *float64 `json:"30d"`
+	Quarter *float64 `json:"90d"`
 }
 
 // Input is everything a report is built from.

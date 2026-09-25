@@ -73,9 +73,11 @@ const (
 // provider, with totals on the right and at the bottom. The cells are a
 // heat map on a log scale; without color, the largest in each column is
 // bold, unless the column has a value that is not known. The share mode
-// shows each device's estimated share of each window. Tokens that are not
-// all known, as a device's on a collector older than v0.2.0, show as
-// tokens prints them, and a share that is not known is ?.
+// shows each value as a part of its column's total: a subscription's
+// column adds up to 100, and TOTAL is each device's part of the team's
+// tokens. Tokens that are not all known, as a device's on a collector
+// older than v0.2.0, show as tokens prints them, and a share that is not
+// known is ?.
 func (p *page) grid() []chunks {
 	g := p.g
 	m := p.r.Team.Matrix
@@ -83,9 +85,6 @@ func (p *page) grid() []chunks {
 	var cols []gridCol
 	for i := range m.Columns {
 		c := &m.Columns[i]
-		if share && c.NoQuota {
-			continue
-		}
 		grp := c.Provider
 		if c.NoQuota {
 			grp = ""
@@ -102,42 +101,50 @@ func (p *page) grid() []chunks {
 		}
 		cell := r.Cells[c.idx]
 		if share {
-			if cell.Share == nil {
-				return 0
+			if v := per.share(cell.Share); v != nil {
+				return *v
 			}
-			return *cell.Share
+			return 0
 		}
 		return float64(per.Of(cell.Usage))
+	}
+	// part prints a share of whole: ? when it is not known, and the none
+	// mark when whole has no tokens.
+	part := func(s Share, whole Usage) string {
+		v := per.share(s)
+		if v == nil && !per.Known(whole) {
+			return "?"
+		}
+		return p.percent(v)
+	}
+	// totalOf prints a total: in the share mode, all of it when it has any
+	// tokens.
+	totalOf := func(u Usage) string {
+		switch {
+		case !share:
+			return p.tokens(per, u)
+		case per.Of(u) > 0:
+			return "100"
+		case !per.Known(u):
+			return "?"
+		}
+		return g.none
 	}
 	text := func(r Row, c gridCol) string {
 		if c.idx >= len(r.Cells) {
 			return g.none
 		}
 		cell := r.Cells[c.idx]
-		if !share {
-			return p.tokens(per, cell.Usage)
-		}
-		// A window whose tokens are not all known cannot be split, though
-		// how full it is is known.
-		if cell.Share == nil && c.c.Percent != nil && c.c.WindowUnknown {
-			return "?"
-		}
-		return p.percent(cell.Share)
-	}
-	bottom := func(c gridCol) string {
 		if share {
-			if c.c.Percent == nil {
-				return "?"
-			}
-			return p.percent(c.c.Percent)
+			return part(cell.Share, c.c.Usage)
 		}
-		return p.tokens(per, c.c.Usage)
+		return p.tokens(per, cell.Usage)
 	}
 
 	var top float64
 	for k := range cols {
 		c := &cols[k]
-		c.w = max(gridCell, width(p.txt(c.c.Name)), width(bottom(*c)))
+		c.w = max(gridCell, width(p.txt(c.c.Name)), width(totalOf(c.c.Usage)))
 		for _, r := range rows {
 			c.w = max(c.w, width(text(r, *c)))
 			c.top = max(c.top, value(r, *c))
@@ -151,18 +158,12 @@ func (p *page) grid() []chunks {
 		grand = grand.add(r.Usage)
 	}
 	lead := 2 + nameW
-	totalW := 0
-	if !share {
-		totalW = max(gridCell, width(p.tokens(per, grand)))
-	}
+	totalW := max(gridCell, width(totalOf(grand)))
 	// after is how wide the matrix is right of its last column: TOTAL, and
 	// over it the count of the columns off the right edge, if any.
 	more := func(n int) string { return "+" + strconv.Itoa(n) + " more" }
 	after := func(off int) int {
-		n := 0
-		if totalW > 0 {
-			n = 2 + totalW
-		}
+		n := 2 + totalW
 		if off > 0 {
 			n = max(n, 2+width(more(off)))
 		}
@@ -192,11 +193,11 @@ func (p *page) grid() []chunks {
 	edge := x + after(hidden)
 
 	title := chunks{p.bold("DEVICES " + g.times + " SUBSCRIPTIONS"), p.plain("  ")}
+	unit := "M tokens in+out"
 	if share {
-		title = append(title, p.muted(strconv.Itoa(len(rows))+g.sep+"% of each window, estimated"))
-	} else {
-		title = append(title, p.muted(strconv.Itoa(len(rows))+g.sep+per.String()+g.sep+"M tokens in+out"))
+		unit = "% of column total"
 	}
+	title = append(title, p.muted(strconv.Itoa(len(rows))+g.sep+per.String()+g.sep+unit))
 	// The views go before the matrix's modes, and are the first to go
 	// where both do not fit.
 	pills := chunks{p.pill("tokens", !share), p.plain(" "), p.pill("share", share)}
@@ -251,10 +252,8 @@ func (p *page) grid() []chunks {
 		names = append(names, p.right(name, c.w)...)
 		cur = c.x + c.w
 	}
-	if totalW > 0 {
-		names = append(names, p.space(2))
-		names = append(names, p.right(p.muted("TOTAL"), totalW)...)
-	}
+	names = append(names, p.space(2))
+	names = append(names, p.right(p.muted("TOTAL"), totalW)...)
 	out = append(out, names)
 
 	for _, r := range rows {
@@ -267,8 +266,10 @@ func (p *page) grid() []chunks {
 			line = append(line, p.right(p.heat(text(r, c), value(r, c), c, top), c.w)...)
 			cur = c.x + c.w
 		}
-		if totalW > 0 {
-			line = append(line, p.space(2))
+		line = append(line, p.space(2))
+		if share {
+			line = append(line, p.right(p.cell(part(r.Share, grand)), totalW)...)
+		} else {
 			line = append(line, p.right(p.cell(p.tokens(per, r.Usage)), totalW)...)
 		}
 		out = append(out, line)
@@ -280,19 +281,11 @@ func (p *page) grid() []chunks {
 	for _, k := range shown {
 		c := cols[k]
 		total = append(total, p.space(c.x-cur))
-		if share && c.c.Percent == nil {
-			// A window whose percent is not known has a plain ? at the
-			// bottom.
-			total = append(total, p.right(p.plain(bottom(c)), c.w)...)
-		} else {
-			total = append(total, p.right(p.cell(bottom(c)), c.w)...)
-		}
+		total = append(total, p.right(p.cell(totalOf(c.c.Usage)), c.w)...)
 		cur = c.x + c.w
 	}
-	if totalW > 0 {
-		total = append(total, p.space(2))
-		total = append(total, p.right(p.cell(p.tokens(per, grand)), totalW)...)
-	}
+	total = append(total, p.space(2))
+	total = append(total, p.right(p.cell(totalOf(grand)), totalW)...)
 	return append(out, total)
 }
 

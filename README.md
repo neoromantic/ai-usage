@@ -74,7 +74,7 @@ DEVICES × SUBSCRIPTIONS is every machine against every subscription, in million
 
 The matrix shows accounts by short names: the part of an email before the `@`, or the first 8 characters of an id. `ai-usage alias` gives an account a name for the whole team; see [Teams](#teams).
 
-When standard input and output are both terminals, `ai-usage` opens the same page as an interactive view. It scrolls, with the head of DEVICES kept at the top while its rows go by, and the matrix scrolls sideways; `s` switches DEVICES between the matrix and the status view, `p` picks the period (today, 7, 30, or 90 days), `%` shows each machine's estimated share of each subscription's window, `r` collects now, `?` lists every key, and `q` quits. Piped output, `--json`, `--plain`, and `TERM=dumb` print the page instead, and so does the installer's first run. The page is at its best at 120 to 160 columns; narrower, it drops columns in a fixed order, down to 80.
+When standard input and output are both terminals, `ai-usage` opens the same page as an interactive view. It scrolls, with the head of DEVICES kept at the top while its rows go by, and the matrix scrolls sideways; `s` switches DEVICES between the matrix and the status view, `p` picks the period (today, 7, 30, or 90 days), `%` shows each machine's percent of each subscription's tokens in the period, and in TOTAL of all the team's, `r` collects now, `?` lists every key, and `q` quits. Piped output, `--json`, `--plain`, and `TERM=dumb` print the page instead, and so does the installer's first run. The page is at its best at 120 to 160 columns; narrower, it drops columns in a fixed order, down to 80.
 
 ## Install
 
@@ -330,7 +330,7 @@ Then start `ai-usage schedule run` in it as that user. The first run's report an
 
 ## JSON for agents
 
-`ai-usage --json` and `ai-usage report --json` print the report as JSON with `"schema_version": 3`. A field changes meaning only with a new schema version.
+`ai-usage --json` and `ai-usage report --json` print the report as JSON with `"schema_version": 4`. A field changes meaning only with a new schema version.
 
 ```
 schema_version, generated_at
@@ -345,10 +345,10 @@ providers[] claude, codex, grok, hermes: status (ok, partial, error, skipped), e
 projects[]  this machine's projects over every account, with usage and providers
 team        pulled_at, latest_version, devices[] (error, silent, old, usage), providers[] with
             accounts summed across devices (name, alias, state, quota, usage, users, busiest,
-            per_device[], linked_usage[]), and matrix (columns[], rows[] of cells with share)
+            per_device[], linked_usage[]), and matrix (columns[], rows[] with share, of cells with share)
 ```
 
-Version 3 replaced `headline_percent`, `level`, and `pace`, with their 75% and 90% marks, by each window's `state` and `forecast`.
+Version 4 made a matrix cell's `share` its part of the column's tokens in each period, where it was an estimate of how much of the window the device used, and gave each row a `share` of the team's tokens. Version 3 replaced `headline_percent`, `level`, and `pace`, with their 75% and 90% marks, by each window's `state` and `forecast`.
 
 `ai-usage status --json` prints `schema_version`, `collector`, and `sources[]`. Every field is described in [docs/json-schema.md](docs/json-schema.md).
 

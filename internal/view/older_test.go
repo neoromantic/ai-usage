@@ -2,6 +2,7 @@ package view
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -45,6 +46,11 @@ func column(t *testing.T, mx Matrix, label string) int {
 	}
 	t.Fatalf("no column %q", label)
 	return -1
+}
+
+// near says a share is known and about want.
+func near(v *float64, want float64) bool {
+	return v != nil && math.Abs(*v-want) < 1e-9
 }
 
 func row(t *testing.T, mx Matrix, device string) Row {
@@ -116,25 +122,33 @@ func TestOlderCollector(t *testing.T) {
 	if oldRow.Usage != old.Usage {
 		t.Fatalf("old row = %+v", oldRow.Usage)
 	}
-	for _, i := range []int{annCol, kimCol} {
-		if c := oldRow.Cells[i]; !c.WindowUnknown || c.Share != nil || c.WindowTokens != 0 {
-			t.Fatalf("old cell %d = %+v", i, c)
-		}
+	// The old device's part of the last 7 days is not known; of 90 days,
+	// it is.
+	if c := oldRow.Cells[annCol]; !c.WindowUnknown || c.WindowTokens != 0 || c.Share.Week != nil || !near(c.Share.Quarter, 400.0/412*100) {
+		t.Fatalf("old ann cell = %+v", c)
 	}
-	// ann's window cannot be split while the old device's part is not
+	if c := oldRow.Cells[kimCol]; !c.WindowUnknown || c.Share.Week != nil || !near(c.Share.Quarter, 100) {
+		t.Fatalf("old kim cell = %+v", c)
+	}
+	// ann's 7 days cannot be split while the old device's part is not
 	// known: annbook spent some, so its share is not known either.
-	if c := here.Cells[annCol]; c.WindowUnknown || c.WindowTokens != 8_000_000 || c.Share != nil {
+	if c := here.Cells[annCol]; c.WindowUnknown || c.WindowTokens != 8_000_000 || c.Share.Week != nil || !near(c.Share.Quarter, 12.0/412*100) {
 		t.Fatalf("annbook ann cell = %+v", c)
 	}
 	// A device that spent none has none of it.
-	if c := here.Cells[kimCol]; c.Share == nil || *c.Share != 0 {
+	if c := here.Cells[kimCol]; !near(c.Share.Week, 0) || !near(c.Share.Quarter, 0) {
 		t.Fatalf("annbook kim cell = %+v", c)
 	}
-	if c := oldRow.Cells[leeCol]; c.WindowUnknown || c.Share == nil || *c.Share != 0 || c.Usage != (Usage{Quarter: 120_000_000}) {
+	if c := oldRow.Cells[leeCol]; c.WindowUnknown || !near(c.Share.Week, 0) || c.Usage != (Usage{Quarter: 120_000_000}) {
 		t.Fatalf("old lee cell = %+v", c)
 	}
-	if c := srv.Cells[leeCol]; c.Share == nil || *c.Share != 40 {
+	if c := srv.Cells[leeCol]; !near(c.Share.Week, 100) {
 		t.Fatalf("srv1 lee cell = %+v", c)
+	}
+	// Of all the team's tokens, the old device's part of 90 days is
+	// known, and of 7 days it is not.
+	if s := oldRow.Share; s.Week != nil || !near(s.Quarter, float64(oldRow.Usage.Quarter)/float64(oldRow.Usage.Quarter+here.Usage.Quarter+srv.Usage.Quarter)*100) {
+		t.Fatalf("old row share = %+v", s)
 	}
 
 	// JSON says which periods are not known, and says nothing of those
@@ -213,7 +227,7 @@ func TestOlderCollectorSplitsHermesByLogin(t *testing.T) {
 		i := column(t, mx, label)
 		// Hermes was last active 2 hours ago, through either login as far as
 		// the snapshot says.
-		if c := oldRow.Cells[i]; c.Usage != (Usage{Quarter: want, Unknown: recent}) || !c.WindowUnknown || c.Share != nil {
+		if c := oldRow.Cells[i]; c.Usage != (Usage{Quarter: want, Unknown: recent}) || !c.WindowUnknown || c.Share.Week != nil || !near(c.Share.Quarter, 100) {
 			t.Fatalf("%s cell = %+v", label, c)
 		}
 		if a := findTeamAccount(t, r, "codex", label); a.Users != 1 || a.Busiest == nil || *a.Busiest != "otherbox" {

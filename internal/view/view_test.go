@@ -491,20 +491,27 @@ func TestMatrix(t *testing.T) {
 	if this.Usage.Week != 5_000_000 || other.Usage.Week != 3_500_000 {
 		t.Fatalf("row usage = %+v %+v", this.Usage, other.Usage)
 	}
-	// Hermes through the bots login counts in the bots column.
-	if c := other.Cells[1]; c.Usage.Week != 3_000_000 || c.WindowTokens != 3_000_000 || c.Share == nil || *c.Share != 30 {
+	// Hermes through the bots login counts in the bots column: 3M of the
+	// team's 5M in 7 days.
+	if c := other.Cells[1]; c.Usage.Week != 3_000_000 || c.WindowTokens != 3_000_000 || !near(c.Share.Week, 60) || !near(c.Share.Today, 75) {
 		t.Fatalf("build codex cell = %+v", c)
 	}
-	// This device spent 1M since the window began, of the team's 4M: a
-	// quarter of the 40% used.
-	if c := this.Cells[1]; c.WindowTokens != 1_000_000 || c.Share == nil || *c.Share != 10 || c.Usage.Month != 2_000_000 {
+	// This device spent 2M in 7 days, 1M of them since the window began.
+	if c := this.Cells[1]; c.WindowTokens != 1_000_000 || !near(c.Share.Week, 40) || !near(c.Share.Today, 25) || c.Usage.Month != 2_000_000 {
 		t.Fatalf("this codex cell = %+v", c)
 	}
-	if c := this.Cells[0]; c.Share == nil || *c.Share != 60 {
+	if c := this.Cells[0]; !near(c.Share.Week, 100) {
 		t.Fatalf("this claude cell = %+v", c)
 	}
-	if c := other.Cells[2]; c.Usage.Week != 500_000 || c.Share != nil {
+	if c := other.Cells[0]; !near(c.Share.Week, 0) {
+		t.Fatalf("build claude cell = %+v", c)
+	}
+	if c := other.Cells[2]; c.Usage.Week != 500_000 || !near(c.Share.Week, 100) {
 		t.Fatalf("no quota cell = %+v", c)
+	}
+	// Of the team's 8.5M in 7 days, this device spent 5M.
+	if !near(this.Share.Week, 5/8.5*100) || !near(other.Share.Week, 3.5/8.5*100) {
+		t.Fatalf("row shares = %+v %+v", this.Share, other.Share)
 	}
 	if bots := findTeamAccount(t, r, "codex", "bots@a.io"); bots.Users != 2 || *bots.Busiest != "build" {
 		t.Fatalf("bots users = %d %v", bots.Users, bots.Busiest)
@@ -937,7 +944,7 @@ func TestMatrixSplitsHermesByLogin(t *testing.T) {
 	for label, want := range map[string]struct {
 		tokens int64
 		share  float64
-	}{"bots@acme.dev": {4_000_000, 40}, "sam@mail.test": {1_000_000, 10}} {
+	}{"bots@acme.dev": {4_000_000, 100}, "sam@mail.test": {1_000_000, 100}} {
 		col := -1
 		for i, c := range mx.Columns {
 			if c.Label == label {
@@ -950,7 +957,7 @@ func TestMatrixSplitsHermesByLogin(t *testing.T) {
 		if c := mx.Columns[col]; c.Usage.Week != want.tokens || c.WindowTokens != want.tokens {
 			t.Fatalf("%s column = %+v", label, c)
 		}
-		if c := mx.Rows[0].Cells[col]; c.Usage.Week != want.tokens || c.Share == nil || *c.Share != want.share {
+		if c := mx.Rows[0].Cells[col]; c.Usage.Week != want.tokens || !near(c.Share.Week, want.share) {
 			t.Fatalf("%s cell = %+v", label, c)
 		}
 	}
@@ -1309,7 +1316,7 @@ func TestJSONFieldNamesAreStable(t *testing.T) {
 	f.in.Config.Aliases = map[string]state.Alias{state.Key("codex", "bob"): {Name: "b", At: now}}
 	f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", now)
 	r := Build(f.in)
-	if r.SchemaVersion != 3 {
+	if r.SchemaVersion != 4 {
 		t.Fatalf("schema version %d", r.SchemaVersion)
 	}
 	b, err := json.Marshal(r)
@@ -1405,10 +1412,12 @@ team.matrix team.matrix.columns team.matrix.columns.label team.matrix.columns.na
 team.matrix.columns.percent team.matrix.columns.provider team.matrix.columns.state team.matrix.columns.usage
 team.matrix.columns.usage.30d team.matrix.columns.usage.7d team.matrix.columns.usage.90d team.matrix.columns.usage.today
 team.matrix.columns.usage.unknown team.matrix.columns.window_tokens team.matrix.columns.window_unknown
-team.matrix.rows team.matrix.rows.cells team.matrix.rows.cells.share team.matrix.rows.cells.usage
+team.matrix.rows team.matrix.rows.cells team.matrix.rows.cells.share team.matrix.rows.cells.share.30d
+team.matrix.rows.cells.share.7d team.matrix.rows.cells.share.90d team.matrix.rows.cells.share.today team.matrix.rows.cells.usage
 team.matrix.rows.cells.usage.30d team.matrix.rows.cells.usage.7d team.matrix.rows.cells.usage.90d team.matrix.rows.cells.usage.today
 team.matrix.rows.cells.usage.unknown team.matrix.rows.cells.window_tokens team.matrix.rows.cells.window_unknown team.matrix.rows.device team.matrix.rows.device_id team.matrix.rows.usage
 team.matrix.rows.usage.30d team.matrix.rows.usage.7d team.matrix.rows.usage.90d team.matrix.rows.usage.today
+team.matrix.rows.share team.matrix.rows.share.30d team.matrix.rows.share.7d team.matrix.rows.share.90d team.matrix.rows.share.today
 team.matrix.rows.usage.unknown
 team.providers team.providers.accounts team.providers.accounts.alias team.providers.accounts.busiest team.providers.accounts.current
 team.providers.accounts.devices team.providers.accounts.label team.providers.accounts.last_active_at

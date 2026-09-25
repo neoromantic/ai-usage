@@ -653,24 +653,16 @@ func matrix(providers []TeamProvider, byProv map[string]map[string]*teamAccount,
 		}
 		mx.Rows = append(mx.Rows, row)
 	}
+	var all Usage
 	for _, row := range mx.Rows {
+		all = all.add(row.Usage)
+	}
+	for r := range mx.Rows {
+		row := &mx.Rows[r]
 		for i := range row.Cells {
-			col, c := mx.Columns[i], &row.Cells[i]
-			switch {
-			case col.Percent == nil || c.WindowUnknown:
-			case col.WindowUnknown:
-				// The team's tokens since the window began are not all known,
-				// so the window cannot be split: only a device that spent none
-				// has a share, which is none.
-				if c.WindowTokens == 0 {
-					s := 0.0
-					c.Share = &s
-				}
-			case col.WindowTokens > 0:
-				s := float64(c.WindowTokens) / float64(col.WindowTokens) * *col.Percent
-				c.Share = &s
-			}
+			row.Cells[i].Share = shareOf(row.Cells[i].Usage, mx.Columns[i].Usage)
 		}
+		row.Share = shareOf(row.Usage, all)
 	}
 	sort.SliceStable(mx.Rows, func(i, j int) bool {
 		a, b := mx.Rows[i], mx.Rows[j]
@@ -683,6 +675,29 @@ func matrix(providers []TeamProvider, byProv map[string]map[string]*teamAccount,
 		return a.DeviceID < b.DeviceID
 	})
 	return mx
+}
+
+// shareOf is part's share of whole in each period.
+func shareOf(part, whole Usage) Share {
+	of := func(p Period) *float64 {
+		n, total := p.Of(part), p.Of(whole)
+		switch {
+		case !p.Known(whole):
+			// The whole's tokens are not all known, so it cannot be split:
+			// only a part that spent none has a share, which is none.
+			if !p.Known(part) || n > 0 {
+				return nil
+			}
+		case total == 0:
+			return nil
+		}
+		s := 0.0
+		if n > 0 {
+			s = float64(n) / float64(total) * 100
+		}
+		return &s
+	}
+	return Share{Today: of(Today), Week: of(Week), Month: of(Month), Quarter: of(Quarter)}
 }
 
 // sortTeamAccounts puts the worst state first, ties to the one with less

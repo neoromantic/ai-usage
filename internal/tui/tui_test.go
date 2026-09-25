@@ -292,8 +292,8 @@ func TestShare(t *testing.T) {
 	if m = keys(t, m, "%"); m.opts.Share || strings.Contains(bar(m), "%") {
 		t.Fatalf("share without a matrix: %v %q", m.opts.Share, bar(m))
 	}
-	// A matrix of NO QUOTA tokens alone has no column to share; % still
-	// leaves share mode.
+	// A matrix gone in share mode, as after a refresh that left one
+	// device: % still leaves share mode.
 	noQuota := func(r view.Report, o view.Options) view.Page {
 		if o.Share {
 			return fakeRender(100, 0)(r, o)
@@ -692,14 +692,17 @@ const olderReport = `{"generated_at": "2026-09-23T17:38:00Z", "collector": {"dev
       "window_tokens": 8000000, "window_unknown": true}],
     "rows": [
       {"device": "annbook", "device_id": "d-annbook", "usage": {"today": 4000000, "7d": 8000000, "30d": 12000000, "90d": 12000000},
-        "cells": [{"usage": {"today": 4000000, "7d": 8000000, "30d": 12000000, "90d": 12000000}, "window_tokens": 8000000, "share": null}]},
+        "cells": [{"usage": {"today": 4000000, "7d": 8000000, "30d": 12000000, "90d": 12000000}, "window_tokens": 8000000,
+          "share": {"today": null, "7d": null, "30d": null, "90d": 2.912621359223301}}],
+        "share": {"today": null, "7d": null, "30d": null, "90d": 2.912621359223301}},
       {"device": "MacBook-Old", "device_id": "d-macbook-old", "usage": {"today": 0, "7d": 0, "30d": 0, "90d": 400000000, "unknown": ["today", "7d", "30d"]},
         "cells": [{"usage": {"today": 0, "7d": 0, "30d": 0, "90d": 400000000, "unknown": ["today", "7d", "30d"]}, "window_tokens": 0,
-          "window_unknown": true, "share": null}]}]}}}`
+          "window_unknown": true, "share": {"today": null, "7d": null, "30d": null, "90d": 97.0873786407767}}],
+        "share": {"today": null, "7d": null, "30d": null, "90d": 97.0873786407767}}]}}}`
 
 // The period and share keys redraw a device on an older collector: its
-// tokens over 90 days, and ? for every shorter period and for its share,
-// with the totals that miss it at least what they show.
+// tokens over 90 days, and ? for every shorter period and for its share of
+// it, with the totals that miss it at least what they show.
 func TestOlderDevice(t *testing.T) {
 	var r view.Report
 	if err := json.Unmarshal([]byte(olderReport), &r); err != nil {
@@ -734,11 +737,17 @@ func TestOlderDevice(t *testing.T) {
 		m = keys(t, m, c.key)
 		check(c.key+" "+m.opts.Period.String(), c.old, c.total)
 	}
-	// Its share is not known, nor is annbook's, but the window's is.
+	// Its share of 7 days is not known, nor is annbook's, though each
+	// column is all of its own; of 90 days, both are known.
 	m = keys(t, m, "%")
-	check("share", "?", "60")
-	if got := cells(m, "annbook"); got != "?" {
+	check("share", "? ?", "100 100")
+	if got := cells(m, "annbook"); got != "? ?" {
 		t.Errorf("share: annbook %q", got)
+	}
+	m = keys(t, m, "9")
+	check("share 90d", "97 97", "100 100")
+	if got := cells(m, "annbook"); got != "3 3" {
+		t.Errorf("share 90d: annbook %q", got)
 	}
 }
 
