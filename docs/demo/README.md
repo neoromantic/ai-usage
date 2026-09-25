@@ -1,0 +1,52 @@
+# Demo reports and screenshots
+
+Every machine, person, account, and number here is made up. The pictures in the README and in posts come from these files, never from a real team.
+
+## The reports
+
+Two reports, saved as `ai-usage --json` prints them:
+
+- **`solo.json`**: one developer, `mira-mbp`, with Claude Max, ChatGPT Pro, and SuperGrok. Claude runs out on Saturday, 12 hours before its weekly reset, and its Fable limit runs out tonight. Codex has room, and Grok is paid for but almost unused.
+- **`team.json`**: a small studio. It has two laptops (`mira-mbp` and `leo-air`) and a Linux server, `build-01`. Nine Hermes bots run in containers of their own (`scout`, `editor`, `herald`, …), and all of them bill through one Codex login, `bots@studio.dev`. That login runs out on Friday, 2½ days before its reset. Claude's 5-hour window is full. Leo's Codex Plus is out, and his laptop runs an older release whose Codex fails. The `courier` bot has not reported since yesterday.
+
+`scripts/demo/main.go` builds both with the code that builds a real report, from made-up readings and token logs. Their forecasts, ATTENTION, and matrix therefore agree with the numbers, as they would in a real run. Every report is taken at Thursday 24 September 2026, 15:40 in Berlin.
+
+To show one in your own terminal, interactive view included:
+
+```sh
+ai-usage report --from docs/demo/team.json
+TZ=Europe/Berlin ai-usage report --from docs/demo/solo.json --plain --width 110
+```
+
+`--from` shows any report saved with `--json`. It reads no state of this machine and collects nothing.
+
+## The pictures
+
+| File | What it shows |
+| --- | --- |
+| `team.png`, `team-light.png` | the whole team page, dark and light; the README's picture |
+| `team-80.png` | the same page at 80 columns, the narrowest layout; tall, for phones |
+| `team-attention.png` | ATTENTION and SUBSCRIPTIONS only |
+| `team-bots.png` | the interactive view after `%`: each machine's share of each subscription, such as how the server and the nine bots split `bots` |
+| `team-status.png`, `team-devices.png` | DEVICES as each machine's status: release, last report, tools, errors; interactive and printed |
+| `team-help.png` | the interactive view's help, `?` |
+| `solo.png` | one developer's page, with USAGE in place of the matrix |
+| `solo-forecast.png` | the solo page's top: the forecast lines |
+| `json.png` | `ai-usage --json` through `jq`: what an agent reads |
+| `social/*.png` | the pictures marked for posts, on a backdrop |
+| `social/tour.mp4`, `social/tour.gif` | the interactive view, key by key: the page, `s` status, `%` share, `p` 30 days, `?` help |
+
+The pictures are at twice the size of the page, drawn in JetBrains Mono.
+
+## Making them again
+
+```sh
+bun scripts/demo/shots.ts            # every picture
+bun scripts/demo/shots.ts team-bots  # the pictures whose names start so
+```
+
+The script regenerates the two reports and builds `ai-usage`. It shows each picture's report the way a person would see it: printed, or in the interactive view in a tmux of its own, with keys pressed. The terminal's text and colors become an HTML page, which agent-browser photographs in Chrome. The PNGs are then redrawn in 256 colors, at about half the size. It needs Go, bun, tmux, agent-browser, jq, and ffmpeg.
+
+- **Another picture:** add an entry to `shots` in `scripts/demo/shots.ts`: the report, the width, the flags or keys, and whether it is for posts.
+- **Another story:** add a report in `scripts/demo/main.go`: its machines, their logins and readings, and how much each spends a day on which project.
+- **After a change to the report's schema:** run the script again. `--from` refuses a report of another `schema_version`.

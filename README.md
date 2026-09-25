@@ -4,6 +4,13 @@ ai-usage shows how much of your Claude Code, Codex, Grok, and Hermes quota you h
 
 It is one small binary for macOS, Linux, and Windows. The system scheduler runs it every 15 minutes. Each run reads what those tools already record on disk, asks the installed tools for your account and quota, and exits. A run can also publish an encrypted summary for this machine to a small relay, and read the summaries of the other machines in your team.
 
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/demo/team-light.png">
+  <img alt="The ai-usage report of a made-up team: two laptops, a server, and nine bots that share one Codex login" src="docs/demo/team.png">
+</picture>
+
+That team is made up; [docs/demo](docs/demo) has its report and more pictures, and `ai-usage report --from docs/demo/team.json` shows it in your terminal. The same page as text, for another made-up team:
+
 ```
 ai-usage · annbook · team qmvrtzpa                                  ● collected 7m ago  ● relay 7m ago  ● up to date
 
@@ -244,6 +251,7 @@ Or, from a clone with the Vercel CLI logged in, run `sh scripts/deploy-relay.sh`
 | `ai-usage [--json] [--offline] [VIEW] [DISPLAY]` | collect now and print the report; `--offline` skips the relay |
 | `ai-usage collect [--quiet] [--json] [--offline] [--home DIR] [VIEW] [DISPLAY]` | the same; the scheduler runs `collect --quiet --home DIR`, and `--home` overrides `AI_USAGE_HOME` |
 | `ai-usage report [--json] [VIEW] [DISPLAY]` | print the last collected report without collecting |
+| `ai-usage report --from FILE [VIEW] [DISPLAY]` | show a report saved with `--json`, such as one in [docs/demo](docs/demo), instead of this machine's; it reads no state and collects nothing |
 | `ai-usage status [--json] [DISPLAY]` | version, last success, last error, relay, schedule, update, and each tool's state, with full error texts |
 | `ai-usage team` | the team fingerprint and its machines |
 | `ai-usage team key` | print the team's private key |

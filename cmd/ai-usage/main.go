@@ -31,6 +31,7 @@ import (
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
+	"github.com/neoromantic/ai-usage/internal/tui"
 	"github.com/neoromantic/ai-usage/internal/view"
 	"github.com/neoromantic/ai-usage/relay"
 )
@@ -603,12 +604,16 @@ func loadResult(d state.Dir) (*collect.Result, error) {
 func cmdReport(ctx context.Context, args []string, stdout io.Writer) error {
 	fs := flags("report")
 	jsonOut := fs.Bool("json", false, "")
+	from := fs.String("from", "", "")
 	disp := displayFlags(fs, true)
 	if err := parse(fs, args); err != nil {
 		return err
 	}
 	if err := disp.check(); err != nil {
 		return err
+	}
+	if *from != "" {
+		return reportFrom(ctx, *from, *jsonOut, disp, stdout)
 	}
 	d, err := dir()
 	if err != nil {
@@ -628,6 +633,35 @@ func cmdReport(ctx context.Context, args []string, stdout io.Writer) error {
 		return showView(ctx, d, res, relayURL(res.Config), disp, false, stdout)
 	}
 	return printReport(stdout, d, res, relayURL(res.Config), *jsonOut, false, disp)
+}
+
+// reportFrom shows a report saved with --json, such as a teammate's or a
+// demo's, rather than this device's. It reads no state and collects
+// nothing, so the interactive view has no `r`.
+func reportFrom(ctx context.Context, path string, jsonOut bool, disp *display, stdout io.Writer) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var r view.Report
+	if err := json.Unmarshal(b, &r); err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	if r.SchemaVersion != view.SchemaVersion {
+		return fmt.Errorf("%s: schema_version %d, this release reads %d", path, r.SchemaVersion, view.SchemaVersion)
+	}
+	if jsonOut {
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(r)
+	}
+	if disp.interactive(stdout, false, false) {
+		o := disp.options(stdout, false)
+		o.Width = disp.width
+		return tui.Run(ctx, tui.Config{Report: r, Options: o, Profile: disp.profile(stdout)}, os.Stdin, stdout)
+	}
+	_, err = io.WriteString(disp.writer(stdout), view.Text(r, disp.options(stdout, true)))
+	return err
 }
 
 func cmdStatus(args []string, stdout io.Writer) error {
