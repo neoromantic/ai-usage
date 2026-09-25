@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -182,10 +183,20 @@ const claudeFresh = 10 * time.Minute
 // claudeUsageTimeout bounds that read, which takes a few seconds.
 var claudeUsageTimeout = time.Minute
 
-// claudeGuardModel names no model. /usage ignores it, since it calls none.
-// A Claude Code that cannot run /usage without a terminal sends it to the
-// model as a prompt instead, and that fails before it spends a token.
+// claudeGuardModel names no model. /usage calls none and ignores it, and no
+// Claude Code since 2.1.0 sends /usage to a model: one that does not know
+// /usage says so. The name stays as a safety net, so that one that sent it
+// to a model as a prompt would fail before it spends a token. From about
+// 2.1.251, Claude Code warns on stderr at every run that its model catalog
+// does not describe the name, which is no error.
 const claudeGuardModel = "ai-usage-no-model"
+
+// claudeModelMissing reports whether a line says that the model
+// claudeGuardModel names does not exist, as it would were /usage sent to it.
+func claudeModelMissing(l string) bool {
+	return strings.Contains(l, claudeGuardModel) &&
+		(strings.Contains(l, "may not exist") || strings.Contains(l, "not found") || strings.Contains(l, "not_found"))
+}
 
 // claudeRefresh has Claude Code read the account's usage and cache it, as
 // its /usage dialog does. In print mode /usage is a local command: it calls
@@ -208,16 +219,18 @@ func claudeRefresh(ctx context.Context, env Env, bin, configDir string) error {
 	cmd.Stdout, cmd.Stderr = &said, &said
 	cmd.WaitDelay = time.Second
 	err := cmd.Run()
+	// The model catalog's warning is no error, even as the last line.
+	lines := slices.DeleteFunc(said.lines(), func(l string) bool { return strings.Contains(l, "model catalog") })
 	switch {
 	case err == nil:
 		return nil
 	case ctx.Err() != nil:
 		return errors.New("claude /usage: no answer in time")
-	case strings.Contains(said.String(), claudeGuardModel):
+	case slices.ContainsFunc(lines, claudeModelMissing):
 		return errors.New("claude /usage: not supported by this Claude Code; update it")
 	}
 	msg := "claude /usage: " + shortErr(err)
-	if l := said.String(); l != "" {
+	if l := errorOf(lines); l != "" {
 		msg += ": " + l
 	}
 	return errors.New(msg)

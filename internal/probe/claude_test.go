@@ -557,6 +557,8 @@ func TestClaudeUsageRefreshFails(t *testing.T) {
 		{usage: "fail", wantErr: "exit status 1", percent: 12},
 		// One that sent /usage to a model is too old to read it.
 		{usage: "old", wantErr: "update", percent: 12},
+		// The model catalog's warning, even as the last line, is not that.
+		{usage: "catalog-fail", wantErr: "claude /usage: exit status 1", percent: 12},
 		{usage: "write-then-fail", percent: 7},
 		// Claude Code exits 0 when it could not reach the usage.
 		{usage: "no-write", wantErr: "/usage", percent: 12},

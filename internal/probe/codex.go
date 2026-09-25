@@ -127,15 +127,22 @@ func (l *lastLine) Write(p []byte) (int, error) {
 
 var terminalCodes = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
 
-// String is the last line that says it is an error, or else the last line
-// that is not a hint, a stack frame, or a runtime's version, as a command-line
-// parser, Node, or a Rust panic prints after the error. A line cut at a comma
-// is joined with the one after it.
-func (l *lastLine) String() string {
+// String is the line of the lines kept that errorOf picks.
+func (l *lastLine) String() string { return errorOf(l.lines()) }
+
+// lines are the lines kept, without terminal colors, control characters, or
+// blank lines.
+func (l *lastLine) lines() []string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	return printedLines(string(l.tail))
+}
+
+// printedLines are the lines of what a program printed, without terminal
+// colors, control characters, or blank lines.
+func printedLines(s string) []string {
 	var lines []string
-	for _, line := range strings.Split(terminalCodes.ReplaceAllString(string(l.tail), ""), "\n") {
+	for _, line := range strings.Split(terminalCodes.ReplaceAllString(s, ""), "\n") {
 		line = strings.TrimSpace(strings.Map(func(r rune) rune {
 			if unicode.IsControl(r) {
 				return ' '
@@ -146,6 +153,14 @@ func (l *lastLine) String() string {
 			lines = append(lines, line)
 		}
 	}
+	return lines
+}
+
+// errorOf is the last line that says it is an error, or else the last line
+// that is not a hint, a stack frame, or a runtime's version, as a command-line
+// parser, Node, or a Rust panic prints after the error. A line cut at a comma
+// is joined with the one after it.
+func errorOf(lines []string) string {
 	for i := len(lines) - 1; i >= 0; i-- {
 		if !errorLine.MatchString(lines[i]) {
 			continue

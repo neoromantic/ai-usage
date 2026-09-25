@@ -229,15 +229,19 @@ func stdinState() string {
 
 // fakeClaudeUsage is `claude -p /usage`, in the way PROBE_USAGE names. By
 // default it caches a fresh reading of 7% in the config file PROBE_CACHE
-// names, if any, for the account logged in there, as Claude Code does.
+// names, if any, for the account logged in there, as Claude Code does. Like
+// Claude Code from 2.1.251, it first warns on stderr that its model catalog
+// does not describe the model it was given.
 func fakeClaudeUsage(mode string, args []string, rec *os.File) int {
+	model := args[slices.Index(args, "--model")+1]
+	catalog := fmt.Sprintf("%q isn't described by this version's model catalog; update Claude Code, or map it with behavesAs in settings.", model)
+	fmt.Fprintln(os.Stderr, catalog)
 	switch mode {
 	case "fail":
 		fmt.Fprintln(os.Stderr, "Error: usage is unavailable right now")
 		return 1
 	case "old":
 		// Sent to the model as a prompt, which the API does not know.
-		model := args[slices.Index(args, "--model")+1]
 		fmt.Printf("There's an issue with the selected model (%s). It may not exist or you may not have access to it.\n", model)
 		return 1
 	case "hang":
@@ -245,6 +249,10 @@ func fakeClaudeUsage(mode string, args []string, rec *os.File) int {
 	case "no-write":
 		fmt.Println("Current session: usage unavailable")
 		return 0
+	case "catalog-fail":
+		// The model catalog's warning is the last line.
+		fmt.Fprintln(os.Stderr, catalog)
+		return 1
 	}
 	if path := os.Getenv("PROBE_CACHE"); path != "" {
 		body, err := os.ReadFile(path)
