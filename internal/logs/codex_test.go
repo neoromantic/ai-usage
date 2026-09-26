@@ -175,26 +175,25 @@ func TestCodexSubAgentsRollIntoRoot(t *testing.T) {
 }
 
 // A fork replays its parent's history, token_count lines included, and then
-// continues the parent's cumulative total.
+// continues the parent's cumulative total. A forked sub-agent rolls into its
+// parent without the replay.
 func TestCodexForkCountsOnlyItsOwnRequests(t *testing.T) {
 	replay := func(at string) []string {
 		return []string{cxCount(at, e1[0], e1[1]), cxCount(at, e2[0], e2[1])}
 	}
 	// A user's fork, which stays its own session, is in TestReadHomesCountsAcrossHomesOnce.
-	t.Run("forked sub-agent rolls in without its replay", func(t *testing.T) {
-		home := t.TempDir()
-		mustWrite(t, rollout(home, "sessions", "20", rootID), rootLines...)
-		lines := []string{cxMeta{at: "2026-09-20T11:00:00.000Z", id: kidA, session: rootID, cwd: "/work/app", source: spawnedBy(rootID), extra: `,"forked_from_id":"` + rootID + `"`}.String()}
-		lines = append(lines, replay("2026-09-20T11:00:00.000Z")...)
-		lines = append(lines, cxCount("2026-09-20T11:00:09.000Z", u{3000, 2300, 95}, u{500, 400, 15}))
-		mustWrite(t, rollout(home, "sessions", "20", kidA), lines...)
+	home := t.TempDir()
+	mustWrite(t, rollout(home, "sessions", "20", rootID), rootLines...)
+	lines := []string{cxMeta{at: "2026-09-20T11:00:00.000Z", id: kidA, session: rootID, cwd: "/work/app", source: spawnedBy(rootID), extra: `,"forked_from_id":"` + rootID + `"`}.String()}
+	lines = append(lines, replay("2026-09-20T11:00:00.000Z")...)
+	lines = append(lines, cxCount("2026-09-20T11:00:09.000Z", u{3000, 2300, 95}, u{500, 400, 15}))
+	mustWrite(t, rollout(home, "sessions", "20", kidA), lines...)
 
-		res := mustRead(t, "codex", home, since)
-		want := rootOwn.Add(Tokens{Input: 100, CacheRead: 400, Output: 15})
-		if len(res.Sessions) != 1 || res.Sessions[0].Tokens != want {
-			t.Fatalf("sessions = %+v, want one with %+v", res.Sessions, want)
-		}
-	})
+	res := mustRead(t, "codex", home, since)
+	want := rootOwn.Add(Tokens{Input: 100, CacheRead: 400, Output: 15})
+	if len(res.Sessions) != 1 || res.Sessions[0].Tokens != want {
+		t.Fatalf("sessions = %+v, want one with %+v", res.Sessions, want)
+	}
 }
 
 // A fork whose parent file is gone starts from a seeded total with no last
@@ -319,37 +318,6 @@ func TestCodexLegacyTotalsWithoutLastUsage(t *testing.T) {
 	if got := byID(t, res, "rollout-bare"); got.Tokens != (Tokens{Input: 3, Output: 1}) || got.Project != UnknownProject {
 		t.Fatalf("bare = %+v", got)
 	}
-}
-
-func TestCodexOneThreadInTwoFiles(t *testing.T) {
-	t.Run("archived copy counts once", func(t *testing.T) {
-		home := t.TempDir()
-		live := rollout(home, "sessions", "20", rootID)
-		archived := rollout(home, "archived_sessions", "20", rootID)
-		mustWrite(t, live, rootLines...)
-		mustWrite(t, archived, rootLines...)
-		ageFile(t, live, now.Add(-2*time.Hour))
-		ageFile(t, archived, now.Add(-time.Hour))
-		res := mustRead(t, "codex", home, since)
-		got := byID(t, res, rootID)
-		if len(res.Sessions) != 1 || got.Tokens != rootOwn || !got.Updated.Equal(now.Add(-time.Hour)) {
-			t.Fatalf("sessions = %+v", res.Sessions)
-		}
-	})
-	t.Run("pages add up", func(t *testing.T) {
-		home := t.TempDir()
-		mustWrite(t, rollout(home, "sessions", "20", rootID), rootLines...)
-		// A later page continues the same thread's cumulative total.
-		mustWrite(t, filepath.Join(home, "sessions", "2026", "09", "21", "rollout-2026-09-21T10-00-00-"+rootID+".jsonl"),
-			cxMeta{at: "2026-09-20T10:00:00.000Z", id: rootID, cwd: "/work/app", extra: `,"history_base":{"thread_id":"` + rootID + `","end_ordinal_exclusive":6,"end_byte_offset":4096}`}.String(),
-			cxCount("2026-09-21T10:00:05.000Z", u{3000, 2300, 90}, u{500, 400, 10}),
-		)
-		res := mustRead(t, "codex", home, since)
-		want := rootOwn.Add(Tokens{Input: 100, CacheRead: 400, Output: 10})
-		if len(res.Sessions) != 1 || byID(t, res, rootID).Tokens != want {
-			t.Fatalf("sessions = %+v, want %+v", res.Sessions, want)
-		}
-	})
 }
 
 func TestCodexMtimeWindow(t *testing.T) {
@@ -613,14 +581,25 @@ func TestCodexHours(t *testing.T) {
 	})
 	t.Run("a thread in two files", func(t *testing.T) {
 		home := t.TempDir()
-		mustWrite(t, rollout(home, "sessions", "20", rootID), rootLines...)
-		mustWrite(t, rollout(home, "archived_sessions", "20", rootID), rootLines...)
+		live := rollout(home, "sessions", "20", rootID)
+		archived := rollout(home, "archived_sessions", "20", rootID)
+		mustWrite(t, live, rootLines...)
+		mustWrite(t, archived, rootLines...)
 		// A later page continues the thread.
-		mustWrite(t, filepath.Join(home, "sessions", "2026", "09", "21", "rollout-2026-09-21T10-00-00-"+rootID+".jsonl"),
+		page := filepath.Join(home, "sessions", "2026", "09", "21", "rollout-2026-09-21T10-00-00-"+rootID+".jsonl")
+		mustWrite(t, page,
 			cxMeta{at: "2026-09-20T10:00:00.000Z", id: rootID, cwd: "/work/app", extra: `,"history_base":{"thread_id":"` + rootID + `","end_ordinal_exclusive":6,"end_byte_offset":4096}`}.String(),
 			cxCount("2026-09-21T10:00:05.000Z", u{3000, 2300, 90}, u{500, 400, 10}),
 		)
+		ageFile(t, page, now.Add(-3*time.Hour))
+		ageFile(t, live, now.Add(-2*time.Hour))
+		ageFile(t, archived, now.Add(-time.Hour))
 		res := mustRead(t, "codex", home, since)
-		checkHours(t, byID(t, res, rootID), map[string]int64{"2026-09-20T10:00:00Z": 680, "2026-09-21T10:00:00Z": 110})
+		got := byID(t, res, rootID)
+		want := rootOwn.Add(Tokens{Input: 100, CacheRead: 400, Output: 10})
+		if len(res.Sessions) != 1 || got.Tokens != want || !got.Updated.Equal(now.Add(-time.Hour)) {
+			t.Fatalf("sessions = %+v, want one with %+v", res.Sessions, want)
+		}
+		checkHours(t, got, map[string]int64{"2026-09-20T10:00:00Z": 680, "2026-09-21T10:00:00Z": 110})
 	})
 }

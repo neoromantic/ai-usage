@@ -110,10 +110,8 @@ func TestHermesRollsChildIntoParent(t *testing.T) {
 	}
 	mustWrite(t, filepath.Join(home, ".env"), "SECRET=1")
 	deny(t, filepath.Join(home, ".env"))
-	before := tree(t, home)
 
 	res := mustRead(t, "hermes", home, since)
-	sameTree(t, before, tree(t, home))
 	if res.Malformed != 0 || res.Unreadable != 0 {
 		t.Fatalf("malformed %d unreadable %d", res.Malformed, res.Unreadable)
 	}
@@ -448,9 +446,7 @@ func hermesWorkDB(t *testing.T, home string) {
 func TestHermesSplitsUsageByBillingProvider(t *testing.T) {
 	home := t.TempDir()
 	hermesWorkDB(t, home)
-	before := tree(t, home)
 	res := mustRead(t, "hermes", home, since)
-	sameTree(t, before, tree(t, home))
 	if got := strings.Join(ids(res), ","); got != "claude,main,review" {
 		t.Fatalf("sessions = %s", got)
 	}

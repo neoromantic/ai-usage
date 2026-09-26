@@ -207,6 +207,10 @@ func TestClaudeOneSessionInTwoProjects(t *testing.T) {
 	if got.ID != "dup" || got.Project != "/work/a" {
 		t.Fatalf("session = %+v", got)
 	}
+	// The messages with a time spent 33 and 44. The 12 without one, the
+	// anonymous lines and the sub-agent, go along in proportion, with what
+	// rounding leaves to the largest hour.
+	checkHours(t, got, map[string]int64{"2026-09-20T10:00:00Z": 38, "2026-09-21T10:00:00Z": 51})
 }
 
 func TestClaudeWindowAndCredentialFiles(t *testing.T) {
@@ -442,14 +446,5 @@ func TestClaudeHours(t *testing.T) {
 			"2026-09-21T05:30:00Z": 11,
 		})
 		checkHours(t, byID(t, res, "copy"), map[string]int64{"2026-09-21T09:00:00Z": 44})
-	})
-	t.Run("one session in two projects", func(t *testing.T) {
-		home := t.TempDir()
-		shared := cl{id: "m1", req: "r1", session: "dup", cwd: "/work/a", at: "2026-09-20T10:00:00Z", usage: use(10, 1, 0, 0)}.String()
-		mustWrite(t, filepath.Join(home, "projects", "-work-a", "dup.jsonl"), shared)
-		mustWrite(t, filepath.Join(home, "projects", "-work-b", "dup.jsonl"), shared,
-			cl{id: "m2", req: "r2", session: "dup", cwd: "/work/a", at: "2026-09-21T10:00:00Z", usage: use(40, 4, 0, 0)}.String())
-		res := mustRead(t, "claude", home, since)
-		checkHours(t, byID(t, res, "dup"), map[string]int64{"2026-09-20T10:00:00Z": 11, "2026-09-21T10:00:00Z": 44})
 	})
 }
