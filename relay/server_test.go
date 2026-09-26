@@ -94,6 +94,9 @@ func TestPutRejects(t *testing.T) {
 	if n := len(stored(t, e, fp)); n != 0 {
 		t.Fatalf("%d documents stored after rejected writes", n)
 	}
+	if n := len(stored(t, e, other.Fingerprint())); n != 0 {
+		t.Fatalf("%d documents stored under the team a rejected body named", n)
+	}
 
 	t.Run("method not allowed", func(t *testing.T) {
 		req := putRequest(t, e.ts.URL, fp, dev, body, pub, sig(k, body))
@@ -259,6 +262,9 @@ func TestDelete(t *testing.T) {
 	req = signedRequest(t, e.ts.URL, http.MethodDelete, "/v1/teams/"+fp+"/devices/BAD", k, http.MethodDelete, fp, "BAD", t0)
 	if resp, _ := send(t, req); resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("bad device path: status = %d", resp.StatusCode)
+	}
+	if _, ok := stored(t, e, fp)["device-two"]; !ok {
+		t.Fatal("a rejected delete removed device-two")
 	}
 
 	if err := c.Remove(ctx, "device-two"); err != nil {
