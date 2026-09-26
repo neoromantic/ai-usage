@@ -58,8 +58,9 @@ To try an installer against local files, serve the folder and point the installe
 
 `.github/workflows/ci.yml` runs on pushes to `main` and on pull requests:
 
-- `gofmt`, `go build`, and `go vet` with the oldest Go that `go.mod` allows
+- `gofmt` and `go build` with the oldest Go that `go.mod` allows
 - `sh -n` and ShellCheck on the shell scripts, and a PowerShell parse of `install.ps1`
 - a cross-compile of all six release files
-- `go vet` and `go test` on Linux, macOS, and Windows, plus `go test -race` on Linux
+- `go vet`, `staticcheck` and `deadcode -test` for Linux, macOS, and Windows, and `go mod tidy -diff`, with the stable Go
+- `go test` on Linux and macOS, plus `go test -race` on Linux; Windows is cross-compiled and installed by the smoke test, but its unit tests are not a gate
 - the installer smoke test on all three, which on Windows also registers the Task Scheduler task for real, checks that it runs on battery, and removes it

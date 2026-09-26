@@ -31,7 +31,6 @@ jobs:
             exit 1
           fi
       - run: go build ./...
-      - run: go vet ./...
       - name: Shell scripts
         run: |
           for f in install.sh scripts/*.sh .github/scripts/*.sh; do sh -n "$f"; done
@@ -58,7 +57,19 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: stable
-      - run: go vet ./...
+      - if: runner.os == 'Linux'
+        name: vet, staticcheck and deadcode for every release OS; go mod tidy
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
+          go install golang.org/x/tools/cmd/deadcode@v0.50.0
+          bin=$(go env GOPATH)/bin
+          for os in linux darwin windows; do
+            GOOS=$os go vet ./...
+            GOOS=$os "$bin/staticcheck" ./...
+            d=$(GOOS=$os "$bin/deadcode" -test ./...)
+            [ -z "$d" ] || { echo "$d"; exit 1; }
+          done
+          go mod tidy -diff
       - run: go test ./...
       - if: runner.os == 'Linux'
         run: go test -race ./...
