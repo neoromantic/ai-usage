@@ -14,10 +14,34 @@ var attentionOrder = []string{AttentionOut, AttentionOver, AttentionError, Atten
 // attention is what needs attention now, most urgent first: windows that
 // are out or will run out, devices that fail or are silent, devices on an
 // older release, and windows past half that will be left mostly unused.
-// This device's failed run, relay, and update check are errors of this
-// device, and another's failed update check is its error while it is old.
 func attention(t Team, c Collector, now time.Time) []Attention {
-	out := []Attention{}
+	out := append(append([]Attention{}, quotaAttention(t, now)...), deviceAttention(t, c)...)
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if ra, rb := slices.Index(attentionOrder, a.Kind), slices.Index(attentionOrder, b.Kind); ra != rb {
+			return ra < rb
+		}
+		switch a.Kind {
+		case AttentionOut, AttentionOver, AttentionSilent:
+			if ta, tb := when(a), when(b); !sameTime(ta, tb) {
+				return before(ta, tb)
+			}
+		case AttentionUnder:
+			if *a.Percent != *b.Percent {
+				return *a.Percent < *b.Percent
+			}
+		case AttentionError:
+			return a.Devices[0] < b.Devices[0]
+		}
+		return false
+	})
+	return out
+}
+
+// quotaAttention is the subscription windows that are out or will run out,
+// and the main windows past half that will be left mostly unused.
+func quotaAttention(t Team, now time.Time) []Attention {
+	var out []Attention
 	for _, p := range t.Providers {
 		for _, a := range p.Accounts {
 			if !a.Subscription || a.Quota == nil {
@@ -43,19 +67,27 @@ func attention(t Team, c Collector, now time.Time) []Attention {
 					at.Kind, at.At = AttentionOut, w.ResetsAt
 				case w.State == StateOver:
 					at.Kind, at.At, at.ResetsAt = AttentionOver, w.Forecast.RunsOutAt, w.ResetsAt
-					pct := w.Forecast.Percent
-					at.Percent = &pct
 				case w.State == StateUnder && w.Main && w.Forecast.Elapsed >= 0.5:
 					at.Kind, at.ResetsAt = AttentionUnder, w.ResetsAt
-					pct := w.Forecast.Percent
-					at.Percent = &pct
 				default:
 					continue
+				}
+				if at.Kind != AttentionOut {
+					pct := w.Forecast.Percent
+					at.Percent = &pct
 				}
 				out = append(out, at)
 			}
 		}
 	}
+	return out
+}
+
+// deviceAttention is the failing, silent, and old devices. This device's
+// failed run, relay, and update check are errors of this device, and
+// another's failed update check is its error while it is old.
+func deviceAttention(t Team, c Collector) []Attention {
+	var out []Attention
 	var old []string
 	var behind *time.Time
 	for _, d := range t.Devices {
@@ -92,25 +124,6 @@ func attention(t Team, c Collector, now time.Time) []Attention {
 		sort.Strings(old)
 		out = append(out, Attention{Kind: AttentionOld, Devices: old, Message: *t.Latest, At: timeOf(behind)})
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		a, b := out[i], out[j]
-		if ra, rb := slices.Index(attentionOrder, a.Kind), slices.Index(attentionOrder, b.Kind); ra != rb {
-			return ra < rb
-		}
-		switch a.Kind {
-		case AttentionOut, AttentionOver, AttentionSilent:
-			if ta, tb := when(a), when(b); !sameTime(ta, tb) {
-				return before(ta, tb)
-			}
-		case AttentionUnder:
-			if *a.Percent != *b.Percent {
-				return *a.Percent < *b.Percent
-			}
-		case AttentionError:
-			return a.Devices[0] < b.Devices[0]
-		}
-		return false
-	})
 	return out
 }
 
