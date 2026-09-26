@@ -11,7 +11,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -733,15 +732,5 @@ func TestCleanupOldUnderBrackets(t *testing.T) {
 		}
 	}
 	cleanupOld(exe)
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var left []string
-	for _, e := range entries {
-		left = append(left, e.Name())
-	}
-	if want := []string{"ai-usage.exe", "other.old-1"}; !reflect.DeepEqual(left, want) {
-		t.Fatalf("left %v, want %v", left, want)
-	}
+	onlyFiles(t, dir, "ai-usage.exe", "other.old-1")
 }
