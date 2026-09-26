@@ -90,6 +90,12 @@ func cmdAlias(args []string, stdout io.Writer) error {
 	}); err != nil {
 		return err
 	}
+	aliasDone(stdout, targets, name, was, clear)
+	return nil
+}
+
+// aliasDone says what the command changed and when the team sees it.
+func aliasDone(stdout io.Writer, targets []account, name, was string, clear bool) {
 	label, on := snapshot.Printable(targets[0].label), providersOf(targets)
 	same := ""
 	if len(targets) > 1 {
@@ -106,7 +112,6 @@ func cmdAlias(args []string, stdout io.Writer) error {
 	if len(targets) > 1 {
 		fmt.Fprintf(stdout, "a provider before the account, as in %s:%s, picks one alone\n", targets[len(targets)-1].provider, label)
 	}
-	return nil
 }
 
 type account struct{ provider, label string }
@@ -125,72 +130,82 @@ type aliasSet struct {
 type aliasBook struct {
 	accounts []account
 	names    map[string]aliasSet
+	seen     map[string]bool
 }
 
 func loadAliasBook(d state.Dir, cfg state.Config, st *state.State) *aliasBook {
-	b := &aliasBook{names: map[string]aliasSet{}}
-	seen := map[string]bool{}
-	add := func(p, l string) {
-		k := state.Key(p, l)
-		if l == "" || l == collect.UnknownAccount || !snapshot.KnownProvider(p) || seen[k] {
-			return
-		}
-		seen[k] = true
-		b.accounts = append(b.accounts, account{p, l})
-	}
-	note := func(p, l string, a aliasSet) {
-		k := state.Key(p, l)
-		cur, ok := b.names[k]
-		if !ok || snapshot.AliasWins(a.at, a.device, cur.at, cur.device) {
-			b.names[k] = a
-		}
-	}
+	b := &aliasBook{names: map[string]aliasSet{}, seen: map[string]bool{}}
 	for _, a := range collect.Totals(st) {
-		add(a.Provider, a.Label)
+		b.addAccount(a.Provider, a.Label)
 	}
 	for k, a := range cfg.Aliases {
 		parts := state.SplitKey(k)
 		if len(parts) != 2 || a.At.IsZero() {
 			continue
 		}
-		add(parts[0], parts[1])
-		note(parts[0], parts[1], aliasSet{name: a.Name, at: a.At, device: cfg.Device})
+		b.addAccount(parts[0], parts[1])
+		b.noteName(parts[0], parts[1], aliasSet{name: a.Name, at: a.At, device: cfg.Device})
 	}
-	// The other devices, as the team was last read. This device's own
-	// snapshot there may be older than its config.
-	if key, err := team.Load(d.KeyFile()); err == nil {
-		if cache, err := collect.LoadTeamCache(d); err == nil && cache.Team == key.Fingerprint() {
-			open := func(s string) (string, bool) {
-				v, err := key.Open(s)
-				return snapshot.Printable(v), err == nil
-			}
-			for _, doc := range cache.Docs {
-				if doc.Device == cfg.Device {
-					continue
-				}
-				for _, a := range doc.Accounts {
-					if l, ok := open(a.Label); ok {
-						add(a.Provider, l)
-					}
-				}
-				by, _ := open(doc.DeviceLabel)
-				for _, a := range doc.Aliases {
-					l, ok := open(a.Label)
-					n, nok := open(a.Name)
-					// A name this command would refuse is not one.
-					if !ok || !nok || (n != "" && snapshot.CheckAlias(n) != nil) {
-						continue
-					}
-					add(a.Provider, l)
-					note(a.Provider, l, aliasSet{name: n, at: a.At, device: doc.Device, by: cmp.Or(by, "unknown")})
-				}
-			}
-		}
-	}
+	b.addTeam(d, cfg.Device)
 	slices.SortFunc(b.accounts, func(x, y account) int {
 		return cmp.Or(cmp.Compare(slices.Index(snapshot.Providers, x.provider), slices.Index(snapshot.Providers, y.provider)), cmp.Compare(x.label, y.label))
 	})
 	return b
+}
+
+func (b *aliasBook) addAccount(p, l string) {
+	k := state.Key(p, l)
+	if l == "" || l == collect.UnknownAccount || !snapshot.KnownProvider(p) || b.seen[k] {
+		return
+	}
+	b.seen[k] = true
+	b.accounts = append(b.accounts, account{p, l})
+}
+
+func (b *aliasBook) noteName(p, l string, a aliasSet) {
+	k := state.Key(p, l)
+	cur, ok := b.names[k]
+	if !ok || snapshot.AliasWins(a.at, a.device, cur.at, cur.device) {
+		b.names[k] = a
+	}
+}
+
+// addTeam adds the other devices, as the team was last read. This device's
+// own snapshot there may be older than its config.
+func (b *aliasBook) addTeam(d state.Dir, self string) {
+	key, err := team.Load(d.KeyFile())
+	if err != nil {
+		return
+	}
+	cache, err := collect.LoadTeamCache(d)
+	if err != nil || cache.Team != key.Fingerprint() {
+		return
+	}
+	open := func(s string) (string, bool) {
+		v, err := key.Open(s)
+		return snapshot.Printable(v), err == nil
+	}
+	for _, doc := range cache.Docs {
+		if doc.Device == self {
+			continue
+		}
+		for _, a := range doc.Accounts {
+			if l, ok := open(a.Label); ok {
+				b.addAccount(a.Provider, l)
+			}
+		}
+		by, _ := open(doc.DeviceLabel)
+		for _, a := range doc.Aliases {
+			l, ok := open(a.Label)
+			n, nok := open(a.Name)
+			// A name this command would refuse is not one.
+			if !ok || !nok || (n != "" && snapshot.CheckAlias(n) != nil) {
+				continue
+			}
+			b.addAccount(a.Provider, l)
+			b.noteName(a.Provider, l, aliasSet{name: n, at: a.At, device: doc.Device, by: cmp.Or(by, "unknown")})
+		}
+	}
 }
 
 // alias is the name the team gave a, or "".
