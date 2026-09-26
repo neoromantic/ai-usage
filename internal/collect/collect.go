@@ -429,46 +429,10 @@ func (s *sampler) provider(ctx context.Context, p string, homes []string) state.
 	if len(homes) > 0 {
 		res = s.ReadLogs(p, homes, s.since)
 	}
-	// The Claude app's session homes have no login to ask about: the app
-	// recorded the account each session ran under.
-	apps := map[string]claudeAppSession{}
-	for _, h := range homes {
-		if rec := claudeAppRecord(p, h); rec != "" {
-			apps[h] = readClaudeAppSession(rec)
-		}
-	}
-	// Which homes have usage, and when each was last used, as the logs
-	// show.
-	used := map[string]bool{}
-	lastUse := map[string]time.Time{}
-	for _, rs := range res.Sessions {
-		for _, h := range append([]string{rs.Home}, rs.Homes...) {
-			used[h] = true
-			if rs.Updated.After(lastUse[h]) {
-				lastUse[h] = rs.Updated
-			}
-		}
-	}
-	// Claude homes that share their logs go unused: the logs give their
-	// sessions to one of them, and cannot say which login ran them.
-	for h := range sharedClaudeLogs(p, homes) {
-		delete(lastUse, h)
-	}
-	labels := map[string]string{}
-	var answers []answer
-	if p != "hermes" {
-		answers = askAll(ctx, func(ctx context.Context, p, home string) (probe.Reading, error) {
-			if _, ok := apps[home]; ok {
-				return probe.Reading{}, nil
-			}
-			return s.Ask(ctx, p, home, lastUse[home])
-		}, p, homes)
-	}
 	// partial means some home's read was incomplete, so a lower count than
 	// last time is a missing file rather than a real drop.
 	partial := false
-	var probeErrs [][2]string
-	for i, home := range homes {
+	for _, home := range homes {
 		hr := res.Homes[home]
 		if hr.Err != nil {
 			errs = append(errs, "read "+home+": "+shortErr(hr.Err))
@@ -483,67 +447,17 @@ func (s *sampler) provider(ctx context.Context, p string, homes []string) state.
 			errs = append(errs, fmt.Sprintf("%d unreadable files", hr.Unreadable))
 			partial = true
 		}
-		if app, ok := apps[home]; ok {
-			labels[home] = touchAccount(s.st, p, app.account()).Label
-		} else if p != "hermes" {
-			a := answers[i]
-			// An app's per-account home with nobody logged in is an account
-			// removed or not added yet, and a home with no usage is a tool
-			// installed but never used, as in a bot's image, which Claude
-			// Code makes its home for as soon as it is asked who is logged
-			// in. Neither is a problem.
-			if a.err != nil && !(errors.Is(a.err, probe.ErrNotLoggedIn) && (isManaged(p, home) || !used[home])) {
-				probeErrs = append(probeErrs, [2]string{home, shortErr(a.err)})
-			}
-			labels[home] = applyReading(s.st, p, home, a.reading, errors.Is(a.err, probe.ErrNotLoggedIn), hr.Limits, s.now, s.prevRun)
-		}
-	}
-	errs = append(errs, homeErrors(probeErrs, len(homes), s.UserHome)...)
-	if p != "hermes" {
-		claimUnknown(s.st, p, homes, answers, res, labels)
 	}
 	var read []readSession
-	for _, rs := range res.Sessions {
-		label, ok := labels[rs.Home]
-		if l := servedBy(s.st, p, rs, labels); l != "" {
-			label, ok = l, true
-		}
-		if p == "hermes" {
-			label = rs.Account
-		} else if !ok {
-			// A session from a home that was not probed has no account.
-			label = UnknownAccount
-		}
-		if label == "" {
-			label = UnknownAccount
-		}
-		if app, ok := apps[rs.Home]; ok {
-			rs.Project = app.project()
-		}
-		read = append(read, readSession{s: rs, label: label})
-	}
-	for _, r := range read {
-		if p == "hermes" {
-			touchAccount(s.st, p, r.label)
-		}
-		grown := attribute(s.st, p, r.s, r.label, partial, s.now, s.growth)
-		if p == "hermes" {
-			for l := range grown {
-				touchAccount(s.st, p, l)
-			}
-			s.linkGrowth(r.s, grown)
-		}
-	}
-	applyRejected(s.st, p, read, s.now, s.prevRun)
 	probed := homes
 	if p == "hermes" {
-		markHermesCurrent(s.st, read)
-		s.linkHermes(read, partial)
-		probed = nil
-		if len(homes) > 0 {
-			probed = []string{""}
-		}
+		read, probed = s.hermes(homes, res, partial)
+	} else {
+		var probeErrs []string
+		read, probeErrs = s.harness(ctx, p, homes, res, partial)
+		errs = append(errs, probeErrs...)
 	}
+	applyRejected(s.st, p, read, s.now, s.prevRun)
 	// An installed tool without its data directory has never been used, and
 	// nobody is logged in to it: logging in makes the directory. It is not
 	// asked, since asking would start it and it would make the directory
@@ -559,6 +473,81 @@ func (s *sampler) provider(ctx context.Context, p string, homes []string) state.
 	}
 	src.Error = snapshot.Truncate(strings.Join(dedupe(errs), "; "), 300)
 	return src
+}
+
+// harness asks each home of harness p who is logged in, labels each session
+// read with its account, and attributes the sessions' growth. It returns the
+// sessions and the probes' problems.
+func (s *sampler) harness(ctx context.Context, p string, homes []string, res logs.Result, partial bool) ([]readSession, []string) {
+	// The Claude app's session homes have no login to ask about: the app
+	// recorded the account each session ran under.
+	apps := claudeApps(p, homes)
+	used, lastUse := lastUses(p, homes, res)
+	answers := askAll(ctx, func(ctx context.Context, p, home string) (probe.Reading, error) {
+		if _, ok := apps[home]; ok {
+			return probe.Reading{}, nil
+		}
+		return s.Ask(ctx, p, home, lastUse[home])
+	}, p, homes)
+	labels := map[string]string{}
+	var probeErrs [][2]string
+	for i, home := range homes {
+		if app, ok := apps[home]; ok {
+			labels[home] = touchAccount(s.st, p, app.account()).Label
+			continue
+		}
+		a := answers[i]
+		// An app's per-account home with nobody logged in is an account
+		// removed or not added yet, and a home with no usage is a tool
+		// installed but never used, as in a bot's image, which Claude
+		// Code makes its home for as soon as it is asked who is logged
+		// in. Neither is a problem.
+		if a.err != nil && !(errors.Is(a.err, probe.ErrNotLoggedIn) && (isManaged(p, home) || !used[home])) {
+			probeErrs = append(probeErrs, [2]string{home, shortErr(a.err)})
+		}
+		labels[home] = applyReading(s.st, p, home, a.reading, errors.Is(a.err, probe.ErrNotLoggedIn), res.Homes[home].Limits, s.now, s.prevRun)
+	}
+	claimUnknown(s.st, p, homes, answers, res, labels)
+	var read []readSession
+	for _, rs := range res.Sessions {
+		label, ok := labels[rs.Home]
+		if l := servedBy(s.st, p, rs, labels); l != "" {
+			label, ok = l, true
+		}
+		if !ok || label == "" {
+			// A session from a home that was not probed has no account.
+			label = UnknownAccount
+		}
+		if app, ok := apps[rs.Home]; ok {
+			rs.Project = app.project()
+		}
+		read = append(read, readSession{s: rs, label: label})
+	}
+	for _, r := range read {
+		attribute(s.st, p, r.s, r.label, partial, s.now, s.growth)
+	}
+	return read, homeErrors(probeErrs, len(homes), s.UserHome)
+}
+
+// lastUses is which homes of p have usage, and when each was last used, as
+// the logs show.
+func lastUses(p string, homes []string, res logs.Result) (used map[string]bool, lastUse map[string]time.Time) {
+	used = map[string]bool{}
+	lastUse = map[string]time.Time{}
+	for _, rs := range res.Sessions {
+		for _, h := range append([]string{rs.Home}, rs.Homes...) {
+			used[h] = true
+			if rs.Updated.After(lastUse[h]) {
+				lastUse[h] = rs.Updated
+			}
+		}
+	}
+	// Claude homes that share their logs go unused: the logs give their
+	// sessions to one of them, and cannot say which login ran them.
+	for h := range sharedClaudeLogs(p, homes) {
+		delete(lastUse, h)
+	}
+	return used, lastUse
 }
 
 // answer is one home's reply to a probe.

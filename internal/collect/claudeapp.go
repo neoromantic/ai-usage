@@ -62,6 +62,18 @@ func claudeAppRecord(p, h string) string {
 	return ""
 }
 
+// claudeApps is the app's records of the homes of p that are its sessions'
+// homes, by home.
+func claudeApps(p string, homes []string) map[string]claudeAppSession {
+	apps := map[string]claudeAppSession{}
+	for _, h := range homes {
+		if rec := claudeAppRecord(p, h); rec != "" {
+			apps[h] = readClaudeAppSession(rec)
+		}
+	}
+	return apps
+}
+
 // claudeAppSession is what a run takes from the app's record of a session.
 // The record also holds the session's title, first message, and system
 // prompt, which are never decoded.
