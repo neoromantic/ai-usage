@@ -852,55 +852,7 @@ func joinTeam(ctx context.Context, d state.Dir, line string, stdout, stderr io.W
 func cmdRelay(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	sub, args := subcommand(args)
 	if sub == "serve" {
-		fs := flags("relay serve")
-		addr := fs.String("addr", ":8080", "")
-		ipHeader := fs.String("client-ip-header", "", "")
-		if err := parse(fs, args); err != nil {
-			return err
-		}
-		header := strings.TrimSpace(*ipHeader)
-		if strings.ContainsAny(header, " \t:") {
-			return usageError("--client-ip-header takes a header name, such as X-Real-Ip")
-		}
-		store, kind := relay.StoreFromEnv()
-		handler := relay.NewServer(store)
-		// Behind a reverse proxy, the header it sets names the client.
-		handler.ClientIPHeader = header
-		srv := &http.Server{
-			Addr:              *addr,
-			Handler:           handler,
-			ReadHeaderTimeout: 10 * time.Second,
-			ReadTimeout:       30 * time.Second,
-			WriteTimeout:      30 * time.Second,
-			IdleTimeout:       2 * time.Minute,
-			MaxHeaderBytes:    16 << 10,
-		}
-		// ListenAndServe returns as soon as the shutdown starts, so the command
-		// waits for it to finish. A bug in it closes the server and is the
-		// command's error rather than the end of the process.
-		stopped := make(chan error, 1)
-		go func() {
-			defer close(stopped)
-			defer func() {
-				if v := recover(); v != nil {
-					_ = srv.Close()
-					stopped <- fmt.Errorf("relay shutdown stopped by a bug: %v", v)
-				}
-			}()
-			<-ctx.Done()
-			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = srv.Shutdown(sctx)
-		}()
-		clients := "the connection's address"
-		if header != "" {
-			clients = header + " from a local proxy"
-		}
-		fmt.Fprintf(stderr, "relay listening on %s with %s store; clients by %s\n", *addr, kind, clients)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return err
-		}
-		return <-stopped
+		return relayServe(ctx, args, stderr)
 	}
 	d, cfg, err := loadConfig()
 	if err != nil {
@@ -940,6 +892,58 @@ func cmdRelay(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	default:
 		return usageError("unknown relay command " + sub)
 	}
+}
+
+func relayServe(ctx context.Context, args []string, stderr io.Writer) error {
+	fs := flags("relay serve")
+	addr := fs.String("addr", ":8080", "")
+	ipHeader := fs.String("client-ip-header", "", "")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	header := strings.TrimSpace(*ipHeader)
+	if strings.ContainsAny(header, " \t:") {
+		return usageError("--client-ip-header takes a header name, such as X-Real-Ip")
+	}
+	store, kind := relay.StoreFromEnv()
+	handler := relay.NewServer(store)
+	// Behind a reverse proxy, the header it sets names the client.
+	handler.ClientIPHeader = header
+	srv := &http.Server{
+		Addr:              *addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    16 << 10,
+	}
+	// ListenAndServe returns as soon as the shutdown starts, so the command
+	// waits for it to finish. A bug in it closes the server and is the
+	// command's error rather than the end of the process.
+	stopped := make(chan error, 1)
+	go func() {
+		defer close(stopped)
+		defer func() {
+			if v := recover(); v != nil {
+				_ = srv.Close()
+				stopped <- fmt.Errorf("relay shutdown stopped by a bug: %v", v)
+			}
+		}()
+		<-ctx.Done()
+		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(sctx)
+	}()
+	clients := "the connection's address"
+	if header != "" {
+		clients = header + " from a local proxy"
+	}
+	fmt.Fprintf(stderr, "relay listening on %s with %s store; clients by %s\n", *addr, kind, clients)
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return <-stopped
 }
 
 func cmdSchedule(ctx context.Context, args []string, stdout, stderr io.Writer) error {
