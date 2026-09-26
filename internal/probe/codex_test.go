@@ -149,7 +149,7 @@ func TestCodexAnswers(t *testing.T) {
 			if (err == nil) != (tc.wantErr == "") || !strings.Contains(errText(err), tc.wantErr) {
 				t.Errorf("error = %q, want one with %q", errText(err), tc.wantErr)
 			}
-			if got := saysLoggedOut(err); got != tc.loggedOut {
+			if got := errors.Is(err, ErrNotLoggedIn); got != tc.loggedOut {
 				t.Errorf("logged out = %v, want %v", got, tc.loggedOut)
 			}
 			if r.Account != tc.account || r.Plan != tc.plan {
@@ -296,7 +296,7 @@ func TestCodexAnswerEndsTheSearch(t *testing.T) {
 	ran := withRan(&env)
 	bundle(t, env.HomeDir, chatGPTApp, testNow)
 	_, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
-	if !saysLoggedOut(err) || len(*ran) != 1 {
+	if !errors.Is(err, ErrNotLoggedIn) || len(*ran) != 1 {
 		t.Errorf("ran %q, error %v", *ran, err)
 	}
 }

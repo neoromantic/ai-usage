@@ -655,13 +655,6 @@ func waitNoGoroutine(t *testing.T, fn string) {
 	}
 }
 
-// saysLoggedOut is how collect tells a harness that answered "nobody is
-// logged in" from one that did not answer.
-func saysLoggedOut(err error) bool {
-	var lo interface{ LoggedOut() bool }
-	return errors.As(err, &lo) && lo.LoggedOut()
-}
-
 func TestJoinedErrorsKeepLoggedOut(t *testing.T) {
 	err := joinErrors([]error{errors.New("claude auth status: slow"), notLoggedIn("claude"), errors.New("claude config is not JSON")})
 	for _, part := range []string{"slow", "not logged in", "not JSON"} {
@@ -669,10 +662,10 @@ func TestJoinedErrorsKeepLoggedOut(t *testing.T) {
 			t.Errorf("message %q lacks %q", errText(err), part)
 		}
 	}
-	if !saysLoggedOut(err) {
+	if !errors.Is(err, ErrNotLoggedIn) {
 		t.Error("the joined error lost the logged-out answer")
 	}
-	if saysLoggedOut(joinErrors([]error{errors.New("codex initialize: no answer in time")})) {
+	if errors.Is(joinErrors([]error{errors.New("codex initialize: no answer in time")}), ErrNotLoggedIn) {
 		t.Error("a timeout reads as logged out")
 	}
 	if joinErrors(nil) != nil {

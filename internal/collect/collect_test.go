@@ -606,10 +606,7 @@ func TestProbeErrorsNameTheirHome(t *testing.T) {
 }
 
 // notLoggedIn is how a probe says the harness answered and nobody is logged in.
-type notLoggedIn string
-
-func (e notLoggedIn) Error() string { return string(e) + ": not logged in" }
-func (notLoggedIn) LoggedOut() bool { return true }
+func notLoggedIn(p string) error { return fmt.Errorf("%s: %w", p, probe.ErrNotLoggedIn) }
 
 func TestHarnessThatSaysLoggedOutEndsCurrent(t *testing.T) {
 	w, o := newWorld(t)

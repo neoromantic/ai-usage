@@ -460,10 +460,10 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 			// installed but never used, as in a bot's image, which Claude
 			// Code makes its home for as soon as it is asked who is logged
 			// in. Neither is a problem.
-			if a.err != nil && !(isLoggedOut(a.err) && (isManaged(p, home) || !used[home])) {
+			if a.err != nil && !(errors.Is(a.err, probe.ErrNotLoggedIn) && (isManaged(p, home) || !used[home])) {
 				probeErrs = append(probeErrs, [2]string{home, shortErr(a.err)})
 			}
-			labels[home] = applyReading(st, p, home, a.reading, isLoggedOut(a.err), hr.Limits, now, prevRun)
+			labels[home] = applyReading(st, p, home, a.reading, errors.Is(a.err, probe.ErrNotLoggedIn), hr.Limits, now, prevRun)
 		}
 	}
 	errs = append(errs, homeErrors(probeErrs, len(homes), o.UserHome)...)
@@ -556,13 +556,6 @@ func askAll(ctx context.Context, ask func(context.Context, string, string) (prob
 		}
 	}
 	return out
-}
-
-// isLoggedOut reports whether a probe error is the harness answering that
-// nobody is logged in, rather than not answering at all.
-func isLoggedOut(err error) bool {
-	var lo interface{ LoggedOut() bool }
-	return errors.As(err, &lo) && lo.LoggedOut()
 }
 
 // applyReading records who is logged in at home, when that changed, and
@@ -773,7 +766,7 @@ func claimUnknown(st *state.State, p string, homes []string, answers []answer, r
 	claim := map[string]string{}
 	for i, home := range homes {
 		label := strings.TrimSpace(answers[i].reading.Account)
-		if label == "" && !isLoggedOut(answers[i].err) {
+		if label == "" && !errors.Is(answers[i].err, probe.ErrNotLoggedIn) {
 			continue
 		}
 		k := state.Key(p, home)

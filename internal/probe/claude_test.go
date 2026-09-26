@@ -314,7 +314,7 @@ func TestClaudeAnswers(t *testing.T) {
 			if (err == nil) != (tc.wantErr == "") || !strings.Contains(errText(err), tc.wantErr) {
 				t.Errorf("error = %q, want one with %q", errText(err), tc.wantErr)
 			}
-			if got := saysLoggedOut(err); got != tc.loggedOut {
+			if got := errors.Is(err, ErrNotLoggedIn); got != tc.loggedOut {
 				t.Errorf("logged out = %v, want %v", got, tc.loggedOut)
 			}
 			if r.Account != tc.account {
@@ -575,7 +575,7 @@ func TestClaudeUsageRefreshFails(t *testing.T) {
 			writeFile(t, file, claudeCache)
 			env.Environ = append(env.Environ, "PROBE_CACHE="+file)
 			r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", time.Now())
-			if (err == nil) != (tc.wantErr == "") || !strings.Contains(errText(err), tc.wantErr) || saysLoggedOut(err) {
+			if (err == nil) != (tc.wantErr == "") || !strings.Contains(errText(err), tc.wantErr) || errors.Is(err, ErrNotLoggedIn) {
 				t.Errorf("error = %q, want one with %q", errText(err), tc.wantErr)
 			}
 			if r.Account != "dev@example.com" || r.Quota == nil || r.Quota.Windows[0].Percent != tc.percent {

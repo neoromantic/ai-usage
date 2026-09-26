@@ -12,6 +12,8 @@ package probe
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,18 +42,18 @@ type Quota struct {
 	Windows []snapshot.Window
 }
 
-// notLoggedIn is the error of a harness that answered that nobody is logged
-// in. It is not used for a harness that did not answer, whether it timed out,
-// is missing, or printed something unreadable. collect tells the two apart
-// through LoggedOut: the first ends the current login, the second keeps it.
-type notLoggedIn string
+// ErrNotLoggedIn is the error of a harness that answered that nobody is
+// logged in. It is not used for a harness that did not answer, whether it
+// timed out, is missing, or printed something unreadable. collect tells the
+// two apart with errors.Is: the first ends the current login, the second
+// keeps it.
+var ErrNotLoggedIn = errors.New("not logged in")
 
-func (e notLoggedIn) Error() string { return string(e) + ": not logged in" }
-func (notLoggedIn) LoggedOut() bool { return true }
+func notLoggedIn(harness string) error { return fmt.Errorf("%s: %w", harness, ErrNotLoggedIn) }
 
 // joinErrors joins a probe's problems into one error whose message is the
 // messages in order, separated by "; ", and whose chain keeps each of them,
-// so errors.As still finds a notLoggedIn among them.
+// so errors.Is still finds ErrNotLoggedIn among them.
 func joinErrors(errs []error) error {
 	switch len(errs) {
 	case 0:
