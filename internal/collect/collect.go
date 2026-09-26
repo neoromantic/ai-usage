@@ -451,7 +451,6 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 	// partial means some home's read was incomplete, so a lower count than
 	// last time is a missing file rather than a real drop.
 	partial := false
-	legacy := legacyNamed(st, p)
 	var probeErrs [][2]string
 	for i, home := range homes {
 		hr := res.Homes[home]
@@ -485,7 +484,7 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 	}
 	errs = append(errs, homeErrors(probeErrs, len(homes), o.UserHome)...)
 	if p != "hermes" {
-		claimUnknown(st, p, homes, answers, res, labels, legacy)
+		claimUnknown(st, p, homes, answers, res, labels)
 	}
 	var read []readSession
 	for _, s := range res.Sessions {
@@ -776,24 +775,6 @@ func homeErrors(errs [][2]string, homes int, userHome string) []string {
 	return out
 }
 
-// legacyNamed reports whether the ledger is from before the homes that
-// answered were recorded, and has an account of p that a harness named. Such
-// a ledger does not know which homes answered, and none of them claims. An
-// account only the Claude app's records name was never seen by a harness.
-func legacyNamed(st *state.State, p string) bool {
-	for k := range st.Answered {
-		if state.SplitKey(k)[0] == p {
-			return false
-		}
-	}
-	for _, a := range st.Accounts {
-		if a.Provider == p && a.Label != UnknownAccount && !a.LastSeenAt.IsZero() {
-			return true
-		}
-	}
-	return false
-}
-
 // claimUnknown gives the account a home first names the usage counted there
 // while that home had never answered, as the first run gives an account the
 // history before it. Until then, as when an old binary cannot answer, that
@@ -803,9 +784,8 @@ func legacyNamed(st *state.State, p string) bool {
 // for a file several homes hold, by the account servedBy names when a home
 // logged in to it claims this run. A home whose logs were not all read this
 // run claims at a later one, since the sessions it missed would stay unknown.
-// labels are this run's accounts by home. legacy is legacyNamed from before
-// this run's readings.
-func claimUnknown(st *state.State, p string, homes []string, answers []answer, res logs.Result, labels map[string]string, legacy bool) {
+// labels are this run's accounts by home.
+func claimUnknown(st *state.State, p string, homes []string, answers []answer, res logs.Result, labels map[string]string) {
 	claim := map[string]string{}
 	for i, home := range homes {
 		label := strings.TrimSpace(answers[i].reading.Account)
@@ -819,12 +799,9 @@ func claimUnknown(st *state.State, p string, homes []string, answers []answer, r
 		if st.Answered[k] {
 			continue
 		}
-		if !legacy && label != "" && label != UnknownAccount {
+		if label != "" && label != UnknownAccount {
 			if hr := res.Homes[home]; hr.Err != nil || hr.Unreadable > 0 {
-				// It claims at a run that reads them all. The entry still
-				// tells this ledger from one older than Answered.
-				st.Answered[k] = false
-				continue
+				continue // It claims at a run that reads them all.
 			}
 			claim[home] = label
 		}

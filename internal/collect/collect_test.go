@@ -398,7 +398,7 @@ func TestClaimTakesTheUnknownHours(t *testing.T) {
 	}}
 	home := "/home/sam/.codex"
 	res := logs.Result{Sessions: []logs.Session{{ID: "s1", Home: home}}, Homes: map[string]logs.HomeRead{home: {}}}
-	claimUnknown(st, "codex", []string{home}, []answer{{reading: probe.Reading{Account: "ann@acme.dev"}}}, res, map[string]string{home: "ann@acme.dev"}, false)
+	claimUnknown(st, "codex", []string{home}, []answer{{reading: probe.Reading{Account: "ann@acme.dev"}}}, res, map[string]string{home: "ann@acme.dev"})
 	if a := totalsFor(t, st, "codex", "ann@acme.dev"); a.Tokens != tok(100) || !reflect.DeepEqual(a.Hours, map[int64]int64{h - 5: 110}) {
 		t.Errorf("ann = %d tokens in %v, want 110 at h-5", logs.InOut(a.Tokens), a.Hours)
 	}
@@ -581,37 +581,6 @@ func TestClaimOnceAfterTheAccountAgesOut(t *testing.T) {
 	res := run(t, o)
 	if b := totalsFor(t, res.State, "codex", "bea@x"); !b.Tokens.Zero() {
 		t.Fatalf("a later account claimed usage from before it: %+v", b)
-	}
-}
-
-// A ledger from before homes were recorded, whose harness named an account,
-// claims nothing.
-func TestLegacyLedgerWithANamedAccountDoesNotClaim(t *testing.T) {
-	w, o := newWorld(t)
-	h := w.home(t, "codex")
-	k := state.Key("codex", h)
-	w.login("codex", h, "ann@x", nil)
-	w.sessions("codex", h, sess("s1", "/p", 500, t0))
-	run(t, o)
-	w.askErr[k] = errors.New("no answer")
-	w.now = t0.Add(15 * time.Minute)
-	w.sessions("codex", h, sess("s1", "/p", 500, t0), sess("s2", "/q", 300, w.now))
-	delete(w.readings, k)
-	run(t, o)
-	st, err := o.Dir.LoadState()
-	if err != nil {
-		t.Fatal(err)
-	}
-	st.Answered = nil
-	if err := o.Dir.SaveState(st); err != nil {
-		t.Fatal(err)
-	}
-	w.now = t0.Add(30 * time.Minute)
-	delete(w.askErr, k)
-	w.login("codex", h, "bea@x", nil)
-	res := run(t, o)
-	if b := totalsFor(t, res.State, "codex", "bea@x"); !b.Tokens.Zero() {
-		t.Fatalf("bea = %+v", b)
 	}
 }
 

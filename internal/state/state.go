@@ -151,9 +151,8 @@ type State struct {
 	// Answered keys, by provider and home, the homes whose harness has
 	// answered who is logged in there, or that nobody is, at some run. It is
 	// never pruned: usage counted before a home first answers is given to
-	// the account it names then, and only then. False is a home that named
-	// an account in a run that could not read all its logs; it claims at a
-	// run that does.
+	// the account it names then, and only then. A false entry reads as not
+	// answered.
 	Answered map[string]bool `json:"answered,omitempty"`
 	// Switched is, by provider and home, when a run last found another
 	// account logged in there than the run before it, or nobody. A request
