@@ -58,19 +58,27 @@ func encode(t *testing.T, d Doc) []byte {
 // TestWireFormat pins the snapshot bytes deployed collectors sign. The relay
 // takes a body only when it is exactly the encoding of what Decode reads from
 // it, so a change that fails this test makes it refuse their snapshots. The
-// golden uses every member and is written by hand: never regenerate it.
+// golden uses every member and is written by hand: never regenerate it. It
+// sets last_error and aliases, so the minimal document beside it, which
+// leaves them out, pins their omitempty.
 func TestWireFormat(t *testing.T) {
 	golden, err := os.ReadFile(filepath.Join("testdata", "v1.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	golden = bytes.TrimSpace(golden)
-	d, err := Decode(golden)
-	if err != nil {
-		t.Fatalf("Decode: %v", err)
-	}
-	if b := encode(t, d); !bytes.Equal(b, golden) {
-		t.Fatalf("the wire format changed:\n%s\n%s", golden, b)
+	minimal := `{"v":1,"team":"a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2","device":"mac-0123abcd","device_label":"Ab-_","os_user":"Ab-_",` +
+		`"collector_version":"v1.2.3","collected_at":"2026-09-23T12:00:00Z","last_success_at":"2026-09-23T11:45:00Z",` +
+		`"accounts":[{"provider":"codex","label":"Ab-_","current":true,"plan":"pro","quota_at":"2026-09-23T11:59:00Z",` +
+		`"windows":[{"name":"7d","percent":40,"resets_at":"2026-09-25T00:00:00Z","minutes":10080}],"sessions":1,` +
+		`"tokens":{"input":1,"output":2,"cache_read":3,"cache_write":4},"projects":[]}],"sources":[]}`
+	for _, body := range [][]byte{bytes.TrimSpace(golden), []byte(minimal)} {
+		d, err := Decode(body)
+		if err != nil {
+			t.Fatalf("Decode: %v", err)
+		}
+		if b := encode(t, d); !bytes.Equal(b, body) {
+			t.Fatalf("the wire format changed:\n%s\n%s", body, b)
+		}
 	}
 }
 
