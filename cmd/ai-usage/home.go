@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -198,7 +199,7 @@ func homePath(h string, mustExist bool) (string, error) {
 
 func addHomes(cfg *state.Config, userHome, p string, homes []string, refs []homeRef) {
 	add := func(p, h string) {
-		if h == filepath.Join(userHome, "."+p) || contains(cfg.Homes[p], h) {
+		if h == filepath.Join(userHome, "."+p) || slices.Contains(cfg.Homes[p], h) {
 			return
 		}
 		if cfg.Homes == nil {
@@ -233,7 +234,7 @@ func removeHomes(cfg *state.Config, userHome, p string, homes []string, forget b
 		if h == filepath.Join(userHome, "."+p) && (!named || forget) {
 			return errors.New(h + " is the default " + p + " home, which is always read")
 		}
-		if !contains(cfg.Homes[p], h) && !named && !forget {
+		if !slices.Contains(cfg.Homes[p], h) && !named && !forget {
 			return errors.New(h + " is not an added " + p + " home")
 		}
 		// Hermes homes would quietly fall back to the default login.
@@ -288,7 +289,7 @@ func listHomes(cfg state.Config, userHome string, stdout io.Writer) error {
 				name = ""
 			}
 			var notes []string
-			if contains(cfg.Homes[p], h) {
+			if slices.Contains(cfg.Homes[p], h) {
 				notes = append(notes, "added")
 			}
 			if p == "hermes" {
@@ -303,13 +304,13 @@ func listHomes(cfg state.Config, userHome string, stdout io.Writer) error {
 		var missing []string
 		gone := map[string]bool{}
 		for _, h := range cfg.Homes[p] {
-			if !contains(found[p], h) {
+			if !slices.Contains(found[p], h) {
 				gone[h] = true
 			}
 		}
 		if p == "hermes" {
 			for h := range cfg.QuotaFrom {
-				if !contains(found[p], h) {
+				if !slices.Contains(found[p], h) {
 					gone[h] = true
 				}
 			}
@@ -363,13 +364,4 @@ func samePath(a, b string) bool {
 	ra, errA := filepath.EvalSymlinks(a)
 	rb, errB := filepath.EvalSymlinks(b)
 	return errA == nil && errB == nil && ra == rb
-}
-
-func contains(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
 }

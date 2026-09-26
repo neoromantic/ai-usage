@@ -302,7 +302,7 @@ func TestHermesUnusableDatabase(t *testing.T) {
 		}},
 		{"truncated database", func(t *testing.T, home string) {
 			db := hermesDB(t, home, hermesColumns)
-			for i := 0; i < 200; i++ {
+			for i := range 200 {
 				hermesRow{id: strings.Repeat("x", 100) + string(rune('a'+i%26)) + strings.Repeat("y", i), in: 1}.insert(t, db)
 			}
 			db.Close()

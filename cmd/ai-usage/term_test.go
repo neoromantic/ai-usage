@@ -23,7 +23,7 @@ func firstLineWidth(s string) int {
 // widest is how wide the widest line of s is.
 func widest(s string) int {
 	w := 0
-	for _, l := range strings.Split(s, "\n") {
+	for l := range strings.SplitSeq(s, "\n") {
 		w = max(w, utf8.RuneCountInString(l))
 	}
 	return w

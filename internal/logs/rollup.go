@@ -1,6 +1,9 @@
 package logs
 
-import "slices"
+import (
+	"cmp"
+	"slices"
+)
 
 // UnknownProject is the project of a session whose log names no directory.
 const UnknownProject = "unknown"
@@ -37,20 +40,14 @@ func dedupeSessions(in []Session) []Session {
 }
 
 func fillFrom(dst *Session, src Session) {
-	if dst.ParentID == "" {
-		dst.ParentID = src.ParentID
-	}
-	if dst.Project == "" {
-		dst.Project = src.Project
-	}
-	if dst.Account == "" {
-		dst.Account = src.Account
-	}
+	dst.ParentID = cmp.Or(dst.ParentID, src.ParentID)
+	dst.Project = cmp.Or(dst.Project, src.Project)
+	dst.Account = cmp.Or(dst.Account, src.Account)
 	if src.Updated.After(dst.Updated) {
 		dst.Updated = src.Updated
 	}
 	for _, h := range src.Homes {
-		if !containsString(dst.Homes, h) {
+		if !slices.Contains(dst.Homes, h) {
 			dst.Homes = append(dst.Homes, h)
 		}
 	}
@@ -105,15 +102,6 @@ func addParts(dst *Session, src Session) {
 	for a, t := range src.Parts {
 		dst.Parts[a] = dst.Parts[a].Add(t)
 	}
-}
-
-func containsString(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
 }
 
 // rollup adds each sub-agent's tokens onto its root session.

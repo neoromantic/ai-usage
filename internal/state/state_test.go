@@ -151,9 +151,7 @@ func TestEditConfigKeepsConcurrentEdits(t *testing.T) {
 	d := tempDir(t)
 	var wg sync.WaitGroup
 	for i := range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, err := d.EditConfig(func(c *Config) error {
 				if c.Homes == nil {
 					c.Homes = map[string][]string{}
@@ -164,7 +162,7 @@ func TestEditConfigKeepsConcurrentEdits(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	c, err := d.LoadConfig()

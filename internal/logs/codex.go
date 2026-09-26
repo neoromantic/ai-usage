@@ -2,12 +2,15 @@ package logs
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -107,7 +110,7 @@ func walkCodex(root, home string, since time.Time, stale map[string]string, link
 			return nil
 		}
 		if first, ok := linked.find(d.Name(), info); ok {
-			if first != nil && first.home != home && !containsString(first.mirrors, home) {
+			if first != nil && first.home != home && !slices.Contains(first.mirrors, home) {
 				first.mirrors = append(first.mirrors, home)
 			}
 			return nil
@@ -124,9 +127,7 @@ func walkCodex(root, home string, since time.Time, stale map[string]string, link
 		if err != nil {
 			out.Unreadable++
 		}
-		if f.id == "" {
-			f.id = strings.TrimSuffix(d.Name(), ".jsonl")
-		}
+		f.id = cmp.Or(f.id, strings.TrimSuffix(d.Name(), ".jsonl"))
 		f.home = home
 		f.updated = info.ModTime().UTC()
 		f.fresh = true
@@ -299,11 +300,7 @@ func codexLimits(files []*codexFile) *Limits {
 			}
 		}
 	}
-	buckets := make([]string, 0, len(newest))
-	for b := range newest {
-		buckets = append(buckets, b)
-	}
-	sort.Strings(buckets)
+	buckets := slices.Sorted(maps.Keys(newest))
 	anchor := newest[codexMainLimit]
 	if anchor == nil {
 		for _, b := range buckets {
@@ -394,15 +391,9 @@ func parseCodex(path string) (*codexFile, int, error) {
 
 func (f *codexFile) meta(row codexLine) {
 	p := row.Payload
-	f.id = p.ID
-	if f.id == "" {
-		f.id = p.SessionID
-	}
+	f.id = cmp.Or(p.ID, p.SessionID)
 	f.project = strings.TrimSpace(p.Cwd)
-	f.parent = spawnParent(p.Source)
-	if f.parent == "" {
-		f.parent = p.ParentThreadID
-	}
+	f.parent = cmp.Or(spawnParent(p.Source), p.ParentThreadID)
 	// session_id names the root thread of a sub-agent.
 	if f.parent == "" && p.SessionID != "" && p.SessionID != f.id {
 		f.parent = p.SessionID
@@ -503,25 +494,16 @@ func (u codexUsage) since(prev codexUsage) codexUsage {
 	if u.Input < prev.Input {
 		return u
 	}
-	pos := func(a, b int64) int64 {
-		if a > b {
-			return a - b
-		}
-		return 0
-	}
 	return codexUsage{
-		Input:      pos(u.Input, prev.Input),
-		Cached:     pos(u.Cached, prev.Cached),
-		Output:     pos(u.Output, prev.Output),
-		CacheWrite: pos(u.CacheWrite, prev.CacheWrite),
+		Input:      max(u.Input-prev.Input, 0),
+		Cached:     max(u.Cached-prev.Cached, 0),
+		Output:     max(u.Output-prev.Output, 0),
+		CacheWrite: max(u.CacheWrite-prev.CacheWrite, 0),
 	}
 }
 
 func (u codexUsage) tokens() Tokens {
-	input := u.Input - u.Cached
-	if input < 0 {
-		input = 0
-	}
+	input := max(u.Input-u.Cached, 0)
 	return Tokens{Input: input, Output: u.Output, CacheRead: u.Cached, CacheWrite: u.CacheWrite}
 }
 
@@ -620,10 +602,7 @@ func (l *codexLogLimits) reading(at time.Time) (string, *Limits) {
 	if l == nil || at.IsZero() || (l.Primary == nil && l.Secondary == nil) {
 		return "", nil
 	}
-	bucket := l.LimitID
-	if bucket == "" {
-		bucket = codexMainLimit
-	}
+	bucket := cmp.Or(l.LimitID, codexMainLimit)
 	out := &Limits{ObservedAt: at.UTC(), Plan: l.PlanType}
 	for _, w := range []*codexLogWindow{l.Primary, l.Secondary} {
 		if w == nil {

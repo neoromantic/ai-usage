@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -28,7 +29,7 @@ var agentPath = []string{"/usr/bin", "/bin", "/usr/sbin", "/sbin"}
 func AgentPlist(exe, home, path string) string {
 	dirs := pathDirs(path)
 	for _, d := range agentPath {
-		if !contains(dirs, d) {
+		if !slices.Contains(dirs, d) {
 			dirs = append(dirs, d)
 		}
 	}
@@ -247,7 +248,7 @@ func (s Scheduler) disabled(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	for _, l := range strings.Split(string(out), "\n") {
+	for l := range strings.SplitSeq(string(out), "\n") {
 		k, v, ok := strings.Cut(strings.TrimSpace(l), " => ")
 		if ok && k == `"`+AgentLabel+`"` {
 			return v == "disabled" || v == "true"

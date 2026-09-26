@@ -10,6 +10,7 @@ import (
 	"io"
 	"os/exec"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -142,7 +143,7 @@ func (l *lastLine) lines() []string {
 // colors, control characters, or blank lines.
 func printedLines(s string) []string {
 	var lines []string
-	for _, line := range strings.Split(terminalCodes.ReplaceAllString(s, ""), "\n") {
+	for line := range strings.SplitSeq(terminalCodes.ReplaceAllString(s, ""), "\n") {
 		line = strings.TrimSpace(strings.Map(func(r rune) rune {
 			if unicode.IsControl(r) {
 				return ' '
@@ -161,24 +162,24 @@ func printedLines(s string) []string {
 // parser, Node, or a Rust panic prints after the error. A line cut at a comma
 // is joined with the one after it.
 func errorOf(lines []string) string {
-	for i := len(lines) - 1; i >= 0; i-- {
-		if !errorLine.MatchString(lines[i]) {
+	for i, line := range slices.Backward(lines) {
+		if !errorLine.MatchString(line) {
 			continue
 		}
 		// A panic since Rust 1.73 says where on one line and why on the next.
-		if strings.Contains(lines[i], "panicked at") && strings.HasSuffix(lines[i], ":") && i+1 < len(lines) && !hint(lines[i+1]) {
+		if strings.Contains(line, "panicked at") && strings.HasSuffix(line, ":") && i+1 < len(lines) && !hint(lines[i+1]) {
 			return truncate(lines[i+1], 160)
 		}
-		return truncate(lines[i], 160)
+		return truncate(line, 160)
 	}
-	for i := len(lines) - 1; i >= 0; i-- {
-		if hint(lines[i]) {
+	for i, line := range slices.Backward(lines) {
+		if hint(line) {
 			continue
 		}
 		if i > 0 && strings.HasSuffix(lines[i-1], ",") {
-			return truncate(lines[i-1]+" "+lines[i], 160)
+			return truncate(lines[i-1]+" "+line, 160)
 		}
-		return truncate(lines[i], 160)
+		return truncate(line, 160)
 	}
 	return ""
 }

@@ -273,7 +273,7 @@ func (p helpPaint) wrap(text string, width int) []string {
 	var line strings.Builder
 	n := 0
 	code := false
-	for _, w := range strings.Fields(text) {
+	for w := range strings.FieldsSeq(text) {
 		ww := 0
 		var styled strings.Builder
 		for i, part := range strings.Split(w, "`") {

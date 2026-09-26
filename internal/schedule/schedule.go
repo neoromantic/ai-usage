@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf16"
@@ -100,7 +101,8 @@ func execRunner(ctx context.Context, name string, args []string, stdin []byte) (
 	if err != nil {
 		msg := strings.TrimSpace(stderr.String())
 		if msg != "" {
-			return out, fmt.Errorf("%s: %s", name, firstLine(msg))
+			line, _, _ := strings.Cut(msg, "\n")
+			return out, fmt.Errorf("%s: %s", name, line)
 		}
 		return out, fmt.Errorf("%s: %w", name, err)
 	}
@@ -120,7 +122,7 @@ func Line(exe, home, path string) string {
 	withRequired := func(dirs []string) []string {
 		out := append([]string(nil), dirs...)
 		for _, d := range cronPath {
-			if !contains(out, d) {
+			if !slices.Contains(out, d) {
 				out = append(out, d)
 			}
 		}
@@ -130,10 +132,10 @@ func Line(exe, home, path string) string {
 	full := false
 	for _, d := range dirs {
 		switch {
-		case contains(cronPath, d):
+		case slices.Contains(cronPath, d):
 			kept = append(kept, d)
 		case full:
-		case len(cronLine(exe, home, withRequired(append(kept[:len(kept):len(kept)], d)))) > maxLine:
+		case len(cronLine(exe, home, withRequired(append(slices.Clip(kept), d)))) > maxLine:
 			// Stop at the first directory that does not fit, so no later
 			// directory takes over a lookup an earlier one would have won.
 			full = true
@@ -170,8 +172,8 @@ func args(home string, quote func(string) string) string {
 // cron's working directory, and repeats, which never win a lookup.
 func pathDirs(path string) []string {
 	var out []string
-	for _, d := range strings.Split(path, ":") {
-		if !strings.HasPrefix(d, "/") || contains(out, d) {
+	for d := range strings.SplitSeq(path, ":") {
+		if !strings.HasPrefix(d, "/") || slices.Contains(out, d) {
 			continue
 		}
 		out = append(out, d)
@@ -445,19 +447,3 @@ func shq(s string) string {
 
 // cronEscape keeps cron from reading % as the end of the command.
 func cronEscape(s string) string { return strings.ReplaceAll(s, "%", `\%`) }
-
-func contains(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
-}
-
-func firstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return s[:i]
-	}
-	return s
-}

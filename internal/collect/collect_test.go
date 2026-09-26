@@ -931,7 +931,7 @@ func TestHermesAttributesByBillingProvider(t *testing.T) {
 	}
 	// The newest session bills anthropic now. Its earlier openrouter share
 	// must not make openrouter current, on any run.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		w.now = w.now.Add(15 * time.Minute)
 		res = run(t, o)
 		if !IsCurrent(res.State, "hermes", "anthropic") || IsCurrent(res.State, "hermes", "openrouter") {
@@ -1370,7 +1370,7 @@ func TestUnbelievableQuotaTimesDoNotStopRuns(t *testing.T) {
 	}})
 	gh := w.home(t, "grok")
 	w.login("grok", gh, "gina", &probe.Quota{At: time.Date(-1, 1, 1, 0, 0, 0, 0, time.UTC), Source: "log", Windows: []snapshot.Window{{Name: "5h", Percent: 1}}})
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		w.now = t0.Add(time.Duration(i) * 15 * time.Minute)
 		res, err := Run(context.Background(), o)
 		if err != nil {

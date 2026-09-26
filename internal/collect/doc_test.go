@@ -239,10 +239,10 @@ func TestBuildDocFitsTheSizeLimit(t *testing.T) {
 		Sessions: map[string]*state.Session{},
 	}
 	// More accounts and projects than fit, each with a long path.
-	for a := 0; a < snapshot.MaxAccounts+4; a++ {
+	for a := range snapshot.MaxAccounts + 4 {
 		label := fmt.Sprintf("account-%02d@%s.example", a, strings.Repeat("x", 200))
 		st.Accounts[state.Key("claude", label)] = &state.Account{Provider: "claude", Label: label}
-		for p := 0; p < snapshot.MaxProjects+5; p++ {
+		for p := range snapshot.MaxProjects + 5 {
 			path := fmt.Sprintf("/Users/анна/%s/project-%02d", strings.Repeat("каталог/", 60), p)
 			st.Sessions[state.Key("claude", fmt.Sprintf("%d-%d", a, p))] = &state.Session{
 				Provider: "claude", Project: path, Updated: t0,
@@ -277,7 +277,7 @@ func TestBuildDocFitsTheSizeLimit(t *testing.T) {
 func TestFitDocDropsAccountsWhenProjectsAreNotEnough(t *testing.T) {
 	big := strings.Repeat("A", snapshot.MaxSealed)
 	doc := snapshot.Doc{Accounts: []snapshot.Account{}}
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		doc.Accounts = append(doc.Accounts, snapshot.Account{Provider: "claude", Label: big, Windows: []snapshot.Window{}, Projects: []snapshot.Project{}})
 	}
 	fitDoc(&doc)

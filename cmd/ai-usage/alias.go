@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"flag"
 	"fmt"
@@ -205,7 +206,7 @@ func loadAliasBook(d state.Dir, cfg state.Config, st *state.State) *aliasBook {
 						continue
 					}
 					add(a.Provider, l)
-					note(a.Provider, l, aliasSet{name: n, at: a.At, device: doc.Device, by: orUnknownName(by)})
+					note(a.Provider, l, aliasSet{name: n, at: a.At, device: doc.Device, by: cmp.Or(by, "unknown")})
 				}
 			}
 		}
@@ -222,13 +223,6 @@ func loadAliasBook(d state.Dir, cfg state.Config, st *state.State) *aliasBook {
 		return x.label < y.label
 	})
 	return b
-}
-
-func orUnknownName(s string) string {
-	if s == "" {
-		return "unknown"
-	}
-	return s
 }
 
 // alias is the name the team gave a, or "".

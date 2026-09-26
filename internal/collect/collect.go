@@ -561,12 +561,10 @@ func askAll(ctx context.Context, ask func(context.Context, string, string) (prob
 	out := make([]answer, len(homes))
 	var wg sync.WaitGroup
 	for i, home := range homes {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			defer func() { out[i].panicked = recover() }()
 			out[i].reading, out[i].err = ask(ctx, p, home)
-		}()
+		})
 	}
 	wg.Wait()
 	for _, a := range out {
@@ -1229,13 +1227,8 @@ func (r paths) resolve(p string) string {
 func quotaLinks(named map[string]map[string]string, r paths) map[string]map[string]string {
 	// Two spellings of one home merge in a fixed order, so the same entry
 	// wins every run.
-	homes := make([]string, 0, len(named))
-	for h := range named {
-		homes = append(homes, h)
-	}
-	sort.Strings(homes)
 	out := map[string]map[string]string{}
-	for _, h := range homes {
+	for _, h := range slices.Sorted(maps.Keys(named)) {
 		k := r.resolve(h)
 		for p, at := range named[h] {
 			if out[k] == nil {
@@ -1358,7 +1351,6 @@ func linkHermes(st *state.State, o Options, read []readSession, partial bool) {
 		for l, u := range uses[acct.Label] {
 			if top == nil || u.tokens > top.tokens ||
 				(u.tokens == top.tokens && (u.last.After(top.last) || (u.last.Equal(top.last) && l.Label < best.Label))) {
-				l := l
 				best, top = &l, u
 			}
 		}

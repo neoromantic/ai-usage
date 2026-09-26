@@ -80,7 +80,7 @@ func (l chunks) drawnWidth() int {
 func (l chunks) String() string {
 	end, last := l.drawn()
 	var b strings.Builder
-	for i := 0; i < end; i++ {
+	for i := range end {
 		c := l[i]
 		t := c.text
 		if i == end-1 {

@@ -18,7 +18,7 @@ func TestHelpLayout(t *testing.T) {
 		if ansi.Strip(colored) != plain || colored == plain {
 			t.Errorf("width %d: color changes the text, or adds none", width)
 		}
-		for _, l := range strings.Split(plain, "\n") {
+		for l := range strings.SplitSeq(plain, "\n") {
 			if ansi.StringWidth(l) > min(width, helpMax) {
 				t.Errorf("width %d: %q is wider", width, l)
 			}

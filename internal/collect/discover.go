@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -217,7 +218,7 @@ func Remember(remembered map[string][]string, userHome string, found map[string]
 			if isProfile(p, h, homes) || managedByDefault(p, h, userHome) || claudeAppRecord(p, h) != "" {
 				continue
 			}
-			if contains(remembered[p], h) {
+			if slices.Contains(remembered[p], h) {
 				continue
 			}
 			remembered[p] = append(remembered[p], h)
@@ -236,7 +237,7 @@ func unremembered(found map[string][]string, userHome string, remembered map[str
 	out := map[string][]string{}
 	for p, homes := range all {
 		for _, h := range homes {
-			if !contains(remembered[p], h) {
+			if !slices.Contains(remembered[p], h) {
 				out[p] = append(out[p], h)
 			}
 		}
@@ -262,7 +263,7 @@ func RememberEnv(remembered map[string]map[string]string, getenv func(string) st
 			continue
 		}
 		home := filepath.Clean(v)
-		if !contains(found[p], home) || remembered[p][home] == v {
+		if !slices.Contains(found[p], home) || remembered[p][home] == v {
 			continue
 		}
 		if remembered == nil {
@@ -283,13 +284,4 @@ func samePath(a, b string) bool {
 	a, errA := filepath.Abs(a)
 	b, errB := filepath.Abs(b)
 	return errA == nil && errB == nil && a == b
-}
-
-func contains(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
 }

@@ -93,7 +93,7 @@ func readRuns(t *testing.T, path string) []helperRecord {
 		t.Fatalf("fake harness left no record: %v", err)
 	}
 	var out []helperRecord
-	for _, l := range strings.Split(strings.TrimSpace(string(body)), "\n") {
+	for l := range strings.SplitSeq(strings.TrimSpace(string(body)), "\n") {
 		var r helperRecord
 		if json.Unmarshal([]byte(l), &r) == nil && r.Name != "" {
 			out = append(out, r)

@@ -2,15 +2,17 @@ package logs
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"math"
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -84,12 +86,7 @@ func readGrok(home string, since time.Time) (Result, error) {
 		return out, err
 	}
 
-	dirs := make([]string, 0, len(found))
-	for dir := range found {
-		dirs = append(dirs, dir)
-	}
-	sort.Strings(dirs)
-	for _, dir := range dirs {
+	for _, dir := range slices.Sorted(maps.Keys(found)) {
 		slot := found[dir]
 		if !freshEnough(slot.mod, since) {
 			continue
@@ -105,12 +102,8 @@ func readGrok(home string, since time.Time) (Result, error) {
 			if err != nil {
 				out.Unreadable++
 			} else {
-				if id != "" {
-					sess.ID = id
-				}
-				if project != "" {
-					sess.Project = project
-				}
+				sess.ID = cmp.Or(id, sess.ID)
+				sess.Project = cmp.Or(project, sess.Project)
 			}
 		}
 		if slot.updates != "" {
@@ -178,10 +171,7 @@ func parseGrokUpdates(path string) (Tokens, map[int64]int64, int, error) {
 		} else if at.IsZero() {
 			at = prev.at
 		}
-		input := usage.InputTokens - usage.CachedReadTokens
-		if input < 0 {
-			input = 0
-		}
+		input := max(usage.InputTokens-usage.CachedReadTokens, 0)
 		latest[prompt] = grokTurn{at: at, tokens: Tokens{
 			Input:      input,
 			Output:     usage.OutputTokens,

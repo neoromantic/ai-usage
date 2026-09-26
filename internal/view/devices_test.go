@@ -13,7 +13,7 @@ func TestMatrixMore(t *testing.T) {
 	r := loadReport(t, "team")
 	for w := 80; w <= 160; w += 4 {
 		for _, share := range []bool{false, true} {
-			for scroll := 0; scroll < 8; scroll++ {
+			for scroll := range 8 {
 				o := Options{Width: w, Loc: sampleZone, Share: share, Interactive: true, MatrixScroll: scroll}
 				p := Render(r, o)
 				heads := pageSection(p, "DEVICES")[1]

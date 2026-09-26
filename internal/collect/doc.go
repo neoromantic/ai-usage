@@ -1,6 +1,7 @@
 package collect
 
 import (
+	"cmp"
 	"encoding/json"
 	"maps"
 	"sort"
@@ -367,9 +368,9 @@ func BuildDoc(st *state.State, key *team.Key, cfg state.Config, hostname, osUser
 		V:                snapshot.Version,
 		Team:             key.Fingerprint(),
 		Device:           cfg.Device,
-		DeviceLabel:      seal(orUnknown(hostname)),
-		OSUser:           seal(orUnknown(osUser)),
-		CollectorVersion: orUnknown(snapshot.PlainLabel(version)),
+		DeviceLabel:      seal(cmp.Or(hostname, "unknown")),
+		OSUser:           seal(cmp.Or(osUser, "unknown")),
+		CollectorVersion: cmp.Or(snapshot.PlainLabel(version), "unknown"),
 		CollectedAt:      now,
 		LastSuccessAt:    st.LastSuccessAt,
 		LastError:        seal(lastError(st, version)),
@@ -521,11 +522,4 @@ func clip(s string, n int) string {
 		cut++
 	}
 	return "…" + s[cut:]
-}
-
-func orUnknown(s string) string {
-	if s == "" {
-		return "unknown"
-	}
-	return s
 }

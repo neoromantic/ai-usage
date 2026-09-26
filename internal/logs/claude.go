@@ -2,6 +2,7 @@ package logs
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -200,10 +201,7 @@ func addTracked(out []Session, files []*claudeFile, copied map[string]bool) []Se
 	}
 	counted := map[string]Tokens{}
 	for _, s := range out {
-		root := s.ID
-		if s.ParentID != "" {
-			root = s.ParentID
-		}
+		root := cmp.Or(s.ParentID, s.ID)
 		counted[root] = counted[root].Add(s.Tokens)
 	}
 	for i, s := range out {
@@ -227,12 +225,7 @@ type claudeFile struct {
 }
 
 // root is the session this file's usage rolls into.
-func (f *claudeFile) root() string {
-	if f.sess.ParentID != "" {
-		return f.sess.ParentID
-	}
-	return f.sess.ID
-}
+func (f *claudeFile) root() string { return cmp.Or(f.sess.ParentID, f.sess.ID) }
 
 type claudeMsg struct {
 	id      string
@@ -253,10 +246,7 @@ func parseClaude(path, id, parent string) (*claudeFile, int, error) {
 	sidechainOf := ""
 	sawSession := false
 	// Sub-agent lines carry their parent's session id.
-	own := id
-	if parent != "" {
-		own = parent
-	}
+	own := cmp.Or(parent, id)
 	long, err := forEachLine(path, func(line []byte) {
 		if !bytes.Contains(line, []byte(`"usage"`)) && !bytes.Contains(line, []byte(`"cwd"`)) && !bytes.Contains(line, []byte(`"cost-state"`)) {
 			return
@@ -289,10 +279,7 @@ func parseClaude(path, id, parent string) (*claudeFile, int, error) {
 		if row.Type != "assistant" || row.Message == nil || row.Message.Usage == nil {
 			return
 		}
-		msgID := row.Message.ID
-		if msgID == "" {
-			msgID = row.UUID
-		}
+		msgID := cmp.Or(row.Message.ID, row.UUID)
 		named := msgID != ""
 		if !named {
 			anon++

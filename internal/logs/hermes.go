@@ -1,6 +1,7 @@
 package logs
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
@@ -318,9 +319,7 @@ func hermesUsage(db querier) (map[string]*hermesSessionUsage, error) {
 		if isAux {
 			// Hermes leaves the route of a fallback call empty rather than
 			// credit the main loop's route with it.
-			if provider == "" {
-				provider = UnknownAccount
-			}
+			provider = cmp.Or(provider, UnknownAccount)
 			u.aux[provider] = u.aux[provider].Add(t)
 		} else {
 			u.main[provider] = u.main[provider].Add(t)

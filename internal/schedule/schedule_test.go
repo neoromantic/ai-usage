@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -160,7 +161,7 @@ func cronCommand(t *testing.T, line string) string {
 // a relative entry, and the system directories last.
 func longPath(n int) string {
 	var dirs []string
-	for i := 0; i < n; i++ {
+	for i := range n {
 		dirs = append(dirs, fmt.Sprintf("/Users/someone/.local/share/tools/pkg-%02d/bin", i))
 		if i == n/2 {
 			dirs = append(dirs, ".", "/usr/bin", dirs[0])
@@ -178,13 +179,13 @@ func TestLineFitsCronLimit(t *testing.T) {
 	start := strings.Index(line, "PATH='") + len("PATH='")
 	end := strings.Index(line[start:], "'") + start
 	got := strings.Split(line[start:end], ":")
-	if !contains(got, "/usr/bin") || !contains(got, "/bin") {
+	if !slices.Contains(got, "/usr/bin") || !slices.Contains(got, "/bin") {
 		t.Fatalf("trimmed PATH lost cron's defaults: %v", got)
 	}
 	// The kept directories are the leading ones, in their order.
 	own := func(ds []string) (out []string) {
 		for _, d := range ds {
-			if !contains(cronPath, d) {
+			if !slices.Contains(cronPath, d) {
 				out = append(out, d)
 			}
 		}

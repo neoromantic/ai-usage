@@ -383,7 +383,7 @@ func TestUsageSections(t *testing.T) {
 				continue
 			}
 			var cmd []string
-			for _, f := range strings.Fields(rest) {
+			for f := range strings.FieldsSeq(rest) {
 				if !word.MatchString(f) {
 					break
 				}
@@ -911,7 +911,7 @@ func TestHomeCommands(t *testing.T) {
 	out := d.ok("home", "add", "hermes", ".hermes-a", ".hermes-b", "--quota-from", "codex:.codex")
 	codex, a, b := filepath.Join(bots, ".codex"), filepath.Join(bots, ".hermes-a"), filepath.Join(bots, ".hermes-b")
 	lines := map[string]bool{}
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		lines[strings.Join(strings.Fields(line), " ")] = true
 	}
 	for _, want := range []string{

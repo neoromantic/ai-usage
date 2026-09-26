@@ -1,6 +1,7 @@
 package view
 
 import (
+	"cmp"
 	"sort"
 	"time"
 
@@ -50,7 +51,7 @@ func Build(in Input) Report {
 	totals := collect.Totals(st)
 	for _, p := range collect.Providers {
 		src := st.Sources[p]
-		pv := Provider{Provider: p, Status: orDefault(src.Status, "skipped"), Error: strPtr(src.Error), Homes: src.Homes, Accounts: []Account{}}
+		pv := Provider{Provider: p, Status: cmp.Or(src.Status, "skipped"), Error: strPtr(src.Error), Homes: src.Homes, Accounts: []Account{}}
 		if pv.Homes == nil {
 			pv.Homes = []string{}
 		}
@@ -258,11 +259,4 @@ func strPtr(s string) *string {
 		return nil
 	}
 	return &s
-}
-
-func orDefault(s, d string) string {
-	if s == "" {
-		return d
-	}
-	return s
 }
