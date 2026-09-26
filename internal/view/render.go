@@ -309,27 +309,6 @@ func (p *page) path(s string) string {
 	return fsutil.Tilde(s, p.home)
 }
 
-// dur prints a duration in at most two units: 34m, 7h 5m, 1d 23h, 12d.
-func dur(d time.Duration) string {
-	if d < time.Minute {
-		return "<1m"
-	}
-	m := int(d / time.Minute)
-	days, hours, mins := m/(60*24), m/60%24, m%60
-	switch {
-	case days > 0 && hours > 0:
-		return strconv.Itoa(days) + "d " + strconv.Itoa(hours) + "h"
-	case days > 0:
-		return strconv.Itoa(days) + "d"
-	case hours > 0 && mins > 0:
-		return strconv.Itoa(hours) + "h " + strconv.Itoa(mins) + "m"
-	case hours > 0:
-		return strconv.Itoa(hours) + "h"
-	default:
-		return strconv.Itoa(mins) + "m"
-	}
-}
-
 // millions prints tokens in whole millions: 603, 1210, <1 under a million,
 // and the none mark for nothing.
 func (p *page) millions(n int64) string {

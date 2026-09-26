@@ -73,14 +73,14 @@ func (p *page) header(pageWidth int) chunks {
 func (p *page) health() []healthItem {
 	c := p.r.Collector
 	t := p.th
-	// ago is "7m ago", or "just now"; short is "7m", or "now".
+	// since is "7m ago", or "just now"; short is "7m", or "now".
 	short := func(at *time.Time) string {
 		if at == nil {
 			return "never"
 		}
 		return age(p.now.Sub(*at))
 	}
-	ago := func(at *time.Time) string {
+	since := func(at *time.Time) string {
 		if s := short(at); s != "now" && s != "never" {
 			return s + " ago"
 		}
@@ -96,11 +96,11 @@ func (p *page) health() []healthItem {
 	case c.LastRunAt == nil:
 		out = append(out, healthItem{t.Out, "never collected", "never collected", false})
 	case failed(c):
-		out = append(out, healthItem{t.Out, "last run failed " + ago(c.LastErrorAt), "run failed", false})
+		out = append(out, healthItem{t.Out, "last run failed " + since(c.LastErrorAt), "run failed", false})
 	case !c.Schedule.Registered:
-		out = append(out, healthItem{t.Tight, "collected " + ago(c.LastSuccessAt) + ", not scheduled", "not scheduled", false})
+		out = append(out, healthItem{t.Tight, "collected " + since(c.LastSuccessAt) + ", not scheduled", "not scheduled", false})
 	default:
-		out = append(out, healthItem{t.OK, "collected " + ago(c.LastSuccessAt), "collected " + short(c.LastSuccessAt), false})
+		out = append(out, healthItem{t.OK, "collected " + since(c.LastSuccessAt), "collected " + short(c.LastSuccessAt), false})
 	}
 	rl := c.Relay
 	switch {
@@ -111,7 +111,7 @@ func (p *page) health() []healthItem {
 	case rl.Pending || rl.LastPushAt == nil:
 		out = append(out, healthItem{t.Tight, "relay pending", "relay pending", false})
 	default:
-		out = append(out, healthItem{t.OK, "relay " + ago(rl.LastPushAt), "relay " + short(rl.LastPushAt), false})
+		out = append(out, healthItem{t.OK, "relay " + since(rl.LastPushAt), "relay " + short(rl.LastPushAt), false})
 	}
 	up := c.Update
 	switch {

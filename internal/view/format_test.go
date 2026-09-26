@@ -12,21 +12,18 @@ import (
 func TestDurations(t *testing.T) {
 	m, h, d := time.Minute, time.Hour, 24*time.Hour
 	for _, c := range []struct {
-		d               time.Duration
-		span, age, ago_ string
+		d         time.Duration
+		age, ago_ string
 	}{
-		{30 * time.Second, "<1m", "now", "just now"},
-		{53 * m, "53m", "53m", "53m ago"},
-		{5*h + 53*m, "5h53m", "5h", "5h 53m ago"},
-		{5 * h, "5h", "5h", "5h ago"},
-		{14*h + 20*m, "14h", "14h", "14h ago"},
-		{3*d + 4*h + 10*m, "3d4h", "3d", "3d 4h ago"},
-		{3 * d, "3d", "3d", "3d ago"},
-		{12*d + 5*h, "12d", "12d", "12d ago"},
+		{30 * time.Second, "now", "just now"},
+		{53 * m, "53m", "53m ago"},
+		{5*h + 53*m, "5h", "5h 53m ago"},
+		{5 * h, "5h", "5h ago"},
+		{14*h + 20*m, "14h", "14h ago"},
+		{3*d + 4*h + 10*m, "3d", "3d 4h ago"},
+		{3 * d, "3d", "3d ago"},
+		{12*d + 5*h, "12d", "12d ago"},
 	} {
-		if got := span(c.d); got != c.span {
-			t.Errorf("span(%v) = %q, want %q", c.d, got, c.span)
-		}
 		if got := age(c.d); got != c.age {
 			t.Errorf("age(%v) = %q, want %q", c.d, got, c.age)
 		}

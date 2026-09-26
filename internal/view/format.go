@@ -175,28 +175,24 @@ func wrapItems(items []string, sep string, first, rest int) []string {
 	return append(out, cur)
 }
 
-// span prints a duration in at most five columns: 3d22h, 12d, 14h, 5h53m, 53m.
-func span(d time.Duration) string {
+// dur prints a duration in at most two units: 34m, 7h 5m, 1d 23h, 12d.
+func dur(d time.Duration) string {
 	if d < time.Minute {
 		return "<1m"
 	}
-	m := int(d.Minutes())
-	days, hours, mins := m/(60*24), (m/60)%24, m%60
+	m := int(d / time.Minute)
+	days, hours, mins := m/(60*24), m/60%24, m%60
 	switch {
-	case days >= 10:
-		return fmt.Sprintf("%dd", days)
 	case days > 0 && hours > 0:
-		return fmt.Sprintf("%dd%dh", days, hours)
+		return strconv.Itoa(days) + "d " + strconv.Itoa(hours) + "h"
 	case days > 0:
-		return fmt.Sprintf("%dd", days)
-	case hours >= 10:
-		return fmt.Sprintf("%dh", hours)
+		return strconv.Itoa(days) + "d"
 	case hours > 0 && mins > 0:
-		return fmt.Sprintf("%dh%dm", hours, mins)
+		return strconv.Itoa(hours) + "h " + strconv.Itoa(mins) + "m"
 	case hours > 0:
-		return fmt.Sprintf("%dh", hours)
+		return strconv.Itoa(hours) + "h"
 	default:
-		return fmt.Sprintf("%dm", mins)
+		return strconv.Itoa(mins) + "m"
 	}
 }
 
@@ -214,16 +210,18 @@ func age(d time.Duration) string {
 	}
 }
 
-// ago is the long form for status: "2h 5m ago".
+// ago is the long form for status: "2h 5m ago". From 10 hours it drops
+// the minutes, and from 10 days the hours.
 func ago(d time.Duration) string {
-	if d < time.Minute {
+	switch {
+	case d < time.Minute:
 		return "just now"
+	case d >= 10*24*time.Hour:
+		d = d.Truncate(24 * time.Hour)
+	case d >= 10*time.Hour:
+		d = d.Truncate(time.Hour)
 	}
-	s := strings.Replace(span(d), "d", "d ", 1)
-	if !strings.Contains(s, "d") && strings.HasSuffix(s, "m") {
-		s = strings.Replace(s, "h", "h ", 1)
-	}
-	return strings.TrimSpace(s) + " ago"
+	return dur(d) + " ago"
 }
 
 func clamp(v, lo, hi int) int {
