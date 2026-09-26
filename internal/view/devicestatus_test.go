@@ -8,9 +8,7 @@ import (
 	"time"
 )
 
-// statusRows are the device names of the DEVICES section's rows, in order,
-// as the matrix or the status view shows them; heads is how many lines are
-// over the rows.
+// statusRows are the device names of DEVICES' rows, in order, in either view.
 func statusRows(t *testing.T, p Page) []string {
 	t.Helper()
 	lines := pageSection(p, "DEVICES")

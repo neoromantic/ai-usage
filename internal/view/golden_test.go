@@ -14,7 +14,7 @@ import (
 
 var update = flag.Bool("update", false, "rewrite the golden files in testdata")
 
-// fixture loads a report from testdata.
+// loadReport loads a report from testdata.
 func loadReport(t *testing.T, name string) Report {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("testdata", name+".json"))
@@ -75,7 +75,6 @@ func TestGolden(t *testing.T) {
 			o.Share = true
 			return plainText(team, o)
 		}},
-		// A window whose percent is not known has a plain ? at the bottom.
 		{"team-share-color", func() string {
 			o := page(120)
 			o.Color, o.Dark, o.Share = true, true, true
