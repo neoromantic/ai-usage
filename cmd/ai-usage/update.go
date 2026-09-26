@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
@@ -26,6 +28,16 @@ const updateTimeout = 7 * time.Minute
 // such as one that does not start here, is not downloaded again. Runs still
 // look up the latest release, so a newer one is installed at once.
 const retryFailed = 6 * time.Hour
+
+// menuBarApp is where install.sh puts the macOS menu bar app, which
+// self-update keeps at the binary's release; "" on other systems.
+func menuBarApp() string {
+	home, err := os.UserHomeDir()
+	if runtime.GOOS != "darwin" || err != nil {
+		return ""
+	}
+	return filepath.Join(home, "Applications", selfupdate.AppBundle)
+}
 
 // housekeeping registers with the scheduler and applies self-update, both
 // inside the run lock. A development build does neither on its own. scheduled
@@ -66,12 +78,16 @@ func updateIfDue(ctx context.Context, st *state.State, now time.Time, scheduled 
 	}
 	u := newUpdater()
 	// A release that was downloaded and did not install would most likely
-	// fail the same way at every run.
-	if f := st.Update.Failed; f != nil {
-		if since := now.Sub(f.At); since >= 0 && since < retryFailed {
-			u.Skip = f.Tag
+	// fail the same way at every run, and so would its menu bar app.
+	skip := func(f *state.FailedRelease) string {
+		if f != nil {
+			if since := now.Sub(f.At); since >= 0 && since < retryFailed {
+				return f.Tag
+			}
 		}
+		return ""
 	}
+	u.Skip, u.SkipApp = skip(st.Update.Failed), skip(st.Update.AppFailed)
 	uctx, cancel := context.WithTimeout(ctx, updateTimeout)
 	defer cancel()
 	res, err := u.Check(uctx)
@@ -95,13 +111,20 @@ func noteUpdate(st *state.State, now time.Time, res selfupdate.Result, err error
 		// The latest release is still the one that failed, for the same
 		// reason as far as anyone knows.
 		st.Update.Error = st.Update.Failed.Error
+	case errors.Is(err, selfupdate.ErrAppSkipped) && st.Update.AppFailed != nil:
+		st.Update.Error = st.Update.AppFailed.Error
 	case err != nil:
 		st.Update.Error = err.Error()
-		if res.Downloaded {
+		// A binary that installed failed nothing: the error is the menu
+		// bar app's.
+		if res.Downloaded && !res.Installed {
 			st.Update.Failed = &state.FailedRelease{Tag: res.Latest, At: now, Error: err.Error()}
 		}
+		if res.AppDownloaded {
+			st.Update.AppFailed = &state.FailedRelease{Tag: res.Latest, At: now, Error: err.Error()}
+		}
 	default:
-		st.Update.Failed = nil
+		st.Update.Failed, st.Update.AppFailed = nil, nil
 	}
 	if res.Installed {
 		st.Update.Installed = res.Latest
@@ -131,7 +154,9 @@ func cmdUpdate(ctx context.Context, stdout, stderr io.Writer) error {
 	if serr := d.SaveState(st); serr != nil && err == nil {
 		err = serr
 	}
-	if err != nil {
+	// The menu bar app's error comes with the binary at the latest release,
+	// which is said first.
+	if err != nil && !errors.Is(err, selfupdate.ErrApp) {
 		return err
 	}
 	if res.Installed {
@@ -139,5 +164,8 @@ func cmdUpdate(ctx context.Context, stdout, stderr io.Writer) error {
 	} else {
 		fmt.Fprintf(stdout, "up to date (%s; latest %s)\n", version, res.Latest)
 	}
-	return nil
+	if res.AppDownloaded && err == nil {
+		fmt.Fprintf(stdout, "installed the menu bar app of %s\n", res.Latest)
+	}
+	return err
 }

@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -341,6 +343,105 @@ func TestFailedReleaseIsNotDownloadedAgain(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(exe); !bytes.Equal(b, g.bin) {
 		t.Fatal("binary was not replaced")
+	}
+}
+
+// The menu bar app's error after the binary installed is shown, but the
+// release did install: it is not one to skip.
+func TestAppErrorIsNotAFailedRelease(t *testing.T) {
+	st := &state.State{}
+	now := time.Now().UTC()
+	noteUpdate(st, now, selfupdate.Result{Latest: "v1.3.0", Installed: true, Downloaded: true}, errors.New("menu bar app: nope"))
+	if st.Update.Installed != "v1.3.0" || st.Update.Error != "menu bar app: nope" || st.Update.Failed != nil {
+		t.Fatalf("update = %+v", st.Update)
+	}
+}
+
+// A menu bar app that was downloaded and did not install is, like a
+// release, not downloaded again for retryFailed. Its error stays shown, and
+// a check that has nothing left to do forgets it.
+func TestFailedAppIsNotDownloadedAgain(t *testing.T) {
+	hermetic(t)
+	releaseBuild(t, "v1.3.0")
+	var u *selfupdate.Updater
+	made := newUpdater
+	newUpdater = func() *selfupdate.Updater {
+		u = made()
+		return u
+	}
+	t0 := time.Now().UTC().Truncate(time.Second)
+	appErr := fmt.Errorf("%w: rename: permission denied", selfupdate.ErrApp)
+	failed := func() *state.State {
+		st := &state.State{}
+		noteUpdate(st, t0, selfupdate.Result{Latest: "v1.3.0", AppDownloaded: true}, appErr)
+		return st
+	}
+	st := failed()
+	if f := st.Update.AppFailed; f == nil || f.Tag != "v1.3.0" || !f.At.Equal(t0) || st.Update.Failed != nil || st.Update.Error != appErr.Error() {
+		t.Fatalf("update = %+v", st.Update)
+	}
+	for _, tc := range []struct {
+		after time.Duration
+		skip  string
+	}{{15 * time.Minute, "v1.3.0"}, {retryFailed, ""}} {
+		updateIfDue(context.Background(), failed(), t0.Add(tc.after), true)
+		if u.SkipApp != tc.skip || u.Skip != "" {
+			t.Fatalf("after %s: skip %q, app %q; want app %q", tc.after, u.Skip, u.SkipApp, tc.skip)
+		}
+	}
+	noteUpdate(st, t0.Add(time.Hour), selfupdate.Result{Latest: "v1.3.0"}, selfupdate.ErrAppSkipped)
+	if st.Update.Error != appErr.Error() || st.Update.AppFailed == nil {
+		t.Fatalf("update of a skipped app = %+v", st.Update)
+	}
+	noteUpdate(st, t0.Add(2*time.Hour), selfupdate.Result{Latest: "v1.3.0"}, nil)
+	if st.Update.Error != "" || st.Update.AppFailed != nil {
+		t.Fatalf("update with nothing left to do = %+v", st.Update)
+	}
+}
+
+// ai-usage update says what became of the binary before the menu bar app's
+// error.
+func TestUpdateCommandWithAppError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions differ on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root can write anywhere")
+	}
+	hermetic(t)
+	d := newDevice(t)
+	exe, g := releaseBuild(t, "v1.3.0")
+	app := filepath.Join(t.TempDir(), "AI Usage.app")
+	plist := `<plist><dict><key>CFBundleShortVersionString</key><string>1.2.0</string></dict></plist>`
+	if err := os.MkdirAll(filepath.Join(app, "Contents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(app, "Contents", "Info.plist"), []byte(plist), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Dir(app), 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(filepath.Dir(app), 0o755) })
+	newUpdater = func() *selfupdate.Updater {
+		return &selfupdate.Updater{Current: version, Exe: exe, GitHub: g.URL, HTTP: g.Client(), GOOS: "darwin", App: app}
+	}
+	r := d.run("", "update")
+	if r.code != 1 || !strings.Contains(r.stdout, "up to date (v1.3.0; latest v1.3.0)") || !strings.Contains(r.stderr, "menu bar app: cannot write beside") {
+		t.Fatalf("update = %+v", r)
+	}
+}
+
+// Self-update keeps the app where install.sh puts it, on macOS only.
+func TestMenuBarApp(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	want := ""
+	if runtime.GOOS == "darwin" {
+		want = filepath.Join(home, "Applications", "AI Usage.app")
+	}
+	if got := menuBarApp(); got != want {
+		t.Fatalf("menuBarApp() = %q, want %q", got, want)
 	}
 }
 

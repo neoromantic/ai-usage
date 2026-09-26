@@ -1,6 +1,7 @@
 // Package selfupdate replaces the collector binary with the newest GitHub
 // release. The run that finds a release finishes on the old binary; the new
-// one is in place for the next run. There is no switch to turn it off.
+// one is in place for the next run. On macOS it also brings the menu bar app
+// to the binary's release. There is no switch to turn it off.
 package selfupdate
 
 import (
@@ -57,10 +58,26 @@ type Updater struct {
 	// install. Check does not download it again: it reports it as the latest
 	// with ErrSkipped.
 	Skip string
+	// App is the macOS menu bar app's bundle, which Check brings to the
+	// binary's release; "" for none. Check leaves it alone while no app is
+	// installed there.
+	App string
+	// SkipApp is a release whose menu bar app an earlier check downloaded
+	// and could not install. Check does not download it again: it leaves the
+	// app as it is, with ErrAppSkipped.
+	SkipApp string
 }
 
 // ErrSkipped is Check's answer when the latest release is Updater.Skip.
 var ErrSkipped = errors.New("the latest release did not install at an earlier check")
+
+// ErrApp is in every error of the menu bar app's that Check returns, which
+// starts with "menu bar app: ". The binary is at the latest release then.
+var ErrApp = errors.New("menu bar app")
+
+// ErrAppSkipped is Check's answer when the latest release is
+// Updater.SkipApp and the menu bar app is older.
+var ErrAppSkipped = fmt.Errorf("%w: the latest release did not install at an earlier check", ErrApp)
 
 var (
 	errStalled  = errors.New("download stalled")
@@ -99,6 +116,8 @@ type Result struct {
 	// Downloaded says the check downloaded the release's binary, whether or
 	// not it then installed it.
 	Downloaded bool
+	// AppDownloaded is the same for the release's menu bar app.
+	AppDownloaded bool
 }
 
 func (u *Updater) fill() error {
@@ -141,7 +160,10 @@ func Dev(version string) bool {
 	return !ok
 }
 
-// Check looks up the latest release and installs it when it is newer.
+// Check looks up the latest release and installs it when it is newer. Once
+// the binary is at that release, it brings the menu bar app there too. An
+// error of the app's wraps ErrApp, and the Result still says what happened
+// to the binary.
 func (u *Updater) Check(ctx context.Context) (Result, error) {
 	if Dev(u.Current) {
 		return Result{}, errors.New("development build; self-update applies to release builds")
@@ -156,21 +178,28 @@ func (u *Updater) Check(ctx context.Context) (Result, error) {
 		return Result{}, err
 	}
 	res := Result{Latest: tag}
+	app := func() (Result, error) {
+		res.AppDownloaded, err = u.updateApp(ctx, repo, tag)
+		return res, err
+	}
 	if !Newer(tag, u.Current) {
-		return res, nil
+		return app()
 	}
 	// A process that runs for long, such as the interactive view, can find a
 	// release that a scheduled run has already put in its place.
 	if v, err := reports(ctx, u.Exe); err == nil && !Dev(v) && !Newer(tag, v) {
 		res.Installed = true
-		return res, nil
+		return app()
 	}
 	if tag == u.Skip {
 		return res, ErrSkipped
 	}
 	res.Downloaded, err = u.install(ctx, repo, tag)
 	res.Installed = err == nil
-	return res, err
+	if err != nil {
+		return res, err
+	}
+	return app()
 }
 
 // install downloads release tag from repo, checks it and puts it in place of
@@ -314,12 +343,18 @@ func starts(ctx context.Context, bin, tag string) error {
 	if err != nil {
 		return err
 	}
-	got, ok1 := parse(v)
-	want, ok2 := parse(tag)
-	if !ok1 || !ok2 || got != want {
+	if !sameRelease(v, tag) {
 		return fmt.Errorf("it reports version %q", v)
 	}
 	return nil
+}
+
+// sameRelease reports whether version v is release tag, with or without the
+// leading v.
+func sameRelease(v, tag string) bool {
+	a, ok1 := parse(v)
+	b, ok2 := parse(tag)
+	return ok1 && ok2 && a == b
 }
 
 // swap puts the staged binary in place of exe. Windows cannot overwrite a

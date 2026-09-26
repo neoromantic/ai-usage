@@ -171,6 +171,9 @@ type Update struct {
 	// Failed is the last release that was downloaded and did not install,
 	// which runs do not download again for a while.
 	Failed *FailedRelease `json:"failed,omitempty"`
+	// AppFailed is the same for the macOS menu bar app of a release that the
+	// binary did install.
+	AppFailed *FailedRelease `json:"app_failed,omitempty"`
 }
 
 // FailedRelease is a release that was downloaded and did not install: when,

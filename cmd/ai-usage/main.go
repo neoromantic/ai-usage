@@ -33,7 +33,7 @@ var (
 	clock        = time.Now
 	probeEnv     = probe.DefaultEnv
 	newScheduler = schedule.Default
-	newUpdater   = func() *selfupdate.Updater { return &selfupdate.Updater{Current: version} }
+	newUpdater   = func() *selfupdate.Updater { return &selfupdate.Updater{Current: version, App: menuBarApp()} }
 )
 
 func main() {
