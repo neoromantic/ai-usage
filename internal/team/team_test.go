@@ -233,9 +233,6 @@ func TestSealOpen(t *testing.T) {
 		if len(plain) >= 6 && strings.Contains(sealed, plain) {
 			t.Fatalf("Seal(%q) leaks the plaintext", plain)
 		}
-		if len(sealed) != k.SealedLen(len(plain)) {
-			t.Fatalf("len(Seal(%d bytes)) = %d, SealedLen = %d", len(plain), len(sealed), k.SealedLen(len(plain)))
-		}
 		// The relay accepts it as a sealed field.
 		d := validDocWith(k, sealed)
 		if err := d.Validate(); err != nil {
@@ -292,11 +289,11 @@ func TestOpenRejects(t *testing.T) {
 	}
 }
 
-func TestSealedLenFitsSnapshot(t *testing.T) {
+func TestSealedFitsSnapshot(t *testing.T) {
 	k := mustGenerate(t)
-	// The collector clips sealed text to 300 bytes before sealing.
-	if n := k.SealedLen(300); n > snapshot.MaxSealed {
-		t.Fatalf("SealedLen(300) = %d, over snapshot.MaxSealed %d", n, snapshot.MaxSealed)
+	// The collector clips sealed text to maxSealedPlain (300) bytes.
+	if n := len(k.Seal(strings.Repeat("x", 300))); n > snapshot.MaxSealed {
+		t.Fatalf("len(Seal(300 bytes)) = %d, over snapshot.MaxSealed %d", n, snapshot.MaxSealed)
 	}
 }
 

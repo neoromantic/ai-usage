@@ -182,8 +182,3 @@ func (k *Key) Open(sealed string) (string, error) {
 	}
 	return string(plain), nil
 }
-
-// SealedLen is the sealed length of an n-byte plaintext.
-func (k *Key) SealedLen(n int) int {
-	return base64.RawURLEncoding.EncodedLen(k.seal.NonceSize() + n + k.seal.Overhead())
-}
