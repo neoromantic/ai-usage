@@ -1956,7 +1956,7 @@ func TestStopAfterSample(t *testing.T) {
 	}))
 	defer srv.Close()
 	t.Setenv("AI_USAGE_RELAY", srv.URL)
-	if err := collectNow(state.Dir(d.dir), false)(ctx); err != nil {
+	if _, err := (collection{d: state.Dir(d.dir)}).run(ctx); err != nil {
 		t.Fatal(err)
 	}
 	st := d.state()

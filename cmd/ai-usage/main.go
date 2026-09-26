@@ -235,7 +235,7 @@ var osUser = func() string {
 	return os.Getenv("USERNAME")
 }
 
-func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) (err error) {
+func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	fs := flags("collect")
 	jsonOut := fs.Bool("json", false, "")
 	quiet := fs.Bool("quiet", false, "")
@@ -256,53 +256,22 @@ func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) (e
 	if err != nil {
 		return err
 	}
-	// A failure before housekeeping still gets its release check, so a
-	// release that breaks collection can be replaced by the one that fixes it.
-	// A run stopped by a signal failed at nothing.
-	housekept := false
-	defer func() {
-		if err != nil && !housekept && ctx.Err() == nil {
-			rescue(ctx, d, err, *quiet)
-		}
-	}()
-	cfg, err := d.LoadConfig()
-	if err != nil {
-		return err
-	}
 	guide := false
-	opts := collect.Options{
-		Dir:      d,
-		Version:  version,
-		Probe:    probeEnv(),
-		Hostname: deviceName(cfg),
-		OSUser:   osUser(),
-		Now:      clock,
-		After: func(ctx context.Context, cfg *state.Config, st *state.State) {
-			housekeeping(ctx, d, cfg, st, *quiet)
-			housekept = true
+	res, err := collection{
+		d:         d,
+		offline:   *offline,
+		scheduled: *quiet,
+		waiting: func() {
+			fmt.Fprintln(stderr, "ai-usage: another run, such as the scheduled one, is collecting now; waiting for its result")
+		},
+		locked: func(st *state.State) {
 			// The guide waits for a report a person reads, even when the
 			// scheduler collected first.
 			if st.GuideDue && !*quiet && !*jsonOut {
 				st.GuideDue, guide = false, true
 			}
 		},
-	}
-	if endpoint := relayURL(cfg); endpoint != "" && !*offline {
-		// Run signs with the key it loads under the run lock.
-		opts.Relay = &relay.Client{BaseURL: endpoint}
-	}
-	if *quiet {
-		opts.PullEvery = time.Hour
-	} else {
-		// A run the person started while another, usually the scheduled
-		// one, collects waits for it and shows its result rather than
-		// collect twice. The scheduler runs with --quiet and just skips.
-		opts.Wait = lockWait
-		opts.Waiting = func() {
-			fmt.Fprintln(stderr, "ai-usage: another run, such as the scheduled one, is collecting now; waiting for its result")
-		}
-	}
-	res, err := runCollect(ctx, opts)
+	}.run(ctx)
 	if err != nil {
 		return err
 	}
@@ -347,15 +316,68 @@ func (e *panicError) Error() string {
 	return fmt.Sprintf("collection stopped by a bug: %v\n%s", e.value, e.stack)
 }
 
-// runCollect turns a panic in a collection into an error, so the run can still
-// record it and look for a release that fixes it.
-func runCollect(ctx context.Context, o collect.Options) (res *collect.Result, err error) {
+// collection is a collection and its housekeeping, as `collect` and `r` in
+// the interactive view run it. scheduled says the scheduler started it, with
+// collect --quiet. waiting is called when a run that is not scheduled starts
+// to wait for one that holds the run lock. locked, when set, runs under the
+// run lock after housekeeping.
+type collection struct {
+	d                  state.Dir
+	offline, scheduled bool
+	waiting            func()
+	locked             func(*state.State)
+}
+
+func (c collection) run(ctx context.Context) (res *collect.Result, err error) {
+	// A failure before housekeeping still gets its release check, so a
+	// release that breaks collection can be replaced by the one that fixes it.
+	// A run stopped by a signal, or by the view closing, failed at nothing.
+	housekept := false
+	defer func() {
+		if err != nil && !housekept && ctx.Err() == nil {
+			rescue(ctx, c.d, err, c.scheduled)
+		}
+	}()
+	// A panic becomes an error before the rescue reads it, so the run can
+	// still record it and look for a release that fixes it.
 	defer func() {
 		if v := recover(); v != nil {
 			res, err = nil, &panicError{v, debug.Stack()}
 		}
 	}()
-	return collect.Run(ctx, o)
+	cfg, err := c.d.LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+	opts := collect.Options{
+		Dir:      c.d,
+		Version:  version,
+		Probe:    probeEnv(),
+		Hostname: deviceName(cfg),
+		OSUser:   osUser(),
+		Now:      clock,
+		After: func(ctx context.Context, cfg *state.Config, st *state.State) {
+			housekeeping(ctx, c.d, cfg, st, c.scheduled)
+			housekept = true
+			if c.locked != nil {
+				c.locked(st)
+			}
+		},
+	}
+	if endpoint := relayURL(cfg); endpoint != "" && !c.offline {
+		// Run signs with the key it loads under the run lock.
+		opts.Relay = &relay.Client{BaseURL: endpoint}
+	}
+	if c.scheduled {
+		opts.PullEvery = time.Hour
+	} else {
+		// A run the person started while another, usually the scheduled
+		// one, collects waits for it and shows its result rather than
+		// collect twice. The scheduler runs with --quiet and just skips.
+		opts.Wait = lockWait
+		opts.Waiting = c.waiting
+	}
+	return collect.Run(ctx, opts)
 }
 
 // rescue runs when a collection failed before its housekeeping: it keeps a
@@ -480,7 +502,7 @@ func noteUpdate(st *state.State, now time.Time, res selfupdate.Result, err error
 // lockWait is how long a command the person started waits for another run,
 // such as a scheduled one, to release the run lock. A scheduled run on a Mac
 // takes up to about a minute at background priority.
-var lockWait = 3 * time.Minute
+const lockWait = 3 * time.Minute
 
 // waitLock takes the run lock for a command the person started that changes
 // what a collection also writes or acts on: the team key and cache, the

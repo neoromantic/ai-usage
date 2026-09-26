@@ -11,7 +11,6 @@ import (
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/tui"
 	"github.com/neoromantic/ai-usage/internal/view"
-	"github.com/neoromantic/ai-usage/relay"
 )
 
 // stdinTTY says whether standard input is a terminal. Tests pin it.
@@ -58,7 +57,12 @@ func viewConfig(d state.Dir, res *collect.Result, disp *display, offline bool, s
 		}
 		return reportAt(d, res, now.UTC()), nil
 	}
-	c.Refresh = collectNow(d, offline)
+	// Unlike the bare run, `r` says nothing on the terminal the view is drawn
+	// on, not even that it waits for another run.
+	c.Refresh = func(ctx context.Context) error {
+		_, err := collection{d: d, offline: offline}.run(ctx)
+		return err
+	}
 	c.Stopping = func() {
 		fmt.Fprintln(os.Stderr, "ai-usage: stopping the collection r started")
 	}
@@ -81,43 +85,4 @@ func reportAt(d state.Dir, res *collect.Result, now time.Time) view.Report {
 		OSUser:   osUser(),
 		Now:      now,
 	})
-}
-
-// collectNow is the bare run's collection, for `r` in the interactive view:
-// housekeeping, the relay unless offline, and a wait for a run that holds
-// the lock, such as the scheduled one, whose result it then shows rather
-// than collect twice. It says nothing on the terminal the view is drawn on.
-func collectNow(d state.Dir, offline bool) func(context.Context) error {
-	return func(ctx context.Context) (err error) {
-		housekept := false
-		defer func() {
-			// A collection stopped because the view closed failed at nothing.
-			if err != nil && !housekept && ctx.Err() == nil {
-				rescue(ctx, d, err, false)
-			}
-		}()
-		cfg, err := d.LoadConfig()
-		if err != nil {
-			return err
-		}
-		opts := collect.Options{
-			Dir:      d,
-			Version:  version,
-			Probe:    probeEnv(),
-			Hostname: deviceName(cfg),
-			OSUser:   osUser(),
-			Now:      clock,
-			After: func(ctx context.Context, cfg *state.Config, st *state.State) {
-				housekeeping(ctx, d, cfg, st, false)
-				housekept = true
-			},
-			Wait:    lockWait,
-			Waiting: func() {},
-		}
-		if endpoint := relayURL(cfg); endpoint != "" && !offline {
-			opts.Relay = &relay.Client{BaseURL: endpoint}
-		}
-		_, err = runCollect(ctx, opts)
-		return err
-	}
 }
