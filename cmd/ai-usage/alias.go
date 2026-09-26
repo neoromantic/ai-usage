@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"cmp"
 	"errors"
 	"flag"
@@ -10,7 +9,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
@@ -59,11 +57,7 @@ func cmdAlias(args []string, stdout io.Writer) error {
 			return usageError(err.Error())
 		}
 	}
-	d, err := dir()
-	if err != nil {
-		return err
-	}
-	cfg, err := d.LoadConfig()
+	d, cfg, err := loadConfig()
 	if err != nil {
 		return err
 	}
@@ -295,20 +289,16 @@ func (b *aliasBook) free(targets []account, name string) error {
 
 // table lists accounts, one a line, with the name each goes by.
 func (b *aliasBook) table(as []account) string {
-	var buf bytes.Buffer
-	tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+	var rows [][]string
 	for _, a := range as {
-		fmt.Fprintf(tw, "  %s\t%s\t%s\n", a.provider, snapshot.Printable(a.label), b.current(a))
+		rows = append(rows, []string{"  " + a.provider, snapshot.Printable(a.label), b.current(a)})
 	}
-	_ = tw.Flush()
-	return strings.TrimRight(buf.String(), "\n")
+	return strings.TrimRight(tabulate(rows), "\n")
 }
 
 // list prints the names the team gave accounts, and who gave them.
 func (b *aliasBook) list(stdout io.Writer) error {
-	var buf bytes.Buffer
-	tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	n := 0
+	var rows [][]string
 	for _, a := range b.accounts {
 		s := b.names[state.Key(a.provider, a.label)]
 		if s.name == "" {
@@ -318,17 +308,13 @@ func (b *aliasBook) list(stdout io.Writer) error {
 		if s.by != "" {
 			by = s.by
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\tset on %s %s\n", a.provider, snapshot.Printable(a.label), s.name, by, s.at.Local().Format("2006-01-02 15:04"))
-		n++
+		rows = append(rows, []string{a.provider, snapshot.Printable(a.label), s.name, "set on " + by + " " + s.at.Local().Format("2006-01-02 15:04")})
 	}
-	if n == 0 {
+	if len(rows) == 0 {
 		_, err := fmt.Fprintln(stdout, "no account has a name yet; `ai-usage alias ACCOUNT NAME` names one for the whole team")
 		return err
 	}
-	if err := tw.Flush(); err != nil {
-		return err
-	}
-	_, err := io.Copy(stdout, &buf)
+	_, err := fmt.Fprint(stdout, tabulate(rows))
 	return err
 }
 

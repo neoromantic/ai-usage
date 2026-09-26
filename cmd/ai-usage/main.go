@@ -157,7 +157,21 @@ func parse(fs *flag.FlagSet, args []string) error {
 	return nil
 }
 
-func dir() (state.Dir, error) { return state.DefaultDir() }
+func subcommand(args []string) (string, []string) {
+	if len(args) == 0 {
+		return "", nil
+	}
+	return args[0], args[1:]
+}
+
+func loadConfig() (state.Dir, state.Config, error) {
+	d, err := state.DefaultDir()
+	if err != nil {
+		return "", state.Config{}, err
+	}
+	cfg, err := d.LoadConfig()
+	return d, cfg, err
+}
 
 func relayURL(cfg state.Config) string {
 	if v := strings.TrimSpace(os.Getenv("AI_USAGE_RELAY")); v != "" {
@@ -242,13 +256,10 @@ func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) er
 	offline := fs.Bool("offline", false, "")
 	home := fs.String("home", "", "")
 	disp := displayFlags(fs, true)
-	if err := parse(fs, args); err != nil {
+	if err := disp.parse(fs, args); err != nil {
 		return err
 	}
-	if err := disp.check(); err != nil {
-		return err
-	}
-	d, err := dir()
+	d, err := state.DefaultDir()
 	if *home != "" {
 		// The scheduler names the folder, since it does not see AI_USAGE_HOME.
 		d, err = state.Dir(*home), nil
@@ -617,16 +628,13 @@ func cmdReport(ctx context.Context, args []string, stdout io.Writer) error {
 	jsonOut := fs.Bool("json", false, "")
 	from := fs.String("from", "", "")
 	disp := displayFlags(fs, true)
-	if err := parse(fs, args); err != nil {
-		return err
-	}
-	if err := disp.check(); err != nil {
+	if err := disp.parse(fs, args); err != nil {
 		return err
 	}
 	if *from != "" {
 		return reportFrom(ctx, *from, *jsonOut, disp, stdout)
 	}
-	d, err := dir()
+	d, err := state.DefaultDir()
 	if err != nil {
 		return err
 	}
@@ -671,13 +679,10 @@ func cmdStatus(args []string, stdout io.Writer) error {
 	fs := flags("status")
 	jsonOut := fs.Bool("json", false, "")
 	disp := displayFlags(fs, false)
-	if err := parse(fs, args); err != nil {
+	if err := disp.parse(fs, args); err != nil {
 		return err
 	}
-	if err := disp.check(); err != nil {
-		return err
-	}
-	d, err := dir()
+	d, err := state.DefaultDir()
 	if err != nil {
 		return err
 	}
@@ -708,14 +713,11 @@ func cmdStatus(args []string, stdout io.Writer) error {
 }
 
 func cmdTeam(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
-	d, err := dir()
+	d, err := state.DefaultDir()
 	if err != nil {
 		return err
 	}
-	sub := ""
-	if len(args) > 0 {
-		sub, args = args[0], args[1:]
-	}
+	sub, args := subcommand(args)
 	switch sub {
 	case "":
 		res, err := loadResult(d)
@@ -848,10 +850,7 @@ func joinTeam(ctx context.Context, d state.Dir, line string, stdout, stderr io.W
 }
 
 func cmdRelay(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	sub := ""
-	if len(args) > 0 {
-		sub, args = args[0], args[1:]
-	}
+	sub, args := subcommand(args)
 	if sub == "serve" {
 		fs := flags("relay serve")
 		addr := fs.String("addr", ":8080", "")
@@ -903,11 +902,7 @@ func cmdRelay(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 		}
 		return <-stopped
 	}
-	d, err := dir()
-	if err != nil {
-		return err
-	}
-	cfg, err := d.LoadConfig()
+	d, cfg, err := loadConfig()
 	if err != nil {
 		return err
 	}
@@ -951,11 +946,8 @@ func cmdSchedule(ctx context.Context, args []string, stdout, stderr io.Writer) e
 	if len(args) != 1 {
 		return usageError("schedule takes install, remove, status, or run")
 	}
-	d, err := dir()
+	d, _, err := loadConfig()
 	if err != nil {
-		return err
-	}
-	if _, err := d.LoadConfig(); err != nil {
 		return err
 	}
 	s := newScheduler()
@@ -1087,15 +1079,8 @@ var (
 )
 
 func cmdName(args []string, stdout io.Writer) error {
-	sub := ""
-	if len(args) > 0 {
-		sub, args = args[0], args[1:]
-	}
-	d, err := dir()
-	if err != nil {
-		return err
-	}
-	cfg, err := d.LoadConfig()
+	sub, args := subcommand(args)
+	d, cfg, err := loadConfig()
 	if err != nil {
 		return err
 	}
@@ -1165,7 +1150,7 @@ func cmdUpdate(ctx context.Context, stdout, stderr io.Writer) error {
 	if selfupdate.Dev(version) {
 		return errors.New("this is a development build (" + version + "); install a release to self-update")
 	}
-	d, err := dir()
+	d, err := state.DefaultDir()
 	if err != nil {
 		return err
 	}

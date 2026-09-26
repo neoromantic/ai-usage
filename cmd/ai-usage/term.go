@@ -42,8 +42,12 @@ func displayFlags(fs *flag.FlagSet, views bool) *display {
 	return d
 }
 
-// check rejects bad display flags before a collection starts.
-func (d *display) check() error {
+// parse reads a drawing command's flags and rejects bad display flags
+// before a collection starts.
+func (d *display) parse(fs *flag.FlagSet, args []string) error {
+	if err := parse(fs, args); err != nil {
+		return err
+	}
 	switch d.color {
 	case "auto", "always", "never":
 	default:

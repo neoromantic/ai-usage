@@ -22,11 +22,8 @@ import (
 // cmdHome lists, adds, and removes the harness homes this device reads
 // besides the ones it finds itself.
 func cmdHome(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	sub := ""
-	if len(args) > 0 {
-		sub, args = args[0], args[1:]
-	}
-	d, err := dir()
+	sub, args := subcommand(args)
+	d, err := state.DefaultDir()
 	if err != nil {
 		return err
 	}
@@ -269,11 +266,10 @@ func quotaUsers(cfg *state.Config, p, h string) []string {
 // listHomes prints every home a run would read, and what each bills through.
 func listHomes(cfg state.Config, userHome string, stdout io.Writer) error {
 	found := collect.Discover(userHome, os.Getenv, cfg.Homes)
-	var buf bytes.Buffer
-	tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+	var rows [][]string
 	for _, p := range snapshot.Providers {
 		if len(found[p]) == 0 {
-			fmt.Fprintf(tw, "%s\t(none)\t\n", p)
+			rows = append(rows, []string{p, "(none)", ""})
 			continue
 		}
 		for i, h := range found[p] {
@@ -288,13 +284,13 @@ func listHomes(cfg state.Config, userHome string, stdout io.Writer) error {
 			if p == "hermes" {
 				notes = append(notes, quotaNotes(collect.QuotaHomesOf(cfg.QuotaFrom, h), userHome)...)
 			}
-			fmt.Fprintf(tw, "%s\t%s\t%s\n", name, fsutil.Tilde(h, userHome), strings.Join(notes, " · "))
+			rows = append(rows, []string{name, fsutil.Tilde(h, userHome), strings.Join(notes, " · ")})
 		}
 	}
 	// A home added or named that is gone is not read; say so rather than
 	// drop it.
 	for _, p := range snapshot.Providers {
-		var missing []string
+		var missing [][]string
 		gone := map[string]bool{}
 		for _, h := range cfg.Homes[p] {
 			if !slices.Contains(found[p], h) {
@@ -313,22 +309,29 @@ func listHomes(cfg state.Config, userHome string, stdout io.Writer) error {
 			if p == "hermes" {
 				notes = append(notes, quotaNotes(cfg.QuotaFrom[h], userHome)...)
 			}
-			missing = append(missing, fsutil.Tilde(h, userHome)+"\t"+strings.Join(notes, " · "))
+			missing = append(missing, []string{p, fsutil.Tilde(h, userHome), strings.Join(notes, " · ")})
 		}
-		sort.Strings(missing)
-		for _, m := range missing {
-			fmt.Fprintf(tw, "%s\t%s\n", p, m)
-		}
+		slices.SortFunc(missing, slices.Compare)
+		rows = append(rows, missing...)
 	}
-	if err := tw.Flush(); err != nil {
-		return err
+	_, err := fmt.Fprint(stdout, tabulate(rows))
+	return err
+}
+
+// tabulate lines rows up in columns two spaces apart, one row a line. The
+// padding an empty last cell leaves at the end of a line is trimmed.
+func tabulate(rows [][]string) string {
+	var buf bytes.Buffer
+	tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+	for _, r := range rows {
+		fmt.Fprintln(tw, strings.Join(r, "\t"))
 	}
-	for _, line := range strings.SplitAfter(buf.String(), "\n") {
-		if line != "" {
-			fmt.Fprintln(stdout, strings.TrimRight(line, " \n"))
-		}
+	_ = tw.Flush()
+	var out strings.Builder
+	for line := range strings.Lines(buf.String()) {
+		out.WriteString(strings.TrimRight(line, " \n") + "\n")
 	}
-	return nil
+	return out.String()
 }
 
 // quotaNotes says, by harness, where a Hermes home takes its quota from.
