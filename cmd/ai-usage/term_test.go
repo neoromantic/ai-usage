@@ -123,8 +123,8 @@ func TestDisplayFlagErrors(t *testing.T) {
 	hermetic(t)
 	d := newDevice(t)
 	for _, args := range [][]string{
-		{"report", "--projects", "--tokens"},
-		{"--offline", "--tokens"},
+		{"report", "--projects", "--bogus"},
+		{"--offline", "--color=sometimes"},
 		{"report", "--color=sometimes"},
 		{"report", "--width", "-3"},
 		{"status", "--projects"},
@@ -138,8 +138,7 @@ func TestDisplayFlagErrors(t *testing.T) {
 			t.Fatalf("%v: exit %d, stderr %q", args, r.code, r.stderr)
 		}
 	}
-	// Bad flags are refused before anything is collected. --tokens is
-	// gone: the matrix replaced it.
+	// Bad flags are refused before anything is collected.
 	if _, err := os.Stat(d.dir); !os.IsNotExist(err) {
 		t.Fatalf("a refused run wrote to %s: %v", d.dir, err)
 	}
