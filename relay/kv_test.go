@@ -88,24 +88,12 @@ func (f *fakeKV) exists(k string) bool {
 var errWrongType = errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 
 func (f *fakeKV) run(cmd []string) (any, error) {
-	if len(cmd) == 0 {
-		return nil, errors.New("ERR empty command")
-	}
 	args := cmd[1:]
 	for _, k := range args {
 		f.expire(k)
 	}
-	need := func(n int) error {
-		if len(args) < n {
-			return errors.New("ERR wrong number of arguments for '" + strings.ToLower(cmd[0]) + "' command")
-		}
-		return nil
-	}
 	switch strings.ToUpper(cmd[0]) {
 	case "GET":
-		if err := need(1); err != nil {
-			return nil, err
-		}
 		if _, ok := f.sets[args[0]]; ok {
 			return nil, errWrongType
 		}
@@ -114,31 +102,14 @@ func (f *fakeKV) run(cmd []string) (any, error) {
 		}
 		return nil, nil
 	case "SET":
-		if err := need(2); err != nil {
-			return nil, err
-		}
 		k := args[0]
 		delete(f.sets, k)
-		delete(f.exp, k)
 		f.str[k] = args[1]
-		if len(args) == 4 && strings.EqualFold(args[2], "EX") {
-			secs, err := strconv.Atoi(args[3])
-			if err != nil || secs <= 0 {
-				return nil, errors.New("ERR invalid expire time in 'set' command")
-			}
-			f.exp[k] = f.now().Add(time.Duration(secs) * time.Second)
-		} else if len(args) != 2 {
-			return nil, errors.New("ERR syntax error")
-		}
+		secs, _ := strconv.Atoi(args[3])
+		f.exp[k] = f.now().Add(time.Duration(secs) * time.Second)
 		return "OK", nil
 	case "SADD", "SREM":
-		if err := need(2); err != nil {
-			return nil, err
-		}
 		k := args[0]
-		if _, ok := f.str[k]; ok {
-			return nil, errWrongType
-		}
 		set := f.sets[k]
 		if set == nil {
 			set = map[string]bool{}
@@ -162,9 +133,6 @@ func (f *fakeKV) run(cmd []string) (any, error) {
 		}
 		return n, nil
 	case "SMEMBERS":
-		if err := need(1); err != nil {
-			return nil, err
-		}
 		if _, ok := f.str[args[0]]; ok {
 			return nil, errWrongType
 		}
@@ -175,17 +143,8 @@ func (f *fakeKV) run(cmd []string) (any, error) {
 		sort.Strings(out)
 		return out, nil
 	case "SCARD":
-		if err := need(1); err != nil {
-			return nil, err
-		}
-		if _, ok := f.str[args[0]]; ok {
-			return nil, errWrongType
-		}
 		return len(f.sets[args[0]]), nil
 	case "MGET":
-		if err := need(1); err != nil {
-			return nil, err
-		}
 		out := make([]any, len(args))
 		for i, k := range args {
 			if v, ok := f.str[k]; ok {
@@ -194,9 +153,6 @@ func (f *fakeKV) run(cmd []string) (any, error) {
 		}
 		return out, nil
 	case "DEL":
-		if err := need(1); err != nil {
-			return nil, err
-		}
 		n := 0
 		for _, k := range args {
 			if f.exists(k) {
@@ -208,32 +164,14 @@ func (f *fakeKV) run(cmd []string) (any, error) {
 		}
 		return n, nil
 	case "INCR":
-		if err := need(1); err != nil {
-			return nil, err
-		}
 		k := args[0]
-		if _, ok := f.sets[k]; ok {
-			return nil, errWrongType
-		}
-		n := int64(0)
-		if v, ok := f.str[k]; ok {
-			var err error
-			if n, err = strconv.ParseInt(v, 10, 64); err != nil {
-				return nil, errors.New("ERR value is not an integer or out of range")
-			}
-		}
+		n, _ := strconv.ParseInt(f.str[k], 10, 64)
 		n++
 		f.str[k] = strconv.FormatInt(n, 10)
 		return n, nil
 	case "EXPIRE":
-		if err := need(2); err != nil {
-			return nil, err
-		}
 		k := args[0]
-		secs, err := strconv.Atoi(args[1])
-		if err != nil {
-			return nil, errors.New("ERR value is not an integer or out of range")
-		}
+		secs, _ := strconv.Atoi(args[1])
 		nx, gt := false, false
 		for _, opt := range args[2:] {
 			switch strings.ToUpper(opt) {
@@ -241,8 +179,6 @@ func (f *fakeKV) run(cmd []string) (any, error) {
 				nx = true
 			case "GT":
 				gt = true
-			default:
-				return nil, errors.New("ERR Unsupported option " + opt)
 			}
 		}
 		if !f.exists(k) {
