@@ -32,7 +32,7 @@ func Grok(home string) (Reading, error) {
 			readErr = err
 		}
 	}
-	r := Reading{Account: st.latestUser()}
+	r := Reading{Account: st.newestUser(func(grokAuth) bool { return true })}
 	if r.Account == "" {
 		if readErr != nil {
 			return r, errors.New("grok log: " + shortErr(readErr))
@@ -53,7 +53,6 @@ type grokAuth struct {
 }
 
 type grokBilling struct {
-	at    time.Time
 	pid   int
 	plan  string
 	quota *Quota
@@ -103,17 +102,16 @@ func (s *grokScan) add(line []byte) {
 		s.auths = append(s.auths, grokAuth{at: row.TS.UTC(), pid: row.PID, user: c.UserID})
 	case "billing: fetched credits config":
 		if b := grokBillingLine(row); b != nil {
-			b.pid = row.PID
 			s.billings = append(s.billings, b)
 		}
 	}
 }
 
-// latestUser is the user of the newest sign-in line.
-func (s *grokScan) latestUser() string {
+// newestUser is the user of the newest sign-in line that keep accepts.
+func (s *grokScan) newestUser(keep func(grokAuth) bool) string {
 	var best *grokAuth
 	for i := range s.auths {
-		if a := &s.auths[i]; best == nil || !a.at.Before(best.at) {
+		if a := &s.auths[i]; keep(*a) && (best == nil || !a.at.Before(best.at)) {
 			best = a
 		}
 	}
@@ -133,7 +131,7 @@ func (s *grokScan) billingFor(user string) *grokBilling {
 		if owner := s.ownerOf(b); owner != "" && owner != user {
 			continue
 		}
-		if best == nil || !b.at.Before(best.at) {
+		if best == nil || !b.quota.At.Before(best.quota.At) {
 			best = b
 		}
 	}
@@ -143,20 +141,9 @@ func (s *grokScan) billingFor(user string) *grokBilling {
 // ownerOf is the user the same process signed in as last before the billing
 // line. Pids are reused, so a sign-in after the line does not count.
 func (s *grokScan) ownerOf(b *grokBilling) string {
-	var owner *grokAuth
-	for i := range s.auths {
-		a := &s.auths[i]
-		if a.pid != b.pid || a.at.After(b.at) {
-			continue
-		}
-		if owner == nil || !a.at.Before(owner.at) {
-			owner = a
-		}
-	}
-	if owner == nil {
-		return ""
-	}
-	return owner.user
+	return s.newestUser(func(a grokAuth) bool {
+		return a.pid == b.pid && !a.at.After(b.quota.At)
+	})
 }
 
 func grokBillingLine(row grokLogLine) *grokBilling {
@@ -196,8 +183,8 @@ func grokBillingLine(row grokLogLine) *grokBilling {
 		w.Name = "credits"
 	}
 	return &grokBilling{
-		at:    row.TS.UTC(),
-		plan:  snapshot.PlainLabel(c.SubscriptionTier),
+		pid:   row.PID,
+		plan:  c.SubscriptionTier,
 		quota: &Quota{At: row.TS.UTC(), Source: "log", Windows: []snapshot.Window{w}},
 	}
 }

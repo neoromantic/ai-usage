@@ -416,20 +416,6 @@ func TestCodexLimits(t *testing.T) {
 	}
 }
 
-func TestCodexLimitsCapsWindows(t *testing.T) {
-	var parts []string
-	for i := range 6 {
-		parts = append(parts, fmt.Sprintf(`"b%d":{"primary":{"usedPercent":1,"windowDurationMins":300},"secondary":{"usedPercent":2,"windowDurationMins":10080}}`, i))
-	}
-	q, _, err := codexLimits(json.RawMessage(`{"rateLimitsByLimitId":{`+strings.Join(parts, ",")+`}}`), testNow)
-	if err != nil || q == nil || len(q.Windows) != snapshot.MaxWindows {
-		t.Fatalf("got %v, %v", describe(q), err)
-	}
-	if q.Windows[0].Name != "b0 5h" || q.Windows[7].Name != "b3 7d" {
-		t.Errorf("windows = %v", describe(q))
-	}
-}
-
 // pipeServer is an in-process app-server: it answers what answer returns
 // for each request, and says nothing for an empty answer.
 func pipeServer(t *testing.T, answer func(id int, method string) string) (*codexRPC, func()) {

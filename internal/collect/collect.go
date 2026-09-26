@@ -1163,12 +1163,9 @@ func linkedAccount(st *state.State, o Options, hermesHome, billing string) *stat
 	if !ok {
 		return nil
 	}
-	at := quotaHome(o.quotaFrom, o.paths, hermesHome, p)
+	at := cmp.Or(quotaHome(o.quotaFrom, o.paths, hermesHome, p), probe.DefaultHome(o.UserHome, p))
 	if at == "" {
-		if o.UserHome == "" {
-			return nil
-		}
-		at = filepath.Join(o.UserHome, "."+p)
+		return nil
 	}
 	label := st.Current[state.Key(p, at)]
 	if label == "" {

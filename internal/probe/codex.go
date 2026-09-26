@@ -9,13 +9,13 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/neoromantic/ai-usage/internal/logs"
@@ -56,7 +56,7 @@ func codexAt(ctx context.Context, env Env, bin, home string) (r Reading, served 
 	defer cancel()
 
 	custom := ""
-	if !isDefaultHome(env.HomeDir, home, ".codex") {
+	if filepath.Clean(home) != DefaultHome(env.HomeDir, "codex") {
 		custom = home
 	}
 	cmd := env.command(ctx, bin, []string{"CODEX_HOME", custom}, "app-server")
@@ -130,8 +130,8 @@ var terminalCodes = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
 // String is the line of the lines kept that errorOf picks.
 func (l *lastLine) String() string { return errorOf(l.lines()) }
 
-// lines are the lines kept, without terminal colors, control characters, or
-// blank lines.
+// lines are the lines kept, without terminal colors, control or hidden
+// characters, or blank lines.
 func (l *lastLine) lines() []string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -139,16 +139,11 @@ func (l *lastLine) lines() []string {
 }
 
 // printedLines are the lines of what a program printed, without terminal
-// colors, control characters, or blank lines.
+// colors, control or hidden characters, or blank lines.
 func printedLines(s string) []string {
 	var lines []string
 	for line := range strings.SplitSeq(terminalCodes.ReplaceAllString(s, ""), "\n") {
-		line = strings.TrimSpace(strings.Map(func(r rune) rune {
-			if unicode.IsControl(r) {
-				return ' '
-			}
-			return r
-		}, line))
+		line = strings.TrimSpace(snapshot.Printable(line))
 		if line != "" {
 			lines = append(lines, line)
 		}
@@ -340,7 +335,7 @@ func codexLimits(raw json.RawMessage, now time.Time) (*Quota, string, error) {
 			plan = b.PlanType
 		}
 		for _, w := range []*codexWindow{b.Primary, b.Secondary} {
-			if w == nil || len(q.Windows) >= snapshot.MaxWindows {
+			if w == nil {
 				continue
 			}
 			win := snapshot.Window{

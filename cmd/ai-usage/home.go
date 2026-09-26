@@ -15,6 +15,7 @@ import (
 
 	"github.com/neoromantic/ai-usage/internal/collect"
 	"github.com/neoromantic/ai-usage/internal/fsutil"
+	"github.com/neoromantic/ai-usage/internal/probe"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
@@ -188,7 +189,7 @@ func homePath(h string, mustExist bool) (string, error) {
 
 func addHomes(cfg *state.Config, userHome, p string, homes []string, refs []homeRef) {
 	add := func(p, h string) {
-		if h == filepath.Join(userHome, "."+p) || slices.Contains(cfg.Homes[p], h) {
+		if h == probe.DefaultHome(userHome, p) || slices.Contains(cfg.Homes[p], h) {
 			return
 		}
 		if cfg.Homes == nil {
@@ -220,7 +221,7 @@ func addHomes(cfg *state.Config, userHome, p string, homes []string, refs []home
 func removeHomes(cfg *state.Config, userHome, p string, homes []string, forget bool) error {
 	for _, h := range homes {
 		named := p == "hermes" && cfg.QuotaFrom[h] != nil
-		if h == filepath.Join(userHome, "."+p) && (!named || forget) {
+		if h == probe.DefaultHome(userHome, p) && (!named || forget) {
 			return errors.New(h + " is the default " + p + " home, which is always read")
 		}
 		if !slices.Contains(cfg.Homes[p], h) && !named && !forget {

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/neoromantic/ai-usage/internal/probe"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
@@ -36,10 +37,9 @@ var profiles = map[string]struct{ dir, marker string }{
 func Discover(userHome string, getenv func(string) string, remembered map[string][]string) map[string][]string {
 	out := map[string][]string{}
 	for _, p := range snapshot.Providers {
-		var def string
+		def := probe.DefaultHome(userHome, p)
 		var cands []string
-		if userHome != "" {
-			def = filepath.Join(userHome, "."+p)
+		if def != "" {
 			cands = append(cands, def)
 		}
 		if v := getenv(homeEnv[p]); v != "" {
@@ -214,7 +214,7 @@ func Remember(remembered map[string][]string, userHome string, found map[string]
 	changed := false
 	for p, homes := range found {
 		for _, h := range homes {
-			if userHome != "" && h == filepath.Join(userHome, "."+p) {
+			if h == probe.DefaultHome(userHome, p) {
 				continue
 			}
 			if isProfile(p, h, homes) || managedByDefault(p, h, userHome) || claudeAppRecord(p, h) != "" {

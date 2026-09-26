@@ -78,13 +78,6 @@ func Claude(ctx context.Context, env Env, home, remembered string, lastUse time.
 	return r, joinErrors(errs)
 }
 
-func isDefaultHome(userHome, home, leaf string) bool {
-	if userHome == "" {
-		return false
-	}
-	return filepath.Clean(home) == filepath.Join(userHome, leaf)
-}
-
 // claudeConfigDir is the CLAUDE_CONFIG_DIR claude runs with for home, or ""
 // to run it without one. Once the variable is set, even to the default
 // ~/.claude, Claude Code keeps its config inside the directory and its login
@@ -103,7 +96,7 @@ func (e Env) claudeConfigDir(home, remembered string) string {
 			return home
 		}
 	}
-	if isDefaultHome(e.HomeDir, home, ".claude") {
+	if filepath.Clean(home) == DefaultHome(e.HomeDir, "claude") {
 		return ""
 	}
 	return home
@@ -746,7 +739,7 @@ func claudeLimitName(l claudeLimit) (string, int) {
 		if model == "" {
 			return "7d scoped", 10080
 		}
-		return snapshot.PlainLabel("7d " + model), 10080
+		return "7d " + model, 10080
 	case "":
 		return "", 0
 	default:
@@ -754,7 +747,7 @@ func claudeLimitName(l claudeLimit) (string, int) {
 		if model != "" {
 			name += " " + model
 		}
-		return snapshot.PlainLabel(name), 0
+		return name, 0
 	}
 }
 

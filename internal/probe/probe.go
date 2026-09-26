@@ -116,6 +116,15 @@ func DefaultEnv() Env {
 	}
 }
 
+// DefaultHome is the home a harness uses when nothing names another, such as
+// ~/.codex, or "" when the user's home is unknown.
+func DefaultHome(userHome, provider string) string {
+	if userHome == "" {
+		return ""
+	}
+	return filepath.Join(userHome, "."+provider)
+}
+
 func (e Env) now() time.Time {
 	if e.Now == nil {
 		return time.Now().UTC()
