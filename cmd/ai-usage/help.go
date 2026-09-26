@@ -51,7 +51,7 @@ var help = []helpSection{
 	}},
 	{"RELAY", []helpLine{
 		{"ai-usage relay show|set URL|clear", "choose the relay this device publishes to"},
-		{"ai-usage relay serve [--addr :8080] [--client-ip-header NAME]", "run a relay (Vercel KV from env, else memory)"},
+		{"ai-usage relay serve [--addr :8080] [--client-ip-header NAME]", "run a relay (Upstash for Redis from `KV_REST_API_URL` and `KV_REST_API_TOKEN`, else memory)"},
 	}},
 	{"SCHEDULE", []helpLine{
 		{"ai-usage schedule install", "register with the system scheduler, and let later runs keep it registered"},
@@ -75,7 +75,7 @@ var help = []helpSection{
 		{"--plain", "print the report; on a terminal, the default is the interactive view, with every key under `?`"},
 	}},
 	{"ENVIRONMENT", []helpLine{
-		{"AI_USAGE_HOME", "collector directory (default: OS config dir/ai-usage)"},
+		{"AI_USAGE_HOME", "the state folder; `ai-usage status` shows where it is"},
 		{"AI_USAGE_RELAY", "relay URL, overrides the configured one"},
 		{"AI_USAGE_NAME", "this device's name in the team, over the configured one, in runs that see it"},
 		{"AI_USAGE_NO_SCHEDULE", "set to skip scheduler registration on this run"},
