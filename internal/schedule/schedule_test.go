@@ -18,10 +18,9 @@ import (
 
 // fakeCron is a crontab kept in memory. A nil tab means the user has none.
 type fakeCron struct {
-	tab      *string
-	readErr  error
-	writeErr error
-	calls    []string
+	tab     *string
+	readErr error
+	calls   []string
 }
 
 func (f *fakeCron) run(_ context.Context, name string, args []string, stdin []byte) ([]byte, error) {
@@ -36,9 +35,6 @@ func (f *fakeCron) run(_ context.Context, name string, args []string, stdin []by
 		}
 		return []byte(*f.tab), nil
 	case name == "crontab" && reflect.DeepEqual(args, []string{"-"}):
-		if f.writeErr != nil {
-			return nil, f.writeErr
-		}
 		s := string(stdin)
 		f.tab = &s
 		return nil, nil

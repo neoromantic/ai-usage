@@ -42,9 +42,6 @@ const (
 	Absent State = iota
 	// Other means an entry runs another binary or another state folder.
 	Other
-	// Duplicate means the launch agent runs the collector, and a crontab
-	// line an older version wrote on macOS runs it too.
-	Duplicate
 	// Disabled means the person commented the entry out or disabled the
 	// task or the launch agent. Runs leave it alone; Install turns it back
 	// on.

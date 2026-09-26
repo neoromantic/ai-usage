@@ -1005,8 +1005,6 @@ func cmdSchedule(ctx context.Context, args []string, stdout, stderr io.Writer) e
 			fmt.Fprintf(stdout, "registered: %s runs every %s with state folder %s\n", exe, schedule.Interval, home)
 		case schedule.Other:
 			fmt.Fprintln(stdout, "registered, but for a different binary path or state folder; `ai-usage schedule install` registers this one")
-		case schedule.Duplicate:
-			fmt.Fprintln(stdout, "registered, but a crontab line from an older version runs the collector too; `ai-usage schedule install` removes it")
 		case schedule.Disabled:
 			fmt.Fprintln(stdout, disabledByHand)
 		default:

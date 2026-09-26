@@ -18,8 +18,8 @@ import (
 	"time"
 )
 
-// fakeLaunchd answers launchctl for user 501 and keeps a crontab for the
-// line an older version wrote.
+// fakeLaunchd answers launchctl for user 501 and fails any other command,
+// crontab included.
 type fakeLaunchd struct {
 	noSession bool
 	loaded    bool
@@ -29,16 +29,12 @@ type fakeLaunchd struct {
 	// disabled is what print-disabled shows for the agent; empty means it is
 	// not listed.
 	disabled string
-	cron     fakeCron
 	calls    []string
 	// booted is the plist the last bootstrap loaded.
 	booted string
 }
 
-func (f *fakeLaunchd) run(ctx context.Context, name string, args []string, stdin []byte) ([]byte, error) {
-	if name == "crontab" {
-		return f.cron.run(ctx, name, args, stdin)
-	}
+func (f *fakeLaunchd) run(_ context.Context, name string, args []string, _ []byte) ([]byte, error) {
 	f.calls = append(f.calls, name+" "+strings.Join(args, " "))
 	if name != "launchctl" || len(args) == 0 {
 		return nil, fmt.Errorf("unexpected command %s %v", name, args)
@@ -245,10 +241,10 @@ func TestAgentInstall(t *testing.T) {
 	if got, _ := s.Lookup(ctx, exe, "/other/state"); got != Other {
 		t.Fatalf("Lookup for another state folder = %v", got)
 	}
-	// A crontab with no line of ours is never written, because writing it
-	// brings up the macOS prompt.
-	if f.cron.writes() != 0 {
-		t.Fatal("crontab was written")
+	// The crontab is never touched, because writing it brings up the macOS
+	// prompt.
+	if slices.ContainsFunc(f.calls, func(c string) bool { return strings.HasPrefix(c, "crontab ") }) {
+		t.Fatalf("crontab ran: %q", f.calls)
 	}
 
 	// Installing again reloads the new definition in place of the old one.
@@ -374,42 +370,6 @@ func TestAgentRemove(t *testing.T) {
 	}
 }
 
-// TestAgentReplacesCronLine moves a Mac off the crontab line an older version
-// wrote, keeping the person's own lines.
-func TestAgentReplacesCronLine(t *testing.T) {
-	ctx := context.Background()
-	mine := "0 3 * * * /usr/local/bin/backup\n"
-	old := mine + Line(exe, home, "/usr/bin:/bin") + "\n"
-
-	f := &fakeLaunchd{cron: *withTab(old)}
-	s, _ := agent(t, f)
-	if err := s.Install(ctx, exe, home, "/usr/bin"); err != nil {
-		t.Fatal(err)
-	}
-	if *f.cron.tab != mine {
-		t.Fatalf("crontab after Install:\n%s", *f.cron.tab)
-	}
-
-	f = &fakeLaunchd{cron: *withTab(old)}
-	s, _ = agent(t, f)
-	if err := s.Remove(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if *f.cron.tab != mine {
-		t.Fatalf("crontab after Remove:\n%s", *f.cron.tab)
-	}
-
-	// A crontab that cannot be read is left alone.
-	f = &fakeLaunchd{cron: fakeCron{readErr: errors.New("crontab: signal: killed")}}
-	s, _ = agent(t, f)
-	if err := s.Install(ctx, exe, home, "/usr/bin"); err != nil {
-		t.Fatal(err)
-	}
-	if f.cron.writes() != 0 {
-		t.Fatal("an unread crontab was written")
-	}
-}
-
 // TestAgentRunDoesNotBootItselfOut: a run launchd started that finds the
 // plist gone writes it back without booting the agent out, which would stop
 // the run before it loaded the agent again.
@@ -465,69 +425,5 @@ func TestAgentWaitsForBootout(t *testing.T) {
 	f.lingering = 1000
 	if err := s.Remove(ctx); err == nil || !strings.Contains(err.Error(), "did not stop") {
 		t.Fatalf("Remove of an agent that never stops = %v", err)
-	}
-}
-
-// TestAgentLeftoverCronLine: a crontab line an older version wrote keeps the
-// schedule from reading as healthy until a run the person started removes
-// it, and a line they commented out keeps the collector paused.
-func TestAgentLeftoverCronLine(t *testing.T) {
-	ctx := context.Background()
-	mine := "0 3 * * * /usr/local/bin/backup\n"
-	live := mine + Line(exe, home, "/usr/bin:/bin") + "\n"
-
-	// Removing the line failed once, as when the person declined the prompt.
-	f := &fakeLaunchd{cron: fakeCron{tab: &live, writeErr: errors.New("crontab: signal: killed")}}
-	s, file := agent(t, f)
-	if err := s.Install(ctx, exe, home, "/usr/bin"); err == nil || !strings.Contains(err.Error(), "crontab line") {
-		t.Fatalf("Install = %v", err)
-	}
-	if got, _ := s.Lookup(ctx, exe, home); got != Duplicate {
-		t.Fatalf("Lookup with the line left = %v", got)
-	}
-	// A run of the agent reports it and does not write the crontab.
-	s.InAgent = true
-	f.calls, f.cron.calls = nil, nil
-	if err := s.Install(ctx, exe, home, "/usr/bin"); err == nil || !strings.Contains(err.Error(), "schedule install") {
-		t.Fatalf("Install from the agent = %v", err)
-	}
-	if f.cron.writes() != 0 || f.ran("launchctl bootout gui/501/"+AgentLabel) {
-		t.Fatalf("the agent run wrote the crontab or booted out: %q %q", f.calls, f.cron.calls)
-	}
-	// A run the person started removes it.
-	s.InAgent = false
-	f.cron.writeErr = nil
-	if err := s.Install(ctx, exe, home, "/usr/bin"); err != nil {
-		t.Fatal(err)
-	}
-	if *f.cron.tab != mine {
-		t.Fatalf("crontab:\n%s", *f.cron.tab)
-	}
-	if got, _ := s.Lookup(ctx, exe, home); got != Active {
-		t.Fatalf("Lookup = %v", got)
-	}
-
-	// Remove stops before the agent when the crontab cannot be written.
-	f.cron.tab, f.cron.writeErr = &live, errors.New("crontab: signal: killed")
-	if err := s.Remove(ctx); err == nil {
-		t.Fatal("Remove ignored the crontab failure")
-	}
-	if _, err := os.Stat(file); err != nil || !f.loaded {
-		t.Fatalf("Remove took the agent down anyway: loaded %v, %v", f.loaded, err)
-	}
-
-	// A line commented out by hand on an older version stays a pause.
-	paused := mine + "# " + Line(exe, home, "/usr/bin:/bin") + "\n"
-	f = &fakeLaunchd{cron: fakeCron{tab: &paused}}
-	s, _ = agent(t, f)
-	if got, _ := s.Lookup(ctx, exe, home); got != Disabled {
-		t.Fatalf("Lookup with a commented line = %v", got)
-	}
-	// Installing turns it back on and drops the old line.
-	if err := s.Install(ctx, exe, home, "/usr/bin"); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := s.Lookup(ctx, exe, home); got != Active || *f.cron.tab != mine {
-		t.Fatalf("Lookup = %v, crontab:\n%s", got, *f.cron.tab)
 	}
 }

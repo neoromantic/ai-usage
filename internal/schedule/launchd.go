@@ -99,8 +99,7 @@ func (s Scheduler) launchctl(ctx context.Context, args ...string) ([]byte, error
 	return s.Run(ctx, "launchctl", args, nil)
 }
 
-// installAgent writes the plist and loads it in place of an earlier one. A
-// crontab line an older version wrote is removed, so the two never both run.
+// installAgent writes the plist and loads it in place of an earlier one.
 func (s Scheduler) installAgent(ctx context.Context, exe, home, path string) error {
 	file, err := s.plist()
 	if err != nil {
@@ -120,12 +119,7 @@ func (s Scheduler) installAgent(ctx context.Context, exe, home, path string) err
 	if s.InAgent {
 		// Booting the agent out would stop this very run before it loaded
 		// the agent again. launchd already runs this binary, and reads the
-		// new plist the next time it loads the agent. The crontab is left
-		// for a run the person started, since writing it can ask them to
-		// let the computer be administered.
-		if live, _ := s.cronLeft(ctx); live {
-			return errors.New("a crontab line from an older version runs the collector too; `ai-usage schedule install` removes it")
-		}
+		// new plist the next time it loads the agent.
 		return nil
 	}
 	// A loaded agent keeps its old definition until it is booted out.
@@ -135,23 +129,14 @@ func (s Scheduler) installAgent(ctx context.Context, exe, home, path string) err
 	if _, err := s.launchctl(ctx, "enable", s.service()); err != nil {
 		return err
 	}
-	if _, err := s.launchctl(ctx, "bootstrap", s.domain(), file); err != nil {
-		return err
-	}
-	if err := s.dropCronLine(ctx); err != nil {
-		return fmt.Errorf("launch agent registered, but the crontab line from an older version stays: %w", err)
-	}
-	return nil
+	_, err = s.launchctl(ctx, "bootstrap", s.domain(), file)
+	return err
 }
 
-// removeAgent removes the crontab line first, so a failure leaves the
-// schedule as it was rather than half removed.
+// removeAgent boots the agent out and removes the plist.
 func (s Scheduler) removeAgent(ctx context.Context) error {
 	file, err := s.plist()
 	if err != nil {
-		return err
-	}
-	if err := s.dropCronLine(ctx); err != nil {
 		return err
 	}
 	if err := s.bootout(ctx); err != nil {
@@ -197,11 +182,6 @@ func (s Scheduler) lookupAgent(ctx context.Context, exe, home string) (State, er
 	}
 	b, err := os.ReadFile(file)
 	if errors.Is(err, fs.ErrNotExist) {
-		// A Mac an older version scheduled with cron keeps the pause the
-		// person made by commenting the line out.
-		if live, paused := s.cronLeft(ctx); paused && !live {
-			return Disabled, nil
-		}
 		return Absent, nil
 	}
 	if err != nil {
@@ -214,9 +194,6 @@ func (s Scheduler) lookupAgent(ctx context.Context, exe, home string) (State, er
 		return Other, nil
 	case !s.loaded(ctx):
 		return Absent, nil
-	}
-	if live, _ := s.cronLeft(ctx); live {
-		return Duplicate, nil
 	}
 	return Active, nil
 }
@@ -240,40 +217,4 @@ func (s Scheduler) disabled(ctx context.Context) bool {
 		}
 	}
 	return false
-}
-
-// cronLeft reports the crontab lines an older version wrote on macOS: live
-// ones that still run the collector, and ones the person commented out.
-// Reading the crontab brings up no prompt; a crontab that cannot be read
-// counts as having none.
-func (s Scheduler) cronLeft(ctx context.Context) (live, paused bool) {
-	lines, err := s.cronLines(ctx)
-	if err != nil {
-		return false, false
-	}
-	for _, l := range lines {
-		switch {
-		case !isOurs(l):
-		case commented(l):
-			paused = true
-		default:
-			live = true
-		}
-	}
-	return live, paused
-}
-
-// dropCronLine removes the crontab line an older version registered on macOS.
-// The crontab is written only when that line is there, because writing it
-// asks the person to let the terminal administer the computer.
-func (s Scheduler) dropCronLine(ctx context.Context) error {
-	lines, err := s.cronLines(ctx)
-	if err != nil {
-		return nil
-	}
-	kept := withoutMarker(lines)
-	if len(kept) == len(lines) {
-		return nil
-	}
-	return s.writeCron(ctx, kept)
 }
