@@ -483,7 +483,7 @@ A relay SHOULD keep records at least 7 days after their last write. Readers MUST
 
 ## 9. Rate limits
 
-A relay SHOULD limit requests, and SHOULD answer `429` with `Retry-After` in seconds. The reference limits, from `DefaultLimits` in `relay/server.go`:
+A relay SHOULD limit requests, and SHOULD answer `429` with `Retry-After` in seconds. The reference limits, from `DefaultLimits` in `relay/limits.go`:
 
 | Limit | Value | Counted |
 | --- | --- | --- |

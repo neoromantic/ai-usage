@@ -73,3 +73,15 @@ func (e *ErrStatus) Error() string {
 	}
 	return "relay: " + e.Msg + " (HTTP " + strconv.Itoa(e.Code) + ")"
 }
+
+// ListResponse is the team read. Body and Sig are base64url, so the exact
+// signed bytes reach the reader.
+type ListResponse struct {
+	Devices []ListedDevice `json:"devices"`
+}
+
+type ListedDevice struct {
+	Device string `json:"device"`
+	Body   string `json:"body"`
+	Sig    string `json:"sig"`
+}

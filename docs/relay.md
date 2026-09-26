@@ -147,7 +147,7 @@ A relay run with `ai-usage relay serve` has the code it was started with. One st
 
 ## Limits
 
-These are fixed in the code, in `DefaultLimits` in `relay/server.go`.
+These are fixed in the code, in `DefaultLimits` in `relay/limits.go`.
 
 | Limit | Value |
 | --- | --- |
