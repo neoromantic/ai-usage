@@ -22,7 +22,3 @@ func lockByte(f *os.File, flags uint32) error {
 	}
 	return err
 }
-
-// processAlive cannot tell on Windows whether another user's process exists,
-// so an earlier release's lock there is held by its age alone.
-func processAlive(int) bool { return true }

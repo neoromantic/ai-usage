@@ -367,10 +367,6 @@ func (d Dir) lock(name string) (func(), error) {
 		f.Close()
 		return nil, err
 	}
-	if heldBefore(f) {
-		f.Close()
-		return nil, ErrBusy
-	}
 	// The holder's process id, for a person who wonders which run it is.
 	if f.Truncate(0) == nil {
 		_, _ = f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
@@ -379,30 +375,6 @@ func (d Dir) lock(name string) (func(), error) {
 		_ = f.Truncate(0)
 		_ = f.Close()
 	}, nil
-}
-
-// heldBefore reports whether a release from before the system's lock holds
-// the lock file. Those create it and write "pid nonce" into it, and remove it
-// when done, so one that is still running while a newer release is installed
-// holds the lock by the file alone. It is held while its process runs, up to
-// the 10 minutes those releases allowed a run.
-func heldBefore(f *os.File) bool {
-	b := make([]byte, 64)
-	n, _ := f.ReadAt(b, 0)
-	pid, nonce, ok := strings.Cut(string(b[:n]), " ")
-	info, err := f.Stat()
-	if !ok || len(nonce) != 16 || err != nil {
-		return false
-	}
-	if _, err := hex.DecodeString(nonce); err != nil {
-		return false
-	}
-	id, err := strconv.Atoi(pid)
-	if err != nil || id <= 0 || id == os.Getpid() {
-		return false
-	}
-	age := time.Since(info.ModTime())
-	return age > -10*time.Minute && age < 10*time.Minute && processAlive(id)
 }
 
 // lockPoll is how often LockWait tries the lock again.

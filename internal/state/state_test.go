@@ -49,56 +49,6 @@ func TestLockIsExclusive(t *testing.T) {
 	unlock2()
 }
 
-// TestLockHonorsEarlierRelease: a release from before the system's lock holds
-// run.lock by having written "pid nonce" into it. Its lock holds a run off
-// while its process runs, for up to 10 minutes; a file a crashed run left
-// holds nothing.
-func TestLockHonorsEarlierRelease(t *testing.T) {
-	d := tempDir(t)
-	if err := os.MkdirAll(string(d), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	path := d.Path("run.lock")
-	write := func(owner string, age time.Duration) {
-		t.Helper()
-		if err := os.WriteFile(path, []byte(owner), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		at := time.Now().Add(-age)
-		if err := os.Chtimes(path, at, at); err != nil {
-			t.Fatal(err)
-		}
-	}
-	live := strconv.Itoa(os.Getppid()) + " 0011223344556677"
-	write(live, time.Minute)
-	if _, err := d.Lock(); !errors.Is(err, ErrBusy) {
-		t.Fatalf("lock while an earlier release runs = %v", err)
-	}
-	if b, _ := os.ReadFile(path); string(b) != live {
-		t.Fatalf("the earlier release's lock became %q", b)
-	}
-	cases := map[string]string{"over 10 minutes old": live, "not a lock": "12345\n"}
-	if runtime.GOOS != "windows" {
-		gone := exec.Command(os.Args[0], "-test.run=^$")
-		if err := gone.Run(); err != nil {
-			t.Fatal(err)
-		}
-		cases["its process gone"] = strconv.Itoa(gone.Process.Pid) + " 0011223344556677"
-	}
-	for name, owner := range cases {
-		age := time.Minute
-		if name == "over 10 minutes old" {
-			age = time.Hour
-		}
-		write(owner, age)
-		unlock, err := d.Lock()
-		if err != nil {
-			t.Fatalf("%s: %v", name, err)
-		}
-		unlock()
-	}
-}
-
 // TestHoldLock is the other process of TestLockEndsWithItsProcess.
 func TestHoldLock(t *testing.T) {
 	dir := os.Getenv("AI_USAGE_TEST_HOLD_LOCK")
