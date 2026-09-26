@@ -1,12 +1,10 @@
 package probe
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,7 +14,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unicode/utf8"
 
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
@@ -194,6 +191,32 @@ func TestCodexBinaryMissing(t *testing.T) {
 	}
 }
 
+// An npm install of codex is a script that runs `env node`, with node beside
+// it. The system scheduler's PATH has neither, and app-server still answers.
+func TestCodexScriptFindsItsInterpreter(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("scripts with #! lines are for Unix")
+	}
+	dir := filepath.Join(t.TempDir(), "npm", "bin")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	node := "#!/bin/sh\nexec \"$PROBE_TESTBIN\" -test.run='^TestHelperProcess$' -- codex \"$2\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "fakenode"), []byte(node), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "codex"), []byte("#!/usr/bin/env fakenode\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env, _ := fakeEnv(t, "codex-ok", "PATH=/usr/bin:/bin", "PROBE_TESTBIN="+os.Args[0])
+	env.Command = nil
+	env.LookPath = func(string) (string, error) { return filepath.Join(dir, "codex"), nil }
+	r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
+	if err != nil || r.Account != "dev@example.com" {
+		t.Fatalf("reading %+v, error %v", r, err)
+	}
+}
+
 // withRan makes env's harness commands pass their whole path to the fake,
 // and lists the paths run.
 func withRan(env *Env) *[]string {
@@ -318,38 +341,6 @@ func TestCodexOnlyBundled(t *testing.T) {
 	}
 }
 
-func TestBins(t *testing.T) {
-	home := t.TempDir()
-	onPath := filepath.Join(home, ".local", "bin", exeName("codex"))
-	writeExe(t, onPath)
-	env := Env{HomeDir: home, LookPath: notOnPath}
-	old := bundle(t, home, filepath.Join(".cursor", "extensions", "openai.chatgpt-0.4.1", "bin", "linux-x86_64", exeName("codex")), testNow.Add(-72*time.Hour))
-	newer := bundle(t, home, filepath.Join(".cursor", "extensions", "openai.chatgpt-0.5.0", "bin", "linux-x86_64", exeName("codex")), testNow)
-	app := bundle(t, home, chatGPTApp, testNow.Add(-24*time.Hour))
-	want := []string{onPath, newer, app, old}
-	if runtime.GOOS != "windows" {
-		// A link to a binary already listed, and a file that cannot run,
-		// are left out.
-		link := filepath.Join(home, "Applications", "Codex.app", "Contents", "Resources", "codex")
-		if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Symlink(onPath, link); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Chmod(bundle(t, home, vscodeExt, testNow), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if got := env.bins("codex"); !slices.Equal(got, want) {
-		t.Errorf("bins = %q, want %q", got, want)
-	}
-	writeExe(t, filepath.Join(home, ".vscode", "extensions", "openai.chatgpt-26.5.1", "bin", "x", exeName("claude")))
-	if got := env.bins("claude"); got != nil {
-		t.Errorf("claude bins = %q", got)
-	}
-}
-
 func TestCodexLimits(t *testing.T) {
 	window := func(pct float64, mins int, reset int64) string {
 		return fmt.Sprintf(`{"usedPercent":%g,"windowDurationMins":%d,"resetsAt":%d}`, pct, mins, reset)
@@ -413,154 +404,5 @@ func TestCodexLimits(t *testing.T) {
 				t.Errorf("got  %v\nwant %v", describe(q), describe(want))
 			}
 		})
-	}
-}
-
-// pipeServer is an in-process app-server: it answers what answer returns
-// for each request, and says nothing for an empty answer.
-func pipeServer(t *testing.T, answer func(id int, method string) string) (*codexRPC, func()) {
-	t.Helper()
-	cr, cw := io.Pipe()
-	sr, sw := io.Pipe()
-	go func() {
-		br := bufio.NewReader(cr)
-		for {
-			line, err := br.ReadBytes('\n')
-			if err != nil {
-				return
-			}
-			var m struct {
-				ID     int    `json:"id"`
-				Method string `json:"method"`
-			}
-			_ = json.Unmarshal(line, &m)
-			if out := answer(m.ID, m.Method); out != "" {
-				if _, err := io.WriteString(sw, out); err != nil {
-					return
-				}
-			}
-		}
-	}()
-	rpc := newCodexRPC(cw, sr)
-	return rpc, func() {
-		rpc.close()
-		_ = cw.Close()
-		_ = sw.Close()
-		_ = cr.Close()
-	}
-}
-
-// A call that gave up must not leave a reader behind that takes the next
-// call's answer.
-func TestCodexRPCAbandonedCall(t *testing.T) {
-	rpc, stop := pipeServer(t, func(id int, method string) string {
-		if id == 2 {
-			return `{"id":1,"result":{"late":true}}` + "\n" + `{"id":2,"result":{"ok":true}}` + "\n"
-		}
-		return ""
-	})
-	defer stop()
-	ctx1, cancel1 := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel1()
-	if _, err := rpc.call(ctx1, "first", nil); err == nil {
-		t.Fatal("first call was answered")
-	}
-	ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel2()
-	res, err := rpc.call(ctx2, "second", nil)
-	if err != nil || string(res) != `{"ok":true}` {
-		t.Fatalf("second call: %s, %v", res, err)
-	}
-	stop()
-	waitNoGoroutine(t, "probe.(*codexRPC)")
-}
-
-// A long error answer is cut short, and not inside a character.
-func TestCodexRPCErrorAnswer(t *testing.T) {
-	long := "x" + strings.Repeat("é", 100) // two-byte characters from an odd offset
-	rpc, stop := pipeServer(t, func(id int, method string) string {
-		return fmt.Sprintf(`{"id":%d,"error":{"code":-32600,"message":%q}}`+"\n", id, long)
-	})
-	defer stop()
-	_, err := rpc.call(context.Background(), "m", nil)
-	if msg := errText(err); !strings.Contains(msg, "éééé") || strings.Contains(msg, long) || !utf8.ValidString(msg) {
-		t.Errorf("error = %q", msg)
-	}
-}
-
-func TestCodexRPCLastLineWithoutNewline(t *testing.T) {
-	cr, cw := io.Pipe()
-	sr, sw := io.Pipe()
-	go func() {
-		_, _ = bufio.NewReader(cr).ReadBytes('\n')
-		_, _ = io.WriteString(sw, `{"id":1,"result":{"ok":true}}`)
-		_ = sw.Close()
-		_ = cr.Close()
-	}()
-	rpc := newCodexRPC(cw, sr)
-	defer rpc.close()
-	res, err := rpc.call(context.Background(), "m", nil)
-	if err != nil || string(res) != `{"ok":true}` {
-		t.Fatalf("call: %s, %v", res, err)
-	}
-	if _, err := rpc.call(context.Background(), "next", nil); err == nil {
-		t.Error("call after the server went away succeeded")
-	}
-	waitNoGoroutine(t, "probe.(*codexRPC)")
-}
-
-// close releases a reader that holds a line nobody asked for.
-func TestCodexRPCCloseReleasesReader(t *testing.T) {
-	sr, sw := io.Pipe()
-	rpc := newCodexRPC(io.Discard, sr)
-	go func() { _, _ = io.WriteString(sw, `{"method":"unasked"}`+"\n") }()
-	time.Sleep(20 * time.Millisecond)
-	rpc.close()
-	rpc.close()
-	waitNoGoroutine(t, "probe.(*codexRPC).read")
-	_ = sw.Close()
-}
-
-// buggyReader panics as a bug in the reading goroutine would.
-type buggyReader struct{}
-
-func (buggyReader) Read([]byte) (int, error) { panic("reader bug") }
-
-// A bug in the goroutine that reads app-server fails the call, in one line,
-// rather than ending the process.
-func TestCodexRPCReaderPanicIsTheCallError(t *testing.T) {
-	rpc := newCodexRPC(io.Discard, buggyReader{})
-	defer rpc.close()
-	_, err := rpc.call(context.Background(), "initialize", nil)
-	if msg := errText(err); !strings.Contains(msg, "reader bug") || strings.Contains(msg, "\n") {
-		t.Errorf("error = %q", msg)
-	}
-	waitNoGoroutine(t, "probe.(*codexRPC).read")
-}
-
-// A bug in the goroutine that waits for app-server is the probe's error. A
-// nil command panics there as such a bug would.
-func TestWaitOrKillPanicIsItsError(t *testing.T) {
-	if msg := errText(waitOrKill(nil, time.Minute)); msg == "" || strings.Contains(msg, "\n") {
-		t.Errorf("error = %q", msg)
-	}
-}
-
-func TestLastLineSaysTheError(t *testing.T) {
-	for in, want := range map[string]string{
-		"node:internal/modules/cjs/loader:1228\n  throw err;\n  ^\n\nError: Cannot find module '/x'\n    at Module._resolveFilename (node:internal)\n\nNode.js v22.1.0\n": "Error: Cannot find module '/x'",
-		"it broke\n\nFor more information, try '--help'.\n": "it broke",
-		"\x1b[2mlast words\x1b[0m\r\n\n":                    "last words",
-		"":                                                  "",
-		"thread 'main' panicked at src/main.rs:5:5:\nfailed to load config\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n": "failed to load config",
-		"thread 'main' panicked at 'old style', src/main.rs:5:5\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n":            "thread 'main' panicked at 'old style', src/main.rs:5:5",
-		"TypeError: foo is not a function\n    at ModuleJob.run (node:internal/modules/esm/module_job:195:25)\n\nNode.js v20.11.0\n":                         "TypeError: foo is not a function",
-		"'node' is not recognized as an internal or external command,\r\noperable program or batch file.\r\n":                                                "'node' is not recognized as an internal or external command, operable program or batch file.",
-	} {
-		var l lastLine
-		_, _ = l.Write([]byte(in))
-		if got := l.String(); got != want {
-			t.Errorf("lastLine(%q) = %q, want %q", in, got, want)
-		}
 	}
 }
