@@ -112,7 +112,7 @@ func (m Model) items() []item {
 	}
 	var its []item
 	if m.help {
-		if len(m.helpLines()) > m.bodyHeight() {
+		if m.maxHelpTop() > 0 {
 			its = append(its, item{key: vertical, action: "scroll", drop: 1})
 		}
 		return append(its, item{key: "esc", action: "close"}, item{key: "q", action: "quit"})

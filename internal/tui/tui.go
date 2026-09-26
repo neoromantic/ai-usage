@@ -22,7 +22,7 @@ import (
 
 // Config is what the view shows and how it gets a newer report.
 type Config struct {
-	// Report is the report shown first. A zero one is loaded at the start.
+	// Report is the report shown first.
 	Report view.Report
 	// Options say how the page is drawn. A Width above 0 fixes the layout
 	// width; 0 follows the terminal. Period, Share, and DeviceStatus are
@@ -110,7 +110,7 @@ type Model struct {
 	cfg  Config
 	jobs *jobs
 	// Intervals, which tests stretch so that no timer fires in them.
-	pollEvery, reloadEvery, spinEvery time.Duration
+	pollEvery, spinEvery time.Duration
 
 	report view.Report
 	opts   view.Options
@@ -144,19 +144,16 @@ func New(c Config) Model {
 		c.Render = view.Render
 	}
 	m := Model{
-		cfg:         c,
-		jobs:        &jobs{ctx: context.Background()},
-		pollEvery:   pollEvery,
-		reloadEvery: reloadEvery,
-		spinEvery:   spinEvery,
-		report:      c.Report,
-		opts:        c.Options,
-		loadedAt:    c.Now(),
-		sig:         signature(c.Watch),
+		cfg:       c,
+		jobs:      &jobs{ctx: context.Background()},
+		pollEvery: pollEvery,
+		spinEvery: spinEvery,
+		report:    c.Report,
+		opts:      c.Options,
+		loadedAt:  c.Now(),
+		sig:       signature(c.Watch),
 	}
-	m.opts.Interactive = true
 	m.opts.MatrixScroll = 0
-	m.opts.Busy = ""
 	m.theme = view.NewTheme(m.opts.Dark)
 	return m
 }
@@ -165,9 +162,6 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{tea.RequestBackgroundColor}
 	if m.cfg.Load != nil {
 		cmds = append(cmds, m.poll())
-		if m.report.GeneratedAt.IsZero() {
-			cmds = append(cmds, loadCmd(m.cfg.Load, m.cfg.Now(), m.sig))
-		}
 	}
 	return tea.Batch(cmds...)
 }
@@ -191,7 +185,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.wheel(msg.Mouse())
 	case pollMsg:
 		cmds := []tea.Cmd{m.poll()}
-		if !m.loading && (signature(m.cfg.Watch) != m.sig || m.cfg.Now().Sub(m.loadedAt) >= m.reloadEvery) {
+		if !m.loading && (signature(m.cfg.Watch) != m.sig || m.cfg.Now().Sub(m.loadedAt) >= reloadEvery) {
 			cmds = append(cmds, m.load())
 		}
 		return m, tea.Batch(cmds...)
@@ -293,13 +287,9 @@ func (m *Model) wheel(e tea.Mouse) {
 	shift := e.Mod.Contains(tea.ModShift)
 	switch {
 	case e.Button == tea.MouseWheelLeft, e.Button == tea.MouseWheelUp && shift:
-		if !m.help {
-			m.scrollMatrix(-1)
-		}
+		m.scrollMatrix(-1)
 	case e.Button == tea.MouseWheelRight, e.Button == tea.MouseWheelDown && shift:
-		if !m.help {
-			m.scrollMatrix(1)
-		}
+		m.scrollMatrix(1)
 	case e.Button == tea.MouseWheelUp:
 		m.scroll(-wheelLines)
 	case e.Button == tea.MouseWheelDown:
@@ -310,10 +300,10 @@ func (m *Model) wheel(e tea.Mouse) {
 // scroll moves the page, or the help when it is open, by n lines.
 func (m *Model) scroll(n int) {
 	if m.help {
-		m.helpTop = clamp(m.helpTop+n, 0, max(0, len(m.helpLines())-m.bodyHeight()))
+		m.helpTop = clamp(m.helpTop+n, m.maxHelpTop())
 		return
 	}
-	m.top = clamp(m.top+n, 0, m.maxTop())
+	m.top = clamp(m.top+n, m.maxTop())
 }
 
 // scrollScreen moves the page, or the help when it is open, a screen up or
@@ -358,7 +348,7 @@ func (m Model) pinned(top int) int {
 // than its first and no further right than showing its last.
 func (m *Model) scrollMatrix(n int) {
 	s := m.opts.MatrixScroll + n
-	if m.statusView() || s < 0 || n > 0 && !m.matrixRight() {
+	if m.help || m.statusView() || s < 0 || n > 0 && !m.matrixRight() {
 		return
 	}
 	m.opts.MatrixScroll = s
@@ -427,10 +417,7 @@ func (m *Model) load() tea.Cmd {
 	}
 	m.loading = true
 	m.loadedAt = m.cfg.Now()
-	return loadCmd(m.cfg.Load, m.loadedAt, signature(m.cfg.Watch))
-}
-
-func loadCmd(load func(time.Time) (view.Report, error), now time.Time, sig string) tea.Cmd {
+	load, now, sig := m.cfg.Load, m.loadedAt, signature(m.cfg.Watch)
 	return func() tea.Msg {
 		r, err := load(now)
 		return loadedMsg{report: r, err: err, sig: sig}
@@ -444,13 +431,9 @@ func (m *Model) draw() {
 		return
 	}
 	m.page = m.render(m.opts)
-	// The status view keeps the matrix's scroll for when it shows again.
-	if m.opts.MatrixScroll > 0 && m.page.MatrixColumns == 0 && !m.statusView() {
-		m.opts.MatrixScroll = 0
-		m.page = m.render(m.opts)
-	}
 	// Scrolled right on a terminal that grew, or a matrix that lost columns:
-	// scroll left while the columns on the right still all show.
+	// scroll left while the columns on the right still all show. The status
+	// view keeps the matrix's scroll for when it shows again.
 	for m.opts.MatrixScroll > 0 && !m.statusView() {
 		o := m.opts
 		o.MatrixScroll--
@@ -460,8 +443,8 @@ func (m *Model) draw() {
 		}
 		m.opts, m.page = o, p
 	}
-	m.top = clamp(m.top, 0, m.maxTop())
-	m.helpTop = clamp(m.helpTop, 0, max(0, len(m.helpLines())-m.bodyHeight()))
+	m.top = clamp(m.top, m.maxTop())
+	m.helpTop = clamp(m.helpTop, m.maxHelpTop())
 }
 
 func (m Model) render(o view.Options) view.Page {
@@ -495,6 +478,8 @@ func (m Model) bodyHeight() int {
 }
 
 func (m Model) maxTop() int { return max(0, len(m.page.Body)-m.bodyHeight()) }
+
+func (m Model) maxHelpTop() int { return max(0, len(m.helpLines())-m.bodyHeight()) }
 
 func (m Model) statusText() string {
 	if m.refreshErr != "" {
@@ -569,7 +554,7 @@ func firstLine(err error) string {
 	return s
 }
 
-func clamp(v, lo, hi int) int { return max(lo, min(v, hi)) }
+func clamp(v, hi int) int { return max(0, min(v, hi)) }
 
 // signature is the watched files' sizes and change times; a run that saves
 // state replaces the file, which changes both.

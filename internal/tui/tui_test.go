@@ -1043,20 +1043,6 @@ func TestReload(t *testing.T) {
 	if m = poll(); m.statusText() != "" {
 		t.Fatalf("status after a good reload: %q", m.statusText())
 	}
-
-	// A zero report loads at the start.
-	c := New(Config{Load: func(time.Time) (view.Report, error) { return report("first"), nil }, Render: fakeRender(3, 0)})
-	c.pollEvery = time.Hour
-	var loaded bool
-	// It asks the terminal for its background, and loads; the poll waits.
-	for _, msg := range immediate(c.Init()) {
-		if l, ok := msg.(loadedMsg); ok && l.report.Collector.DeviceLabel == "first" {
-			loaded = true
-		}
-	}
-	if !loaded {
-		t.Fatal("Init did not load a zero report")
-	}
 }
 
 // TestBackground: the terminal's answer decides the background, whatever
