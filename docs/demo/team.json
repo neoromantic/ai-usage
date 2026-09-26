@@ -770,6 +770,7 @@
         "age_seconds": 180,
         "last_success_at": "2026-09-24T13:37:00Z",
         "last_error": null,
+        "update_error": null,
         "sources": [
           {
             "provider": "claude",
@@ -795,6 +796,7 @@
         "error": null,
         "silent": false,
         "old": false,
+        "behind_since": null,
         "usage": {
           "today": 16236736,
           "7d": 161981166,
@@ -812,6 +814,7 @@
         "age_seconds": 480,
         "last_success_at": "2026-09-24T13:32:00Z",
         "last_error": null,
+        "update_error": null,
         "sources": [
           {
             "provider": "claude",
@@ -837,6 +840,7 @@
         "error": null,
         "silent": false,
         "old": false,
+        "behind_since": null,
         "usage": {
           "today": 2535263,
           "7d": 16250812,
@@ -854,6 +858,7 @@
         "age_seconds": 360,
         "last_success_at": "2026-09-24T13:34:00Z",
         "last_error": null,
+        "update_error": null,
         "sources": [
           {
             "provider": "claude",
@@ -879,6 +884,7 @@
         "error": null,
         "silent": false,
         "old": false,
+        "behind_since": null,
         "usage": {
           "today": 16897391,
           "7d": 167052762,
@@ -896,6 +902,7 @@
         "age_seconds": 720,
         "last_success_at": "2026-09-24T13:28:00Z",
         "last_error": null,
+        "update_error": null,
         "sources": [
           {
             "provider": "claude",
@@ -921,6 +928,7 @@
         "error": null,
         "silent": false,
         "old": false,
+        "behind_since": null,
         "usage": {
           "today": 170649,
           "7d": 1828410,
@@ -938,6 +946,7 @@
         "age_seconds": 105120,
         "last_success_at": "2026-09-23T08:28:00Z",
         "last_error": null,
+        "update_error": null,
         "sources": [
           {
             "provider": "claude",
@@ -963,6 +972,7 @@
         "error": null,
         "silent": true,
         "old": false,
+        "behind_since": null,
         "usage": {
           "today": 0,
           "7d": 6468065,
@@ -980,6 +990,7 @@
         "age_seconds": 660,
         "last_success_at": "2026-09-24T13:29:00Z",
         "last_error": null,
+        "update_error": null,
         "sources": [
           {
             "provider": "claude",
@@ -1005,6 +1016,7 @@
         "error": null,
         "silent": false,
         "old": false,
+        "behind_since": null,
         "usage": {
           "today": 442839,
           "7d": 4046933,
@@ -1022,6 +1034,7 @@
         "age_seconds": 300,
         "last_success_at": "2026-09-24T13:35:00Z",
         "last_error": null,
+        "update_error": null,
         "sources": [
           {
             "provider": "claude",
@@ -1047,6 +1060,7 @@
         "error": null,
         "silent": false,
         "old": false,
+        "behind_since": null,
         "usage": {
           "today": 4965639,
           "7d": 36793679,
@@ -1064,6 +1078,7 @@
         "age_seconds": 360,
         "last_success_at": "2026-09-24T13:34:00Z",
         "last_error": null,
+        "update_error": null,
         "sources": [
           {
             "provider": "claude",
@@ -1089,6 +1104,7 @@
         "error": null,
         "silent": false,
         "old": false,
+        "behind_since": null,
         "usage": {
           "today": 4229840,
           "7d": 29030842,
@@ -1106,6 +1122,7 @@
         "age_seconds": 660,
         "last_success_at": "2026-09-24T13:29:00Z",
         "last_error": null,
+        "update_error": null,
         "sources": [
           {
             "provider": "claude",
@@ -1131,6 +1148,7 @@
         "error": "codex: app-server exited without answering",
         "silent": false,
         "old": true,
+        "behind_since": null,
         "usage": {
           "today": 9064390,
           "7d": 121389927,
@@ -1148,6 +1166,7 @@
         "age_seconds": 240,
         "last_success_at": "2026-09-24T13:36:00Z",
         "last_error": null,
+        "update_error": null,
         "sources": [
           {
             "provider": "claude",
@@ -1173,6 +1192,7 @@
         "error": null,
         "silent": false,
         "old": false,
+        "behind_since": null,
         "usage": {
           "today": 4202516,
           "7d": 48568409,
@@ -1190,6 +1210,7 @@
         "age_seconds": 420,
         "last_success_at": "2026-09-24T13:33:00Z",
         "last_error": null,
+        "update_error": null,
         "sources": [
           {
             "provider": "claude",
@@ -1215,6 +1236,7 @@
         "error": null,
         "silent": false,
         "old": false,
+        "behind_since": null,
         "usage": {
           "today": 2675255,
           "7d": 26241712,
@@ -1232,6 +1254,7 @@
         "age_seconds": 600,
         "last_success_at": "2026-09-24T13:30:00Z",
         "last_error": null,
+        "update_error": null,
         "sources": [
           {
             "provider": "claude",
@@ -1257,6 +1280,7 @@
         "error": null,
         "silent": false,
         "old": false,
+        "behind_since": null,
         "usage": {
           "today": 714753,
           "7d": 6911824,

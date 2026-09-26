@@ -24,12 +24,13 @@ TZ=Europe/Berlin ai-usage report --from docs/demo/solo.json --plain --width 110
 
 | File | What it shows |
 | --- | --- |
-| `team.png`, `team-light.png` | the whole team page, dark and light; the README's picture |
+| `team.png`, `team-light.png` | the whole team page, dark and light |
 | `team-80.png` | the same page at 80 columns, the narrowest layout; tall, for phones |
 | `team-attention.png` | ATTENTION and SUBSCRIPTIONS only |
 | `team-matrix.png` | DEVICES × SUBSCRIPTIONS only: every machine and bot against every subscription |
 | `team-bots.png` | the interactive view after `%`: each machine's share of each subscription, such as how the server and the nine bots split `bots` |
 | `team-status.png`, `team-devices.png` | DEVICES as each machine's status: release, last report, tools, errors; interactive and printed |
+| `devices-status.png` | the status view alone, printed with `--devices` |
 | `team-help.png` | the interactive view's help, `?` |
 | `solo.png` | one developer's page, with USAGE in place of the matrix |
 | `solo-forecast.png` | the solo page's top: the forecast lines |
@@ -37,7 +38,7 @@ TZ=Europe/Berlin ai-usage report --from docs/demo/solo.json --plain --width 110
 | `relay-view.png` | what the relay keeps for `mira-mbp`, trimmed: names, emails, and paths sealed, numbers plain |
 | `json.png` | `ai-usage --json` through `jq`: what an agent reads |
 | `social/architecture.png` | how a team's numbers travel, drawn from `scripts/demo/diagram.html` |
-| `social/*.png` | the pictures marked for posts, on a backdrop |
+| `social/*.png` | the pictures marked for posts, on a backdrop; the README shows these |
 | `social/tour.mp4`, `social/tour.gif` | the interactive view, key by key: the page, `s` status, `%` share, `p` 30 days, `?` help |
 
 The pictures are at twice the size of the page, drawn in JetBrains Mono.
@@ -51,7 +52,7 @@ bun scripts/demo/shots.ts team-bots  # the pictures whose names start so
 
 The script regenerates the two reports and builds `ai-usage`. It shows each picture's report the way a person would see it: printed, or in the interactive view in a tmux of its own, with keys pressed. The terminal's text and colors become an HTML page, which agent-browser photographs in Chrome. The PNGs are then redrawn in 256 colors, at about half the size. It needs Go, bun, tmux, agent-browser, jq, and ffmpeg.
 
-- **Another picture:** add an entry to `shots` in `scripts/demo/shots.ts`: the report, the width, the flags or keys, and whether it is for posts.
+- **Another picture:** add an entry to `shots` in `scripts/demo/shots.ts`: the report, the width, the flags or keys, and whether it is for posts and the README.
 - **Another story:** add a report in `scripts/demo/main.go`: its machines, their logins and readings, and how much each spends a day on which project.
 - **The first run and the relay's view:** `go run ./scripts/demo guide 110` prints the solo report with the guide a first run prints under it, and `go run ./scripts/demo snapshot` the snapshot `mira-mbp` would publish, sealed with a made-up team key. `install` and `relay-view` are made from them.
 - **After a change to the report's schema:** run the script again. `--from` refuses a report of another `schema_version`.

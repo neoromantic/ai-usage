@@ -4,10 +4,7 @@ ai-usage shows how much of your Claude Code, Codex, Grok, and Hermes quota you h
 
 It is one small binary for macOS, Linux, and Windows. The system scheduler runs it every 15 minutes. Each run reads what those tools already record on disk, asks the installed tools for your account and quota, and exits. A run can also publish an encrypted summary for this machine to a small relay, and read the summaries of the other machines in your team.
 
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/demo/team-light.png">
-  <img alt="The ai-usage report of a made-up team: two laptops, a server, and nine bots that share one Codex login" src="docs/demo/team.png">
-</picture>
+![The ai-usage report of a made-up team: two laptops, a server, and nine bots that share one Codex login](docs/demo/social/team.png)
 
 That team is made up; [docs/demo](docs/demo) has its report and more pictures, and `ai-usage report --from docs/demo/team.json` shows it in your terminal. The same page as text, for another made-up team:
 
@@ -77,11 +74,17 @@ The header names this machine and the team, and says whether collection, the rel
 
 SUBSCRIPTIONS has one row per Claude, Codex, and Grok account, grouped by tool, the worst first. The bar is the weekly window: the heavy line is what has been used, and the tick how much would be used by now if the window were spent evenly. LEFT is what is left, RESETS when it resets, and AT RESET how full it will be then at its average pace since the window began: `over` at 100% or more, which means it runs out by its reset, `tight` from 85%, `ok` from 50%, and `under` below that. A window that limits the account more than the weekly one, such as a model's window or a full 5-hour window, gets an indented row of its own. `~` marks a reading over 6 hours old, unless the window is full, since a full window stays full until it resets. `?` marks an account with no reading, a window that has reset since it was read, or a Claude 5-hour or weekly window that a refused request did not read. USERS counts the machines that used the account in this window and names the busiest. Hermes is a tool, not a subscription: what it spends through a Codex or Grok login counts as that login's use.
 
+![One developer's subscriptions: at this week's pace Claude runs out on Saturday, 12 hours before its reset, and its model window tonight; Codex has 78% left, and SuperGrok will leave most of its week unused](docs/demo/social/solo-forecast.png)
+
 DEVICES × SUBSCRIPTIONS is every machine against every subscription, in millions of input plus output tokens over the last 7 days, cache left out. NO QUOTA holds the tokens no subscription covers, such as Hermes on an API key. The section has a second view, status: a row per machine with its user, its release, how long ago it reported, the tools it reads, its tokens today and over 7, 30, and 90 days, and a note of what is wrong with it, such as an error, an update to install, or why it does not update itself. `--devices` prints that view. With only this machine, the section is USAGE instead: a row per subscription, with today, 7 days, 30 days, and 90 days. PROJECTS lists this machine's top projects over every account; `--projects` lists all of them. A dim legend at the bottom explains only the marks on screen.
+
+![The status view of DEVICES: each machine's user, release, when it last reported, the tools it reads, its tokens, and what is wrong with it](docs/demo/social/devices-status.png)
 
 The matrix shows accounts by short names: the part of an email before the `@`, or the first 8 characters of an id. `ai-usage alias` gives an account a name for the whole team; see [Teams](#teams).
 
 When standard input and output are both terminals, `ai-usage` opens the same page as an interactive view. It scrolls, with the head of DEVICES kept at the top while its rows go by, and the matrix scrolls sideways; `s` switches DEVICES between the matrix and the status view, `p` picks the period (today, 7, 30, or 90 days), `%` shows each machine's percent of each subscription's tokens in the period, and in TOTAL of all the team's, `r` collects now, `?` lists every key, and `q` quits. Piped output, `--json`, `--plain`, and `TERM=dumb` print the page instead, and so does the installer's first run. The page is at its best at 120 to 160 columns; narrower, it drops columns in a fixed order, down to 80.
+
+![The interactive view, key by key: the page, s for status, % for each machine's share, p for 30 days, and ? for help](docs/demo/social/tour.gif)
 
 ## Install
 
@@ -165,6 +168,8 @@ The first run:
 
 The guide is printed once. When the scheduler collected first, or the first run you started used `--json`, the guide comes with the next `ai-usage` that prints text; `ai-usage report` never prints it.
 
+![The installer's first run: the report, and under it the guide, which says ai-usage now collects every 15 minutes through launchd, what the team and the relay see, and the commands worth knowing](docs/demo/social/install.png)
+
 The crontab line looks like this. It keeps the `PATH` of the shell that installed it, so that scheduled runs find the tools, and it names the state folder, so that scheduled runs use the same device, team key, and history as your own runs:
 
 ```
@@ -213,6 +218,8 @@ A key cannot be revoked. To shut someone out, start a new team and join the rema
 
 In the team view, token counts add up across machines. Quota percentages do not: an account's quota is the newest reading any machine has for it.
 
+![DEVICES × SUBSCRIPTIONS for a made-up team: twelve machines, most of them bots, against six subscriptions, in millions of tokens over 7 days](docs/demo/social/team-matrix.png)
+
 A machine goes by its host name; a Mac goes by the local host name in Sharing settings, which does not change with the network. `ai-usage name set NAME` gives it another, and the team sees it after the machine's next run.
 
 An account goes by a short name in the report: the part of an email before the `@`, or the first 8 characters of an id. To give one a name of your choosing for the whole team:
@@ -229,6 +236,8 @@ The account is its label, its current name, or `PROVIDER:LABEL`; an email matche
 ## Relay
 
 The relay is a small HTTP API that keeps one snapshot per machine. It is needed only for the team view; without one, ai-usage reports on this machine alone.
+
+![How a team's numbers travel: each machine sends a signed snapshot with names, emails, and paths sealed; the relay sees tools, plans, percentages, and token counts; every machine reads the whole team back and opens it with the team key](docs/demo/social/architecture.png)
 
 ```sh
 ai-usage relay show                          # the relay in use, or "no relay configured"
@@ -321,9 +330,13 @@ On a server, run the collector as a user that can read those folders. On macOS a
 
 The collector runs in a container as on any Linux machine: install it inside, as the user whose tools it should read, and each container is a machine in the team. Keep that user's home on a volume, name the machine with `AI_USAGE_NAME`, and run `ai-usage schedule run` beside the main process, since containers rarely have cron. [docs/containers.md](docs/containers.md) has the install command, an entrypoint, a Dockerfile, and an s6-overlay service.
 
+![Nine bot containers and a server on one Codex login, each machine's share of it in the interactive view](docs/demo/social/team-bots.png)
+
 ## JSON for agents
 
 `ai-usage --json` and `ai-usage report --json` print the report as JSON with `"schema_version": 4`. A field changes meaning only with a new schema version.
+
+![ai-usage --json through jq: each subscription's tool, short name, and state](docs/demo/social/json.png)
 
 ```
 schema_version, generated_at
@@ -364,6 +377,8 @@ In plain text, so the relay can check the shape:
 - each tool's status: ok, partial, error, or skipped
 
 So the relay's operator can see how many machines a team has, which tools and plans they use, how much, and when, but not who, on which machine, or in which project. The operator also sees the IP addresses that connect, which the relay keeps in rate-limit counters for up to a day.
+
+![What the relay keeps for one machine, trimmed: the machine, user, account, and project paths sealed, the provider, plan, quota windows, and session count in plain text](docs/demo/social/relay-view.png)
 
 Every snapshot is signed with the team key, and each machine checks the signatures of what it reads. The relay cannot forge or change a snapshot without being noticed. It can withhold one, delete one, or keep serving an older one.
 

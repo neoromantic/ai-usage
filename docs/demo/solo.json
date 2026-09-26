@@ -785,6 +785,7 @@
         "age_seconds": 240,
         "last_success_at": "2026-09-24T13:36:00Z",
         "last_error": null,
+        "update_error": null,
         "sources": [
           {
             "provider": "claude",
@@ -810,6 +811,7 @@
         "error": null,
         "silent": false,
         "old": false,
+        "behind_since": null,
         "usage": {
           "today": 25168448,
           "7d": 233914303,
