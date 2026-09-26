@@ -21,9 +21,7 @@ import (
 func orcaHome(t *testing.T, data, id string, marked bool) string {
 	t.Helper()
 	h := filepath.Join(data, "codex-accounts", id, "home")
-	if err := os.MkdirAll(h, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	mkdirs(t, h)
 	if marked {
 		if err := os.WriteFile(filepath.Join(h, ".orca-managed-home"), []byte(id+"\n"), 0o600); err != nil {
 			t.Fatal(err)
@@ -36,17 +34,13 @@ func TestDiscoverFindsOrcaCodexHomes(t *testing.T) {
 	root := t.TempDir()
 	home := filepath.Join(root, "home")
 	def := filepath.Join(home, ".codex")
-	if err := os.MkdirAll(def, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	mkdirs(t, def)
 	data := defaultAppData("orca", home)
 	b := orcaHome(t, data, "e4c8", true)
 	a := orcaHome(t, data, "5b21", true)
 	orcaHome(t, data, "unmarked", false)
 	// Orca's own runtime home is not an account's.
-	if err := os.MkdirAll(filepath.Join(data, "codex-runtime-home", "home"), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	mkdirs(t, filepath.Join(data, "codex-runtime-home", "home"))
 
 	// Found by path alone, as under the scheduler: default home first.
 	got := Discover(home, func(string) string { return "" }, nil)
@@ -204,8 +198,7 @@ func TestMirroredUnknownHistoryFollowsItsRateLimits(t *testing.T) {
 	for _, h := range []string{def, a, b} {
 		delete(w.askErr, state.Key("codex", h))
 	}
-	w.askErr[state.Key("codex", def)] = notLoggedIn("codex")
-	w.readings[state.Key("codex", def)] = probe.Reading{}
+	w.logout("codex", def)
 	w.login("codex", a, "bea", weekly(w.now, 60, beaReset))
 	w.login("codex", b, "sam", weekly(w.now, 30, samReset))
 	res := run(t, o)

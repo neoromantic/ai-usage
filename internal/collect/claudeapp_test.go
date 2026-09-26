@@ -18,9 +18,7 @@ func claudeAppHome(t *testing.T, userHome, dir, id, record string) string {
 	t.Helper()
 	s := filepath.Join(defaultAppData("Claude", userHome), claudeAppSessions, "org", "user", dir, "local_"+id)
 	h := filepath.Join(s, ".claude")
-	if err := os.MkdirAll(h, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	mkdirs(t, h)
 	if record != "" {
 		if err := os.WriteFile(s+".json", []byte(record), 0o600); err != nil {
 			t.Fatal(err)

@@ -1,7 +1,6 @@
 package collect
 
 import (
-	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -10,16 +9,10 @@ import (
 func TestDiscoverAndRemember(t *testing.T) {
 	root := t.TempDir()
 	home := filepath.Join(root, "home")
-	mk := func(parts ...string) string {
-		p := filepath.Join(append([]string{root}, parts...)...)
-		if err := os.MkdirAll(p, 0o700); err != nil {
-			t.Fatal(err)
-		}
-		return p
-	}
-	defCodex := mk("home", ".codex")
-	envCodex := mk("codex-env")
-	oldCodex := mk("codex-old")
+	defCodex := filepath.Join(home, ".codex")
+	envCodex := filepath.Join(root, "codex-env")
+	oldCodex := filepath.Join(root, "codex-old")
+	mkdirs(t, defCodex, envCodex, oldCodex)
 	env := map[string]string{
 		"CODEX_HOME":        envCodex + string(filepath.Separator), // cleaned
 		"CLAUDE_CONFIG_DIR": filepath.Join(root, "missing"),        // not a directory: left out
@@ -43,27 +36,16 @@ func TestDiscoverAndRemember(t *testing.T) {
 func TestDiscoverFindsHermesProfiles(t *testing.T) {
 	root := t.TempDir()
 	home := filepath.Join(root, "home")
-	mk := func(parts ...string) string {
-		p := filepath.Join(append([]string{root}, parts...)...)
-		if err := os.MkdirAll(p, 0o700); err != nil {
-			t.Fatal(err)
-		}
-		return p
-	}
-	db := func(dir string) {
-		if err := os.WriteFile(filepath.Join(dir, "state.db"), nil, 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	def := mk("home", ".hermes")
-	work := mk("home", ".hermes", "profiles", "work")
-	db(work)
-	mk("home", ".hermes", "profiles", "empty") // no usage yet
-	deleted := mk("home", ".hermes", "profiles", ".deleted")
-	db(deleted)
-	other := mk("hermes-root")
-	otherProf := mk("hermes-root", "profiles", "lab")
-	db(otherProf)
+	def := filepath.Join(home, ".hermes")
+	work := filepath.Join(def, "profiles", "work")
+	empty := filepath.Join(def, "profiles", "empty") // no usage yet
+	deleted := filepath.Join(def, "profiles", ".deleted")
+	other := filepath.Join(root, "hermes-root")
+	otherProf := filepath.Join(other, "profiles", "lab")
+	mkdirs(t, def, work, empty, deleted, other, otherProf)
+	hermesProfile(t, work)
+	hermesProfile(t, deleted)
+	hermesProfile(t, otherProf)
 
 	env := map[string]string{"HERMES_HOME": other}
 	got := Discover(home, func(k string) string { return env[k] }, nil)

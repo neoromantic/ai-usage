@@ -50,9 +50,7 @@ func newWorld(t *testing.T) (*world, Options) {
 		askErr:   map[string]error{},
 		lastUse:  map[string]time.Time{},
 	}
-	if err := os.MkdirAll(w.userHome, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	mkdirs(t, w.userHome)
 	o := Options{
 		Dir:      state.Dir(filepath.Join(root, "ai-usage")),
 		Version:  "v1.2.3",
@@ -75,9 +73,7 @@ func newWorld(t *testing.T) (*world, Options) {
 func (w *world) home(t *testing.T, p string) string {
 	t.Helper()
 	h := filepath.Join(w.userHome, "."+p)
-	if err := os.MkdirAll(h, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	mkdirs(t, h)
 	return h
 }
 
@@ -85,11 +81,40 @@ func (w *world) home(t *testing.T, p string) string {
 func (w *world) extraHome(t *testing.T, p, name string) string {
 	t.Helper()
 	h := filepath.Join(filepath.Dir(w.userHome), name)
-	if err := os.MkdirAll(h, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	mkdirs(t, h)
 	w.env[homeEnv[p]] = h
 	return h
+}
+
+// mkdirs makes each folder, with the folders above it.
+func mkdirs(t *testing.T, dirs ...string) {
+	t.Helper()
+	for _, d := range dirs {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// hermesProfile gives dir the empty state.db a Hermes profile with usage has.
+func hermesProfile(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "state.db"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// editConfig changes config.json as a person's command would.
+func editConfig(t *testing.T, d state.Dir, edit func(*state.Config)) {
+	t.Helper()
+	cfg, err := d.LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	edit(&cfg)
+	if err := d.SaveConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // read stands in for logs.ReadHomes: each home's logs, tagged with the home,
@@ -137,6 +162,13 @@ func (w *world) login(p, home, account string, q *probe.Quota) {
 	w.readings[state.Key(p, home)] = probe.Reading{Account: account, Quota: q}
 }
 
+// logout makes the harness in home answer that nobody is logged in.
+func (w *world) logout(p, home string) {
+	k := state.Key(p, home)
+	w.readings[k] = probe.Reading{}
+	w.askErr[k] = notLoggedIn(p)
+}
+
 func sess(id, project string, input int64, updated time.Time) logs.Session {
 	return logs.Session{ID: id, Project: project, Tokens: snapshot.Tokens{Input: input, Output: input / 10}, Updated: updated}
 }
@@ -160,24 +192,27 @@ func run(t *testing.T, o Options) *Result {
 	return res
 }
 
-func totalsFor(t *testing.T, st *state.State, provider, label string) AccountTotals {
-	t.Helper()
+func findTotals(st *state.State, provider, label string) (AccountTotals, bool) {
 	for _, a := range Totals(st) {
 		if a.Provider == provider && a.Label == label {
-			return a
+			return a, true
 		}
 	}
-	t.Fatalf("no totals for %s %s in %+v", provider, label, Totals(st))
-	return AccountTotals{}
+	return AccountTotals{}, false
+}
+
+func totalsFor(t *testing.T, st *state.State, provider, label string) AccountTotals {
+	t.Helper()
+	a, ok := findTotals(st, provider, label)
+	if !ok {
+		t.Fatalf("no totals for %s %s in %+v", provider, label, Totals(st))
+	}
+	return a
 }
 
 func hasTotals(st *state.State, provider, label string) bool {
-	for _, a := range Totals(st) {
-		if a.Provider == provider && a.Label == label {
-			return true
-		}
-	}
-	return false
+	_, ok := findTotals(st, provider, label)
+	return ok
 }
 
 func lastSample(t *testing.T, o Options) state.Sample {

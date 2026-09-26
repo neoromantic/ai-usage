@@ -184,8 +184,7 @@ func TestFirstNamedAccountClaimsUnknownHistory(t *testing.T) {
 
 	// Later unknown usage has an account to compare with, and stays unknown.
 	w.now = t0.Add(30 * time.Minute)
-	w.askErr[k] = notLoggedIn("codex")
-	w.readings[k] = probe.Reading{}
+	w.logout("codex", h)
 	w.sessions("codex", h, sess("s1", "/p", 1300, w.now), sess("s2", "/q", 50, w.now))
 	run(t, o)
 	w.now = t0.Add(45 * time.Minute)
@@ -289,8 +288,7 @@ func TestUnusedHomeWithoutLoginIsNoProblem(t *testing.T) {
 	// when asked who is logged in, and the next run finds it empty.
 	w, o := newWorld(t)
 	h := w.home(t, "claude")
-	w.askErr[state.Key("claude", h)] = notLoggedIn("claude")
-	w.readings[state.Key("claude", h)] = probe.Reading{}
+	w.logout("claude", h)
 	if got := run(t, o).State.Sources["claude"]; got.Status != "ok" || got.Error != "" {
 		t.Fatalf("claude source = %+v", got)
 	}
@@ -325,19 +323,8 @@ func TestHomesSharingClaudeLogsAreNotToldTheirUse(t *testing.T) {
 	personal := w.home(t, "claude")
 	work := w.extraHome(t, "claude", "work-claude")
 	own := filepath.Join(filepath.Dir(w.userHome), "own-claude")
-	cfg, err := o.Dir.LoadConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg.Homes = map[string][]string{"claude": {own}}
-	if err := o.Dir.SaveConfig(cfg); err != nil {
-		t.Fatal(err)
-	}
-	for _, h := range []string{personal, own} {
-		if err := os.MkdirAll(filepath.Join(h, "projects"), 0o700); err != nil {
-			t.Fatal(err)
-		}
-	}
+	editConfig(t, o.Dir, func(cfg *state.Config) { cfg.Homes = map[string][]string{"claude": {own}} })
+	mkdirs(t, filepath.Join(personal, "projects"), filepath.Join(own, "projects"))
 	if err := os.Symlink(filepath.Join(personal, "projects"), filepath.Join(work, "projects")); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
@@ -360,8 +347,7 @@ func TestLoggedOutHomeDoesNotClaimLater(t *testing.T) {
 	w, o := newWorld(t)
 	h := w.home(t, "codex")
 	k := state.Key("codex", h)
-	w.askErr[k] = notLoggedIn("codex")
-	w.readings[k] = probe.Reading{}
+	w.logout("codex", h)
 	w.sessions("codex", h, sess("s1", "/p", 1000, t0))
 	run(t, o)
 	w.now = t0.Add(15 * time.Minute)
@@ -382,8 +368,7 @@ func TestClaimOnceAfterTheAccountAgesOut(t *testing.T) {
 	w.login("codex", h, "ann@x", nil)
 	w.sessions("codex", h, sess("s1", "/p", 500, t0))
 	run(t, o)
-	w.askErr[k] = notLoggedIn("codex")
-	w.readings[k] = probe.Reading{}
+	w.logout("codex", h)
 	for day := 1; day <= 95; day += 2 {
 		w.now = t0.Add(time.Duration(day) * 24 * time.Hour)
 		w.sessions("codex", h, sess(fmt.Sprintf("u%d", day), "/p", 100, w.now))

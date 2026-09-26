@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/logs"
-	"github.com/neoromantic/ai-usage/internal/probe"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
@@ -114,8 +113,7 @@ func TestHermesLinksSubscriptionsToDefaultHomes(t *testing.T) {
 
 	// Nobody logged in to ~/.codex: no link, and new usage is linked to no one.
 	w.now = t0.Add(30 * time.Minute)
-	w.readings[state.Key("codex", codex)] = probe.Reading{}
-	w.askErr[state.Key("codex", codex)] = notLoggedIn("codex")
+	w.logout("codex", codex)
 	w.sessions("hermes", hermes,
 		hermesSess("h1", "openai-codex", w.now, map[string]snapshot.Tokens{"openai-codex": tok(1400)}),
 	)
@@ -188,28 +186,17 @@ func TestHermesQuotaFromNamedHome(t *testing.T) {
 	botsGrok := filepath.Join(root, "bots", ".grok")
 	agent := filepath.Join(root, "bots", ".hermes-agent")
 	profile := filepath.Join(agent, "profiles", "helper")
-	for _, d := range []string{bots, botsGrok, profile} {
-		if err := os.MkdirAll(d, 0o700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(profile, "state.db"), nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	mkdirs(t, bots, botsGrok, profile)
+	hermesProfile(t, profile)
 	// The entry names the home by a symlink; the run finds it by its path.
 	alias := filepath.Join(root, "agent-alias")
 	if err := os.Symlink(agent, alias); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := o.Dir.LoadConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg.Homes = map[string][]string{"codex": {bots}, "grok": {botsGrok}, "hermes": {agent}}
-	cfg.QuotaFrom = map[string]map[string]string{alias: {"codex": bots, "grok": botsGrok}}
-	if err := o.Dir.SaveConfig(cfg); err != nil {
-		t.Fatal(err)
-	}
+	editConfig(t, o.Dir, func(cfg *state.Config) {
+		cfg.Homes = map[string][]string{"codex": {bots}, "grok": {botsGrok}, "hermes": {agent}}
+		cfg.QuotaFrom = map[string]map[string]string{alias: {"codex": bots, "grok": botsGrok}}
+	})
 
 	botsQuota := quota(t0.Add(-time.Minute), 40, 60)
 	w.login("codex", codex, "sam", quota(t0, 5, 10))
@@ -275,27 +262,16 @@ func TestHermesQuotaFromLinkedProfileAndPartialRead(t *testing.T) {
 	bots := filepath.Join(root, "bots", ".codex")
 	agent := filepath.Join(root, "bots", ".hermes-agent")
 	elsewhere := filepath.Join(root, "profiles-elsewhere", "helper")
-	for _, d := range []string{bots, filepath.Join(agent, "profiles"), elsewhere} {
-		if err := os.MkdirAll(d, 0o700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(elsewhere, "state.db"), nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	mkdirs(t, bots, filepath.Join(agent, "profiles"), elsewhere)
+	hermesProfile(t, elsewhere)
 	profile := filepath.Join(agent, "profiles", "helper")
 	if err := os.Symlink(elsewhere, profile); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := o.Dir.LoadConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg.Homes = map[string][]string{"codex": {bots}, "hermes": {agent}}
-	cfg.QuotaFrom = map[string]map[string]string{agent: {"codex": bots}}
-	if err := o.Dir.SaveConfig(cfg); err != nil {
-		t.Fatal(err)
-	}
+	editConfig(t, o.Dir, func(cfg *state.Config) {
+		cfg.Homes = map[string][]string{"codex": {bots}, "hermes": {agent}}
+		cfg.QuotaFrom = map[string]map[string]string{agent: {"codex": bots}}
+	})
 	w.login("codex", codex, "sam", quota(t0, 5))
 	w.login("codex", bots, "bots", quota(t0, 40))
 	w.sessions("hermes", profile, hermesSess("p1", "openai-codex", t0.Add(-time.Hour), map[string]snapshot.Tokens{"openai-codex": tok(1000)}))

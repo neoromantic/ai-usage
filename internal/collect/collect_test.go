@@ -211,9 +211,7 @@ func TestNothingInstalledIsASuccessfulRun(t *testing.T) {
 func TestInstalledToolWithoutItsHomeIsNotAsked(t *testing.T) {
 	w, o := newWorld(t)
 	bin := filepath.Join(w.userHome, ".local", "bin")
-	if err := os.MkdirAll(bin, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	mkdirs(t, bin)
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte("x"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -278,9 +276,7 @@ func TestRemembersHomesFromEnvironment(t *testing.T) {
 func TestRelativeHomeIsRememberedAbsolute(t *testing.T) {
 	w, o := newWorld(t)
 	root := filepath.Dir(w.userHome)
-	if err := os.MkdirAll(filepath.Join(root, "rel-codex"), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	mkdirs(t, filepath.Join(root, "rel-codex"))
 	t.Chdir(root)
 	w.env["CODEX_HOME"] = "rel-codex"
 	run(t, o)
