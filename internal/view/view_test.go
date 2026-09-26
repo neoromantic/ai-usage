@@ -12,38 +12,9 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
-	"github.com/neoromantic/ai-usage/internal/logs"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
-	"github.com/neoromantic/ai-usage/internal/team"
 )
-
-// spend adds a session of label's that spent n input tokens in each of the
-// given hours.
-func spend(st *state.State, provider, label, project string, n int64, at ...time.Time) {
-	s := &state.Session{Provider: provider, Project: project, By: map[string]snapshot.Tokens{label: {Input: n * int64(len(at))}}, Hours: map[int64]int64{}}
-	for _, t := range at {
-		s.Hours[logs.HourOf(t)] += n
-		if t.After(s.Updated) {
-			s.Updated = t
-		}
-	}
-	st.Sessions[state.Key(provider, label, project, at[0].String())] = s
-}
-
-// docWith is another device's snapshot built with its own config.
-func docWith(t *testing.T, key *team.Key, cfg state.Config, host string, at time.Time, st *state.State) snapshot.Doc {
-	t.Helper()
-	body, err := json.Marshal(collect.BuildDoc(st, key, cfg, host, "kim", "v1.2.0", at))
-	if err != nil {
-		t.Fatal(err)
-	}
-	doc, err := snapshot.Decode(body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return doc
-}
 
 func TestAccountOfThisDevice(t *testing.T) {
 	st := emptyState()
@@ -200,7 +171,7 @@ func TestTeamDeviceUpdate(t *testing.T) {
 	st := emptyState()
 	st.Update.Error = "update check: HTTP 502 from github.com"
 	f := newFixture(t, st)
-	f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", now)
+	f.seal(now)
 	other := emptyState()
 	other.LastError = "codex: not logged in"
 	other.Update.Error = "update check: HTTP 429 from github.com: Too Many Requests"
@@ -276,7 +247,7 @@ func TestAliasesTravelAndTheNewestWins(t *testing.T) {
 		state.Key("codex", "bots@corp.test"): {Name: "bots-old", At: now.Add(-2 * time.Hour)},
 		state.Key("codex", "sam@mail.test"):  {Name: "sp", At: now.Add(-3 * time.Hour)},
 	}
-	f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", now)
+	f.seal(now)
 
 	other := emptyState()
 	addAccount(other, "codex", "bots@corp.test", true, nil, 10)
@@ -322,7 +293,7 @@ func TestAliasThatAnotherAccountGoesBy(t *testing.T) {
 		state.Key("codex", "ann@a.io"):       {Name: "kim", At: now.Add(-time.Hour)},
 		state.Key("claude", "lee@corp.test"): {Name: "Sam", At: now.Add(-time.Hour)},
 	}
-	f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", now)
+	f.seal(now)
 	other := emptyState()
 	addAccount(other, "codex", "kim@corp.test", true, nil, 10)
 	addAccount(other, "claude", "sam@mail.test", true, nil, 10)
@@ -364,7 +335,7 @@ func TestAliasThatTwoAccountsGoByOnThePage(t *testing.T) {
 	addAccount(st, "codex", "ann@acme.dev", true, out(), 10)
 	f := newFixture(t, st)
 	f.in.Config.Aliases = map[string]state.Alias{state.Key("codex", "ann@acme.dev"): {Name: "kim", At: now.Add(-time.Hour)}}
-	f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", now)
+	f.seal(now)
 	other := emptyState()
 	addAccount(other, "codex", "sam@mail.test", true, out(), 10)
 	cfg := state.Config{Device: "d-other-device", Aliases: map[string]state.Alias{
@@ -374,7 +345,7 @@ func TestAliasThatTwoAccountsGoByOnThePage(t *testing.T) {
 
 	// On one device, the alias came before the account that goes by it.
 	addAccount(st, "codex", "kim@corp.test", false, nil, 10)
-	f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", now)
+	f.seal(now)
 	one := withTeam(t, f)
 
 	for _, c := range []struct {
@@ -443,19 +414,15 @@ func TestAliasesTheReportRefuses(t *testing.T) {
 // began, Hermes through it included, and names the busiest.
 func TestUsersSinceTheWindowBegan(t *testing.T) {
 	start := now.Add(-3 * 24 * time.Hour)
-	q := func(at time.Time) *state.Quota {
-		return &state.Quota{At: at, Source: "harness", Windows: []snapshot.Window{week7(40, start.Add(week))}}
-	}
 	st := emptyState()
-	addAccount(st, "codex", "bots", true, q(now), 0)
+	addAccount(st, "codex", "bots", true, weekQuota(now, 40), 0)
 	spend(st, "codex", "bots", "/w", 50, now.Add(-2*time.Hour))
 	f := newFixture(t, st)
 
 	busy := emptyState()
-	addAccount(busy, "codex", "bots", true, q(now.Add(-time.Hour)), 0)
+	addAccount(busy, "codex", "bots", true, weekQuota(now.Add(-time.Hour), 40), 0)
 	addHermes(busy, "openai-codex", "codex", "bots", 0)
-	spend(busy, "hermes", "openai-codex", "/h", 300, now.Add(-5*time.Hour))
-	busy.Sessions[state.Key("hermes", "openai-codex", "/h", now.Add(-5*time.Hour).String())].Via = map[string]snapshot.Tokens{state.Key("codex", "bots"): {Input: 300}}
+	spendVia(busy, "openai-codex", "/h", "codex", "bots", 300, now.Add(-5*time.Hour))
 	// Before the window began only.
 	before := emptyState()
 	addAccount(before, "codex", "bots", true, nil, 0)
@@ -491,21 +458,17 @@ func TestUsersSinceTheWindowBegan(t *testing.T) {
 
 func TestMatrix(t *testing.T) {
 	start := now.Add(-3 * 24 * time.Hour)
-	q := func(pct float64) *state.Quota {
-		return &state.Quota{At: now, Source: "harness", Windows: []snapshot.Window{week7(pct, start.Add(week))}}
-	}
 	st := emptyState()
-	addAccount(st, "claude", "ann@a.io", true, q(60), 0)
-	addAccount(st, "codex", "bots@a.io", true, q(40), 0)
+	addAccount(st, "claude", "ann@a.io", true, weekQuota(now, 60), 0)
+	addAccount(st, "codex", "bots@a.io", true, weekQuota(now, 40), 0)
 	spend(st, "claude", "ann@a.io", "/w", 3_000_000, now.Add(-time.Hour))
 	spend(st, "codex", "bots@a.io", "/w", 1_000_000, now.Add(-time.Hour), start.Add(-12*time.Hour))
 	f := newFixture(t, st)
 
 	build := emptyState()
-	addAccount(build, "codex", "bots@a.io", true, q(40), 0)
+	addAccount(build, "codex", "bots@a.io", true, weekQuota(now, 40), 0)
 	addHermes(build, "openai-codex", "codex", "bots@a.io", 0)
-	spend(build, "hermes", "openai-codex", "/h", 3_000_000, now.Add(-2*time.Hour))
-	build.Sessions[state.Key("hermes", "openai-codex", "/h", now.Add(-2*time.Hour).String())].Via = map[string]snapshot.Tokens{state.Key("codex", "bots@a.io"): {Input: 3_000_000}}
+	spendVia(build, "openai-codex", "/h", "codex", "bots@a.io", 3_000_000, now.Add(-2*time.Hour))
 	// A Hermes key with no subscription.
 	build.Accounts[state.Key("hermes", "openrouter")] = &state.Account{Provider: "hermes", Label: "openrouter", LastSeenAt: now}
 	spend(build, "hermes", "openrouter", "/h", 500_000, now.Add(-3*time.Hour))
@@ -707,10 +670,7 @@ func TestHeaderFailuresAreInAttention(t *testing.T) {
 	st.Update = state.Update{CheckedAt: now, Error: "cannot write beside /opt/bin/ai-usage: permission denied"}
 	f := newFixture(t, st)
 	r := Build(f.in)
-	var got []string
-	for _, a := range r.Attention {
-		got = append(got, a.Kind+" "+strings.Join(a.Devices, ",")+" "+a.Message)
-	}
+	got := attentionList(r)
 	want := []string{
 		"error thisbox relay: service unavailable (HTTP 503)",
 		"error thisbox update: cannot write beside /opt/bin/ai-usage: permission denied",
@@ -765,12 +725,9 @@ func TestFailedRunIsInAttention(t *testing.T) {
 		ran := now.Add(-c.ran)
 		st.LastRunAt, st.LastSuccessAt = ran, ran
 		st.LastError, st.LastErrorAt = bug, now.Add(-time.Minute)
-		f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", ran)
+		f.seal(ran)
 		r := Build(f.in)
-		var got []string
-		for _, a := range r.Attention {
-			got = append(got, a.Kind+" "+strings.Join(a.Devices, ",")+" "+a.Message)
-		}
+		got := attentionList(r)
 		if !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s: attention =\n%s\nwant\n%s", c.name, strings.Join(got, "\n"), strings.Join(c.want, "\n"))
 		}
@@ -787,7 +744,7 @@ func TestFailedRunIsInAttention(t *testing.T) {
 	f := newFixture(t, st)
 	st.LastSuccessAt = now.Add(-time.Hour)
 	st.LastError, st.LastErrorAt = "codex: app-server exited without answering", now
-	f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", now)
+	f.seal(now)
 	r := Build(f.in)
 	if len(r.Attention) != 1 || r.Attention[0].Message != st.LastError {
 		t.Fatalf("attention = %+v", r.Attention)
@@ -848,14 +805,8 @@ func TestTeamLinkFromTheWire(t *testing.T) {
 		t.Fatalf("carl linked usage = %#v", carl.LinkedUsage)
 	}
 	// In the matrix, Hermes counts under the login it spends through.
-	var bobCol = -1
-	for i, c := range r.Team.Matrix.Columns {
-		if c.Provider == "codex" && c.Label == "bob" {
-			bobCol = i
-		}
-	}
-	if bobCol < 0 || r.Team.Matrix.Columns[bobCol].Usage.Today != 210 {
-		t.Fatalf("columns = %+v", r.Team.Matrix.Columns)
+	if c := r.Team.Matrix.Columns[column(t, r.Team.Matrix, "bob")]; c.Usage.Today != 210 {
+		t.Fatalf("bob's column = %+v", c)
 	}
 }
 
@@ -957,23 +908,13 @@ func TestTeamLinkedUsageSplitsByLogin(t *testing.T) {
 // The snapshot does not split Hermes' days by login, so they go by the
 // same proportion.
 func TestMatrixSplitsHermesByLogin(t *testing.T) {
-	start := now.Add(-3 * 24 * time.Hour)
-	q := func(pct float64) *state.Quota {
-		return &state.Quota{At: now, Source: "harness", Windows: []snapshot.Window{week7(pct, start.Add(week))}}
-	}
 	f := newFixture(t, emptyState())
 	other := emptyState()
-	addAccount(other, "codex", "bots@acme.dev", false, q(40), 0)
-	addAccount(other, "codex", "sam@mail.test", true, q(10), 0)
+	addAccount(other, "codex", "bots@acme.dev", false, weekQuota(now, 40), 0)
+	addAccount(other, "codex", "sam@mail.test", true, weekQuota(now, 10), 0)
 	addHermes(other, "openai-codex", "codex", "bots@acme.dev", 0)
-	for _, s := range []struct {
-		project, to string
-		n           int64
-		at          time.Time
-	}{{"/bots", "bots@acme.dev", 4_000_000, now.Add(-2 * time.Hour)}, {"/sam", "sam@mail.test", 1_000_000, now.Add(-3 * time.Hour)}} {
-		spend(other, "hermes", "openai-codex", s.project, s.n, s.at)
-		other.Sessions[state.Key("hermes", "openai-codex", s.project, s.at.String())].Via = map[string]snapshot.Tokens{state.Key("codex", s.to): {Input: s.n}}
-	}
+	spendVia(other, "openai-codex", "/bots", "codex", "bots@acme.dev", 4_000_000, now.Add(-2*time.Hour))
+	spendVia(other, "openai-codex", "/sam", "codex", "sam@mail.test", 1_000_000, now.Add(-3*time.Hour))
 	r := withTeam(t, f, otherDoc(t, f.key, "d-other-device", "otherbox", now, other))
 
 	if h := findTeamAccount(t, r, "hermes", "openai-codex"); h.Link == nil || h.Link.Label != "bots@acme.dev" {
@@ -987,15 +928,7 @@ func TestMatrixSplitsHermesByLogin(t *testing.T) {
 		tokens int64
 		share  float64
 	}{"bots@acme.dev": {4_000_000, 100}, "sam@mail.test": {1_000_000, 100}} {
-		col := -1
-		for i, c := range mx.Columns {
-			if c.Label == label {
-				col = i
-			}
-		}
-		if col < 0 {
-			t.Fatalf("no column %s in %+v", label, mx.Columns)
-		}
+		col := column(t, mx, label)
 		if c := mx.Columns[col]; c.Usage.Week != want.tokens || c.WindowTokens != want.tokens {
 			t.Fatalf("%s column = %+v", label, c)
 		}
@@ -1158,17 +1091,8 @@ func TestRefusalReading(t *testing.T) {
 	}
 	// Nobody knows how full ann's weekly window is, so the matrix does not
 	// say it is empty.
-	seen := false
-	for _, c := range r.Team.Matrix.Columns {
-		if c.Label == "ann" {
-			seen = true
-			if c.Percent != nil {
-				t.Fatalf("ann's column = %+v", c)
-			}
-		}
-	}
-	if !seen {
-		t.Fatalf("no column for ann: %+v", r.Team.Matrix.Columns)
+	if c := r.Team.Matrix.Columns[column(t, r.Team.Matrix, "ann")]; c.Percent != nil {
+		t.Fatalf("ann's column = %+v", c)
 	}
 	if len(r.Attention) != 2 || out["ann"] != "7d Opus" || out["kim"] != "" {
 		t.Fatalf("attention = %+v", r.Attention)
@@ -1350,7 +1274,7 @@ func TestJSONFieldNamesAreStable(t *testing.T) {
 		otherDoc(t, f.key, "d-other-device", "o", now.Add(-48*time.Hour), other),
 	}}
 	f.in.Config.Aliases = map[string]state.Alias{state.Key("codex", "bob"): {Name: "b", At: now}}
-	f.in.Doc = collect.BuildDoc(st, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", now)
+	f.seal(now)
 	r := Build(f.in)
 	if r.SchemaVersion != 4 {
 		t.Fatalf("schema version %d", r.SchemaVersion)

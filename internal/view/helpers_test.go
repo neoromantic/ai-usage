@@ -3,10 +3,12 @@ package view
 import (
 	"encoding/json"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/logs"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
@@ -45,6 +47,26 @@ func addAccount(st *state.State, provider, label string, current bool, q *state.
 	}
 }
 
+// spend adds a session of label's that spent n input tokens in each of the
+// given hours.
+func spend(st *state.State, provider, label, project string, n int64, at ...time.Time) {
+	s := &state.Session{Provider: provider, Project: project, By: map[string]snapshot.Tokens{label: {Input: n * int64(len(at))}}, Hours: map[int64]int64{}}
+	for _, t := range at {
+		s.Hours[logs.HourOf(t)] += n
+		if t.After(s.Updated) {
+			s.Updated = t
+		}
+	}
+	st.Sessions[state.Key(provider, label, project, at[0].String())] = s
+}
+
+// spendVia adds a session of the Hermes account label's that spent n input
+// tokens at at, all of them through provider's login to.
+func spendVia(st *state.State, label, project, provider, to string, n int64, at time.Time) {
+	spend(st, "hermes", label, project, n, at)
+	st.Sessions[state.Key("hermes", label, project, at.String())].Via = map[string]snapshot.Tokens{state.Key(provider, to): {Input: n}}
+}
+
 type fixture struct {
 	key *team.Key
 	in  Input
@@ -60,11 +82,18 @@ func newFixture(t *testing.T, st *state.State) *fixture {
 			st.Sources[p] = state.Source{Status: "ok", Homes: []string{"/home/." + p}}
 		}
 	}
-	doc := collect.BuildDoc(st, key, state.Config{Device: cfg.Device}, "thisbox", "sam", "v1.2.3", now)
-	return &fixture{key: key, in: Input{
+	f := &fixture{key: key, in: Input{
 		Version: "v1.2.3", RelayURL: "https://relay.example", Config: cfg, State: st, Key: key,
-		Doc: doc, Hostname: "thisbox", OSUser: "sam", Now: now,
+		Hostname: "thisbox", OSUser: "sam", Now: now,
 	}}
+	f.seal(now)
+	return f
+}
+
+// seal makes f's snapshot of this device from its state and config, as a
+// run at at would.
+func (f *fixture) seal(at time.Time) {
+	f.in.Doc = collect.BuildDoc(f.in.State, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", at)
 }
 
 func findAccount(t *testing.T, r Report, provider, label string) Account {
@@ -83,10 +112,10 @@ func findAccount(t *testing.T, r Report, provider, label string) Account {
 	return Account{}
 }
 
-// otherDoc is another device's published snapshot, decoded as a pull would.
-func otherDoc(t *testing.T, key *team.Key, device, host string, at time.Time, st *state.State) snapshot.Doc {
+// docWith is another device's snapshot built with its own config.
+func docWith(t *testing.T, key *team.Key, cfg state.Config, host string, at time.Time, st *state.State) snapshot.Doc {
 	t.Helper()
-	body, err := json.Marshal(collect.BuildDoc(st, key, state.Config{Device: device}, host, "kim", "v1.2.0", at))
+	body, err := json.Marshal(collect.BuildDoc(st, key, cfg, host, "kim", "v1.2.0", at))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,6 +124,12 @@ func otherDoc(t *testing.T, key *team.Key, device, host string, at time.Time, st
 		t.Fatal(err)
 	}
 	return doc
+}
+
+// otherDoc is another device's published snapshot, decoded as a pull would.
+func otherDoc(t *testing.T, key *team.Key, device, host string, at time.Time, st *state.State) snapshot.Doc {
+	t.Helper()
+	return docWith(t, key, state.Config{Device: device}, host, at, st)
 }
 
 // addHermes adds a Hermes account that bills through provider/to, with one
@@ -111,6 +146,12 @@ func addHermes(st *state.State, label, provider, to string, tokens int64) {
 
 func codexQuota(at time.Time, pct float64) *state.Quota {
 	return &state.Quota{At: at, Source: "harness", Windows: []snapshot.Window{win("7d", pct, now.Add(48*time.Hour))}}
+}
+
+// weekQuota is a harness reading, taken at at, of a weekly window begun 3
+// days before now and pct full.
+func weekQuota(at time.Time, pct float64) *state.Quota {
+	return &state.Quota{At: at, Source: "harness", Windows: []snapshot.Window{week7(pct, now.Add(-3*24*time.Hour).Add(week))}}
 }
 
 func findTeamAccount(t *testing.T, r Report, provider, label string) TeamAccount {
@@ -130,6 +171,15 @@ func withTeam(t *testing.T, f *fixture, docs ...snapshot.Doc) Report {
 	t.Helper()
 	f.in.Team = collect.TeamCache{PulledAt: now, Team: f.key.Fingerprint(), Docs: docs}
 	return Build(f.in)
+}
+
+// attentionList is r's ATTENTION, one "kind devices message" line per item.
+func attentionList(r Report) []string {
+	var got []string
+	for _, a := range r.Attention {
+		got = append(got, a.Kind+" "+strings.Join(a.Devices, ",")+" "+a.Message)
+	}
+	return got
 }
 
 // column is the matrix column of the subscription with label.
