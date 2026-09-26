@@ -38,9 +38,9 @@ type Behind struct {
 	Since   time.Time `json:"since"`
 }
 
-// silentAfter is how long a device goes without reporting before the views
+// SilentAfter is how long a device goes without reporting before the views
 // call it silent. Such a device cannot update itself.
-const silentAfter = 24 * time.Hour
+const SilentAfter = 24 * time.Hour
 
 // LoadTeamCache reads the cache. Documents are decoded again; they were
 // verified when they were pulled.
@@ -198,7 +198,7 @@ func behindSince(prev map[string]Behind, docs []snapshot.Doc, checked string, af
 	latest := selfupdate.Newest(versions...)
 	var out map[string]Behind
 	for _, d := range docs {
-		if !selfupdate.Newer(latest, d.CollectorVersion) || now.Sub(d.CollectedAt) > silentAfter {
+		if !selfupdate.Newer(latest, d.CollectorVersion) || now.Sub(d.CollectedAt) > SilentAfter {
 			continue
 		}
 		b, ok := prev[d.Device]

@@ -117,7 +117,7 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 			LastSuccessAt:    timePtr(d.LastSuccessAt),
 			LastError:        strPtr(snapshot.Printable(lastErr)),
 			Sources:          []Source{},
-			Silent:           now.Sub(d.CollectedAt) > SilentAfter,
+			Silent:           now.Sub(d.CollectedAt) > collect.SilentAfter,
 		}
 		// This device's own update shows in the header and ATTENTION.
 		if !dev.This {

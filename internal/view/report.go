@@ -18,8 +18,6 @@ const SchemaVersion = 4
 const (
 	// StaleAfter marks a quota reading as old in both views.
 	StaleAfter = 6 * time.Hour
-	// SilentAfter marks a device that has not reported for a day.
-	SilentAfter = 24 * time.Hour
 	// BehindAfter marks an old device that has run its release for longer
 	// than updating takes without updating itself: v0.2.0 checks for a
 	// release every 6 hours, and the next run is the update.
