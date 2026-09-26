@@ -160,7 +160,9 @@ func TestJSONFieldNamesAreStable(t *testing.T) {
 const jsonFields = `
 attention attention.account attention.at attention.devices attention.kind attention.message attention.name
 attention.percent attention.provider attention.reading_age_seconds attention.resets_at attention.window
-collector collector.device collector.device_label collector.last_error collector.last_error_at
+collector collector.device collector.device_label
+collector.health collector.health.at collector.health.item collector.health.release collector.health.state collector.health.status
+collector.last_error collector.last_error_at
 collector.last_run_at collector.last_success_at collector.os_user collector.relay
 collector.relay.last_error collector.relay.last_pull_at collector.relay.last_push_at collector.relay.pending
 collector.relay.url collector.schedule collector.schedule.error collector.schedule.foreground collector.schedule.registered
@@ -185,7 +187,7 @@ providers.accounts.quota providers.accounts.quota.age_seconds providers.accounts
 providers.accounts.quota.source providers.accounts.quota.stale providers.accounts.quota.windows
 providers.accounts.quota.windows.forecast providers.accounts.quota.windows.forecast.elapsed
 providers.accounts.quota.windows.forecast.percent providers.accounts.quota.windows.forecast.runs_out_at
-providers.accounts.quota.windows.main providers.accounts.quota.windows.minutes providers.accounts.quota.windows.name
+providers.accounts.quota.windows.limits providers.accounts.quota.windows.main providers.accounts.quota.windows.minutes providers.accounts.quota.windows.name
 providers.accounts.quota.windows.observed_at providers.accounts.quota.windows.percent providers.accounts.quota.windows.reset
 providers.accounts.quota.windows.resets_at providers.accounts.quota.windows.stale providers.accounts.quota.windows.state
 providers.accounts.sessions providers.accounts.state providers.accounts.tokens providers.accounts.tokens.cache_read
@@ -228,7 +230,7 @@ team.providers.accounts.quota.age_seconds team.providers.accounts.quota.device t
 team.providers.accounts.quota.stale team.providers.accounts.quota.windows
 team.providers.accounts.quota.windows.forecast team.providers.accounts.quota.windows.forecast.elapsed
 team.providers.accounts.quota.windows.forecast.percent team.providers.accounts.quota.windows.forecast.runs_out_at
-team.providers.accounts.quota.windows.main team.providers.accounts.quota.windows.minutes team.providers.accounts.quota.windows.name
+team.providers.accounts.quota.windows.limits team.providers.accounts.quota.windows.main team.providers.accounts.quota.windows.minutes team.providers.accounts.quota.windows.name
 team.providers.accounts.quota.windows.observed_at team.providers.accounts.quota.windows.percent team.providers.accounts.quota.windows.reset
 team.providers.accounts.quota.windows.resets_at team.providers.accounts.quota.windows.stale team.providers.accounts.quota.windows.state
 team.providers.accounts.sessions team.providers.accounts.state team.providers.accounts.subscription team.providers.accounts.tokens

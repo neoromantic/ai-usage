@@ -51,6 +51,34 @@ Conventions:
 | `update.latest` | string | the newest release that check saw |
 | `update.staged` | string | a release already installed; the next run uses it |
 | `update.error` | string | the last update error |
+| `health` | list | how the collection, the relay, and the update are doing, one entry each in that order, as the console's header shows them; see below |
+
+A `health` entry:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `item` | string | `collection`, `relay`, or `update` |
+| `status` | string | the first status in the table below that applies to the item |
+| `state` | string | how the item is: `ok`; `warn`, it needs a look; `error`, it fails; `off`, it is not in use or has not run; `info`, news. The console's header colors the item's dot by it: green, yellow, red, gray, and blue |
+| `at` | time | for `collection`, `last_success_at`, or with `failed` `last_error_at`, and `null` with `never`; for `relay`, `relay.last_push_at`, and `null` with `none`; for `update`, `update.checked_at` |
+| `release` | string | with `staged`, `update.staged`; with `available`, `update.latest`; `null` with any other status |
+
+| `item` | `status` | `state` | When |
+| --- | --- | --- | --- |
+| `collection` | `never` | `error` | `last_run_at` is `null`: this device has never collected |
+| `collection` | `failed` | `error` | the last run failed: `last_error_at` is set, and `last_success_at` is older or `null` |
+| `collection` | `unscheduled` | `warn` | `schedule.registered` is `false` |
+| `collection` | `ok` | `ok` | otherwise |
+| `relay` | `none` | `off` | `relay.url` is `null` |
+| `relay` | `failing` | `error` | `relay.last_error` is set |
+| `relay` | `pending` | `warn` | `relay.pending` is `true`, or `relay.last_push_at` is `null` |
+| `relay` | `ok` | `ok` | otherwise |
+| `update` | `dev` | `off` | `version` is not a release such as `v1.2.3`, so the collector does not update itself |
+| `update` | `staged` | `info` | `update.staged` is set |
+| `update` | `failed` | `error` | `update.error` is set |
+| `update` | `unchecked` | `off` | `update.checked_at` is `null` |
+| `update` | `available` | `warn` | `update.latest` is newer than `version` |
+| `update` | `ok` | `ok` | otherwise |
 
 ### attention
 
@@ -65,7 +93,7 @@ Each entry is one thing that needs attention, from the team's view of each subsc
 | `old` | devices run an older release than the team's newest | `devices` lists every one of them; `message` is the newest release; `at` is the earliest `behind_since` among those that have reported for 7 hours since it and are not `silent`, absent when none has |
 | `under` | past half of a subscription's main window, its forecast is under 50% | `provider`, `account`, `name`; `resets_at` is when it resets, `percent` its forecast |
 
-A window is the account's main one or one that limits it more; see the account's `state`. An `out`, `over`, or `under` entry has `reading_age_seconds` when its window's reading is stale.
+A window is one with `limits`: the account's main one, or one that limits it more. An `out`, `over`, or `under` entry has `reading_age_seconds` when its window's reading is stale.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -100,7 +128,7 @@ An account is one login. After you switch accounts, the previous one stays, with
 | `current` | bool | logged in right now. It turns `false` when the tool answers that nobody is logged in; a tool that does not answer leaves the last account current |
 | `home` | string | the first of `homes` the account is logged in to now; absent when it is not logged in |
 | `plan` | string | the plan the tool reports |
-| `state` | string | the worst state of the windows that limit the account: its main window, and each other window that has not reset and is `out`, `over`, or fuller than the main one; `unknown` without a reading |
+| `state` | string | the worst state of the windows that limit the account, those with `limits`; `unknown` without a reading |
 | `quota` | object | the last good quota reading, `null` if there never was one; see below |
 | `link` | object | `{provider, label}`: the account of another tool this one is assumed to bill through, `null` when there is none. Only Hermes has one: its `openai-codex` account is linked to a Codex account and `xai-oauth` to a Grok one. Each Hermes folder is taken to bill through the account logged in to the folder `ai-usage home add --quota-from` named for it, else to `~/.codex` or `~/.grok`; when its folders bill through several, the link is the one most of the account's tokens in the last 90 days went through. Hermes keeps its own login, so the link is an assumption, not a reading |
 | `sessions` | number | sessions in the last 90 days |
@@ -140,6 +168,7 @@ A window:
 | `resets_at` | time | when it resets, if the tool said |
 | `minutes` | number | its length in minutes; absent when the tool did not say |
 | `main` | bool | the account's main window: the one named `7d`, else the first a week long, else the longest. An account with windows has exactly one |
+| `limits` | bool | the window limits the account: it is the main window, or it has not reset and is `out`, `over`, or fuller than the main one, or used at all when the main one has reset. The account's `state` is the worst of these, and the console shows each one that is not the main window as a row of its own |
 | `observed_at` | time | when this window was read. In the team view the windows of one account can come from different devices and readings |
 | `stale` | bool | this window's reading is more than 6 hours old and the window was not full. A full window stays full until it resets, however old the reading |
 | `reset` | bool | the window has reset since it was read, so how full it is now is not known; its `state` is `unknown` and `forecast` is `null` |
@@ -283,6 +312,7 @@ A cell:
 ## Added within version 4
 
 - `update_error` and `behind_since` on a team device, so that the team can see why a device does not update itself, and for how long it has not. An `error` entry in `attention` for an `old` device whose update check fails, and `at` on the `old` entry. No field changed meaning, so the version stays 4.
+- `collector.health`, how the collection, the relay, and the update are doing, and `limits` on a window, which says the window limits the account. A report from an earlier release has neither: read a missing `health` as `[]` and a missing `limits` as `false`, and then only the main windows as limiting. `ai-usage report --from` fills both in for such a report, as this release makes them. No field changed meaning, so the version stays 4.
 
 ## Example
 
@@ -310,7 +340,12 @@ A shortened report from a team of two:
       "last_error": null
     },
     "schedule": { "registered": true, "foreground": false, "error": null },
-    "update": { "checked_at": "2026-09-01T09:13:00Z", "latest": "v1.3.0", "staged": null, "error": null }
+    "update": { "checked_at": "2026-09-01T09:13:00Z", "latest": "v1.3.0", "staged": null, "error": null },
+    "health": [
+      { "item": "collection", "status": "ok", "state": "ok", "at": "2026-09-01T12:02:00Z", "release": null },
+      { "item": "relay", "status": "ok", "state": "ok", "at": "2026-09-01T12:02:00Z", "release": null },
+      { "item": "update", "status": "ok", "state": "ok", "at": "2026-09-01T09:13:00Z", "release": null }
+    ]
   },
   "attention": [
     {
@@ -350,6 +385,7 @@ A shortened report from a team of two:
                 "resets_at": "2026-09-01T14:00:00Z",
                 "minutes": 300,
                 "main": false,
+                "limits": false,
                 "observed_at": "2026-09-01T12:00:00Z",
                 "stale": false,
                 "reset": false,
@@ -362,6 +398,7 @@ A shortened report from a team of two:
                 "resets_at": "2026-09-04T12:00:00Z",
                 "minutes": 10080,
                 "main": true,
+                "limits": true,
                 "observed_at": "2026-09-01T12:00:00Z",
                 "stale": false,
                 "reset": false,
@@ -454,6 +491,7 @@ A shortened report from a team of two:
                   "resets_at": "2026-09-04T12:00:00Z",
                   "minutes": 10080,
                   "main": true,
+                  "limits": true,
                   "observed_at": "2026-09-01T11:51:00Z",
                   "stale": false,
                   "reset": false,

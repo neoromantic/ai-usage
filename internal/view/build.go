@@ -46,6 +46,7 @@ func Build(in Input) Report {
 		Providers: []Provider{},
 		Projects:  []Project{},
 	}
+	r.Collector.Health = health(r.Collector)
 
 	totals := collect.Totals(st)
 	for _, p := range snapshot.Providers {
@@ -74,6 +75,42 @@ func Build(in Input) Report {
 	}
 	r.Attention = attention(r.Team, r.Collector, now)
 	return r
+}
+
+// Fill gives a report saved by an earlier release of this schema the fields
+// added to it since, as Build makes them: the collector's health, and the
+// windows that limit each account. A report that has them keeps them.
+func Fill(r *Report) {
+	if r.Collector.Health == nil {
+		r.Collector.Health = health(r.Collector)
+	}
+	for i := range r.Providers {
+		for j := range r.Providers[i].Accounts {
+			fillLimits(r.Providers[i].Accounts[j].Quota)
+		}
+	}
+	for i := range r.Team.Providers {
+		for j := range r.Team.Providers[i].Accounts {
+			fillLimits(r.Team.Providers[i].Accounts[j].Quota)
+		}
+	}
+}
+
+// fillLimits marks the windows of a quota that limit the account, as
+// readQuota does, unless its main window is marked already.
+func fillLimits(q *Quota) {
+	if q == nil {
+		return
+	}
+	m := mainWindow(q.Windows)
+	if m == nil || m.Limits {
+		return
+	}
+	main := *m
+	for i := range q.Windows {
+		w := &q.Windows[i]
+		w.Limits = w.Main || limitsMore(*w, main)
+	}
 }
 
 // accountView is one of this device's accounts of provider, whose homes are

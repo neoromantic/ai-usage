@@ -139,7 +139,7 @@ func (p *page) subRows(a *TeamAccount) []subRow {
 		return rows
 	}
 	for j := range a.Quota.Windows {
-		if w := &a.Quota.Windows[j]; limitsMore(*w, *main) {
+		if w := &a.Quota.Windows[j]; w.Limits && !w.Main {
 			rows = append(rows, subRow{window: true, name: p.txt(trimLength(w.Name, main.Name)), win: w})
 		}
 	}

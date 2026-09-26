@@ -249,6 +249,7 @@ func ExampleText() {
 	r := Report{GeneratedAt: time.Date(2026, 9, 23, 14, 38, 0, 0, time.UTC)}
 	r.Collector.DeviceLabel = "mbp-anna"
 	r.Collector.Version = "dev"
+	r.Collector.Health = health(r.Collector)
 	fmt.Print(plainText(r, Options{Loc: time.UTC}))
 	// Output:
 	// ai-usage · mbp-anna  ● never collected  ● no relay  ● dev build

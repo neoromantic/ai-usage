@@ -54,6 +54,10 @@ type Collector struct {
 	Relay         Relay      `json:"relay"`
 	Schedule      Schedule   `json:"schedule"`
 	Update        Update     `json:"update"`
+	// Health is the collection, the relay, and the update, in that order,
+	// as the header shows them. A report saved before it has none until
+	// Fill gives it one.
+	Health []Health `json:"health"`
 }
 
 type Relay struct {
@@ -75,6 +79,52 @@ type Update struct {
 	Latest    *string    `json:"latest"`
 	Staged    *string    `json:"staged"`
 	Error     *string    `json:"error"`
+}
+
+// Health items, and the statuses of each. An item is ok when nothing is
+// wrong with it.
+const (
+	HealthCollection = "collection"
+	HealthRelay      = "relay"
+	HealthUpdate     = "update"
+
+	HealthOK = "ok"
+
+	CollectionNever       = "never"       // this device has never collected
+	CollectionFailed      = "failed"      // the last run ended in an error
+	CollectionUnscheduled = "unscheduled" // nothing runs the collector on a schedule
+
+	RelayNone    = "none"    // no relay is set
+	RelayFailing = "failing" // the last push to the relay, or read from it, failed
+	RelayPending = "pending" // the newest snapshot has not reached the relay
+
+	UpdateDev       = "dev"       // a build from source, which does not update itself
+	UpdateStaged    = "staged"    // a newer release is installed; the next run uses it
+	UpdateFailed    = "failed"    // the last update check, or what it installed, failed
+	UpdateUnchecked = "unchecked" // there has been no update check
+	UpdateAvailable = "available" // a newer release is out
+)
+
+// Health states: how an item is, and the color of its dot on the page.
+const (
+	LevelOK    = "ok"
+	LevelWarn  = "warn"
+	LevelError = "error"
+	LevelOff   = "off"
+	LevelInfo  = "info"
+)
+
+// Health is how one part of the collector is doing.
+type Health struct {
+	Item   string `json:"item"`
+	Status string `json:"status"`
+	State  string `json:"state"`
+	// At is when the collector last collected, or when its last run failed;
+	// when this device last reached the relay; or when it last checked for a
+	// release.
+	At *time.Time `json:"at"`
+	// Release is the staged release, or the one available.
+	Release *string `json:"release"`
 }
 
 // Attention kinds, most urgent first.
@@ -204,7 +254,11 @@ type Window struct {
 	ResetsAt *time.Time `json:"resets_at"`
 	Minutes  int        `json:"minutes,omitempty"`
 	// Main is the account's main window, the weekly one where it has one.
-	Main       bool      `json:"main"`
+	Main bool `json:"main"`
+	// Limits is the main window, or one that limits the account more than
+	// the main one does. The account's state is the worst of these, and the
+	// page shows each one that is not the main window as a row of its own.
+	Limits     bool      `json:"limits"`
 	ObservedAt time.Time `json:"observed_at"`
 	// Stale is a reading older than 6 hours of a window that is not full.
 	// A full window stays full until it resets, however old the reading.

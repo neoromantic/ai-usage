@@ -3,8 +3,6 @@ package view
 import (
 	"image/color"
 	"time"
-
-	"github.com/neoromantic/ai-usage/internal/selfupdate"
 )
 
 // healthItem is one item on the header's right: a colored dot and a few
@@ -64,19 +62,37 @@ func (p *page) header(pageWidth int) chunks {
 	return append(l, append(chunks{p.space(max(edge-l.width()-r.width(), 2))}, r...)...).cut(p.w, g.ell)
 }
 
-// health is the collection, the relay, and the update, in the header.
+// health is the collector's health in the header, as the report has it:
+// the collection, the relay, and the update. While the page collects, the
+// collection is that. A status this release does not know is left out.
 func (p *page) health() []healthItem {
-	c := p.r.Collector
-	t := p.th
-	// since is "7m ago", or "just now"; short is "7m", or "now".
-	short := func(at *time.Time) string {
+	var out []healthItem
+	if p.o.Busy != "" {
+		out = append(out, healthItem{busy: true, long: "collecting", short: "collecting"})
+	}
+	for _, h := range p.r.Collector.Health {
+		if p.o.Busy != "" && h.Item == HealthCollection {
+			continue
+		}
+		if long, short := p.healthText(h); long != "" {
+			out = append(out, healthItem{dot: p.level(h.State), long: long, short: short})
+		}
+	}
+	return out
+}
+
+// healthText is a health item in words, in a long and a short form; empty
+// for a status this release does not know.
+func (p *page) healthText(h Health) (long, short string) {
+	// since is "7m ago", or "just now"; ago is "7m", or "now".
+	ago := func(at *time.Time) string {
 		if at == nil {
 			return "never"
 		}
 		return age(p.now.Sub(*at))
 	}
 	since := func(at *time.Time) string {
-		if s := short(at); s != "now" && s != "never" {
+		if s := ago(at); s != "now" && s != "never" {
 			return s + " ago"
 		}
 		if at == nil {
@@ -84,46 +100,64 @@ func (p *page) health() []healthItem {
 		}
 		return "just now"
 	}
-	var out []healthItem
-	switch {
-	case p.o.Busy != "":
-		out = append(out, healthItem{busy: true, long: "collecting", short: "collecting"})
-	case c.LastRunAt == nil:
-		out = append(out, healthItem{t.Out, "never collected", "never collected", false})
-	case failed(c):
-		out = append(out, healthItem{t.Out, "last run failed " + since(c.LastErrorAt), "run failed", false})
-	case !c.Schedule.Registered:
-		out = append(out, healthItem{t.Tight, "collected " + since(c.LastSuccessAt) + ", not scheduled", "not scheduled", false})
-	default:
-		out = append(out, healthItem{t.OK, "collected " + since(c.LastSuccessAt), "collected " + short(c.LastSuccessAt), false})
+	v := "a release"
+	if h.Release != nil {
+		v = p.txt(*h.Release)
 	}
-	rl := c.Relay
-	switch {
-	case rl.URL == nil:
-		out = append(out, healthItem{t.Faint, "no relay", "no relay", false})
-	case rl.LastError != nil:
-		out = append(out, healthItem{t.Out, "relay failing", "relay failing", false})
-	case rl.Pending || rl.LastPushAt == nil:
-		out = append(out, healthItem{t.Tight, "relay pending", "relay pending", false})
-	default:
-		out = append(out, healthItem{t.OK, "relay " + since(rl.LastPushAt), "relay " + short(rl.LastPushAt), false})
+	switch h.Item {
+	case HealthCollection:
+		switch h.Status {
+		case CollectionNever:
+			return "never collected", "never collected"
+		case CollectionFailed:
+			return "last run failed " + since(h.At), "run failed"
+		case CollectionUnscheduled:
+			return "collected " + since(h.At) + ", not scheduled", "not scheduled"
+		case HealthOK:
+			return "collected " + since(h.At), "collected " + ago(h.At)
+		}
+	case HealthRelay:
+		switch h.Status {
+		case RelayNone:
+			return "no relay", "no relay"
+		case RelayFailing:
+			return "relay failing", "relay failing"
+		case RelayPending:
+			return "relay pending", "relay pending"
+		case HealthOK:
+			return "relay " + since(h.At), "relay " + ago(h.At)
+		}
+	case HealthUpdate:
+		switch h.Status {
+		case UpdateDev:
+			return "dev build", "dev build"
+		case UpdateStaged:
+			return v + " runs next time", v + " next run"
+		case UpdateFailed:
+			return "update check failed", "update failed"
+		case UpdateUnchecked:
+			return "update not checked", "not checked"
+		case UpdateAvailable:
+			return v + " available", v + " available"
+		case HealthOK:
+			return "up to date", "up to date"
+		}
 	}
-	up := c.Update
-	switch {
-	case selfupdate.Dev(c.Version):
-		out = append(out, healthItem{t.Faint, "dev build", "dev build", false})
-	case up.Staged != nil:
-		v := p.txt(*up.Staged)
-		out = append(out, healthItem{t.Accent, v + " runs next time", v + " next run", false})
-	case up.Error != nil:
-		out = append(out, healthItem{t.Out, "update check failed", "update failed", false})
-	case up.CheckedAt == nil:
-		out = append(out, healthItem{t.Faint, "update not checked", "not checked", false})
-	case up.Latest != nil && selfupdate.Newer(*up.Latest, c.Version):
-		v := p.txt(*up.Latest)
-		out = append(out, healthItem{t.Tight, v + " available", v + " available", false})
-	default:
-		out = append(out, healthItem{t.OK, "up to date", "up to date", false})
+	return "", ""
+}
+
+// level is the color of a health state's dot.
+func (p *page) level(state string) color.Color {
+	t := p.th
+	switch state {
+	case LevelOK:
+		return t.OK
+	case LevelWarn:
+		return t.Tight
+	case LevelError:
+		return t.Out
+	case LevelInfo:
+		return t.Accent
 	}
-	return out
+	return t.Faint
 }

@@ -229,14 +229,14 @@ func TestAccountStateIsTheWorstWindowThatLimits(t *testing.T) {
 		var rows []string
 		m := mainWindow(ws)
 		for _, w := range ws {
-			if limitsMore(w, *m) {
+			if w.Limits && !w.Main {
 				rows = append(rows, w.Name)
 			}
 		}
 		if state != c.want || len(rows) != len(c.rows) || (len(rows) > 0 && rows[0] != c.rows[0]) {
 			t.Errorf("%s: state %s rows %v, want %s %v", c.name, state, rows, c.want, c.rows)
 		}
-		if (m == nil) != (len(c.ws) == 0) {
+		if (m == nil) != (len(c.ws) == 0) || (m != nil && !m.Limits) {
 			t.Errorf("%s: main window %+v", c.name, m)
 		}
 	}

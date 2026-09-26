@@ -47,12 +47,8 @@ func quotaAttention(t Team, now time.Time) []Attention {
 			if !a.Subscription || a.Quota == nil {
 				continue
 			}
-			main := mainWindow(a.Quota.Windows)
-			if main == nil {
-				continue
-			}
 			for _, w := range a.Quota.Windows {
-				if !w.Main && !limitsMore(w, *main) {
+				if !w.Limits {
 					continue
 				}
 				at := Attention{Provider: p.Provider, Account: a.Label, Name: a.Name}

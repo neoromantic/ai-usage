@@ -95,8 +95,9 @@ func cmdReport(ctx context.Context, args []string, stdout io.Writer) error {
 }
 
 // reportFrom shows a report saved with --json, such as a teammate's or a
-// demo's, rather than this device's. It reads no state and collects
-// nothing, so the interactive view has no `r`.
+// demo's, rather than this device's, with the fields an earlier release did
+// not save filled in. It reads no state and collects nothing, so the
+// interactive view has no `r`.
 func reportFrom(ctx context.Context, path string, jsonOut bool, disp *display, stdout io.Writer) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -109,6 +110,7 @@ func reportFrom(ctx context.Context, path string, jsonOut bool, disp *display, s
 	if r.SchemaVersion != view.SchemaVersion {
 		return fmt.Errorf("%s: schema_version %d, this release reads %d", path, r.SchemaVersion, view.SchemaVersion)
 	}
+	view.Fill(&r)
 	if disp.interactive(stdout, jsonOut, false) {
 		return tui.Run(ctx, disp.tuiConfig(stdout, r), os.Stdin, stdout)
 	}

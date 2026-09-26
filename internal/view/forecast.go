@@ -143,8 +143,9 @@ func mainIndex(rs []reading) int {
 }
 
 // limitsMore says a window that is not the main one limits the account more
-// than the main one does, so the report shows it as a row of its own: it is
-// out, it is over, or it is fuller. A reset window limits nothing it knows.
+// than the main one does, so the report marks it as one that limits the
+// account: it is out, it is over, or it is fuller. A reset window limits
+// nothing it knows.
 func limitsMore(w, main Window) bool {
 	if w.Main || w.Reset {
 		return false
@@ -208,9 +209,9 @@ func readings(ws []snapshot.Window, at time.Time) []reading {
 	return out
 }
 
-// readQuota reads every window, marks the main one, and gives the state of
-// the account: the worst state of the main window and of every window that
-// limits more.
+// readQuota reads every window, marks the main one and those that limit the
+// account, and gives the state of the account: the worst state of the
+// windows that limit it.
 func readQuota(rs []reading, now time.Time) ([]Window, string) {
 	out := make([]Window, 0, len(rs))
 	m := mainIndex(rs)
@@ -226,9 +227,10 @@ func readQuota(rs []reading, now time.Time) ([]Window, string) {
 		return out, StateUnknown
 	}
 	state := out[m].State
-	for _, w := range out {
-		if limitsMore(w, out[m]) {
-			state = worse(state, w.State)
+	for i := range out {
+		out[i].Limits = i == m || limitsMore(out[i], out[m])
+		if out[i].Limits {
+			state = worse(state, out[i].State)
 		}
 	}
 	return out, state
