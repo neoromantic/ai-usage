@@ -269,7 +269,6 @@ func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) (e
 	if err != nil {
 		return err
 	}
-	endpoint := relayURL(cfg)
 	guide := false
 	opts := collect.Options{
 		Dir:      d,
@@ -288,7 +287,7 @@ func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) (e
 			}
 		},
 	}
-	if endpoint != "" && !*offline {
+	if endpoint := relayURL(cfg); endpoint != "" && !*offline {
 		// Run signs with the key it loads under the run lock.
 		opts.Relay = &relay.Client{BaseURL: endpoint}
 	}
@@ -316,9 +315,9 @@ func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) (e
 		guide = takeGuide(d)
 	}
 	if disp.interactive(stdout, *jsonOut, guide) {
-		return showView(ctx, d, res, endpoint, disp, *offline, stdout)
+		return tui.Run(ctx, viewConfig(d, res, disp, *offline, stdout), os.Stdin, stdout)
 	}
-	return printReport(stdout, d, res, endpoint, *jsonOut, guide, disp)
+	return printReport(stdout, reportAt(d, res, clock().UTC()), *jsonOut, guide, disp)
 }
 
 // takeGuide clears the guide's due mark under the run lock and reports
@@ -552,24 +551,9 @@ func executable() (string, error) {
 	return fsutil.RealPath(exe), nil
 }
 
-func printReport(stdout io.Writer, d state.Dir, res *collect.Result, endpoint string, jsonOut, guide bool, disp *display) error {
-	now := clock().UTC()
-	r := view.Build(view.Input{
-		Version:  version,
-		RelayURL: endpoint,
-		Config:   res.Config,
-		State:    liveSchedule(d, res.State),
-		Key:      res.Key,
-		Doc:      res.Doc,
-		Team:     res.Team,
-		Hostname: deviceName(res.Config),
-		OSUser:   osUser(),
-		Now:      now,
-	})
+func printReport(stdout io.Writer, r view.Report, jsonOut, guide bool, disp *display) error {
 	if jsonOut {
-		enc := json.NewEncoder(stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(r)
+		return writeJSON(stdout, r)
 	}
 	o := disp.options(stdout, true)
 	text := view.Text(r, o)
@@ -578,6 +562,13 @@ func printReport(stdout io.Writer, d state.Dir, res *collect.Result, endpoint st
 	}
 	_, err := io.WriteString(disp.writer(stdout), text)
 	return err
+}
+
+// writeJSON prints v as every --json does, indented by two spaces.
+func writeJSON(w io.Writer, v any) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
 }
 
 // loadResult rebuilds a run result from disk without collecting.
@@ -628,9 +619,9 @@ func cmdReport(ctx context.Context, args []string, stdout io.Writer) error {
 		return err
 	}
 	if disp.interactive(stdout, *jsonOut, false) {
-		return showView(ctx, d, res, relayURL(res.Config), disp, false, stdout)
+		return tui.Run(ctx, viewConfig(d, res, disp, false, stdout), os.Stdin, stdout)
 	}
-	return printReport(stdout, d, res, relayURL(res.Config), *jsonOut, false, disp)
+	return printReport(stdout, reportAt(d, res, clock().UTC()), *jsonOut, false, disp)
 }
 
 // reportFrom shows a report saved with --json, such as a teammate's or a
@@ -648,18 +639,10 @@ func reportFrom(ctx context.Context, path string, jsonOut bool, disp *display, s
 	if r.SchemaVersion != view.SchemaVersion {
 		return fmt.Errorf("%s: schema_version %d, this release reads %d", path, r.SchemaVersion, view.SchemaVersion)
 	}
-	if jsonOut {
-		enc := json.NewEncoder(stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(r)
+	if disp.interactive(stdout, jsonOut, false) {
+		return tui.Run(ctx, disp.tuiConfig(stdout, r), os.Stdin, stdout)
 	}
-	if disp.interactive(stdout, false, false) {
-		o := disp.options(stdout, false)
-		o.Width = disp.width
-		return tui.Run(ctx, tui.Config{Report: r, Options: o, Profile: disp.profile(stdout)}, os.Stdin, stdout)
-	}
-	_, err = io.WriteString(disp.writer(stdout), view.Text(r, disp.options(stdout, true)))
-	return err
+	return printReport(stdout, r, jsonOut, false, disp)
 }
 
 func cmdStatus(args []string, stdout io.Writer) error {
@@ -680,10 +663,7 @@ func cmdStatus(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	r := view.Build(view.Input{
-		Version: version, RelayURL: relayURL(res.Config), Config: res.Config, State: liveSchedule(d, res.State),
-		Key: res.Key, Doc: res.Doc, Team: res.Team, Hostname: deviceName(res.Config), OSUser: osUser(), Now: clock().UTC(),
-	})
+	r := reportAt(d, res, clock().UTC())
 	type source struct {
 		Provider string   `json:"provider"`
 		Status   string   `json:"status"`
@@ -699,9 +679,7 @@ func cmdStatus(args []string, stdout io.Writer) error {
 		out.Sources = append(out.Sources, source{p.Provider, p.Status, p.Error, p.Homes})
 	}
 	if *jsonOut {
-		enc := json.NewEncoder(stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(out)
+		return writeJSON(stdout, out)
 	}
 	_, err = io.WriteString(disp.writer(stdout), view.StatusText(r, string(d), disp.options(stdout, true)))
 	return err

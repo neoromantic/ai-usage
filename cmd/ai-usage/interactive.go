@@ -33,48 +33,45 @@ func openView(in, out, jsonOut, plain, guide bool, term string) bool {
 	return in && out && !jsonOut && !plain && !guide && term != "dumb"
 }
 
-// showView opens the interactive view on res until the person quits. It
-// reloads the report from disk when a run saves new state, and `r` runs the
-// collection the bare `ai-usage` runs, offline when this run is.
-func showView(ctx context.Context, d state.Dir, res *collect.Result, endpoint string, disp *display, offline bool, stdout io.Writer) error {
-	return tui.Run(ctx, viewConfig(d, res, endpoint, disp, offline, stdout), os.Stdin, stdout)
-}
-
-// viewConfig is the interactive view of res on stdout. It is written with
-// the escapes the static report would be, so --color and NO_COLOR mean the
+// tuiConfig is the interactive view of r on stdout. It is written with the
+// escapes the static report would be, so --color and NO_COLOR mean the
 // same in both. It starts on the background COLORFGBG says, and does not
 // ask the terminal before it opens: Bubble Tea asks once it reads the
 // terminal, so the keys typed meanwhile reach the view, and the answer
 // then decides.
-func viewConfig(d state.Dir, res *collect.Result, endpoint string, disp *display, offline bool, stdout io.Writer) tui.Config {
-	o := disp.options(stdout, false)
+func (d *display) tuiConfig(stdout io.Writer, r view.Report) tui.Config {
+	o := d.options(stdout, false)
 	// The view follows the terminal's width unless --width fixes it.
-	o.Width = disp.width
-	return tui.Config{
-		Report:  reportAt(d, res, endpoint, clock().UTC()),
-		Options: o,
-		Profile: disp.profile(stdout),
-		Load: func(now time.Time) (view.Report, error) {
-			res, err := loadResult(d)
-			if err != nil {
-				return view.Report{}, err
-			}
-			return reportAt(d, res, relayURL(res.Config), now.UTC()), nil
-		},
-		Refresh: collectNow(d, offline),
-		Stopping: func() {
-			fmt.Fprintln(os.Stderr, "ai-usage: stopping the collection r started")
-		},
-		Watch: []string{d.StateFile(), d.TeamCacheFile()},
-		Now:   clock,
+	o.Width = d.width
+	return tui.Config{Report: r, Options: o, Profile: d.profile(stdout)}
+}
+
+// viewConfig is the interactive view of res on stdout. It reloads the
+// report from disk when a run saves new state, and `r` runs the collection
+// the bare `ai-usage` runs, offline when this run is.
+func viewConfig(d state.Dir, res *collect.Result, disp *display, offline bool, stdout io.Writer) tui.Config {
+	c := disp.tuiConfig(stdout, reportAt(d, res, clock().UTC()))
+	c.Load = func(now time.Time) (view.Report, error) {
+		res, err := loadResult(d)
+		if err != nil {
+			return view.Report{}, err
+		}
+		return reportAt(d, res, now.UTC()), nil
 	}
+	c.Refresh = collectNow(d, offline)
+	c.Stopping = func() {
+		fmt.Fprintln(os.Stderr, "ai-usage: stopping the collection r started")
+	}
+	c.Watch = []string{d.StateFile(), d.TeamCacheFile()}
+	c.Now = clock
+	return c
 }
 
 // reportAt is the report of a run result as of now.
-func reportAt(d state.Dir, res *collect.Result, endpoint string, now time.Time) view.Report {
+func reportAt(d state.Dir, res *collect.Result, now time.Time) view.Report {
 	return view.Build(view.Input{
 		Version:  version,
-		RelayURL: endpoint,
+		RelayURL: relayURL(res.Config),
 		Config:   res.Config,
 		State:    liveSchedule(d, res.State),
 		Key:      res.Key,

@@ -54,7 +54,7 @@ func TestViewColor(t *testing.T) {
 		t.Setenv("NO_COLOR", c.noColor)
 		master, slave := openPTY(t)
 		sent := answering(master, "")
-		cfg := viewConfig(state.Dir(d.dir), res, "", &display{color: c.flag}, true, slave)
+		cfg := viewConfig(state.Dir(d.dir), res, &display{color: c.flag}, true, slave)
 		done := make(chan error, 1)
 		go func() { done <- tui.Run(context.Background(), cfg, slave, slave) }()
 		for deadline := time.Now().Add(5 * time.Second); !strings.Contains(sent(), "ai-usage") && time.Now().Before(deadline); {

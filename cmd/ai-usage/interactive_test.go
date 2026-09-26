@@ -58,11 +58,11 @@ func TestViewConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c := viewConfig(state.Dir(d.dir), res, "", &display{color: "always"}, true, io.Discard); !c.Options.Color || !c.Options.Dark {
+	if c := viewConfig(state.Dir(d.dir), res, &display{color: "always"}, true, io.Discard); !c.Options.Color || !c.Options.Dark {
 		t.Fatalf("the view starts with %+v", c.Options)
 	}
 	t.Setenv("COLORFGBG", "0;15")
-	if c := viewConfig(state.Dir(d.dir), res, "", &display{color: "always"}, true, io.Discard); c.Options.Dark {
+	if c := viewConfig(state.Dir(d.dir), res, &display{color: "always"}, true, io.Discard); c.Options.Dark {
 		t.Fatalf("with a light COLORFGBG, the view starts with %+v", c.Options)
 	}
 	// --devices opens it on the status view of DEVICES; without, the matrix.
@@ -71,10 +71,10 @@ func TestViewConfig(t *testing.T) {
 	if err := parse(fs, []string{"--devices", "--projects"}); err != nil {
 		t.Fatal(err)
 	}
-	if c := viewConfig(state.Dir(d.dir), res, "", disp, true, io.Discard); !c.Options.DeviceStatus || !c.Options.AllProjects {
+	if c := viewConfig(state.Dir(d.dir), res, disp, true, io.Discard); !c.Options.DeviceStatus || !c.Options.AllProjects {
 		t.Fatalf("--devices --projects: the view starts with %+v", c.Options)
 	}
-	if c := viewConfig(state.Dir(d.dir), res, "", &display{}, true, io.Discard); c.Options.DeviceStatus {
+	if c := viewConfig(state.Dir(d.dir), res, &display{}, true, io.Discard); c.Options.DeviceStatus {
 		t.Fatalf("without --devices, the view starts with %+v", c.Options)
 	}
 
@@ -87,7 +87,7 @@ func TestViewConfig(t *testing.T) {
 		"auto":   colorprofile.ASCII,
 		"never":  colorprofile.NoTTY,
 	} {
-		c := viewConfig(state.Dir(d.dir), res, "", &display{color: flag}, true, io.Discard)
+		c := viewConfig(state.Dir(d.dir), res, &display{color: flag}, true, io.Discard)
 		if c.Profile != want || c.Options.Color != (want >= colorprofile.ANSI) {
 			t.Errorf("--color=%s with NO_COLOR: profile %v, color %v", flag, c.Profile, c.Options.Color)
 		}
@@ -169,7 +169,7 @@ func TestQuitDuringRefresh(t *testing.T) {
 	t.Cleanup(func() { keys.Close() })
 	done := make(chan error, 1)
 	go func() {
-		done <- tui.Run(context.Background(), viewConfig(state.Dir(d.dir), res, "", &display{}, true, io.Discard), in, io.Discard)
+		done <- tui.Run(context.Background(), viewConfig(state.Dir(d.dir), res, &display{}, true, io.Discard), in, io.Discard)
 	}()
 	if _, err := io.WriteString(keys, "r"); err != nil {
 		t.Fatal(err)
