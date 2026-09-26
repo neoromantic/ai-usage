@@ -72,7 +72,6 @@ const (
 // subscriptions is how much is left on each subscription, when it resets,
 // and how full it will be then, one provider at a time.
 func (p *page) subscriptions() []chunks {
-	g := p.g
 	var groups []subGroup
 	total, noReading := 0, 0
 	counts := map[string]int{}
@@ -84,52 +83,23 @@ func (p *page) subscriptions() []chunks {
 				continue
 			}
 			total++
-			var main *Window
-			if a.Quota != nil {
-				main = mainWindow(a.Quota.Windows)
-			}
+			rows := p.subRows(a)
 			// An account with a reading of its main window but no forecast
 			// yet, as in the first tenth of the window, counts in neither.
 			switch {
 			case a.State != StateUnknown && a.State != "":
 				counts[a.State]++
-			case !known(main):
+			case !known(rows[0].win):
 				noReading++
 			}
-			row := subRow{here: a.Current, name: p.txt(shownLabel(a)), win: main, users: a.Users, last: g.none}
-			if a.Plan != nil {
-				row.plan = p.txt(*a.Plan)
-			}
-			if a.Busiest != nil {
-				row.busiest = p.txt(*a.Busiest)
-			}
-			if a.LastActiveAt != nil {
-				row.last = age(p.now.Sub(*a.LastActiveAt))
-			}
-			grp.rows = append(grp.rows, row)
-			if main == nil {
-				continue
-			}
-			for j := range a.Quota.Windows {
-				if w := &a.Quota.Windows[j]; limitsMore(*w, *main) {
-					grp.rows = append(grp.rows, subRow{window: true, name: p.txt(trimLength(w.Name, main.Name)), win: w})
-				}
-			}
+			grp.rows = append(grp.rows, rows...)
 		}
 		if len(grp.rows) > 0 {
 			groups = append(groups, grp)
 		}
 	}
 
-	title := chunks{p.bold("SUBSCRIPTIONS"), p.plain("  "), p.muted(strconv.Itoa(total))}
-	for _, s := range []string{StateOut, StateOver, StateTight} {
-		if n := counts[s]; n > 0 {
-			title = append(title, p.muted(g.sep), p.inState(strconv.Itoa(n)+" "+s, s))
-		}
-	}
-	if noReading > 0 {
-		title = append(title, p.muted(g.sep), p.muted(strconv.Itoa(noReading)+" no reading"))
-	}
+	title := p.subTitle(total, noReading, counts)
 	if total == 0 {
 		return []chunks{title, {p.space(2), p.muted("no subscription has been used on this team's devices yet")}}
 	}
@@ -148,6 +118,51 @@ func (p *page) subscriptions() []chunks {
 		}
 	}
 	return out
+}
+
+// subRows is an account's rows: its own, with its main window (nil without
+// a quota), then one for each window that limits it more.
+func (p *page) subRows(a *TeamAccount) []subRow {
+	var main *Window
+	if a.Quota != nil {
+		main = mainWindow(a.Quota.Windows)
+	}
+	row := subRow{here: a.Current, name: p.txt(shownLabel(a)), win: main, users: a.Users, last: p.g.none}
+	if a.Plan != nil {
+		row.plan = p.txt(*a.Plan)
+	}
+	if a.Busiest != nil {
+		row.busiest = p.txt(*a.Busiest)
+	}
+	if a.LastActiveAt != nil {
+		row.last = age(p.now.Sub(*a.LastActiveAt))
+	}
+	rows := []subRow{row}
+	if main == nil {
+		return rows
+	}
+	for j := range a.Quota.Windows {
+		if w := &a.Quota.Windows[j]; limitsMore(*w, *main) {
+			rows = append(rows, subRow{window: true, name: p.txt(trimLength(w.Name, main.Name)), win: w})
+		}
+	}
+	return rows
+}
+
+// subTitle is the section's title: how many subscriptions there are, and how
+// many of them are out, over, tight or without a reading.
+func (p *page) subTitle(total, noReading int, counts map[string]int) chunks {
+	g := p.g
+	title := chunks{p.bold("SUBSCRIPTIONS"), p.plain("  "), p.muted(strconv.Itoa(total))}
+	for _, s := range []string{StateOut, StateOver, StateTight} {
+		if n := counts[s]; n > 0 {
+			title = append(title, p.muted(g.sep), p.inState(strconv.Itoa(n)+" "+s, s))
+		}
+	}
+	if noReading > 0 {
+		title = append(title, p.muted(g.sep), p.muted(strconv.Itoa(noReading)+" no reading"))
+	}
+	return title
 }
 
 // layoutSubs sizes the columns to their cells, then drops columns as the
@@ -204,23 +219,28 @@ func (p *page) layoutSubs(groups []subGroup) subLayout {
 func (p *page) subHeader(l subLayout, provider string) chunks {
 	out := chunks{p.space(2)}
 	out = append(out, p.left(p.bold(strings.ToUpper(provider)), l.acct)...)
-	if l.showPlan {
+	for _, c := range []struct {
+		head        string
+		w           int
+		right, show bool
+	}{
+		{"PLAN", l.plan, false, l.showPlan},
+		{"THIS WEEK", l.bar, false, true},
+		{"LEFT", l.left, true, true},
+		{"RESETS", l.resets(), false, true},
+		{"AT RESET", l.at, true, true},
+		{"USERS", l.users(), false, true},
+		{"LAST", l.last, true, l.showLast},
+	} {
+		if !c.show {
+			continue
+		}
 		out = append(out, p.space(2))
-		out = append(out, p.left(p.muted("PLAN"), l.plan)...)
-	}
-	out = append(out, p.space(2))
-	out = append(out, p.left(p.muted("THIS WEEK"), l.bar)...)
-	out = append(out, p.space(2))
-	out = append(out, p.right(p.muted("LEFT"), l.left)...)
-	out = append(out, p.space(2))
-	out = append(out, p.left(p.muted("RESETS"), l.resets())...)
-	out = append(out, p.space(2))
-	out = append(out, p.right(p.muted("AT RESET"), l.at)...)
-	out = append(out, p.space(2))
-	out = append(out, p.left(p.muted("USERS"), l.users())...)
-	if l.showLast {
-		out = append(out, p.space(2))
-		out = append(out, p.right(p.muted("LAST"), l.last)...)
+		if c.right {
+			out = append(out, p.right(p.muted(c.head), c.w)...)
+		} else {
+			out = append(out, p.left(p.muted(c.head), c.w)...)
+		}
 	}
 	return out
 }
@@ -364,16 +384,11 @@ func elapsed(w Window) (float64, bool) {
 	return min(max(e, 0), 1), true
 }
 
-// bar is a window as n cells: the used part in the color of its forecast,
-// the rest faint, and a tick where even use of the window would be by its
-// reading. A window with no reading is dotted.
-func (p *page) bar(w *Window, n int) chunks {
-	g := p.g
-	if !known(w) {
-		p.mark("dotted")
-		return chunks{p.faint(strings.Repeat(g.unread, n))}
-	}
-	used := int(math.Round(w.Percent / 100 * float64(n)))
+// barSplit is how many of a window's n cells are used, and the cell of its
+// tick: -1 when there is none, as when how much of the window had passed is
+// not known.
+func barSplit(w Window, n int) (used, tick int) {
+	used = int(math.Round(w.Percent / 100 * float64(n)))
 	switch {
 	case w.Percent >= 100:
 		used = n
@@ -383,8 +398,8 @@ func (p *page) bar(w *Window, n int) chunks {
 		used = n - 1
 	}
 	used = max(used, 0)
-	tick := -1
-	if e, ok := elapsed(*w); ok {
+	tick = -1
+	if e, ok := elapsed(w); ok {
 		tick = min(int(e*float64(n)), n-1)
 		// The used part and the tick are rounded to cells, so where both
 		// fall in one cell the tick goes by the forecast: inside the used
@@ -395,6 +410,19 @@ func (p *page) bar(w *Window, n int) chunks {
 			tick = min(max(tick, used), n-1)
 		}
 	}
+	return used, tick
+}
+
+// bar is a window as n cells: the used part in the color of its forecast,
+// the rest faint, and a tick where even use of the window would be by its
+// reading. A window with no reading is dotted.
+func (p *page) bar(w *Window, n int) chunks {
+	g := p.g
+	if !known(w) {
+		p.mark("dotted")
+		return chunks{p.faint(strings.Repeat(g.unread, n))}
+	}
+	used, tick := barSplit(*w, n)
 	color := p.th.State(w.State)
 	if w.State == StateUnknown || w.State == "" {
 		color = p.th.Muted
