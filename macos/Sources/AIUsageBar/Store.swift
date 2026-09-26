@@ -2,18 +2,35 @@ import AIUsageKit
 import AppKit
 import SwiftUI
 
-/// The popover's tabs. Usage is the team's matrix of devices against
-/// subscriptions, or with this device alone its accounts; Devices, the
-/// team's devices' status, is not there alone.
+/// The popover's tabs, the same for a team and for one Mac: how much is
+/// left of each subscription, where the tokens go by device or by
+/// subscription, and this Mac's projects.
 enum Tab: String, CaseIterable, Identifiable {
-    case subscriptions, usage, devices, projects
+    case limits, usage, projects
 
     var id: Self { self }
     var title: String { rawValue.capitalized }
+}
 
-    static func shown(solo: Bool) -> [Tab] {
-        solo ? [.subscriptions, .usage, .projects] : allCases
+/// What the team's Usage tab lists.
+enum UsageMode: String, CaseIterable, Identifiable {
+    case devices, subscriptions
+
+    var id: Self { self }
+    var menuTitle: String {
+        switch self {
+        case .devices: return "By Device"
+        case .subscriptions: return "By Subscription"
+        }
     }
+}
+
+/// Usage narrowed to the devices a chip is about.
+struct DeviceFilter: Equatable {
+    let title: String
+    let devices: Set<String>
+    /// The chip that set it, which shows as chosen.
+    var chip: Chip.Kind?
 }
 
 /// The report and everything the app does with `ai-usage`.
@@ -34,14 +51,31 @@ final class Store: ObservableObject {
     @Published private(set) var refreshError: String?
     @Published private(set) var collecting = false
     @Published private(set) var updating = false
+    /// What the last update said, for Settings: "Up to date (v0.3.1)", or
+    /// why it failed.
+    @Published private(set) var updateResult: (text: String, failed: Bool)?
     /// The time the popover measures ages from: the report's own in a demo.
     @Published private(set) var now = Date()
     @Published private(set) var cliPath: String?
 
     // What the popover shows, kept while the app runs.
-    @Published var tab = Tab.subscriptions
+    @Published var tab = Tab.limits
+    /// The period of Usage and Projects.
     @Published var period = Period.week
-    @Published var share = false
+    @Published var usageMode = UsageMode.devices
+    // What the popover opens up, cleared when it closes, so that it opens
+    // at the height of its collapsed rows.
+    /// The one row whose details show: "limits:claude/mira@studio.dev",
+    /// "dev:<device id>", "col:<index>", "proj:<path>", "solo:<provider>/<label>".
+    @Published var expanded: String?
+    @Published var deviceFilter: DeviceFilter?
+    @Published var showAllProjects = false
+    /// A row to scroll to in Limits, set with the verdict's click.
+    @Published var scrollTarget: String?
+
+    /// The popover's window, and the view the status menu opens under.
+    weak var popoverWindow: NSWindow?
+    weak var statusAnchor: NSView?
 
     let demo: Bool
     private var fetchedAt = Date.distantPast
@@ -68,9 +102,27 @@ final class Store: ObservableObject {
 
     var summary: MenuSummary? { report.flatMap(MenuSummary.pick) }
 
-    /// The tab to show: with this device alone, Devices is not there.
-    func shownTab(solo: Bool) -> Tab {
-        solo && tab == .devices ? .usage : tab
+    /// The collector's update, when there is one to install or the last
+    /// check failed.
+    var updateHealth: Collector.Health? {
+        report?.collector.health.first { $0.item == "update" && ($0.status == "available" || $0.status == "failed") }
+    }
+
+    /// Whether the popover shows its rows as they first open: none
+    /// expanded, none filtered, none added. Only then is it measured.
+    var collapsed: Bool { expanded == nil && deviceFilter == nil && !showAllProjects }
+
+    /// Closes what the popover opened, as it closes.
+    func popoverClosed() {
+        expanded = nil
+        deviceFilter = nil
+        showAllProjects = false
+        scrollTarget = nil
+    }
+
+    /// Opens a row's details, or closes them.
+    func toggle(_ key: String) {
+        expanded = expanded == key ? nil : key
     }
 
     /// The home folder that paths show as "~": this user's, or in a demo
@@ -98,7 +150,7 @@ final class Store: ObservableObject {
     }
 
     /// Reads the last collected report; collecting takes the scheduler's
-    /// run or the Refresh button.
+    /// run or Collect Now.
     func refresh() async {
         guard !demo else { return }
         guard !loading, !collecting else {
@@ -128,12 +180,18 @@ final class Store: ObservableObject {
     func update() async {
         guard !demo, !updating, let cli = locate() else { return }
         updating = true
+        updateResult = nil
         defer { updating = false }
         do {
-            _ = try await cli.run(["update"], timeout: 300)
+            let out = String(decoding: try await cli.run(["update"], timeout: 300), as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            updateResult = (out.prefix(1).uppercased() + out.dropFirst(), false)
             await refresh()
         } catch {
-            phase = .failed(error.localizedDescription)
+            updateResult = (error.localizedDescription, true)
+            if report == nil {
+                phase = .failed(error.localizedDescription)
+            }
         }
     }
 

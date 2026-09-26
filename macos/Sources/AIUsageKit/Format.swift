@@ -16,6 +16,25 @@ public enum Format {
         }
     }
 
+    /// Tokens in whole millions with their unit, for a value that stands
+    /// alone: "167M", "1,975M", "<1M" under a million, and the none mark
+    /// for none.
+    public static func tokensM(_ n: Int) -> String {
+        switch n {
+        case ...0: return none
+        case ..<1_000_000: return "<1M"
+        default:
+            let f = NumberFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.numberStyle = .decimal
+            f.usesGroupingSeparator = true
+            f.groupingSeparator = ","
+            f.groupingSize = 3
+            f.maximumFractionDigits = 0
+            return (f.string(from: NSNumber(value: Int((Double(n) / 1e6).rounded()))) ?? millions(n)) + "M"
+        }
+    }
+
     /// The same for VoiceOver: "104 million", "under a million", "none".
     public static func spokenMillions(_ n: Int) -> String {
         switch n {
@@ -23,25 +42,6 @@ public enum Format {
         case ..<1_000_000: return "under a million"
         default: return millions(n) + " million"
         }
-    }
-
-    /// Tokens in three significant figures at most, for a sentence such as
-    /// a tooltip's: 480K, 12.3M, 130M, 1.7B.
-    public static func tokens(_ n: Int) -> String {
-        if n < 1000 { return String(max(n, 0)) }
-        var value = Double(n)
-        for unit in ["K", "M", "B", "T"] {
-            value /= 1000
-            let tenths = (value * 10).rounded() / 10
-            if tenths < 100 {
-                let s = String(format: "%.1f", tenths)
-                return (s.hasSuffix(".0") ? String(s.dropLast(2)) : s) + unit
-            }
-            if value.rounded() < 1000 || unit == "T" {
-                return String(Int(value.rounded())) + unit
-            }
-        }
-        return String(n)
     }
 
     /// A duration in at most two units: 34m, 7h 5m, 1d 23h, 12d.
@@ -56,6 +56,35 @@ public enum Format {
         case (_, 1..., _): return "\(hours)h"
         default: return "\(mins)m"
         }
+    }
+
+    /// A duration as VoiceOver says it, in the units `duration` shows:
+    /// "1 hour 25 minutes", "2 days 9 hours", "under a minute".
+    public static func spokenDuration(_ seconds: TimeInterval) -> String {
+        guard seconds >= 60 else { return "under a minute" }
+        let m = Int(seconds / 60)
+        let (days, hours, mins) = (m / 1440, m / 60 % 24, m % 60)
+        let unit = { (n: Int, word: String) in "\(n) \(word)\(n == 1 ? "" : "s")" }
+        switch (days, hours, mins) {
+        case (1..., 1..., _): return unit(days, "day") + " " + unit(hours, "hour")
+        case (1..., _, _): return unit(days, "day")
+        case (_, 1..., 1...): return unit(hours, "hour") + " " + unit(mins, "minute")
+        case (_, 1..., _): return unit(hours, "hour")
+        default: return unit(mins, "minute")
+        }
+    }
+
+    /// The last `count` days of a newest-first list of daily tokens, oldest
+    /// first, with days the list does not reach as zeros: the points of a
+    /// sparkline.
+    public static func sparkline(_ days: [Int], count: Int = 14) -> [Int] {
+        let recent = Array(days.prefix(count).reversed())
+        return Array(repeating: 0, count: count - recent.count) + recent
+    }
+
+    /// A plan as a person names it: "Max", "SuperGrok".
+    public static func plan(_ plan: String) -> String {
+        plan.prefix(1).uppercased() + plan.dropFirst()
     }
 
     /// How long ago in its largest unit, as the console's LAST column has
@@ -149,12 +178,17 @@ extension Report {
 }
 
 extension TeamAccount {
-    /// How full the account is now is known for a window that limits it:
-    /// the main one, or another that limits it more. Without one there is
-    /// nothing to show of it but why: it was never read, or each such
-    /// window has reset since its reading or is not in it.
-    public var quotaKnown: Bool {
-        quota?.windows.contains { ($0.main || $0.limits) && $0.known } ?? false
+    /// The known window that limits the account with the least left: the
+    /// main one, or another the report marks with `limits`. The first wins
+    /// a tie.
+    public var tightest: Quota.Window? {
+        var best: Quota.Window?
+        for w in quota?.windows ?? [] where w.known && (w.limits || w.main) {
+            if best.map({ Format.percentLeft(w) < Format.percentLeft($0) }) ?? true {
+                best = w
+            }
+        }
+        return best
     }
 }
 
@@ -172,22 +206,26 @@ public struct MenuSummary: Equatable, Sendable {
     public let percentLeft: Int
     public let used: Double
     public let stale: Bool
+    /// The window's state, which tints the ring when it is over or out.
+    public let state: String
+    public let resetsAt: Date?
 
-    public init(provider: String, label: String, name: String, window: String, percentLeft: Int, used: Double, stale: Bool) {
+    public init(provider: String, label: String, name: String, window: String, percentLeft: Int, used: Double, stale: Bool,
+                state: String = "unknown", resetsAt: Date? = nil) {
         (self.provider, self.label, self.name, self.window) = (provider, label, name, window)
-        (self.percentLeft, self.used, self.stale) = (percentLeft, used, stale)
+        (self.percentLeft, self.used, self.stale, self.state, self.resetsAt) = (percentLeft, used, stale, state, resetsAt)
     }
 
     public static func pick(_ r: Report) -> MenuSummary? {
         var best: MenuSummary?
         for p in r.team.providers {
             for a in p.accounts where a.subscription && a.current {
-                for w in a.quota?.windows ?? [] where w.known && (w.limits || w.main) {
-                    let s = MenuSummary(provider: p.provider, label: a.label, name: a.name, window: w.name,
-                                        percentLeft: Format.percentLeft(w), used: w.percent, stale: w.stale)
-                    if best.map({ s.percentLeft < $0.percentLeft }) ?? true {
-                        best = s
-                    }
+                guard let w = a.tightest else { continue }
+                let s = MenuSummary(provider: p.provider, label: a.label, name: a.name, window: w.name,
+                                    percentLeft: Format.percentLeft(w), used: w.percent, stale: w.stale,
+                                    state: w.state, resetsAt: w.resetsAt)
+                if best.map({ s.percentLeft < $0.percentLeft }) ?? true {
+                    best = s
                 }
             }
         }
@@ -198,16 +236,41 @@ public struct MenuSummary: Equatable, Sendable {
     /// reading.
     public var text: String { (stale ? "~" : "") + "\(percentLeft)%" }
 
+    /// The words beside the ring: the percent left, or the time until the
+    /// reset, or nothing. An out window shows when it is back in either.
+    public func text(_ shows: MenuBarShows, now: Date) -> String? {
+        if shows == .icon { return nil }
+        if state == "out", let at = resetsAt { return Format.duration(at.timeIntervalSince(now)) }
+        switch shows {
+        case .percent: return text
+        case .time: return resetsAt.map { Format.duration($0.timeIntervalSince(now)) } ?? Format.none
+        case .icon: return nil
+        }
+    }
+
     /// What VoiceOver says: "Claude mira, 5h window: 0% left".
     public var spoken: String {
         "\(Format.provider(provider)) \(name), \(window) window: \(percentLeft)% left" + (stale ? ", from an old reading" : "")
     }
 
-    /// The gauge symbol whose needle is nearest to how much is used.
-    public static func symbol(used: Double?) -> String {
-        let steps = [0, 33, 50, 67, 100]
-        let u = min(max(used ?? 0, 0), 100)
-        let step = steps.min { abs(Double($0) - u) < abs(Double($1) - u) }!
-        return "gauge.with.dots.needle.\(step)percent"
+    /// The menu bar item for VoiceOver, with when the window comes back or
+    /// resets: "…: 0% left, back in 1 hour 25 minutes".
+    public func spoken(now: Date) -> String {
+        guard let at = resetsAt else { return spoken }
+        let d = Format.spokenDuration(at.timeIntervalSince(now))
+        return spoken + (state == "out" ? ", back in \(d)" : ", resets in \(d)")
+    }
+}
+
+/// What the menu bar item shows beside its ring, as Settings sets it.
+public enum MenuBarShows: String, CaseIterable, Sendable {
+    case percent, time, icon
+
+    public static let key = "menuBarShows"
+
+    /// The setting to write from the one before it: the percent switched
+    /// off becomes the ring alone. Nil when there is nothing to move.
+    public static func migrated(showPercent: Bool?, shows: String?) -> MenuBarShows? {
+        showPercent == false && shows == nil ? .icon : nil
     }
 }

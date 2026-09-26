@@ -37,7 +37,7 @@ TZ=Europe/Berlin ai-usage report --from docs/demo/solo.json --plain --width 110
 | `install.png` | `curl … \| sh` through the first report and the guide printed under it, for `solo.json`'s developer |
 | `relay-view.png` | what the relay keeps for `mira-mbp`, trimmed: names, emails, and paths sealed, numbers plain |
 | `json.png` | `ai-usage --json` through `jq`: what an agent reads |
-| `menubar.png`, `menubar-light.png` | the macOS menu bar app for the team: its item in the menu bar, and under it the popover on Subscriptions, dark and light; the README's picture of the app |
+| `menubar.png`, `menubar-light.png` | the macOS menu bar app for the team: its item in the menu bar, and under it the popover on Limits, dark and light; the README's picture of the app |
 | `social/architecture.png` | how a team's numbers travel, drawn from `scripts/demo/diagram.html` |
 | `social/*.png` | the pictures marked for posts, on a backdrop; the README shows these |
 | `social/tour.mp4`, `social/tour.gif` | the interactive view, key by key: the page, `s` status, `%` share, `p` 30 days, `?` help |
@@ -63,7 +63,7 @@ The menu bar app draws its own pictures; `shots.ts` does not make them. `AIUsage
 - `popover-TAB-LOOK.png`, each tab of the popover as tall as the app shows it, and `popover-TAB-full-LOOK.png`, the whole tab. TAB is `subscriptions`, `usage`, `usage-share` (Usage in shares), `devices`, and `projects`; a report of one device has no `usage-share` or `devices`
 - `popover-STATE-LOOK.png`, the popover with no report to show: `not-installed`, `not-collected`, `mismatch` (a report of another schema), and `failed`
 - `settings-PANE-LOOK.png`, each Settings pane: `general`, `accounts`, and `team`
-- `menubar-LOOK.png`, the app's item in the menu bar with the popover on Subscriptions under it
+- `menubar-LOOK.png`, the app's item in the menu bar with the popover on Limits under it
 
 ```sh
 cd macos

@@ -1,6 +1,7 @@
 import AIUsageKit
 import AppKit
 import SwiftUI
+import SystemConfiguration
 
 /// The settings window: a toolbar of panes, as a Mac app's settings have.
 /// While it is open the app is a regular one, in the Dock and in ⌘-Tab, so
@@ -49,11 +50,11 @@ enum SettingsWindow {
 /// The size of every pane, so the window keeps its width between them.
 private extension View {
     func pane(height: CGFloat) -> some View {
-        formStyle(.grouped).frame(width: 500, height: height)
+        formStyle(.grouped).frame(width: 460, height: height)
     }
 }
 
-/// A caption in a section's footer.
+/// A line in a section's footer.
 private struct Footnote: View {
     let text: String
 
@@ -63,23 +64,44 @@ private struct Footnote: View {
 
     var body: some View {
         Text(text)
-            .font(.caption)
+            .font(.subheadline)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// A small borderless button with a symbol, beside or inside a field.
+private struct IconButton: View {
+    let symbol: String
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .medium))
+                .frame(width: 16, height: 16)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.secondary)
+        .help(help)
+        .accessibilityLabel(help)
     }
 }
 
 /// A text field that takes effect when you press Return or leave it, as the
 /// fields of a Mac's settings do. It runs the command that sets the value,
 /// shows a check when that worked, and ai-usage's error in red under it when
-/// not. An empty field, or the clear button, clears the setting.
+/// not. An empty field, or its reset button, clears the setting.
 private struct CommitField: View {
     let title: String
     let prompt: String
     /// The value set now.
     let value: String
     var width: CGFloat = 160
-    var clearTitle: String?
+    /// The reset button inside the field's end, when it shows.
+    var reset: String?
     let commit: (String) async throws -> Void
 
     @ViewState private var text = ""
@@ -91,8 +113,9 @@ private struct CommitField: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
             HStack(spacing: 6) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
                     .opacity(saved ? 1 : 0)
                     .accessibilityLabel("Saved")
                     .accessibilityHidden(!saved)
@@ -103,16 +126,19 @@ private struct CommitField: View {
                     .frame(width: width)
                     .focused($focused)
                     .onSubmit(save)
-                if let clearTitle {
-                    Button(clearTitle) {
-                        text = ""
-                        save()
+                    .overlay(alignment: .trailing) {
+                        if let reset {
+                            IconButton(symbol: "arrow.uturn.backward", help: reset) {
+                                text = ""
+                                save()
+                            }
+                            .padding(.trailing, 3)
+                        }
                     }
-                }
             }
             if let error {
                 Text(error)
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.red)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -150,25 +176,46 @@ private struct CommitField: View {
 
 struct GeneralSettings: View {
     @EnvironmentObject private var store: Store
-    @AppStorage("showPercent") private var showPercent = true
+    @AppStorage(MenuBarShows.key) private var shows = MenuBarShows.percent.rawValue
     @ViewState private var login = LoginItem.status
     @ViewState private var loginError: String?
     @ViewState private var cliVersion: String?
 
+    /// The name ai-usage gives this Mac by default, as it reads it.
+    private var hostName: String {
+        if store.demo { return store.report?.collector.deviceLabel ?? "" }
+        if let h = SCDynamicStoreCopyLocalHostName(nil) as String?, !h.isEmpty { return h }
+        let h = ProcessInfo.processInfo.hostName
+        return h.hasSuffix(".local") ? String(h.dropLast(6)) : h
+    }
+
     var body: some View {
+        let label = store.report?.collector.deviceLabel ?? ""
         Form {
-            Section {
-                LabeledContent("This Mac's name") {
-                    CommitField(title: "This Mac's name", prompt: "Host name", value: store.report?.collector.deviceLabel ?? "",
-                                clearTitle: "Use Host Name") { name in
-                        try await store.command(name.isEmpty ? ["name", "clear"] : ["name", "set", name])
-                    }
+            Section("Menu Bar") {
+                Picker("Show", selection: $shows) {
+                    Text("Percent Left").tag(MenuBarShows.percent.rawValue)
+                    Text("Time Until Reset").tag(MenuBarShows.time.rawValue)
+                    Text("Icon Only").tag(MenuBarShows.icon.rawValue)
                 }
-            } footer: {
-                Footnote("The team sees the new name after the next collection.")
+                .pickerStyle(.menu)
+                LabeledContent("Preview") {
+                    MenuBarLabel(summary: store.summary, shows: MenuBarShows(rawValue: shows) ?? .percent, now: store.now)
+                        .font(.system(size: 13, weight: .medium))
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 8)
+                        .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.06)))
+                }
             }
             Section {
-                Toggle("Open at login", isOn: Binding(get: { login != .off }, set: { on in
+                LabeledContent("Name") {
+                    CommitField(title: "Name", prompt: "Host name", value: label,
+                                reset: !label.isEmpty && label != hostName ? "Use Host Name" : nil) { name in
+                        try await store.command(name.isEmpty ? ["name", "clear"] : ["name", "set", name])
+                    }
+                    .help("The team sees the new name after the next collection.")
+                }
+                Toggle("Open at Login", isOn: Binding(get: { login != .off }, set: { on in
                     do {
                         try LoginItem.set(on)
                         loginError = nil
@@ -177,30 +224,67 @@ struct GeneralSettings: View {
                     }
                     login = LoginItem.status
                 }))
-                if login == .needsApproval {
-                    LabeledContent {
+            } header: {
+                Text("This Mac")
+            } footer: {
+                if let loginError {
+                    Text(loginError).font(.subheadline).foregroundStyle(.red)
+                } else if login == .needsApproval {
+                    HStack(spacing: 6) {
+                        Footnote("Approve AI Usage in Login Items.")
                         Button("Open Login Items…") { LoginItem.openSystemSettings() }
-                    } label: {
-                        Text("Allow AI Usage in Login Items to open it at login.")
+                            .buttonStyle(.borderless)
+                            .font(.subheadline)
                     }
                 }
-                if let loginError {
-                    Text(loginError).font(.caption).foregroundStyle(.red)
-                }
-                Toggle("Show percent in menu bar", isOn: $showPercent)
             }
-            Section("Versions") {
-                LabeledContent("Menu bar app", value: Bundle.main.shortVersion)
-                LabeledContent("Command-line tool", value: cliVersion ?? store.report?.collector.version ?? "–")
-                LabeledContent("Tool location") {
-                    Text(store.cliPath ?? "–")
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
+            Section("About") {
+                LabeledContent("AI Usage", value: Bundle.main.shortVersion)
+                LabeledContent("ai-usage") {
+                    VStack(alignment: .trailing, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Text(cliVersion ?? store.report?.collector.version ?? Format.none)
+                            if store.updating {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                // ai-usage update checks for a release and
+                                // installs it when there is one.
+                                Button(store.updateHealth?.release.map { "Update to \($0)" } ?? "Check for Updates") {
+                                    Task { await store.update() }
+                                }
+                                .disabled(store.cliPath == nil && !store.demo)
+                            }
+                        }
+                        if let r = store.updateResult, !store.updating {
+                            Label(r.text, systemImage: r.failed ? "xmark.circle.fill" : "checkmark")
+                                .font(.subheadline)
+                                .foregroundStyle(r.failed ? .red : .secondary)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.trailing)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+                LabeledContent("Location") {
+                    if let path = store.cliPath {
+                        HStack(spacing: 4) {
+                            Text(path)
+                                .font(.system(.subheadline, design: .monospaced))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .textSelection(.enabled)
+                                .help(path)
+                            IconButton(symbol: "folder", help: "Show in Finder") {
+                                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+                            }
+                        }
+                    } else {
+                        Text("Not found").foregroundStyle(.secondary)
+                    }
                 }
             }
         }
-        .pane(height: 400)
+        .pane(height: 440)
         .onAppear {
             login = LoginItem.status
             Task {
@@ -222,22 +306,23 @@ extension Bundle {
 
 struct AccountSettings: View {
     @EnvironmentObject private var store: Store
-    static let rule = "A name is what the whole team sees for an account: at most 12 characters, no spaces. Empty goes back to the default. The team sees a change after the next collection."
 
     var body: some View {
         let providers = store.report?.team.providers.filter { !$0.accounts.isEmpty } ?? []
         Form {
-            Section {
-            } footer: {
-                Footnote(Self.rule)
-            }
             if providers.isEmpty {
-                Text("No account has been seen on this team's devices yet.").foregroundStyle(.secondary)
+                Text("No accounts yet.").foregroundStyle(.secondary)
             }
-            ForEach(providers, id: \.provider) { p in
-                Section(Format.provider(p.provider)) {
+            ForEach(Array(providers.enumerated()), id: \.element.provider) { i, p in
+                Section {
                     ForEach(p.accounts, id: \.label) { a in
                         AliasRow(provider: p.provider, account: a)
+                    }
+                } header: {
+                    Text(Format.provider(p.provider))
+                } footer: {
+                    if i == providers.count - 1 {
+                        Footnote("Names are shared with the team: up to 12 characters, no spaces.")
                     }
                 }
             }
@@ -252,25 +337,31 @@ private struct AliasRow: View {
     let account: TeamAccount
 
     var body: some View {
-        let target = "\(provider):\(account.label)"
-        LabeledContent {
+        let a = account
+        let target = "\(provider):\(a.label)"
+        let devices = "\(a.devices.count) \(a.devices.count == 1 ? "device" : "devices")"
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(a.label)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text([a.subscription ? a.plan.map(Format.plan) : "No quota", devices].compactMap { $0 }.joined(separator: " · "))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
             // Usage the tool did not tie to an account is no account to name.
-            if account.label == "unknown" {
-                Text("Cannot be named")
+            if a.label == "unknown" {
+                Text("Can't be named")
                     .foregroundStyle(.secondary)
                     .help("Usage the tool did not tie to an account")
             } else {
-                CommitField(title: "Name for \(account.label)", prompt: account.alias == nil ? account.name : "Default name",
-                            value: account.alias ?? "", width: 130) { name in
+                CommitField(title: "Name for \(a.label)", prompt: a.alias == nil ? a.name : "Default name",
+                            value: a.alias ?? "", width: 120) { name in
                     try await store.command(name.isEmpty ? ["alias", target, "--clear"] : ["alias", target, name])
                 }
-                .help(AccountSettings.rule)
             }
-        } label: {
-            Text(account.label).lineLimit(1).truncationMode(.middle)
-            Text([account.plan.map(PlanTag.title), account.subscription ? nil : "no quota of its own",
-                  "\(account.devices.count) \(account.devices.count == 1 ? "device" : "devices")"]
-                .compactMap { $0 }.joined(separator: " · "))
         }
     }
 }
@@ -283,21 +374,40 @@ struct TeamSettings: View {
     @ViewState private var relay = ""
     @ViewState private var keyResult: (text: String, failed: Bool)?
     @ViewState private var joining = false
+    @ViewState private var copied = false
 
     var body: some View {
+        let team = store.report?.collector.team
         Form {
-            Section("This Team") {
+            Section("Team") {
+                LabeledContent("Devices", value: store.report.map { "\($0.team.devices.count)" } ?? Format.none)
                 LabeledContent("Fingerprint") {
-                    Text(store.report?.collector.team ?? "–")
-                        .font(.system(.body, design: .monospaced))
-                        .textSelection(.enabled)
+                    HStack(spacing: 4) {
+                        Text(team ?? Format.none)
+                            .font(.system(.body, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                        if let team {
+                            IconButton(symbol: copied ? "checkmark" : "doc.on.doc", help: "Copy Fingerprint") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(team, forType: .string)
+                                copied = true
+                                Task {
+                                    try? await Task.sleep(for: .seconds(2))
+                                    copied = false
+                                }
+                            }
+                        }
+                    }
                 }
-                LabeledContent("Devices", value: store.report.map { "\($0.team.devices.count)" } ?? "–")
             }
             Section {
                 LabeledContent("URL") {
-                    CommitField(title: "Relay URL", prompt: "https://relay.example.com", value: relay, width: 210,
-                                clearTitle: "Use Default") { url in
+                    // The app cannot tell the release's default relay from
+                    // one set by hand, so the reset shows with any relay.
+                    CommitField(title: "Relay URL", prompt: "https://relay.example.com", value: relay, width: 230,
+                                reset: relay.isEmpty ? nil : "Use Default") { url in
                         try await store.command(url.isEmpty ? ["relay", "clear"] : ["relay", "set", url])
                         await showRelay()
                     }
@@ -305,29 +415,26 @@ struct TeamSettings: View {
             } header: {
                 Text("Relay")
             } footer: {
-                Footnote("Every device of the team publishes to the same relay.")
+                Footnote("Every device of the team uses the same relay.")
             }
-            Section("Team Key") {
-                LabeledContent {
+            Section {
+                HStack {
                     Button("Copy Team Key", action: copyKey)
-                } label: {
-                    Text("Anyone with the team key can read the team's snapshots. Share it only with your own devices.")
-                        .foregroundStyle(.secondary)
+                    Button("Join Another Team…") { joining = true }
+                    Spacer()
                 }
                 if let r = keyResult {
-                    Label(r.text, systemImage: r.failed ? "xmark.circle.fill" : "checkmark.circle.fill")
-                        .font(.caption)
+                    Label(r.text, systemImage: r.failed ? "xmark.circle.fill" : "checkmark")
+                        .font(.subheadline)
                         .foregroundStyle(r.failed ? .red : .secondary)
                 }
-                LabeledContent {
-                    Button("Join Another Team…") { joining = true }
-                } label: {
-                    Text("Joining another team leaves this one.")
-                        .foregroundStyle(.secondary)
-                }
+            } header: {
+                Text("Team Key")
+            } footer: {
+                Footnote("Share the key only with your own devices. Joining another team leaves this one.")
             }
         }
-        .pane(height: 450)
+        .pane(height: 440)
         .sheet(isPresented: $joining) { JoinSheet() }
         .onAppear {
             relay = store.report?.collector.relay.url ?? ""
@@ -351,7 +458,7 @@ struct TeamSettings: View {
                 pb.declareTypes([.string, concealed], owner: nil)
                 pb.setString(key, forType: .string)
                 pb.setString("", forType: concealed)
-                keyResult = ("Copied. On the other device, choose Join Another Team… or run ai-usage team join.", false)
+                keyResult = ("Copied. On the other device, choose Join Another Team….", false)
             } catch {
                 keyResult = (error.localizedDescription, true)
             }
@@ -369,13 +476,13 @@ private struct JoinSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Join Another Team").font(.headline)
-            Text("Paste the team key from a device of the other team. This Mac leaves its current team; its old key is kept beside the new one.")
+            Text("Paste the key from a device of the other team; this Mac leaves its current team.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             SecureField("Team key", text: $key)
                 .onSubmit(join)
             if let error {
-                Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                Text(error).font(.subheadline).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
             }
             HStack {
                 if busy {

@@ -1,6 +1,6 @@
 // AIUsageBar is the menu bar app. Two hidden modes help to build it:
 //
-//   AIUsageBar --render REPORT.json OUTDIR   draw the popover and settings to PNGs
+//   AIUsageBar --render REPORT.json OUTDIR   draw the popover, menu bar, and settings to PNGs
 //   AIUsageBar --demo REPORT.json            run on a saved report, without ai-usage
 import AIUsageKit
 import AppKit
@@ -22,7 +22,7 @@ MainActor.assumeIsolated {
             fputs("usage: AIUsageBar --render REPORT.json OUTDIR\n", stderr)
             exit(2)
         }
-        exit(Renderer.run(report(at: args[i + 1]), into: URL(fileURLWithPath: args[i + 2])))
+        exit(Renderer.run(URL(fileURLWithPath: args[i + 1]), into: URL(fileURLWithPath: args[i + 2])))
     }
     if let i = args.firstIndex(of: "--demo"), i + 1 < args.count {
         Store.shared = Store(demo: report(at: args[i + 1]))

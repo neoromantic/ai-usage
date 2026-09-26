@@ -32,6 +32,14 @@ equal("team devices", team.team.devices.count, 12)
 equal("team providers", team.team.providers.map(\.provider), ["claude", "codex", "grok", "hermes"])
 equal("team matrix", [team.team.matrix.columns.count, team.team.matrix.rows.count], [6, 12])
 equal("team projects", team.projects.count, 6)
+// Projects next to each other in one folder show as a group under its name;
+// the ones on their own follow as "Other", in the report's order.
+let sections = ProjectSection.sections(team.projects, home: "/Users/mira")
+equal("project sections", sections.map { "\($0.title ?? "-") \($0.grouped) \($0.projects.count)" }, ["orbit true 3", "Other false 3"])
+equal("project group folder", sections.first?.folder, "~/src/orbit")
+let homeRun = team.projects.filter { !$0.path.contains("/src/") }
+equal("home group", ProjectSection.sections(homeRun, home: "/Users/mira").map { $0.title ?? "-" }, ["Home"])
+equal("no group", ProjectSection.sections(Array(team.projects.suffix(3)), home: "/Users/mira").map { $0.title ?? "-" }, ["-"])
 check("team is not solo", !team.solo)
 check("solo is solo", solo.solo && solo.team.pulledAt == nil)
 equal("solo this device", solo.thisDevice?.label, "mira-mbp")
@@ -61,7 +69,8 @@ func objects(_ v: Any, _ edit: ([String: Any]) -> [String: Any]) -> Any {
 }
 
 // A report from an ai-usage before health, limits, folders, and not_updating.
-let older = try edited("team.json") { objects($0) { $0.filter { !["health", "limits", "folders", "not_updating"].contains($0.key) } } }
+let older = try edited("team.json") { objects($0) { $0.filter { !["health", "limits", "folders", "not_updating", "days"].contains($0.key) } } }
+check("older report has no days", older.providers.allSatisfy { $0.accounts.allSatisfy(\.days.isEmpty) })
 check("older report has no health", older.collector.health.isEmpty)
 check("older report limits nothing", older.team.providers.allSatisfy { $0.accounts.allSatisfy { $0.quota?.windows.allSatisfy { !$0.limits } ?? true } })
 equal("folders", team.projects.map(\.folders), [5, 1, 1, 1, 1, 1])
@@ -73,7 +82,7 @@ check("older report updates", older.team.devices.allSatisfy { !$0.notUpdating })
 // The subscriptions with no window known now: never read, or each window
 // that limits it has reset since its reading or is not in it. Another
 // window's reset alone leaves the account known.
-check("demo quotas known", team.team.providers.allSatisfy { $0.accounts.allSatisfy(\.quotaKnown) })
+check("demo quotas known", team.team.providers.allSatisfy { $0.accounts.allSatisfy { $0.tightest != nil } })
 func withQuota(_ label: String, _ edit: @escaping ([String: Any]) -> Any) throws -> TeamAccount? {
     try edited("team.json") { objects($0) { o in
         guard o["label"] as? String == label, o["busiest"] != nil, let q = o["quota"] as? [String: Any] else { return o }
@@ -81,11 +90,11 @@ func withQuota(_ label: String, _ edit: @escaping ([String: Any]) -> Any) throws
     } }.teamAccount(provider: "claude", label: label)
 }
 let windows = { (q: [String: Any], edit: ([String: Any]) -> [String: Any]) in q.merging(["windows": (q["windows"] as! [[String: Any]]).map(edit)]) { $1 } }
-equal("never read", try withQuota("leo@studio.dev") { _ in NSNull() }?.quotaKnown, false)
-equal("main window reset", try withQuota("leo@studio.dev") { q in windows(q) { $0.merging(["reset": true]) { $1 } } }?.quotaKnown, false)
-equal("main window not read", try withQuota("leo@studio.dev") { q in windows(q) { $0.merging(["unread": true]) { $1 } } }?.quotaKnown, false)
-equal("another window known", try withQuota("mira@studio.dev") { q in windows(q) { $0["main"] as? Bool == true ? $0.merging(["reset": true]) { $1 } : $0 } }?.quotaKnown, true)
-equal("another window not limiting", try withQuota("leo@studio.dev") { q in windows(q) { $0["main"] as? Bool == true ? $0.merging(["reset": true]) { $1 } : $0 } }?.quotaKnown, false)
+equal("never read", try withQuota("leo@studio.dev") { _ in NSNull() }.map { $0.tightest != nil }, false)
+equal("main window reset", try withQuota("leo@studio.dev") { q in windows(q) { $0.merging(["reset": true]) { $1 } } }.map { $0.tightest != nil }, false)
+equal("main window not read", try withQuota("leo@studio.dev") { q in windows(q) { $0.merging(["unread": true]) { $1 } } }.map { $0.tightest != nil }, false)
+equal("another window known", try withQuota("mira@studio.dev") { q in windows(q) { $0["main"] as? Bool == true ? $0.merging(["reset": true]) { $1 } : $0 } }.map { $0.tightest != nil }, true)
+equal("another window not limiting", try withQuota("leo@studio.dev") { q in windows(q) { $0["main"] as? Bool == true ? $0.merging(["reset": true]) { $1 } : $0 } }.map { $0.tightest != nil }, false)
 
 // Times.
 equal("time with offset", parseTime("2026-09-24T15:40:00+02:00"), time("2026-09-24T13:40:00Z"))
@@ -97,10 +106,6 @@ check("schema 3 refused", {
 }())
 
 // Formatters.
-for (n, want) in [(0, "0"), (999, "999"), (9_540, "9.5K"), (480_000, "480K"), (999_960, "1M"), (12_300_000, "12.3M"),
-                  (99_960_000, "100M"), (130_000_000, "130M"), (1_658_119_321, "1.7B")] {
-    equal("tokens \(n)", Format.tokens(n), want)
-}
 let durations: [(TimeInterval, String)] = [(59, "<1m"), (34 * 60, "34m"), (7 * 3600 + 5 * 60, "7h 5m"), (3600, "1h"), (47 * 3600 + 59, "1d 23h"), (12 * 86400, "12d"), (12 * 86400 + 7200, "12d 2h")]
 for (s, want) in durations {
     equal("duration \(Int(s))s", Format.duration(s), want)
@@ -117,6 +122,17 @@ for (s, want) in ages {
 let mira = team.teamAccount(provider: "claude", label: "mira@studio.dev")!
 equal("left", Format.left(mira.quota?.main), "42%")
 equal("left unknown", Format.left(team.teamAccount(provider: "codex", label: "leo@studio.dev")?.quota?.windows.first), "?")
+for (n, want) in [(0, "–"), (999_999, "<1M"), (1_000_000, "1M"), (167_400_000, "167M"), (1_975_000_000, "1,975M")] {
+    equal("tokensM \(n)", Format.tokensM(n), want)
+}
+equal("spoken durations", [30, 85 * 60, 3600, 2 * 86400 + 9 * 3600, 86400].map { Format.spokenDuration(TimeInterval($0)) },
+      ["under a minute", "1 hour 25 minutes", "1 hour", "2 days 9 hours", "1 day"])
+// The sparkline is the last 14 days, oldest first, zeros where the list
+// does not reach.
+equal("sparkline", Format.sparkline([5, 4, 3]), Array(repeating: 0, count: 11) + [3, 4, 5])
+let days = solo.providers[0].accounts[0].days
+equal("sparkline of a report", Format.sparkline(days), Array(days.prefix(14).reversed()))
+equal("days", [days.count, days.first ?? 0], [90, 17_750_013])
 // Whole millions and whole percents, as the console prints them.
 for (n, want) in [(0, "–"), (-5, "–"), (1, "<1"), (999_999, "<1"), (1_000_000, "1"), (1_499_999, "1"), (1_500_000, "2"),
                   (603_000_000, "603"), (1_658_119_321, "1658")] {
@@ -146,8 +162,102 @@ let olderSummary = MenuSummary.pick(older)
 equal("summary of an older report", [olderSummary?.label, olderSummary?.window, olderSummary?.text], ["mira@studio.dev", "7d", "42%"])
 let stale = MenuSummary(provider: "codex", label: "a", name: "a", window: "7d", percentLeft: 42, used: 58, stale: true)
 equal("stale summary", stale.text, "~42%")
-equal("symbols", [nil, 10, 58, 71, 100].map(MenuSummary.symbol).map { $0.replacingOccurrences(of: "gauge.with.dots.needle.", with: "") },
-      ["0percent", "0percent", "50percent", "67percent", "100percent"])
+// The window the menu bar picks carries its state and reset: an out one
+// shows when it is back, in either mode that shows words.
+equal("team summary state", [summary?.state, summary?.resetsAt.map { "\($0)" }], ["out", "\(time("2026-09-24T15:05:00Z"))"])
+equal("out menu text", [MenuBarShows.percent, .time, .icon].map { summary?.text($0, now: team.generatedAt) }, ["1h 25m", "1h 25m", nil])
+let resets = MenuSummary(provider: "codex", label: "a", name: "a", window: "7d", percentLeft: 42, used: 58, stale: false,
+                         state: "ok", resetsAt: team.generatedAt.addingTimeInterval(2 * 86400 + 9 * 3600))
+equal("menu texts", [MenuBarShows.percent, .time, .icon].map { resets.text($0, now: team.generatedAt) }, ["42%", "2d 9h", nil])
+equal("menu text without a reset", stale.text(.time, now: team.generatedAt), "–")
+equal("menu spoken", [summary?.spoken(now: team.generatedAt), resets.spoken(now: team.generatedAt)],
+      ["Claude mira, 5h window: 0% left, back in 1 hour 25 minutes", "Codex a, 7d window: 42% left, resets in 2 days 9 hours"])
+// The tightest window of each account is the one the summary picks from,
+// the first of equals.
+equal("tightest", team.team.providers.flatMap { p in p.accounts.map { "\(p.provider) \($0.name) \($0.tightest?.name ?? "-")" } },
+      ["claude mira 5h", "claude leo 7d", "codex leo 7d", "codex bots 7d", "codex mira 7d", "grok 7f3b9c21 7d", "hermes openai-codex 7d"])
+equal("tightest of an older report", older.teamAccount(provider: "claude", label: "mira@studio.dev")?.tightest?.name, "7d")
+equal("solo tightest", solo.teamAccount(provider: "claude", label: "mira@studio.dev")?.tightest?.name, "7d Fable")
+// Settings from before the menu bar had modes: the percent switched off
+// becomes the ring alone, once.
+equal("migration", [MenuBarShows.migrated(showPercent: false, shows: nil), MenuBarShows.migrated(showPercent: true, shows: nil),
+                    MenuBarShows.migrated(showPercent: false, shows: "time"), MenuBarShows.migrated(showPercent: nil, shows: nil)],
+      [.icon, nil, nil, nil])
+
+// The verdict: the first out entry, else the first over one, with how
+// many more there are; else the subscription with the most room.
+let teamVerdict = Verdict(team, now: team.generatedAt, timeZone: berlin)
+equal("team verdict", [teamVerdict.title, teamVerdict.subline], ["Claude mira · 5h is out", "Back in 1h 25m · Thu 17:05 · +2 more"])
+check("team verdict opens its account", teamVerdict.kind == .out && teamVerdict.more == 2 && teamVerdict.provider == "claude" && teamVerdict.label == "mira@studio.dev")
+let soloVerdict = Verdict(solo, now: solo.generatedAt, timeZone: berlin)
+equal("solo verdict", [soloVerdict.title, soloVerdict.subline],
+      ["Claude mira · Fable runs out ~Thu 23:55", "2d 1h before its reset · +1 more"])
+equal("solo verdict compact", [soloVerdict.compactTitle, soloVerdict.compactSubline],
+      ["Claude mira · Fable runs out", "~Thu 23:55 · 2d 1h before its reset · +1 more"])
+check("solo verdict is over", soloVerdict.kind == .over)
+let calm = try edited("team.json") { json in
+    var o = json as! [String: Any]
+    o["attention"] = (o["attention"] as! [[String: Any]]).filter { !["out", "over"].contains($0["kind"] as? String) }
+    return o
+}
+let calmVerdict = Verdict(calm, now: calm.generatedAt, timeZone: berlin)
+equal("calm verdict", [calmVerdict.title, calmVerdict.subline, calmVerdict.label], ["All on track", "Most room: Grok 7f3b9c21 · 94%", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64"])
+let unread = try edited("team.json") { json in
+    var o = objects(json) { o in o["quota"] != nil ? o.merging(["quota": NSNull()]) { $1 } : o } as! [String: Any]
+    o["attention"] = (o["attention"] as! [[String: Any]]).filter { !["out", "over", "under"].contains($0["kind"] as? String) }
+    return o
+}
+let noneVerdict = Verdict(unread, now: unread.generatedAt, timeZone: berlin)
+check("verdict without windows", noneVerdict.kind == .none && noneVerdict.title == "No limits read yet" && noneVerdict.provider == nil)
+
+// Chips: what asks for something besides the subscriptions. A device on
+// an older release that updates itself gets none.
+let chips = Chip.chips(team)
+equal("team chips", chips.map { "\($0.text) \($0.symbol) \($0.state) \($0.devices)" },
+      ["1 error xmark.circle.fill out [\"leo-air\"]", "1 not reporting antenna.radiowaves.left.and.right.slash tight [\"courier\"]"])
+check("team chip kinds", chips.map(\.kind) == [.errors, .silent] && chips.map(\.short) == ["1", "1"])
+equal("refresh chip first", Chip.chips(team, refreshFailed: true).first?.text, "Can't read report")
+equal("solo chips", Chip.chips(solo).count, 0)
+let leoAir = team.teamDevice(named: "leo-air")!.device
+let notUpdating = try edited("team.json") { objects($0) { $0["device"] as? String == leoAir && $0["os_user"] != nil ? $0.merging(["not_updating": true]) { $1 } : $0 } }
+equal("not updating chip", Chip.chips(notUpdating).last.map { "\($0.text) \($0.state) \($0.devices) \($0.updating)" }, "1 not updating tight [\"leo-air\"] 0")
+let broken = try edited("team.json") { json in
+    var o = objects(json) { o in
+        guard o["item"] as? String == "relay" else { return o }
+        return o.merging(["status": "failing", "state": "error"]) { $1 }
+    } as! [String: Any]
+    let this = (o["collector"] as! [String: Any])["device_label"] as! String
+    o["attention"] = (o["attention"] as! [[String: Any]]) + [["kind": "error", "devices": [this], "message": "relay: relay returned 503"]]
+    return o
+}
+equal("health chip", Chip.chips(broken).first.map { "\($0.text) \($0.state)" }, "Relay failing out")
+// This Mac's failing relay is the health chip's alone, not an error too.
+equal("failing relay said once", Chip.chips(broken).map(\.text), ["Relay failing", "1 error", "1 not reporting"])
+let toolFails = try edited("solo.json") { json in
+    var o = json as! [String: Any]
+    let this = (o["collector"] as! [String: Any])["device_label"] as! String
+    o["attention"] = (o["attention"] as! [[String: Any]]) + [["kind": "error", "devices": [this], "message": "codex: app-server exited without answering"]]
+    return o
+}
+equal("solo chip names the tool", Chip.chips(toolFails).map(\.text), ["Codex failing"])
+
+// Limits rows: the account's state is the report's, which an out window
+// other than the main one sets; the bar and percent stay on the main one.
+let miraLine = LimitLine(mira)
+equal("out row", [miraLine?.state, miraLine?.window.name, miraLine?.blocking?.name], ["out", "7d", "5h"])
+let codexLeo = LimitLine(team.teamAccount(provider: "codex", label: "leo@studio.dev")!)
+equal("main out row", [codexLeo?.state, codexLeo?.window.name, codexLeo?.blocking?.name], ["out", "7d", nil])
+equal("solo over row", LimitLine(solo.teamAccount(provider: "claude", label: "mira@studio.dev")!).map { [$0.state, $0.window.name, $0.others.first?.name] },
+      ["over", "7d", "7d Fable"])
+// A rejection reading: the main window is not in it and the 5h one is out.
+// The row shows the 5h window, not the line of accounts not read.
+let rejected = try withQuota("leo@studio.dev") { q in windows(q) { w in
+    w["main"] as? Bool == true ? w.merging(["unread": true, "state": "unknown"]) { $1 }
+        : w.merging(["percent": 100, "state": "out", "limits": true]) { $1 }
+} }
+let rejectedLine = rejected.flatMap(LimitLine.init)
+equal("rejection row", [rejectedLine?.window.name, rejectedLine?.unreadMain?.name, rejectedLine?.blocking?.name], ["5h", "7d", nil])
+check("never read has no row", try withQuota("leo@studio.dev") { _ in NSNull() }.flatMap(LimitLine.init) == nil)
 
 // The locator, on a made-up home.
 let fm = FileManager.default

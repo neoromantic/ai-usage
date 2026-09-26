@@ -196,6 +196,9 @@ public struct Account: Decodable, Sendable {
     public let link: Link?
     public let sessions: Int
     public let usage: Usage
+    /// Tokens per UTC day on this device, newest first, up to 90 days;
+    /// empty from an ai-usage that does not say.
+    @Absent public var days: [Int]
     public let lastActiveAt: Date?
 }
 
