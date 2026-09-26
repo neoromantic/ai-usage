@@ -43,9 +43,7 @@ type Behind struct {
 const silentAfter = 24 * time.Hour
 
 // LoadTeamCache reads the cache. Documents are decoded again; they were
-// verified when they were pulled. A device listed twice, in a cache written
-// before pulls kept one document per device, keeps its newest document, so
-// its tokens are not added twice.
+// verified when they were pulled.
 func LoadTeamCache(dir state.Dir) (TeamCache, error) {
 	var c TeamCache
 	b, err := os.ReadFile(dir.TeamCacheFile())
@@ -58,20 +56,10 @@ func LoadTeamCache(dir state.Dir) (TeamCache, error) {
 	if err := json.Unmarshal(b, &c); err != nil {
 		return TeamCache{}, err
 	}
-	at := map[string]int{}
 	for _, body := range c.Bodies {
-		doc, err := snapshot.Decode(body)
-		if err != nil {
-			continue
+		if doc, err := snapshot.Decode(body); err == nil {
+			c.Docs = append(c.Docs, doc)
 		}
-		if i, ok := at[doc.Device]; ok {
-			if doc.CollectedAt.After(c.Docs[i].CollectedAt) {
-				c.Docs[i] = doc
-			}
-			continue
-		}
-		at[doc.Device] = len(c.Docs)
-		c.Docs = append(c.Docs, doc)
 	}
 	return c, nil
 }

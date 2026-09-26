@@ -446,19 +446,6 @@ func TestLoadTeamCache(t *testing.T) {
 		t.Fatalf("a body that does not decode was kept: %+v", c.Docs)
 	}
 
-	// A cache written before pulls kept one document per device may list a
-	// device twice. Its newest document is the one read.
-	older, _ := json.Marshal(BuildDoc(ledger(), key, state.Config{Device: "d-0123456789"}, "a", "b", "v1", t0.Add(-time.Hour)))
-	newer, _ := json.Marshal(BuildDoc(ledger(), key, state.Config{Device: "d-0123456789"}, "a", "b", "v1", t0.Add(time.Hour)))
-	dup := TeamCache{PulledAt: t0, Team: key.Fingerprint(), Bodies: [][]byte{older, good, newer, older}}
-	if err := saveTeamCache(d, dup); err != nil {
-		t.Fatal(err)
-	}
-	c, err = LoadTeamCache(d)
-	if err != nil || len(c.Docs) != 1 || !c.Docs[0].CollectedAt.Equal(t0.Add(time.Hour)) {
-		t.Fatalf("duplicate device: %+v, %v", c.Docs, err)
-	}
-
 	if err := fsutil.WriteFile(d.TeamCacheFile(), []byte("{broken"), 0o600); err != nil {
 		t.Fatal(err)
 	}
