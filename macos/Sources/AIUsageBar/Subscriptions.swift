@@ -3,7 +3,9 @@ import SwiftUI
 
 /// Each subscription of the team, by provider: how much is left of its main
 /// window, when it resets, and how full it will be then, with a line for
-/// each other window that limits it more.
+/// each other window that limits it more. The subscriptions with no window
+/// known now, which the report lists last, share a quiet line at the end of
+/// their group: a row of empty bars would say nothing.
 struct SubscriptionsView: View {
     let report: Report
     let now: Date
@@ -17,15 +19,82 @@ struct SubscriptionsView: View {
         } else {
             VStack(alignment: .leading, spacing: 12) {
                 ForEach(groups, id: \.provider) { p in
+                    let accounts = p.accounts.filter(\.subscription)
                     VStack(alignment: .leading, spacing: 8) {
                         GroupHeading(title: Format.provider(p.provider))
-                        ForEach(p.accounts.filter(\.subscription), id: \.label) { a in
+                        ForEach(accounts.filter(\.quotaKnown), id: \.label) { a in
                             AccountRow(provider: p.provider, account: a, solo: report.solo, now: now)
+                        }
+                        let unknown = accounts.filter { !$0.quotaKnown }
+                        ForEach(Unread.Reason.allCases, id: \.self) { reason in
+                            let some = unknown.filter { Unread.reason($0) == reason }
+                            if !some.isEmpty {
+                                Unread(provider: p.provider, reason: reason, accounts: some, solo: report.solo, now: now)
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/// Subscriptions of a provider with no window known now, in a line, for one
+/// reason: "No reading: ann, bo". The tooltip says of each where it is used
+/// and what became of its reading.
+private struct Unread: View {
+    enum Reason: CaseIterable {
+        case never, reset, uncovered
+
+        var title: String {
+            switch self {
+            case .never: return "No reading"
+            case .reset: return "Reset since the last reading"
+            case .uncovered: return "Not in the last reading"
+            }
+        }
+    }
+
+    let provider: String
+    let reason: Reason
+    let accounts: [TeamAccount]
+    let solo: Bool
+    let now: Date
+
+    static func reason(_ a: TeamAccount) -> Reason {
+        guard let main = a.quota?.main else { return .never }
+        return main.reset ? .reset : main.unread == true ? .uncovered : .never
+    }
+
+    var body: some View {
+        (Text(reason.title + ": ") + Text(accounts.map(\.name).joined(separator: ", ")).foregroundColor(.primary))
+            .font(.subheadline)
+            .foregroundColor(.secondary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+            .help(accounts.map(details).joined(separator: "\n"))
+            .accessibilityLabel("\(Format.provider(provider)), \(reason.title.lowercased()): " + accounts.map(\.name).joined(separator: ", "))
+    }
+
+    /// "bo, Max plan: never read; used on bo-air, 15h ago".
+    private func details(_ a: TeamAccount) -> String {
+        let what: String
+        switch reason {
+        case .never:
+            what = a.quota == nil ? "never read" : "no window of it read"
+        case .reset, .uncovered:
+            let q = a.quota!
+            let w = q.main!
+            let read = [q.device.map { "on \($0)" }, w.observedAt.map { Format.ago($0, now: now) }].compactMap { $0 }.joined(separator: " ")
+            what = reason == .reset
+                ? "its \(w.name) window reset" + (w.resetsAt.map { " \(Format.clock($0, now: now))" } ?? "") + ", after its last reading" + (read.isEmpty ? "" : " " + read)
+                : "its \(w.name) window is not in the last reading" + (read.isEmpty ? "" : ", " + read)
+        }
+        let used = a.lastActiveAt.map { t in
+            "used " + (solo ? "" : a.busiest.map { "on \(a.users > 1 ? "\($0) +\(a.users - 1)" : $0), " } ?? "") + Format.ago(t, now: now)
+        }
+        let here = a.current && !solo ? "logged in on this Mac" : nil
+        return a.label + (a.plan.map { ", \(PlanTag.title($0)) plan" } ?? "") + ": " + [what, here, used].compactMap { $0 }.joined(separator: "; ")
     }
 }
 
@@ -115,7 +184,7 @@ private struct AccountRow: View {
 
     /// "Resets in 2d 9h · Sun 01:00", or "Resets Sun 01:00".
     private func resets(countdown: Bool) -> String {
-        guard let w = main else { return "No reading yet" }
+        guard let w = main else { return "No reading" }
         if w.reset { return "Reset since its last reading" }
         if w.unread == true { return "Not covered by the last reading" }
         guard let at = w.resetsAt else { return "Reset time not known" }
@@ -183,7 +252,7 @@ private struct AccountRow: View {
     /// Each window in full, where the reading came from, and the windows
     /// whose fill is not known.
     private var windowHelp: String {
-        guard let q = account.quota, let w = main else { return "No reading of this subscription yet" }
+        guard let q = account.quota, let w = main else { return "No reading of this subscription" }
         var lines = ["\(Int(w.percent))% of the \(w.name) window used"]
         if let at = w.resetsAt, w.known { lines.append("Resets in \(Format.duration(at.timeIntervalSince(now))), \(Format.clock(at, now: now))") }
         if let e = w.forecast?.elapsed {

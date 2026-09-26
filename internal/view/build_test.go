@@ -169,7 +169,7 @@ collector.relay.url collector.schedule collector.schedule.error collector.schedu
 collector.team collector.update collector.update.checked_at collector.update.error
 collector.update.latest collector.update.staged collector.version
 generated_at
-projects projects.last_active_at projects.path projects.providers projects.sessions projects.tokens
+projects projects.folders projects.last_active_at projects.path projects.providers projects.sessions projects.tokens
 projects.tokens.cache_read projects.tokens.cache_write projects.tokens.input projects.tokens.output
 projects.usage projects.usage.30d projects.usage.7d projects.usage.90d projects.usage.today
 providers providers.accounts providers.accounts.current providers.accounts.days
@@ -178,7 +178,7 @@ providers.accounts.link providers.accounts.link.label providers.accounts.link.pr
 providers.accounts.linked_usage providers.accounts.linked_usage.provider providers.accounts.linked_usage.sessions
 providers.accounts.linked_usage.tokens providers.accounts.linked_usage.tokens.cache_read providers.accounts.linked_usage.tokens.cache_write
 providers.accounts.linked_usage.tokens.input providers.accounts.linked_usage.tokens.output providers.accounts.name providers.accounts.plan
-providers.accounts.projects providers.accounts.projects.last_active_at providers.accounts.projects.path providers.accounts.projects.sessions
+providers.accounts.projects providers.accounts.projects.folders providers.accounts.projects.last_active_at providers.accounts.projects.path providers.accounts.projects.sessions
 providers.accounts.projects.tokens providers.accounts.projects.tokens.cache_read providers.accounts.projects.tokens.cache_write
 providers.accounts.projects.tokens.input providers.accounts.projects.tokens.output
 providers.accounts.projects.usage providers.accounts.projects.usage.30d providers.accounts.projects.usage.7d
@@ -197,7 +197,7 @@ providers.error providers.homes providers.provider providers.status
 schema_version
 team team.devices team.devices.age_seconds team.devices.behind_since team.devices.collected_at team.devices.collector_version
 team.devices.device team.devices.error team.devices.label team.devices.last_error team.devices.last_success_at
-team.devices.old team.devices.os_user team.devices.silent team.devices.sources team.devices.sources.error team.devices.sources.provider
+team.devices.not_updating team.devices.old team.devices.os_user team.devices.silent team.devices.sources team.devices.sources.error team.devices.sources.provider
 team.devices.sources.status team.devices.this_device team.devices.update_error team.devices.usage team.devices.usage.30d team.devices.usage.7d
 team.devices.usage.90d team.devices.usage.today
 team.latest_version

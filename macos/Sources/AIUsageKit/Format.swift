@@ -2,7 +2,31 @@ import Foundation
 
 /// How the app prints the report's numbers and times.
 public enum Format {
-    /// Tokens in three significant figures at most: 480K, 12.3M, 130M, 1.7B.
+    /// What a table's cell shows for nothing.
+    public static let none = "–"
+
+    /// Tokens in whole millions, as the console's tables print them, with
+    /// the unit in the table's caption: 603, 1210, "<1" under a million, and
+    /// the none mark for none. Cells of one size line up and compare.
+    public static func millions(_ n: Int) -> String {
+        switch n {
+        case ...0: return none
+        case ..<1_000_000: return "<1"
+        default: return String(Int((Double(n) / 1e6).rounded()))
+        }
+    }
+
+    /// The same for VoiceOver: "104 million", "under a million", "none".
+    public static func spokenMillions(_ n: Int) -> String {
+        switch n {
+        case ...0: return "none"
+        case ..<1_000_000: return "under a million"
+        default: return millions(n) + " million"
+        }
+    }
+
+    /// Tokens in three significant figures at most, for a sentence such as
+    /// a tooltip's: 480K, 12.3M, 130M, 1.7B.
     public static func tokens(_ n: Int) -> String {
         if n < 1000 { return String(max(n, 0)) }
         var value = Double(n)
@@ -74,19 +98,33 @@ public enum Format {
         max(100 - Int(w.percent.rounded(.down)), 0)
     }
 
-    /// A share in whole percents: "<1" under one, ">99" short of all of it.
-    public static func share(_ v: Double) -> String {
-        switch v {
-        case ..<1: return "<1%"
-        case 99..<100: return ">99%"
-        default: return "\(Int(v.rounded()))%"
-        }
+    /// A share in whole percents, as the console prints it, with "%" in the
+    /// table's caption: "<1" under one, ">99" short of all of it, and the
+    /// none mark for none.
+    public static func share(_ v: Double?) -> String {
+        guard let v, v > 0 else { return none }
+        if v < 1 { return "<1" }
+        if v > 99 && v < 100 { return ">99" }
+        return String(Int(v.rounded()))
     }
 
     /// A path under home with "~".
     public static func tilde(_ path: String, home: String) -> String {
         guard !home.isEmpty, path == home || path.hasPrefix(home + "/") else { return path }
         return "~" + path.dropFirst(home.count)
+    }
+
+    /// A project's path as its name and the folder it is in, with "~" for
+    /// home: "~/src/orbit/web" is "web" in "~/src/orbit". A path of one
+    /// part, such as "~" or "unknown", is its own name, in no folder.
+    public static func pathParts(_ path: String, home: String) -> (name: String, folder: String) {
+        var p = tilde(path, home: home)
+        while p.count > 1 && p.hasSuffix("/") {
+            p.removeLast()
+        }
+        guard p.count > 1, let slash = p.lastIndex(of: "/") else { return (p, "") }
+        let folder = p[..<slash]
+        return (String(p[p.index(after: slash)...]), folder.isEmpty ? "/" : String(folder))
     }
 
     /// The provider as a person names it: "Claude", "Codex".
@@ -107,6 +145,16 @@ extension Report {
 
     public func teamDevice(named label: String) -> TeamDevice? {
         team.devices.first { $0.label == label }
+    }
+}
+
+extension TeamAccount {
+    /// How full the account is now is known for a window that limits it:
+    /// the main one, or another that limits it more. Without one there is
+    /// nothing to show of it but why: it was never read, or each such
+    /// window has reset since its reading or is not in it.
+    public var quotaKnown: Bool {
+        quota?.windows.contains { ($0.main || $0.limits) && $0.known } ?? false
     }
 }
 

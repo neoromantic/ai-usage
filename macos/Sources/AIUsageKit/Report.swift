@@ -118,7 +118,7 @@ public struct Collector: Decodable, Sendable {
 }
 
 /// A field that ai-usage added within schema version 4: an earlier release
-/// leaves it out, and it reads as empty, or false.
+/// leaves it out, and it reads as empty, false, or 0.
 @propertyWrapper
 public struct Absent<Value: Decodable & Sendable & AbsentValue>: Decodable, Sendable {
     public var wrappedValue: Value
@@ -139,6 +139,10 @@ public protocol AbsentValue {
 
 extension Bool: AbsentValue {
     public static var absent: Bool { false }
+}
+
+extension Int: AbsentValue {
+    public static var absent: Int { 0 }
 }
 
 extension Array: AbsentValue {
@@ -311,8 +315,13 @@ public struct Tokens: Decodable, Sendable {
     public let cacheWrite: Int
 }
 
+/// A git repository, or a folder outside any, with the sessions in its
+/// subfolders and worktrees.
 public struct Project: Decodable, Sendable {
     public let path: String
+    /// How many working folders count under the project, 1 or more; 0 from
+    /// an ai-usage that does not say.
+    @Absent public var folders: Int
     public let sessions: Int
     public let usage: Usage
     public let providers: [String]?
@@ -343,6 +352,9 @@ public struct TeamDevice: Decodable, Sendable {
     public let silent: Bool
     public let old: Bool
     public let behindSince: Date?
+    /// An old device that does not update itself. False from an ai-usage
+    /// that does not say.
+    @Absent public var notUpdating: Bool
     public let usage: Usage
 
     public struct Source: Decodable, Sendable {

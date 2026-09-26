@@ -26,14 +26,9 @@ struct PopoverView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 12)
                 .measure(ChromeHeight.self)
-                ScrollView {
-                    TabContent(report: report)
-                        .padding(.horizontal, Metrics.inset)
-                        .padding(.bottom, 12)
-                        .measure(ContentHeight.self)
-                }
-                // The two dividers take a point each.
-                .frame(height: max(min(content, maxHeight - chrome - 2), 0))
+                TabStack(report: report)
+                    // The two dividers take a point each.
+                    .frame(height: max(min(content, maxHeight - chrome - 2), 0))
             } else {
                 EmptyStateView()
             }
@@ -58,6 +53,7 @@ private struct ChromeHeight: PreferenceKey {
     }
 }
 
+/// The height of the tallest tab.
 private struct ContentHeight: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
@@ -97,12 +93,44 @@ private struct TabPicker: View {
     }
 }
 
-private struct TabContent: View {
+/// Every tab at once, one over the other, with only the chosen one shown.
+/// The menu bar item's window takes the size of its content, and a window
+/// under the menu bar that changes its height moves and redraws all of
+/// itself, which blinks. Tabs of their own heights would do that on every
+/// switch; as tall as the tallest, the popover keeps its size, and each tab
+/// keeps its scroll position and what was expanded in it.
+private struct TabStack: View {
     @EnvironmentObject private var store: Store
     let report: Report
 
     var body: some View {
-        switch store.shownTab(solo: report.solo) {
+        let shown = store.shownTab(solo: report.solo)
+        ZStack(alignment: .top) {
+            ForEach(Tab.shown(solo: report.solo)) { tab in
+                let on = tab == shown
+                ScrollView {
+                    TabContent(tab: tab, report: report)
+                        .padding(.horizontal, Metrics.inset)
+                        .padding(.bottom, 12)
+                        .measure(ContentHeight.self)
+                }
+                .opacity(on ? 1 : 0)
+                .allowsHitTesting(on)
+                // The hidden tabs' controls stay out of the keyboard's way.
+                .disabled(!on)
+                .accessibilityHidden(!on)
+            }
+        }
+    }
+}
+
+private struct TabContent: View {
+    @EnvironmentObject private var store: Store
+    let tab: Tab
+    let report: Report
+
+    var body: some View {
+        switch tab {
         case .subscriptions:
             SubscriptionsView(report: report, now: store.now)
         case .usage:
@@ -128,8 +156,11 @@ private struct Header: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 1) {
                 Text("AI Usage").font(.headline)
-                if let c = store.report?.collector {
-                    Text("\(c.deviceLabel) · team \(String(c.team.prefix(8)))")
+                if let r = store.report {
+                    let c = r.collector
+                    // The team's fingerprint says nothing at a glance; it is
+                    // in the tooltip and in Settings.
+                    Text(r.solo ? c.deviceLabel : "\(c.deviceLabel) · \(r.team.devices.count) devices")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -245,9 +276,12 @@ private struct AttentionList: View {
                         Text(text.subject)
                             .fontWeight(.medium)
                             .lineLimit(1)
-                        (Text(a.kind.title).state(a.kind.state) + Text(" · " + text.detail).foregroundColor(.secondary))
+                        (Text(a.kind.title).state(a.kind.state) + text.line)
                             .font(.callout)
-                            .lineLimit(1)
+                            // Two lines keep what an error says, and the
+                            // tooltip has all of it.
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .help(text.help)
                     }
@@ -267,8 +301,18 @@ private struct AttentionList: View {
 /// What an attention entry is about and what to know, in a sentence.
 struct AttentionText {
     var subject = ""
+    /// What asks for something, first and in the tight color: how long
+    /// the devices on an older release have not updated.
+    var alert: String?
     var detail = ""
     var help = ""
+
+    /// The words after the entry's kind.
+    var line: Text {
+        let rest = Text(" · " + detail).foregroundColor(.secondary)
+        guard let alert else { return rest }
+        return Text(" · ").foregroundColor(.secondary) + Text(alert).foregroundColor(Palette.text("tight")) + rest
+    }
 
     init(_ a: Attention, report r: Report, now: Date) {
         let clock = { (t: Date) in Format.clock(t, now: now) }
@@ -317,9 +361,11 @@ struct AttentionText {
             let latest = a.message.map { "latest \($0)" } ?? "a newer release is out"
             detail = devices.count == 1 && versions.count == 1
                 ? "on \(versions[0]) · \(latest)"
-                : "\(devices.count) devices on older releases · \(latest)"
+                : "\(devices.count) devices on " + (versions.count == 1 ? versions[0] : "older releases") + " · \(latest)"
+            // The report sets the time once a device has had the runs to
+            // update and has not.
             if let at = a.at {
-                detail += " · not updated for \(from(at))"
+                alert = "not updated for " + (devices.count > 1 ? "up to " : "") + from(at)
             }
             help = devices.joined(separator: ", ")
         case .other:
@@ -447,7 +493,7 @@ private struct EmptyStateView: View {
                 }
                 Text(message)
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .textSelection(.enabled)
             case .failed(let message):

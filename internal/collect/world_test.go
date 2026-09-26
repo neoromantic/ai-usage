@@ -193,7 +193,7 @@ func run(t *testing.T, o Options) *Result {
 }
 
 func findTotals(st *state.State, provider, label string) (AccountTotals, bool) {
-	for _, a := range Totals(st) {
+	for _, a := range Totals(st, nil) {
 		if a.Provider == provider && a.Label == label {
 			return a, true
 		}
@@ -205,7 +205,7 @@ func totalsFor(t *testing.T, st *state.State, provider, label string) AccountTot
 	t.Helper()
 	a, ok := findTotals(st, provider, label)
 	if !ok {
-		t.Fatalf("no totals for %s %s in %+v", provider, label, Totals(st))
+		t.Fatalf("no totals for %s %s in %+v", provider, label, Totals(st, nil))
 	}
 	return a
 }

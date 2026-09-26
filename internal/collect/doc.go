@@ -71,7 +71,9 @@ func BuildDoc(st *state.State, key *team.Key, cfg state.Config, hostname, osUser
 		}
 		doc.Sources = append(doc.Sources, snapshot.Source{Provider: p, Status: src.Status, Error: seal(src.Error)})
 	}
-	for _, a := range Totals(st) {
+	// The snapshot keeps each working folder's usage, as the relay protocol
+	// has it: no view reads another device's projects.
+	for _, a := range Totals(st, nil) {
 		if len(doc.Accounts) == snapshot.MaxAccounts {
 			break
 		}

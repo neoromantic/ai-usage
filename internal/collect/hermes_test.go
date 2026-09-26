@@ -165,7 +165,7 @@ func TestHermesSessionWithoutRouteKeepsCurrent(t *testing.T) {
 	)
 	res := run(t, o)
 	if !IsCurrent(res.State, "hermes", "openai-codex") || hasTotals(res.State, "hermes", UnknownAccount) {
-		t.Fatalf("current = %v, totals = %+v", res.State.Current, Totals(res.State))
+		t.Fatalf("current = %v, totals = %+v", res.State.Current, Totals(res.State, nil))
 	}
 	if a := totalsFor(t, res.State, "hermes", "openai-codex"); a.Tokens != tok(140) || a.Sessions != 2 {
 		t.Fatalf("openai-codex = %+v", a)

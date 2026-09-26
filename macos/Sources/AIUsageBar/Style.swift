@@ -183,6 +183,16 @@ struct GroupHeading: View {
     }
 }
 
+/// Tokens in a table's cell, in whole millions, with the unit in the
+/// table's caption; the none mark is dim.
+struct Millions: View {
+    let tokens: Int
+
+    var body: some View {
+        Text(Format.millions(tokens)).foregroundStyle(tokens > 0 ? .primary : .tertiary)
+    }
+}
+
 /// What a table counts, in a line over it.
 struct Caption: View {
     let text: String
@@ -215,6 +225,35 @@ struct MoreButton: View {
         .buttonStyle(.plain)
         .font(.callout)
         .foregroundStyle(.secondary)
+    }
+}
+
+/// Content that scrolls sideways, faded at an edge with more past it, so a
+/// table that goes on past the edge shows it. The fade is narrow, to lie on
+/// the gap between a table's columns rather than on their numbers.
+struct SideScroll<Content: View>: View {
+    @ViewBuilder let content: Content
+    /// The content's frame in the scroll view's bounds.
+    @ViewState private var frame = CGRect.zero
+    @ViewState private var width: CGFloat = 0
+    private let space = "SideScroll"
+    private static var fade: CGFloat { 12 }
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            content.onGeometryChange(for: CGRect.self) { $0.frame(in: .named(space)) } action: { frame = $0 }
+        }
+        .coordinateSpace(.named(space))
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .mask {
+            HStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: frame.minX < -1 ? Self.fade : 0)
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: frame.maxX > width + 1 ? Self.fade : 0)
+            }
+        }
     }
 }
 

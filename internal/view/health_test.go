@@ -2,6 +2,7 @@ package view
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -123,6 +124,47 @@ func TestFillGivesAnEarlierReportHealthAndLimits(t *testing.T) {
 		if got, _ := json.Marshal(earlier); string(got) != string(want) {
 			t.Errorf("%s: the filled report differs from the saved one", name)
 		}
+	}
+}
+
+// TestFillGivesAnEarlierReportFolders: a release before folders made a
+// project of each working folder, so each of its projects, this device's
+// and each account's, is filled in as one folder. A project that has its
+// folders keeps them.
+func TestFillGivesAnEarlierReportFolders(t *testing.T) {
+	r := loadReport(t, "team")
+	if r.Projects[0].Folders != 4 {
+		t.Fatalf("the fixture's first project has %d folders", r.Projects[0].Folders)
+	}
+	r.Providers[0].Accounts[0].Projects = []Project{{Path: "/Users/ann/src/acme/app"}, {Path: "/Users/ann/Vault", Folders: 2}}
+	for i := range r.Projects[1:] {
+		r.Projects[1+i].Folders = 0
+	}
+	Fill(&r)
+	var got []int
+	for _, p := range append(r.Providers[0].Accounts[0].Projects, r.Projects[:3]...) {
+		got = append(got, p.Folders)
+	}
+	if want := []int{1, 2, 4, 1, 1}; !slices.Equal(got, want) {
+		t.Errorf("folders after Fill = %v, want %v", got, want)
+	}
+}
+
+// TestFillGivesAnEarlierReportNotUpdating: an old device that has reported
+// for BehindAfter since its behind_since does not update itself, unless it
+// is silent.
+func TestFillGivesAnEarlierReportNotUpdating(t *testing.T) {
+	r := loadReport(t, "team")
+	var got []bool
+	for _, silent := range []bool{false, true} {
+		d := &r.Team.Devices[1]
+		since := d.CollectedAt.Add(-BehindAfter)
+		d.Old, d.Silent, d.BehindSince, d.NotUpdating = true, silent, &since, false
+		Fill(&r)
+		got = append(got, d.NotUpdating)
+	}
+	if want := []bool{true, false}; !slices.Equal(got, want) {
+		t.Errorf("not updating after Fill = %v, want %v", got, want)
 	}
 }
 

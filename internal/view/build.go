@@ -48,7 +48,7 @@ func Build(in Input) Report {
 	}
 	r.Collector.Health = health(r.Collector)
 
-	totals := collect.Totals(st)
+	totals := collect.Totals(st, in.Folders)
 	for _, p := range snapshot.Providers {
 		src := st.Sources[p]
 		pv := Provider{Provider: p, Status: cmp.Or(src.Status, "skipped"), Error: strPtr(src.Error), Homes: src.Homes, Accounts: []Account{}}
@@ -62,7 +62,7 @@ func Build(in Input) Report {
 		}
 		r.Providers = append(r.Providers, pv)
 	}
-	for _, pr := range collect.Projects(st) {
+	for _, pr := range collect.Projects(st, in.Folders) {
 		r.Projects = append(r.Projects, projectView(pr, now))
 	}
 	sortProjects(r.Projects, Week)
@@ -78,21 +78,37 @@ func Build(in Input) Report {
 }
 
 // Fill gives a report saved by an earlier release of this schema the fields
-// added to it since, as Build makes them: the collector's health, and the
-// windows that limit each account. A report that has them keeps them.
+// added to it since, as Build makes them: the collector's health, the
+// windows that limit each account, the working folders of each project,
+// one each, since such a release made a project of each, and the team's
+// devices that do not update themselves. A report that has them keeps them.
 func Fill(r *Report) {
 	if r.Collector.Health == nil {
 		r.Collector.Health = health(r.Collector)
 	}
+	for i := range r.Team.Devices {
+		d := &r.Team.Devices[i]
+		d.NotUpdating = d.NotUpdating || notUpdating(*d)
+	}
+	fillFolders(r.Projects)
 	for i := range r.Providers {
 		for j := range r.Providers[i].Accounts {
 			fillLimits(r.Providers[i].Accounts[j].Quota)
+			fillFolders(r.Providers[i].Accounts[j].Projects)
 		}
 	}
 	for i := range r.Team.Providers {
 		for j := range r.Team.Providers[i].Accounts {
 			fillLimits(r.Team.Providers[i].Accounts[j].Quota)
 		}
+	}
+}
+
+// fillFolders gives each project saved without its working folders the one
+// it was.
+func fillFolders(ps []Project) {
+	for i := range ps {
+		ps[i].Folders = max(ps[i].Folders, 1)
 	}
 }
 
@@ -177,6 +193,7 @@ func quotaOf(q Quota, provider string, rs []reading, at, now time.Time) (*Quota,
 func projectView(p collect.ProjectTotals, now time.Time) Project {
 	return Project{
 		Path:         p.Path,
+		Folders:      p.Folders,
 		Sessions:     p.Sessions,
 		Tokens:       p.Tokens,
 		Usage:        usageOf(collect.DaysOf(p.Hours, now), 0),

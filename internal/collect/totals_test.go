@@ -9,7 +9,7 @@ import (
 
 func TestTotals(t *testing.T) {
 	st := ledger()
-	got := Totals(st)
+	got := Totals(st, nil)
 	var order []string
 	for _, a := range got {
 		order = append(order, a.Provider+"/"+a.Label)

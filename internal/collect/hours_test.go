@@ -31,7 +31,7 @@ func TestHoursFollowTheSession(t *testing.T) {
 		},
 	}
 	byLabel := map[string]AccountTotals{}
-	for _, a := range Totals(st) {
+	for _, a := range Totals(st, nil) {
 		byLabel[a.Provider+"/"+a.Label] = a
 	}
 	ann, bo := byLabel["codex/ann"], byLabel["codex/bo"]
@@ -50,7 +50,7 @@ func TestHoursFollowTheSession(t *testing.T) {
 	if got := SinceStart(ann.Hours, t0.Add(-day)); got != 150 {
 		t.Errorf("since a day ago = %d, want 150", got)
 	}
-	ps := Projects(st)
+	ps := Projects(st, nil)
 	if len(ps) != 1 || ps[0].Sessions != 2 || !reflect.DeepEqual(ps[0].Providers, []string{"claude", "codex"}) || DaysOf(ps[0].Hours, t0)[2] != 200 {
 		t.Errorf("projects = %+v", ps)
 	}
@@ -120,7 +120,7 @@ func TestSwitchedSessionKeepsEachAccountsHours(t *testing.T) {
 	if got, want := days("bo@acme.dev"), []int64{20}; !reflect.DeepEqual(got, want) {
 		t.Errorf("bo's days = %v, want %v", got, want)
 	}
-	if ps := Projects(st); len(ps) != 1 || !reflect.DeepEqual(DaysOf(ps[0].Hours, t0), []int64{50, 0, 0, 100}) {
+	if ps := Projects(st, nil); len(ps) != 1 || !reflect.DeepEqual(DaysOf(ps[0].Hours, t0), []int64{50, 0, 0, 100}) {
 		t.Errorf("projects = %+v", ps)
 	}
 }

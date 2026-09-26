@@ -128,7 +128,7 @@ type aliasBook struct {
 
 func loadAliasBook(d state.Dir, cfg state.Config, st *state.State) *aliasBook {
 	b := &aliasBook{names: map[string]aliasSet{}, seen: map[string]bool{}}
-	for _, a := range collect.Totals(st) {
+	for _, a := range collect.Totals(st, nil) {
 		b.addAccount(a.Provider, a.Label)
 	}
 	for k, a := range cfg.Aliases {

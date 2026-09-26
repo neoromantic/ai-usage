@@ -169,6 +169,8 @@ A short NOTE cuts an error with `…`, and keeps a silent device's last error, a
 
 One table for this device, all accounts together, sorted by the chosen period (7d by default). Columns: the project, the period, 90d, sessions, the providers it used, and the last activity. The static report shows the top 10 and says how many more there are. `--projects` prints all of them.
 
+A project is a git repository, named by its folder. Its subfolders and linked worktrees count under it while they exist, so one repository is one row however many branches it had. Claude Code worktrees still count under it after they are removed, and Codex worktrees too when one repository has their name. A folder outside any repository is its own project. [docs/json-schema.md](docs/json-schema.md#projects) has the rules.
+
 ## Legend
 
 The static report ends with a dim legend, listing only the marks on screen, a word or two each:

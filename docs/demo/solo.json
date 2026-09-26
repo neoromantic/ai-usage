@@ -268,6 +268,7 @@
           "projects": [
             {
               "path": "/Users/mira/src/orbit/web",
+              "folders": 3,
               "sessions": 79,
               "tokens": {
                 "input": 916603717,
@@ -285,6 +286,7 @@
             },
             {
               "path": "/Users/mira/src/orbit/api",
+              "folders": 1,
               "sessions": 54,
               "tokens": {
                 "input": 359408028,
@@ -302,6 +304,7 @@
             },
             {
               "path": "/Users/mira/notes",
+              "folders": 1,
               "sessions": 84,
               "tokens": {
                 "input": 185293944,
@@ -319,6 +322,7 @@
             },
             {
               "path": "/Users/mira/dotfiles",
+              "folders": 1,
               "sessions": 78,
               "tokens": {
                 "input": 22198744,
@@ -505,6 +509,7 @@
           "projects": [
             {
               "path": "/Users/mira/src/orbit/web",
+              "folders": 3,
               "sessions": 75,
               "tokens": {
                 "input": 672635161,
@@ -522,6 +527,7 @@
             },
             {
               "path": "/Users/mira/src/orbit/infra",
+              "folders": 1,
               "sessions": 38,
               "tokens": {
                 "input": 116027685,
@@ -539,6 +545,7 @@
             },
             {
               "path": "/Users/mira/src/ml-playground",
+              "folders": 1,
               "sessions": 16,
               "tokens": {
                 "input": 21285392,
@@ -649,6 +656,7 @@
           "projects": [
             {
               "path": "/Users/mira/src/ml-playground",
+              "folders": 1,
               "sessions": 24,
               "tokens": {
                 "input": 10582103,
@@ -679,6 +687,7 @@
   "projects": [
     {
       "path": "/Users/mira/src/orbit/web",
+      "folders": 5,
       "sessions": 154,
       "tokens": {
         "input": 1589238878,
@@ -700,6 +709,7 @@
     },
     {
       "path": "/Users/mira/src/orbit/api",
+      "folders": 1,
       "sessions": 54,
       "tokens": {
         "input": 359408028,
@@ -720,6 +730,7 @@
     },
     {
       "path": "/Users/mira/src/orbit/infra",
+      "folders": 1,
       "sessions": 38,
       "tokens": {
         "input": 116027685,
@@ -740,6 +751,7 @@
     },
     {
       "path": "/Users/mira/notes",
+      "folders": 1,
       "sessions": 84,
       "tokens": {
         "input": 185293944,
@@ -760,6 +772,7 @@
     },
     {
       "path": "/Users/mira/src/ml-playground",
+      "folders": 1,
       "sessions": 40,
       "tokens": {
         "input": 31867495,
@@ -781,6 +794,7 @@
     },
     {
       "path": "/Users/mira/dotfiles",
+      "folders": 1,
       "sessions": 78,
       "tokens": {
         "input": 22198744,
@@ -841,6 +855,7 @@
         "silent": false,
         "old": false,
         "behind_since": null,
+        "not_updating": false,
         "usage": {
           "today": 25168448,
           "7d": 233914303,

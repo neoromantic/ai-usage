@@ -397,6 +397,7 @@
   "projects": [
     {
       "path": "/Users/ann/src/acme/app",
+      "folders": 4,
       "sessions": 43,
       "tokens": {
         "input": 294000000,
@@ -418,6 +419,7 @@
     },
     {
       "path": "/Users/ann/Vault",
+      "folders": 1,
       "sessions": 56,
       "tokens": {
         "input": 91000000,
@@ -438,6 +440,7 @@
     },
     {
       "path": "/Users/ann/src/site",
+      "folders": 1,
       "sessions": 6,
       "tokens": {
         "input": 43400000,
@@ -458,6 +461,7 @@
     },
     {
       "path": "/Users/ann/src/ai-usage",
+      "folders": 1,
       "sessions": 3,
       "tokens": {
         "input": 7839999,
@@ -479,6 +483,7 @@
     },
     {
       "path": "/Users/ann/src/acme/os",
+      "folders": 1,
       "sessions": 3,
       "tokens": {
         "input": 8400000,
@@ -500,6 +505,7 @@
     },
     {
       "path": "/Users/ann/src/acme/relay",
+      "folders": 1,
       "sessions": 2,
       "tokens": {
         "input": 6300000,
@@ -520,6 +526,7 @@
     },
     {
       "path": "/Users/ann/dotfiles",
+      "folders": 1,
       "sessions": 4,
       "tokens": {
         "input": 3500000,
@@ -541,6 +548,7 @@
     },
     {
       "path": "/Users/ann/scratch",
+      "folders": 1,
       "sessions": 5,
       "tokens": {
         "input": 2100000,
@@ -561,6 +569,7 @@
     },
     {
       "path": "/Users/ann/src/acme/landing",
+      "folders": 1,
       "sessions": 2,
       "tokens": {
         "input": 4900000,
@@ -581,6 +590,7 @@
     },
     {
       "path": "/Users/ann/Library/Mobile Documents/iCloud~md~obsidian/Documents/Notes/Projects/2026",
+      "folders": 1,
       "sessions": 1,
       "tokens": {
         "input": 1400000,
@@ -601,6 +611,7 @@
     },
     {
       "path": "/Users/ann/src/acme/os-archive",
+      "folders": 1,
       "sessions": 11,
       "tokens": {
         "input": 14699999,
@@ -621,6 +632,7 @@
     },
     {
       "path": "/Users/ann/src/site/old",
+      "folders": 1,
       "sessions": 3,
       "tokens": {
         "input": 5600000,
@@ -641,6 +653,7 @@
     },
     {
       "path": "/Users/ann/tmp",
+      "folders": 1,
       "sessions": 1,
       "tokens": {
         "input": 210000,
@@ -661,6 +674,7 @@
     },
     {
       "path": "/private/tmp/scratch",
+      "folders": 1,
       "sessions": 1,
       "tokens": {
         "input": 70000,

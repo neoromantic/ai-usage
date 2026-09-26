@@ -423,6 +423,7 @@
   "projects": [
     {
       "path": "/Users/sam/work/api",
+      "folders": 1,
       "sessions": 21,
       "tokens": {
         "input": 49000000,
@@ -444,6 +445,7 @@
     },
     {
       "path": "/Users/sam/work/web",
+      "folders": 1,
       "sessions": 17,
       "tokens": {
         "input": 42000000,
@@ -466,6 +468,7 @@
     },
     {
       "path": "/Users/sam/work/infra",
+      "folders": 1,
       "sessions": 12,
       "tokens": {
         "input": 36400000,
@@ -486,6 +489,7 @@
     },
     {
       "path": "/Users/sam/notes",
+      "folders": 1,
       "sessions": 9,
       "tokens": {
         "input": 14000000,
@@ -506,6 +510,7 @@
     },
     {
       "path": "/Users/sam/Документы/черновики",
+      "folders": 1,
       "sessions": 4,
       "tokens": {
         "input": 5600000,
@@ -526,6 +531,7 @@
     },
     {
       "path": "/Users/sam/work/legacy",
+      "folders": 1,
       "sessions": 6,
       "tokens": {
         "input": 7699999,

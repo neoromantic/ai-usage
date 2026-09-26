@@ -137,7 +137,7 @@ An account is one login. After you switch accounts, the previous one stays, with
 | `days` | list of numbers | input plus output tokens on this device per UTC day, newest first: the first is the report's UTC day, the next the day before, and so on, for up to 90 days. Trailing zeros are left out |
 | `linked_usage` | list | `{provider, sessions, tokens}` for each other tool assumed to bill through this account, such as Hermes on this Codex login; `[]` when none. These tokens are that tool's and are not in `tokens` |
 | `last_active_at` | time | the newest session activity that used this account |
-| `projects` | list | `{path, sessions, tokens, usage, last_active_at}` per working folder, this account's part only, most tokens first |
+| `projects` | list | `{path, folders, sessions, tokens, usage, last_active_at}` per project, this account's part only, most tokens first; see [projects](#projects) |
 
 A Hermes account is named after the billing provider it used, such as `openai-codex`, `xai-oauth`, `anthropic`, or `openrouter`. Its tokens include Hermes' auxiliary calls, such as title generation, compression, and vision, under the provider each call billed. An auxiliary call on a fallback route, which Hermes records with no provider, goes to the `unknown` account.
 
@@ -199,16 +199,26 @@ The pace is the average since the window began, nights and weekends included, so
 
 ### projects
 
-`projects` in the report lists this device's working folders, with every account's tokens in each. The same object lists one account's part of each folder under that account, without `providers`.
+`projects` in the report lists this device's projects, with every account's tokens in each. The same object lists one account's part of each project under that account, without `providers`.
+
+A project is a git repository: sessions in its subfolders and its linked worktrees count under it with its own. A working folder outside any repository is a project of its own. The report finds each folder's project on the file system when it is made, without running git, so a worktree that is gone still counts where its layout says:
+
+- A folder's project is the nearest folder at or above it with a `.git` entry, short of the home folder: a home folder that is a repository is the project of the sessions in it alone. A `.git` file that names a folder in `<common>/worktrees` marks a linked worktree, whose project is the folder that holds the common git folder when that is `.git`, or hidden as `.bare` is; else the folder the common git folder's config names as its worktree, as a submodule's does, or the folder whose `.git` file names it, as `git clone --separate-git-dir` makes; and else the bare repository itself. Any other `.git` file, as a submodule's, makes its folder a project.
+- A Claude Code worktree, `<repo>/.claude/worktrees/<name>`, with no `.git` entry left counts as `<repo>` does.
+- A Codex worktree, `~/.codex/worktrees/<id>/<name>`, with no `.git` entry left is the project named `<name>` that a `.git` entry found, when there is exactly one. Else the Codex worktrees of that name are one project, whose path is `~/.codex/worktrees/*/<name>`.
+- On macOS nothing is read inside Desktop, Documents, Downloads, iCloud Drive, other cloud storage, other apps' data, or other volumes, since the system would ask the person first. A folder there is its own project, but for a Claude Code worktree.
+
+Links are resolved, so a folder reached through one is the same folder. On macOS a link into one of the folders above is not followed.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `path` | string | the working folder |
+| `path` | string | the project's folder |
+| `folders` | number | how many working folders count under the project, 1 or more |
 | `sessions` | number | sessions in the last 90 days |
 | `tokens` | object | tokens in the last 90 days |
 | `usage` | object | input plus output tokens in each period |
-| `providers` | list of strings | the tools that used the folder, most tokens first; only in the report's `projects` |
-| `last_active_at` | time | the newest session activity in the folder |
+| `providers` | list of strings | the tools that used the project, most tokens first; only in the report's `projects` |
+| `last_active_at` | time | the newest session activity in the project |
 
 The report's list is sorted by `usage` in `7d`, then `90d`, then by path.
 
@@ -241,6 +251,7 @@ A device:
 | `silent` | bool | it has not reported for a day |
 | `old` | bool | it runs an older release than `latest_version` |
 | `behind_since` | time | for an `old` device, its first run on the release it runs that this device's reads of the team found while a newer one was out, made since the read before, so that time it did not run, as a laptop asleep, does not count. The device has not updated itself for at least that long; once it has reported for 7 hours since, it had the runs to. `null` otherwise, until a read finds such a run, and once the device has not reported for a day, until it reports again |
+| `not_updating` | bool | an `old` device that does not update itself: it has reported for 7 hours since its `behind_since` and is not `silent`. These are the devices behind the `old` entry's `at` in `attention` |
 | `usage` | object | its input plus output tokens in each period, over every account. A device's days count from the UTC day it collected on, so one that last reported three days ago adds nothing to `today` |
 
 A team account. Each provider's accounts are in the order the report lists them: the worst `state` first (`out`, `over`, `tight`, `ok`, `under`, then `unknown`), ties to the one with less left of its main window, then by label.
@@ -313,6 +324,8 @@ A cell:
 
 - `update_error` and `behind_since` on a team device, so that the team can see why a device does not update itself, and for how long it has not. An `error` entry in `attention` for an `old` device whose update check fails, and `at` on the `old` entry. No field changed meaning, so the version stays 4.
 - `collector.health`, how the collection, the relay, and the update are doing, and `limits` on a window, which says the window limits the account. A report from an earlier release has neither: read a missing `health` as `[]` and a missing `limits` as `false`, and then only the main windows as limiting. `ai-usage report --from` fills both in for such a report, as this release makes them. No field changed meaning, so the version stays 4.
+- `not_updating` on a team device, so that each device the `old` entry in `attention` counts is marked. A report from an earlier release does not have it; `ai-usage report --from` fills it in from `old`, `silent`, `collected_at`, and `behind_since`. No field changed meaning, so the version stays 4.
+- `folders` on a project. A project is now a git repository, with its subfolders and linked worktrees, where each working folder was one; `path` is the project's folder, and `folders` says how many working folders count under it. A report from an earlier release has a project for each working folder and no `folders`: read a missing one as `1`, as `ai-usage report --from` fills it in. Every field keeps its type, and a project's numbers still sum its sessions, so the version stays 4.
 
 ## Example
 
@@ -417,6 +430,7 @@ A shortened report from a team of two:
           "projects": [
             {
               "path": "/Users/ann/src/api",
+              "folders": 2,
               "sessions": 3,
               "tokens": { "input": 14000000, "output": 4200000, "cache_read": 480000000, "cache_write": 21000000 },
               "usage": { "today": 1500000, "7d": 16500000, "30d": 18200000, "90d": 18200000 },
@@ -433,6 +447,7 @@ A shortened report from a team of two:
   "projects": [
     {
       "path": "/Users/ann/src/api",
+      "folders": 3,
       "sessions": 5,
       "tokens": { "input": 17000000, "output": 5100000, "cache_read": 530000000, "cache_write": 21000000 },
       "usage": { "today": 1500000, "7d": 19800000, "30d": 22100000, "90d": 22100000 },
@@ -463,6 +478,7 @@ A shortened report from a team of two:
         "silent": false,
         "old": true,
         "behind_since": "2026-08-31T16:40:00Z",
+        "not_updating": true,
         "usage": { "today": 900000, "7d": 6100000, "30d": 21000000, "90d": 48000000 }
       }
     ],

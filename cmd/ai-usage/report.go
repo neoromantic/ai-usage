@@ -47,6 +47,7 @@ func reportAt(d state.Dir, res *collect.Result, now time.Time) view.Report {
 		Hostname: deviceName(res.Config),
 		OSUser:   osUser(),
 		Now:      now,
+		Folders:  collect.FindProjects(res.State),
 	})
 }
 

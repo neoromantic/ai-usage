@@ -102,6 +102,7 @@ func soloDevice(at time.Time) *device {
 		window("7d", 22, week, 4*24*time.Hour+19*time.Hour))
 	d.account("grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64", "SuperGrok", true, at,
 		window("7d", 9, week, 1*24*time.Hour+22*time.Hour))
+	d.webWorktrees()
 	d.work("claude", "mira@studio.dev", "/Users/mira/src/orbit/web", 16, 90)
 	d.work("claude", "mira@studio.dev", "/Users/mira/src/orbit/api", 9, 60)
 	d.work("codex", "mira@studio.dev", "/Users/mira/src/orbit/web", 11, 90)
@@ -129,6 +130,7 @@ func teamReport() view.Report {
 		window("7d", 41, week, 3*24*time.Hour+7*time.Hour))
 	mira.account("grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64", "SuperGrok", true, now.Add(-3*time.Minute),
 		window("7d", 6, week, 5*24*time.Hour+2*time.Hour))
+	mira.webWorktrees()
 	mira.work("claude", "mira@studio.dev", "/Users/mira/src/orbit/web", 17, 90)
 	mira.work("claude", "mira@studio.dev", "/Users/mira/src/orbit/api", 8, 60)
 	mira.work("codex", "mira@studio.dev", "/Users/mira/src/orbit/web", 10, 90)
@@ -188,13 +190,17 @@ func teamReport() view.Report {
 	return mira.report(&collect.TeamCache{PulledAt: now.Add(-3 * time.Minute), Team: key.Fingerprint(), Docs: docs})
 }
 
-// device is one made-up machine and the ledger its collector keeps.
+// device is one made-up machine and the ledger its collector keeps. Its
+// folders are the projects of the worktrees and subfolders its sessions
+// ran in, which spread holds by harness and project.
 type device struct {
 	rng            *rand.Rand
 	id, host, user string
 	home, version  string
 	at             time.Time
 	st             *state.State
+	folders        collect.Folders
+	spread         map[string][]string
 }
 
 func newDevice(rng *rand.Rand, id, host, user, home, version string, at time.Time, providers ...string) *device {
@@ -209,7 +215,26 @@ func newDevice(rng *rand.Rand, id, host, user, home, version string, at time.Tim
 	st.Relay.LastPushAt, st.Relay.LastPullAt = at, at
 	st.Update.CheckedAt, st.Update.Latest = at.Add(-2*time.Hour), version
 	st.Schedule.Registered = true
-	return &device{rng: rng, id: id, host: host, user: user, home: home, version: version, at: at, st: st}
+	return &device{rng: rng, id: id, host: host, user: user, home: home, version: version, at: at, st: st,
+		folders: collect.Folders{}, spread: map[string][]string{}}
+}
+
+// worktrees spreads the days of provider's sessions in project over the
+// project's folder and dirs, its worktrees and subfolders, in turn. The
+// tokens stay as they were, and so does the project.
+func (d *device) worktrees(provider, project string, dirs ...string) {
+	d.spread[state.Key(provider, project)] = append([]string{project}, dirs...)
+	for _, dir := range dirs {
+		d.folders[dir] = collect.Folder{Path: dir, Project: project}
+	}
+}
+
+// webWorktrees has mira work on orbit/web in a Claude Code worktree, a
+// subfolder, and two Codex worktrees too.
+func (d *device) webWorktrees() {
+	const web = "/Users/mira/src/orbit/web"
+	d.worktrees("claude", web, web+"/.claude/worktrees/checkout", web+"/packages/ui")
+	d.worktrees("codex", web, "/Users/mira/.codex/worktrees/5e1c/web", "/Users/mira/.codex/worktrees/b07a/web")
 }
 
 // window is a quota window of length that resets in resetsIn.
@@ -272,7 +297,11 @@ func (d *device) spend(until time.Time, provider, label, project string, perDay 
 		if i > 0 && d.rng.Float64() < 0.12 {
 			continue
 		}
-		s := &state.Session{Provider: provider, Project: project, Hours: map[int64]int64{}}
+		folder := project
+		if all := d.spread[state.Key(provider, project)]; len(all) > 0 {
+			folder = all[i%len(all)]
+		}
+		s := &state.Session{Provider: provider, Project: folder, Hours: map[int64]int64{}}
 		var total int64
 		for h := 7; h < 19; h++ {
 			at := day.Add(time.Duration(h)*time.Hour + 20*time.Minute)
@@ -293,7 +322,7 @@ func (d *device) spend(until time.Time, provider, label, project string, perDay 
 		if via != nil {
 			s.Via = map[string]snapshot.Tokens{state.Key(via.Provider, via.Label): tok}
 		}
-		d.st.Sessions[state.Key(provider, label, project, day.Format(time.DateOnly))] = s
+		d.st.Sessions[state.Key(provider, label, folder, day.Format(time.DateOnly))] = s
 	}
 }
 
@@ -317,7 +346,7 @@ func (d *device) report(tc *collect.TeamCache) view.Report {
 	in := view.Input{
 		Version: d.version, RelayURL: relay, Config: cfg, State: d.st, Key: key,
 		Doc:      collect.BuildDoc(d.st, key, cfg, d.host, d.user, d.version, d.at),
-		Hostname: d.host, OSUser: d.user, Now: now,
+		Hostname: d.host, OSUser: d.user, Now: now, Folders: d.folders,
 	}
 	if tc != nil {
 		in.Team = *tc

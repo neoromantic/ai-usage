@@ -22,8 +22,11 @@ enum SettingsWindow {
             for pane in panes {
                 let host = NSHostingController(rootView: pane.view.environmentObject(Store.shared))
                 host.sizingOptions = .preferredContentSize
+                // The window takes its title from the chosen pane's
+                // controller, and the toolbar item its label; without one,
+                // the window says "Untitled".
+                host.title = pane.title
                 let item = NSTabViewItem(viewController: host)
-                item.label = pane.title
                 item.image = NSImage(systemSymbolName: pane.symbol, accessibilityDescription: pane.title)
                 tabs.addTabViewItem(item)
             }
@@ -187,9 +190,9 @@ struct GeneralSettings: View {
                 Toggle("Show percent in menu bar", isOn: $showPercent)
             }
             Section("Versions") {
-                LabeledContent("Menu Bar App", value: Bundle.main.shortVersion)
-                LabeledContent("Command-Line Tool", value: cliVersion ?? store.report?.collector.version ?? "–")
-                LabeledContent("Tool Location") {
+                LabeledContent("Menu bar app", value: Bundle.main.shortVersion)
+                LabeledContent("Command-line tool", value: cliVersion ?? store.report?.collector.version ?? "–")
+                LabeledContent("Tool location") {
                     Text(store.cliPath ?? "–")
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -292,7 +295,7 @@ struct TeamSettings: View {
                 LabeledContent("Devices", value: store.report.map { "\($0.team.devices.count)" } ?? "–")
             }
             Section {
-                LabeledContent("Relay URL") {
+                LabeledContent("URL") {
                     CommitField(title: "Relay URL", prompt: "https://relay.example.com", value: relay, width: 210,
                                 clearTitle: "Use Default") { url in
                         try await store.command(url.isEmpty ? ["relay", "clear"] : ["relay", "set", url])

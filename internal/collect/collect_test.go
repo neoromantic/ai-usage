@@ -136,7 +136,7 @@ func TestSameSessionInTwoHomesCountsOnce(t *testing.T) {
 		w.now = t0.Add(time.Duration(i) * 15 * time.Minute)
 		res = run(t, o)
 		got := snapshot.Tokens{}
-		for _, a := range Totals(res.State) {
+		for _, a := range Totals(res.State, nil) {
 			got = got.Add(a.Tokens)
 		}
 		if got != tok(130) {

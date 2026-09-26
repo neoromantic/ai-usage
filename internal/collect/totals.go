@@ -34,7 +34,10 @@ type AccountTotals struct {
 }
 
 type ProjectTotals struct {
-	Path string
+	// Path is the project's folder, and Folders how many working folders
+	// count under it.
+	Path    string
+	Folders int
 	usage
 	// Providers are the harnesses that used the project, most tokens first.
 	// Only Projects fills it.
@@ -62,10 +65,11 @@ func (u *usage) add(tok snapshot.Tokens, hours map[int64]int64, last time.Time) 
 	}
 }
 
-// Totals sums the ledger per account and project.
-func Totals(st *state.State) []AccountTotals {
+// Totals sums the ledger per account and project, a working folder counting
+// under its project in f.
+func Totals(st *state.State, f Folders) []AccountTotals {
 	byKey := map[string]*AccountTotals{}
-	projects := map[string]map[string]*ProjectTotals{}
+	projects := map[string]*projectSums{}
 	get := func(provider, label string) *AccountTotals {
 		k := state.Key(provider, label)
 		a := byKey[k]
@@ -76,7 +80,7 @@ func Totals(st *state.State) []AccountTotals {
 				linkQuota(st, a, acct.Link)
 			}
 			byKey[k] = a
-			projects[k] = map[string]*ProjectTotals{}
+			projects[k] = &projectSums{}
 		}
 		return a
 	}
@@ -90,13 +94,7 @@ func Totals(st *state.State) []AccountTotals {
 			}
 			last, hours := lastActive(s, label), labelHours(s, label)
 			get(s.Provider, label).add(tok, hours, last)
-			k := state.Key(s.Provider, label)
-			p := projects[k][s.Project]
-			if p == nil {
-				p = &ProjectTotals{Path: s.Project}
-				projects[k][s.Project] = p
-			}
-			p.add(tok, hours, last)
+			projects[state.Key(s.Provider, label)].add(f.of(s.Project), tok, hours, last)
 		}
 		for k, tok := range s.Via {
 			parts := state.SplitKey(k)
@@ -110,10 +108,7 @@ func Totals(st *state.State) []AccountTotals {
 	}
 	out := make([]AccountTotals, 0, len(byKey))
 	for k, a := range byKey {
-		for _, p := range projects[k] {
-			a.Projects = append(a.Projects, *p)
-		}
-		sortProjects(a.Projects)
+		a.Projects = projects[k].list()
 		if a.Sessions == 0 && a.Quota == nil && !a.Current && a.LinkedSessions == 0 {
 			continue
 		}
@@ -124,9 +119,9 @@ func Totals(st *state.State) []AccountTotals {
 }
 
 // Projects sums the ledger per project over every account and harness on
-// this device.
-func Projects(st *state.State) []ProjectTotals {
-	byPath := map[string]*ProjectTotals{}
+// this device, a working folder counting under its project in f.
+func Projects(st *state.State, f Folders) []ProjectTotals {
+	var ps projectSums
 	byProvider := map[string]map[string]int64{}
 	for _, s := range st.Sessions {
 		var tok snapshot.Tokens
@@ -145,24 +140,57 @@ func Projects(st *state.State) []ProjectTotals {
 		if tok.Zero() {
 			continue
 		}
-		p := byPath[s.Project]
-		if p == nil {
-			p = &ProjectTotals{Path: s.Project}
-			byPath[s.Project] = p
-			byProvider[s.Project] = map[string]int64{}
+		p := ps.add(f.of(s.Project), tok, hours, last)
+		if byProvider[p.Path] == nil {
+			byProvider[p.Path] = map[string]int64{}
 		}
-		p.add(tok, hours, last)
-		byProvider[s.Project][s.Provider] += tok.Total()
+		byProvider[p.Path][s.Provider] += tok.Total()
 	}
-	out := make([]ProjectTotals, 0, len(byPath))
-	for path, p := range byPath {
-		for prov := range byProvider[path] {
+	out := ps.list()
+	for i := range out {
+		p := &out[i]
+		used := byProvider[p.Path]
+		for prov := range used {
 			p.Providers = append(p.Providers, prov)
 		}
-		used := byProvider[path]
 		slices.SortFunc(p.Providers, func(a, b string) int {
 			return cmp.Or(cmp.Compare(used[b], used[a]), cmp.Compare(a, b))
 		})
+	}
+	return out
+}
+
+// projectSums sums sessions per project, counting the working folders of
+// each.
+type projectSums struct {
+	byPath  map[string]*ProjectTotals
+	folders map[string]map[string]bool
+}
+
+// add counts one session's share, spent in the working folder dir, under
+// dir's project.
+func (ps *projectSums) add(dir Folder, tok snapshot.Tokens, hours map[int64]int64, last time.Time) *ProjectTotals {
+	if ps.byPath == nil {
+		ps.byPath, ps.folders = map[string]*ProjectTotals{}, map[string]map[string]bool{}
+	}
+	p := ps.byPath[dir.Project]
+	if p == nil {
+		p = &ProjectTotals{Path: dir.Project}
+		ps.byPath[dir.Project] = p
+		ps.folders[dir.Project] = map[string]bool{}
+	}
+	if !ps.folders[dir.Project][dir.Path] {
+		ps.folders[dir.Project][dir.Path] = true
+		p.Folders++
+	}
+	p.add(tok, hours, last)
+	return p
+}
+
+// list is the projects, most tokens first.
+func (ps *projectSums) list() []ProjectTotals {
+	var out []ProjectTotals
+	for _, p := range ps.byPath {
 		out = append(out, *p)
 	}
 	sortProjects(out)

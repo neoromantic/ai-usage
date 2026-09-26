@@ -269,6 +269,7 @@
           "projects": [
             {
               "path": "/Users/mira/src/orbit/web",
+              "folders": 3,
               "sessions": 79,
               "tokens": {
                 "input": 972506085,
@@ -286,6 +287,7 @@
             },
             {
               "path": "/Users/mira/src/orbit/api",
+              "folders": 1,
               "sessions": 50,
               "tokens": {
                 "input": 273540479,
@@ -303,6 +305,7 @@
             },
             {
               "path": "/Users/mira/notes",
+              "folders": 1,
               "sessions": 67,
               "tokens": {
                 "input": 133125786,
@@ -320,6 +323,7 @@
             },
             {
               "path": "/Users/mira/dotfiles",
+              "folders": 1,
               "sessions": 71,
               "tokens": {
                 "input": 15186825,
@@ -507,6 +511,7 @@
           "projects": [
             {
               "path": "/Users/mira/src/orbit/web",
+              "folders": 3,
               "sessions": 77,
               "tokens": {
                 "input": 569544803,
@@ -524,6 +529,7 @@
             },
             {
               "path": "/Users/mira/src/orbit/infra",
+              "folders": 1,
               "sessions": 44,
               "tokens": {
                 "input": 98080126,
@@ -634,6 +640,7 @@
           "projects": [
             {
               "path": "/Users/mira/src/ml-playground",
+              "folders": 1,
               "sessions": 22,
               "tokens": {
                 "input": 11296116,
@@ -664,6 +671,7 @@
   "projects": [
     {
       "path": "/Users/mira/src/orbit/web",
+      "folders": 5,
       "sessions": 156,
       "tokens": {
         "input": 1542050888,
@@ -685,6 +693,7 @@
     },
     {
       "path": "/Users/mira/src/orbit/api",
+      "folders": 1,
       "sessions": 50,
       "tokens": {
         "input": 273540479,
@@ -705,6 +714,7 @@
     },
     {
       "path": "/Users/mira/src/orbit/infra",
+      "folders": 1,
       "sessions": 44,
       "tokens": {
         "input": 98080126,
@@ -725,6 +735,7 @@
     },
     {
       "path": "/Users/mira/notes",
+      "folders": 1,
       "sessions": 67,
       "tokens": {
         "input": 133125786,
@@ -745,6 +756,7 @@
     },
     {
       "path": "/Users/mira/src/ml-playground",
+      "folders": 1,
       "sessions": 22,
       "tokens": {
         "input": 11296116,
@@ -765,6 +777,7 @@
     },
     {
       "path": "/Users/mira/dotfiles",
+      "folders": 1,
       "sessions": 71,
       "tokens": {
         "input": 15186825,
@@ -825,6 +838,7 @@
         "silent": false,
         "old": false,
         "behind_since": null,
+        "not_updating": false,
         "usage": {
           "today": 16236736,
           "7d": 161981166,
@@ -869,6 +883,7 @@
         "silent": false,
         "old": false,
         "behind_since": null,
+        "not_updating": false,
         "usage": {
           "today": 2535263,
           "7d": 16250812,
@@ -913,6 +928,7 @@
         "silent": false,
         "old": false,
         "behind_since": null,
+        "not_updating": false,
         "usage": {
           "today": 16897391,
           "7d": 167052762,
@@ -957,6 +973,7 @@
         "silent": false,
         "old": false,
         "behind_since": null,
+        "not_updating": false,
         "usage": {
           "today": 170649,
           "7d": 1828410,
@@ -1001,6 +1018,7 @@
         "silent": true,
         "old": false,
         "behind_since": null,
+        "not_updating": false,
         "usage": {
           "today": 0,
           "7d": 6468065,
@@ -1045,6 +1063,7 @@
         "silent": false,
         "old": false,
         "behind_since": null,
+        "not_updating": false,
         "usage": {
           "today": 442839,
           "7d": 4046933,
@@ -1089,6 +1108,7 @@
         "silent": false,
         "old": false,
         "behind_since": null,
+        "not_updating": false,
         "usage": {
           "today": 4965639,
           "7d": 36793679,
@@ -1133,6 +1153,7 @@
         "silent": false,
         "old": false,
         "behind_since": null,
+        "not_updating": false,
         "usage": {
           "today": 4229840,
           "7d": 29030842,
@@ -1177,6 +1198,7 @@
         "silent": false,
         "old": true,
         "behind_since": null,
+        "not_updating": false,
         "usage": {
           "today": 9064390,
           "7d": 121389927,
@@ -1221,6 +1243,7 @@
         "silent": false,
         "old": false,
         "behind_since": null,
+        "not_updating": false,
         "usage": {
           "today": 4202516,
           "7d": 48568409,
@@ -1265,6 +1288,7 @@
         "silent": false,
         "old": false,
         "behind_since": null,
+        "not_updating": false,
         "usage": {
           "today": 2675255,
           "7d": 26241712,
@@ -1309,6 +1333,7 @@
         "silent": false,
         "old": false,
         "behind_since": null,
+        "not_updating": false,
         "usage": {
           "today": 714753,
           "7d": 6911824,

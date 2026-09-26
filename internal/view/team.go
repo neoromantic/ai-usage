@@ -297,6 +297,7 @@ func (m *merger) markOld(latest *string) {
 		if b, ok := m.behind[d.Device]; ok && d.Old && b.Version == d.CollectorVersion {
 			d.BehindSince = timePtr(b.Since)
 		}
+		d.NotUpdating = notUpdating(*d)
 	}
 }
 

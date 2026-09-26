@@ -130,7 +130,7 @@ func TestUnreadableLabels(t *testing.T) {
 // TestTeamDeviceUpdate: another device's failed release check comes apart
 // from its last run's error, a last_error from an older collector stays
 // whole, and an old device says since when this device's reads have found
-// it on its release.
+// it on its release, and whether it does not update itself.
 func TestTeamDeviceUpdate(t *testing.T) {
 	st := emptyState()
 	st.Update.Error = "update check: HTTP 502 from github.com"
@@ -159,13 +159,13 @@ func TestTeamDeviceUpdate(t *testing.T) {
 	if o.LastError == nil || *o.LastError != other.LastError || o.UpdateError == nil || *o.UpdateError != other.Update.Error {
 		t.Errorf("other device: last error %v, update error %v", o.LastError, o.UpdateError)
 	}
-	if !o.Old || o.BehindSince == nil || !o.BehindSince.Equal(now.Add(-30*time.Hour)) {
-		t.Errorf("other device: old %v since %v", o.Old, o.BehindSince)
+	if !o.Old || o.BehindSince == nil || !o.BehindSince.Equal(now.Add(-30*time.Hour)) || !o.NotUpdating {
+		t.Errorf("other device: old %v since %v, not updating %v", o.Old, o.BehindSince, o.NotUpdating)
 	}
 	// Found behind on another release, it has run this one for no time
 	// that is known.
-	if old.LastError == nil || *old.LastError != "claude: 2 malformed lines; update: none" || old.UpdateError != nil || !old.Old || old.BehindSince != nil {
-		t.Errorf("older device: last error %v, update error %v, old %v since %v", old.LastError, old.UpdateError, old.Old, old.BehindSince)
+	if old.LastError == nil || *old.LastError != "claude: 2 malformed lines; update: none" || old.UpdateError != nil || !old.Old || old.BehindSince != nil || old.NotUpdating {
+		t.Errorf("older device: last error %v, update error %v, old %v since %v, not updating %v", old.LastError, old.UpdateError, old.Old, old.BehindSince, old.NotUpdating)
 	}
 }
 

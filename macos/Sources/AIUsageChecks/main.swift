@@ -60,10 +60,32 @@ func objects(_ v: Any, _ edit: ([String: Any]) -> [String: Any]) -> Any {
     return v
 }
 
-// A report from an ai-usage before health and limits.
-let older = try edited("team.json") { objects($0) { $0.filter { $0.key != "health" && $0.key != "limits" } } }
+// A report from an ai-usage before health, limits, folders, and not_updating.
+let older = try edited("team.json") { objects($0) { $0.filter { !["health", "limits", "folders", "not_updating"].contains($0.key) } } }
 check("older report has no health", older.collector.health.isEmpty)
 check("older report limits nothing", older.team.providers.allSatisfy { $0.accounts.allSatisfy { $0.quota?.windows.allSatisfy { !$0.limits } ?? true } })
+equal("folders", team.projects.map(\.folders), [5, 1, 1, 1, 1, 1])
+equal("older report's folders", older.projects.map(\.folders), [0, 0, 0, 0, 0, 0])
+let stuck = try edited("team.json") { objects($0) { $0["device"] as? String == team.team.devices[1].device ? $0.merging(["not_updating": true]) { $1 } : $0 } }
+equal("not updating", stuck.team.devices.map(\.notUpdating), team.team.devices.indices.map { $0 == 1 })
+check("older report updates", older.team.devices.allSatisfy { !$0.notUpdating })
+
+// The subscriptions with no window known now: never read, or each window
+// that limits it has reset since its reading or is not in it. Another
+// window's reset alone leaves the account known.
+check("demo quotas known", team.team.providers.allSatisfy { $0.accounts.allSatisfy(\.quotaKnown) })
+func withQuota(_ label: String, _ edit: @escaping ([String: Any]) -> Any) throws -> TeamAccount? {
+    try edited("team.json") { objects($0) { o in
+        guard o["label"] as? String == label, o["busiest"] != nil, let q = o["quota"] as? [String: Any] else { return o }
+        return o.merging(["quota": edit(q)]) { $1 }
+    } }.teamAccount(provider: "claude", label: label)
+}
+let windows = { (q: [String: Any], edit: ([String: Any]) -> [String: Any]) in q.merging(["windows": (q["windows"] as! [[String: Any]]).map(edit)]) { $1 } }
+equal("never read", try withQuota("leo@studio.dev") { _ in NSNull() }?.quotaKnown, false)
+equal("main window reset", try withQuota("leo@studio.dev") { q in windows(q) { $0.merging(["reset": true]) { $1 } } }?.quotaKnown, false)
+equal("main window not read", try withQuota("leo@studio.dev") { q in windows(q) { $0.merging(["unread": true]) { $1 } } }?.quotaKnown, false)
+equal("another window known", try withQuota("mira@studio.dev") { q in windows(q) { $0["main"] as? Bool == true ? $0.merging(["reset": true]) { $1 } : $0 } }?.quotaKnown, true)
+equal("another window not limiting", try withQuota("leo@studio.dev") { q in windows(q) { $0["main"] as? Bool == true ? $0.merging(["reset": true]) { $1 } : $0 } }?.quotaKnown, false)
 
 // Times.
 equal("time with offset", parseTime("2026-09-24T15:40:00+02:00"), time("2026-09-24T13:40:00Z"))
@@ -95,9 +117,18 @@ for (s, want) in ages {
 let mira = team.teamAccount(provider: "claude", label: "mira@studio.dev")!
 equal("left", Format.left(mira.quota?.main), "42%")
 equal("left unknown", Format.left(team.teamAccount(provider: "codex", label: "leo@studio.dev")?.quota?.windows.first), "?")
-equal("share", [0.4, 26.6, 99.5, 100].map(Format.share), ["<1%", "27%", ">99%", "100%"])
+// Whole millions and whole percents, as the console prints them.
+for (n, want) in [(0, "–"), (-5, "–"), (1, "<1"), (999_999, "<1"), (1_000_000, "1"), (1_499_999, "1"), (1_500_000, "2"),
+                  (603_000_000, "603"), (1_658_119_321, "1658")] {
+    equal("millions \(n)", Format.millions(n), want)
+}
+equal("spoken millions", [0, 480_000, 104_400_000].map(Format.spokenMillions), ["none", "under a million", "104 million"])
+equal("share", [nil, 0, 0.4, 26.6, 99, 99.5, 100].map(Format.share), ["–", "–", "<1", "27", "99", ">99", "100"])
 equal("tilde", Format.tilde("/Users/mira/src/web", home: "/Users/mira"), "~/src/web")
 equal("tilde elsewhere", Format.tilde("/Users/miranda/x", home: "/Users/mira"), "/Users/miranda/x")
+let paths = ["/Users/mira/src/orbit/web", "/Users/mira", "/Users/mira/notes/", "/private/tmp/x", "/x", "/", "unknown", "/Users/mira/.codex/worktrees/*/app"]
+equal("path parts", paths.map { Format.pathParts($0, home: "/Users/mira") }.map { [$0.name, $0.folder] },
+      [["web", "~/src/orbit"], ["~", ""], ["notes", "~"], ["x", "/private/tmp"], ["x", "/"], ["/", ""], ["unknown", ""], ["app", "~/.codex/worktrees/*"]])
 
 // The menu bar summary: the fullest window of this device's subscriptions
 // among those that limit them, not only a main one.

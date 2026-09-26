@@ -299,10 +299,15 @@ type Usage struct {
 	Quarter int64 `json:"90d"`
 }
 
-// Project is usage in one working directory. On this device's list it is
+// Project is usage in one project: a repository with its worktrees and
+// subfolders, or a working folder outside any. On this device's list it is
 // every account's; under an account, that account's.
 type Project struct {
+	// Path is the project's folder, and Folders how many working folders
+	// count under it. A report saved before Folders has 0 until Fill gives
+	// it 1.
 	Path     string          `json:"path"`
+	Folders  int             `json:"folders"`
 	Sessions int             `json:"sessions"`
 	Tokens   snapshot.Tokens `json:"tokens"`
 	Usage    Usage           `json:"usage"`
@@ -349,7 +354,10 @@ type TeamDevice struct {
 	// out: its run since the read before, so the time it did not run, as a
 	// laptop asleep, does not count.
 	BehindSince *time.Time `json:"behind_since"`
-	Usage       Usage      `json:"usage"`
+	// NotUpdating is an old device that does not update itself: it has
+	// reported for BehindAfter since its BehindSince and is not silent.
+	NotUpdating bool  `json:"not_updating"`
+	Usage       Usage `json:"usage"`
 }
 
 type Source struct {
@@ -485,4 +493,7 @@ type Input struct {
 	Hostname string
 	OSUser   string
 	Now      time.Time
+	// Folders are the projects of the working folders in State; a folder
+	// missing from it is its own.
+	Folders collect.Folders
 }
