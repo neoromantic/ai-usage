@@ -343,7 +343,7 @@ func (p *page) attentionText(a Attention, room int) []chunks {
 		// place, and so does how long the device longest on an old release
 		// has not updated, once that is longer than updating takes, until
 		// even the count leaves no room for it.
-		list := func(tail string) string { return nameList(names, nil, max(room-width(tail), 12), g.ell) + tail }
+		list := func(tail string) string { return nameList(names, max(room-width(tail), 12), g.ell) + tail }
 		if a.At != nil && p.now.Sub(*a.At) >= BehindAfter {
 			up := ""
 			if len(a.Devices) > 1 {

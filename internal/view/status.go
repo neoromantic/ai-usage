@@ -15,7 +15,6 @@ const statusKey = 14
 // column, since this is where full errors live.
 func StatusText(r Report, dir string, o Options) string {
 	u := newUI(&r, o)
-	u.page = u.w
 	u.status(dir)
 	return u.String()
 }
@@ -25,25 +24,23 @@ func (u *ui) status(dir string) {
 	c := u.r.Collector
 	u.emit(u.spread(line{{"ai-usage status", bold}}, line{{u.clock(u.now, "Mon 2 Jan 15:04"), gray}}))
 
-	var problems []line
-	for _, h := range u.healthItems() {
-		if h.short != "" {
-			problems = append(problems, line{{h.short, plain}})
-		}
+	var items []line
+	for _, s := range problems(c) {
+		items = append(items, line{{s, plain}})
 	}
 	for _, p := range u.r.Providers {
 		if p.Status == "error" || p.Status == "partial" {
-			problems = append(problems, line{{p.Provider + " " + p.Status, plain}})
+			items = append(items, line{{p.Provider + " " + p.Status, plain}})
 		}
 	}
-	if len(problems) == 0 {
+	if len(items) == 0 {
 		u.emit(line{{g.ok + " ", green}, {"healthy", plain}})
 	} else {
 		word := "problems"
-		if len(problems) == 1 {
+		if len(items) == 1 {
 			word = "problem"
 		}
-		u.flow(line{{g.fail + " ", red}, {strconv.Itoa(len(problems)) + " " + word + ": ", plain}}, problems, ", ", 2)
+		u.flow(line{{g.fail + " ", red}, {strconv.Itoa(len(items)) + " " + word + ": ", plain}}, items, ", ", 2)
 	}
 	u.blank()
 
@@ -143,6 +140,35 @@ func (u *ui) status(dir string) {
 	}
 	u.blank()
 	u.sources()
+}
+
+// problems names what is wrong with the collection, the relay, the schedule
+// and the update, for the status card's verdict.
+func problems(c Collector) []string {
+	var out []string
+	switch {
+	case c.LastRunAt == nil:
+		out = append(out, "never collected")
+	case failed(c):
+		out = append(out, "last run failed")
+	}
+	if c.Relay.URL != nil {
+		switch {
+		case c.Relay.LastError != nil:
+			out = append(out, "relay failing")
+		case c.Relay.Pending:
+			out = append(out, "relay pending")
+		}
+	}
+	if !c.Schedule.Registered {
+		out = append(out, "not scheduled")
+	}
+	// An update error counts only where the update line shows it: not on a
+	// dev build, and not with a release staged.
+	if !selfupdate.Dev(c.Version) && c.Update.Staged == nil && c.Update.Error != nil {
+		out = append(out, "update check failed")
+	}
+	return out
 }
 
 func (u *ui) sources() {

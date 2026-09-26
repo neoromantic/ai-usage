@@ -9,8 +9,6 @@ import (
 // Theme is the report's semantic colors. The code names a token, never a
 // raw color; each token has a value for dark and for light terminals.
 type Theme struct {
-	// Text is the terminal's own foreground.
-	Text color.Color
 	// Muted is for column headers, secondary text, and units.
 	Muted color.Color
 	// Faint is for tracks, rules, dots, and unknown bars.
@@ -29,7 +27,6 @@ func NewTheme(dark bool) Theme {
 	ld := lipgloss.LightDark(dark)
 	c := func(light, dark string) color.Color { return ld(lipgloss.Color(light), lipgloss.Color(dark)) }
 	return Theme{
-		Text:   lipgloss.NoColor{},
 		Muted:  c("#6c6c6c", "#8a8a8a"),
 		Faint:  c("#b2b2b2", "#4e4e4e"),
 		Accent: c("#0087af", "#5fafff"),

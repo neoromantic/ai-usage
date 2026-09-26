@@ -2,7 +2,6 @@ package view
 
 import (
 	"fmt"
-	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -16,15 +15,13 @@ import (
 type style string
 
 const (
-	plain   style = ""
-	bold    style = "1"
-	red     style = "31"
-	redBold style = "1;31"
-	yellow  style = "33"
-	green   style = "32"
-	magenta style = "35"
-	cyan    style = "36"
-	gray    style = "90"
+	plain  style = ""
+	bold   style = "1"
+	red    style = "31"
+	yellow style = "33"
+	green  style = "32"
+	cyan   style = "36"
+	gray   style = "90"
 )
 
 type seg struct {
@@ -40,14 +37,6 @@ func (l line) width() int {
 		n += width(s.text)
 	}
 	return n
-}
-
-func (l line) text() string {
-	var b strings.Builder
-	for _, s := range l {
-		b.WriteString(s.text)
-	}
-	return b.String()
 }
 
 // cut keeps the start of l within w columns.
@@ -69,35 +58,21 @@ func (l line) cut(w int, ell string) line {
 }
 
 type glyphs struct {
-	eighths                  []string
-	full, track, none        string
-	ell, rule, branch        string
-	here, seen, pace, stale  string
-	ok, partial, fail, skip  string
-	warn, old, staged, dash  string
-	question, crit, warnMark string
-	sep, ge                  string
+	ell, sep                string
+	ok, partial, fail, skip string
+	warn, staged            string
 }
 
 var utf8Glyphs = glyphs{
-	eighths: []string{"", "▏", "▎", "▍", "▌", "▋", "▊", "▉"},
-	full:    "█", track: "░", none: "·",
-	ell: "…", rule: "─", branch: "└",
-	here: "●", seen: "○", pace: "▲", stale: "~",
+	ell: "…", sep: " · ",
 	ok: "✓", partial: "◐", fail: "✕", skip: "·",
-	warn: "!", old: "↓", staged: "↑", dash: "—",
-	question: "?", crit: "!!", warnMark: "!",
-	sep: " · ", ge: "≥",
+	warn: "!", staged: "↑",
 }
 
 var asciiGlyphs = glyphs{
-	full: "#", track: ".", none: ".",
-	ell: "...", rule: "-", branch: "-",
-	here: "*", seen: "o", pace: "^", stale: "~",
+	ell: "...", sep: " - ",
 	ok: "+", partial: "/", fail: "x", skip: ".",
-	warn: "!", old: "v", staged: "^", dash: "-",
-	question: "?", crit: "!!", warnMark: "!",
-	sep: " - ", ge: ">=",
+	warn: "!", staged: "^",
 }
 
 // width is the display width, as a terminal draws s. Everything the console
@@ -123,13 +98,6 @@ func chars(s string) []string {
 func padRight(s string, w int) string {
 	if d := w - width(s); d > 0 {
 		return s + strings.Repeat(" ", d)
-	}
-	return s
-}
-
-func padLeft(s string, w int) string {
-	if d := w - width(s); d > 0 {
-		return strings.Repeat(" ", d) + s
 	}
 	return s
 }
@@ -185,18 +153,6 @@ func truncMid(s string, w int, ell string) string {
 
 var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-// truncLabel shortens an account label. A UUID is known by its first 8 hex
-// digits, like a short git hash; anything else keeps its start.
-func truncLabel(s string, w int, ell string) string {
-	if width(s) <= w {
-		return s
-	}
-	if uuidRe.MatchString(s) && w >= 8+width(ell) {
-		return s[:8] + ell
-	}
-	return truncEnd(s, w, ell)
-}
-
 // truncPath keeps the first folder and as many trailing folders as fit, so
 // "~/orca/workspaces/monorepo/fix-x" becomes "~/orca/…/monorepo/fix-x".
 // When the first folder leaves no room, the path keeps just its root: "~/…/x".
@@ -235,10 +191,8 @@ func truncPath(p string, w int, ell string) string {
 }
 
 // nameList fits as many whole names as it can, then says how many more.
-// When not even the first fits, it takes short[0], the first name's shorter
-// form if there is one, such as a device's host without its user, and cuts
-// that with an ellipsis if it still does not fit.
-func nameList(names, short []string, w int, ell string) string {
+// When not even the first fits, it cuts that one with an ellipsis.
+func nameList(names []string, w int, ell string) string {
 	if len(names) == 0 {
 		return ""
 	}
@@ -262,39 +216,8 @@ func nameList(names, short []string, w int, ell string) string {
 	if shown > 0 {
 		return out + more(len(names)-shown)
 	}
-	first := names[0]
-	if len(short) > 0 && short[0] != "" {
-		first = short[0]
-	}
 	tail := more(len(names) - 1)
-	if width(first+tail) <= w {
-		return first + tail
-	}
-	return truncEnd(first, w-width(tail), ell) + tail
-}
-
-// human prints 1234567 as 1.2M: K, M, G, T with one decimal below 100.
-func human(n int64) string {
-	f := float64(n)
-	for _, u := range []struct {
-		v float64
-		s string
-	}{{1e12, "T"}, {1e9, "G"}, {1e6, "M"}, {1e3, "K"}} {
-		if f >= u.v {
-			x := f / u.v
-			if x >= 100 {
-				return strconv.FormatFloat(x, 'f', 0, 64) + u.s
-			}
-			return strconv.FormatFloat(x, 'f', 1, 64) + u.s
-		}
-	}
-	return strconv.FormatInt(n, 10)
-}
-
-// pctText floors, so a window never shows full before it is and no mark
-// sits next to a number below its threshold. It fits four columns.
-func pctText(p float64) string {
-	return strconv.Itoa(min(int(math.Floor(p)), 999)) + "%"
+	return truncEnd(names[0], w-width(tail), ell) + tail
 }
 
 // span prints a duration in at most five columns: 3d22h, 12d, 14h, 5h53m, 53m.
@@ -346,13 +269,6 @@ func ago(d time.Duration) string {
 		s = strings.Replace(s, "h", "h ", 1)
 	}
 	return strings.TrimSpace(s) + " ago"
-}
-
-func shortFP(fp string, n int, ell string) string {
-	if len(fp) <= n {
-		return fp
-	}
-	return fp[:n] + ell
 }
 
 func clamp(v, lo, hi int) int {

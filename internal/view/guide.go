@@ -23,9 +23,7 @@ func Guide(r Report, scheduler string, o Options) string {
 	if c.Schedule.Registered {
 		u.para(line{{g.ok + " ", green}}, "collects by itself every 15 minutes, started by "+scheduler, plain)
 	} else {
-		// The same words as the header's, which say what to do.
-		h := u.scheduleHealth()
-		u.para(line{{h.glyph + " ", h.st}}, h.detail, h.st)
+		u.para(line{{g.fail + " ", red}}, scheduleFix(c, g.sep), red)
 	}
 	team := []string{"no relay, so no team sees this device yet: ai-usage relay set URL"}
 	if c.Relay.URL != nil {
@@ -55,6 +53,19 @@ func Guide(r Report, scheduler string, o Options) string {
 	}
 	u.emit(line{{"  uninstall: https://github.com/" + selfupdate.Repo + "#uninstall", gray}})
 	return u.String()
+}
+
+// scheduleFix says why nothing is registered, in the same words as status:
+// the scheduler's error, or the reason and the command that registers.
+func scheduleFix(c Collector, sep string) string {
+	switch {
+	case c.Schedule.Error != nil:
+		return "schedule: " + *c.Schedule.Error
+	case selfupdate.Dev(c.Version):
+		return "schedule: dev builds do not register themselves" + sep + "ai-usage schedule install"
+	default:
+		return "schedule: not registered" + sep + "ai-usage schedule install"
+	}
 }
 
 // para prints text after lead, wrapping it at spaces under itself.
