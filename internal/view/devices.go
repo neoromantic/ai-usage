@@ -140,54 +140,8 @@ func (p *page) grid() []chunks {
 	}
 	lead := 2 + nameW
 	totalW := max(gridCell, width(totalOf(grand)))
-	// after is how wide the matrix is right of its last column: TOTAL, and
-	// over it the count of the columns off the right edge, if any.
-	more := func(n int) string { return "+" + strconv.Itoa(n) + " more" }
-	after := func(off int) int {
-		n := 2 + totalW
-		if off > 0 {
-			n = max(n, 2+width(more(off)))
-		}
-		return n
-	}
-
-	// The columns that fit, from the scroll on.
-	scroll := clamp(p.o.MatrixScroll, 0, max(len(cols)-1, 0))
-	var shown []int
-	x := lead
-	for k := scroll; k < len(cols); k++ {
-		gap := 1
-		if k == scroll || cols[k].group != cols[k-1].group {
-			gap = 2
-		}
-		if len(shown) > 0 && x+gap+cols[k].w+after(len(cols)-k-1) > p.w {
-			break
-		}
-		cols[k].x = x + gap
-		x += gap + cols[k].w
-		shown = append(shown, k)
-	}
-	p.matrixColumns, p.matrixShown = len(cols), len(shown)
-	// The count is of the columns off the right edge only. Those scrolled
-	// off the left are the interactive view's, whose key bar leads back.
-	hidden := len(cols) - scroll - len(shown)
-	edge := x + after(hidden)
-
-	title := chunks{p.bold("DEVICES " + g.times + " SUBSCRIPTIONS"), p.plain("  ")}
-	unit := "M tokens in+out"
-	if share {
-		unit = "% of column total"
-	}
-	title = append(title, p.muted(strconv.Itoa(len(rows))+g.sep+per.String()+g.sep+unit))
-	// The views go before the matrix's modes, and are the first to go
-	// where both do not fit.
-	modes := chunks{p.pill("tokens", !share), p.plain(" "), p.pill("share", share)}
-	if t, ok := p.pillsAt(title, append(append(p.viewPills(), p.plain("  ")), modes...), edge); ok {
-		title = t
-	} else {
-		title, _ = p.pillsAt(title, modes, edge)
-	}
-	out := []chunks{title}
+	shown, hidden, edge := p.fitColumns(cols, lead, totalW)
+	out := []chunks{p.gridTitle(len(rows), edge)}
 
 	// The providers over their columns, each with a thin rule.
 	heads := chunks{p.space(lead)}
@@ -255,6 +209,65 @@ func (p *page) grid() []chunks {
 	total = append(total, p.space(2))
 	total = append(total, p.right(p.cell(totalOf(grand)), totalW)...)
 	return append(out, total)
+}
+
+// fitColumns places the columns that fit on the page, from the scroll on,
+// between the rows' lead and TOTAL, totalW wide, and notes how many there
+// are and how many show. It returns the shown ones, how many are off the
+// right edge, and where the matrix ends.
+func (p *page) fitColumns(cols []gridCol, lead, totalW int) (shown []int, hidden, edge int) {
+	// after is how wide the matrix is right of its last column: TOTAL, and
+	// over it the count of the columns off the right edge, if any.
+	after := func(off int) int {
+		n := 2 + totalW
+		if off > 0 {
+			n = max(n, 2+width(more(off)))
+		}
+		return n
+	}
+	scroll := clamp(p.o.MatrixScroll, 0, max(len(cols)-1, 0))
+	x := lead
+	for k := scroll; k < len(cols); k++ {
+		gap := 1
+		if k == scroll || cols[k].group != cols[k-1].group {
+			gap = 2
+		}
+		if len(shown) > 0 && x+gap+cols[k].w+after(len(cols)-k-1) > p.w {
+			break
+		}
+		cols[k].x = x + gap
+		x += gap + cols[k].w
+		shown = append(shown, k)
+	}
+	p.matrixColumns, p.matrixShown = len(cols), len(shown)
+	// The count is of the columns off the right edge only. Those scrolled
+	// off the left are the interactive view's, whose key bar leads back.
+	hidden = len(cols) - scroll - len(shown)
+	return shown, hidden, x + after(hidden)
+}
+
+// more says how many of the matrix's columns are off the right edge.
+func more(n int) string { return "+" + strconv.Itoa(n) + " more" }
+
+// gridTitle is the matrix's title line: its name, the count of its rows,
+// the period and the unit, and the pills of its views and modes, ending at
+// edge.
+func (p *page) gridTitle(rows, edge int) chunks {
+	g, per, share := p.g, p.o.Period, p.o.Share
+	title := chunks{p.bold("DEVICES " + g.times + " SUBSCRIPTIONS"), p.plain("  ")}
+	unit := "M tokens in+out"
+	if share {
+		unit = "% of column total"
+	}
+	title = append(title, p.muted(strconv.Itoa(rows)+g.sep+per.String()+g.sep+unit))
+	// The views go before the matrix's modes, and are the first to go
+	// where both do not fit.
+	modes := chunks{p.pill("tokens", !share), p.plain(" "), p.pill("share", share)}
+	if t, ok := p.pillsAt(title, append(append(p.viewPills(), p.plain("  ")), modes...), edge); ok {
+		return t
+	}
+	title, _ = p.pillsAt(title, modes, edge)
+	return title
 }
 
 // groupName is the heading of a group of subscriptions: its provider, or
