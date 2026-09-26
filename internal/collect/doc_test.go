@@ -173,7 +173,7 @@ func TestBuildDocDecodesAndOpens(t *testing.T) {
 }
 
 func TestBuildDocWithEmptyState(t *testing.T) {
-	st := &state.State{Sources: map[string]state.Source{}, Current: map[string]string{}, Accounts: map[string]*state.Account{}, Sessions: map[string]*state.Session{}}
+	st := state.NewState()
 	doc, _ := encodeDecode(t, BuildDoc(st, mustKey(t), state.Config{Device: "d-0123456789"}, "", "", "", t0))
 	if doc.CollectorVersion != "unknown" || doc.LastError != "" {
 		t.Fatalf("doc = %+v", doc)
@@ -232,12 +232,7 @@ func TestLastErrorCarriesTheUpdateError(t *testing.T) {
 
 func TestBuildDocFitsTheSizeLimit(t *testing.T) {
 	key := mustKey(t)
-	st := &state.State{
-		Sources:  map[string]state.Source{},
-		Current:  map[string]string{},
-		Accounts: map[string]*state.Account{},
-		Sessions: map[string]*state.Session{},
-	}
+	st := state.NewState()
 	// More accounts and projects than fit, each with a long path.
 	for a := range snapshot.MaxAccounts + 4 {
 		label := fmt.Sprintf("account-%02d@%s.example", a, strings.Repeat("x", 200))
@@ -404,7 +399,7 @@ func TestDocCarriesDaysRecentAndAliases(t *testing.T) {
 // session's last activity.
 func TestLedgerPlacesHours(t *testing.T) {
 	h := t0.Unix() / 3600
-	st := &state.State{Accounts: map[string]*state.Account{}, Sessions: map[string]*state.Session{}}
+	st := state.NewState()
 	growth := map[string]snapshot.Tokens{}
 	timed := logs.Session{ID: "s1", Tokens: snapshot.Tokens{Input: 90, Output: 10}, Updated: t0, Hours: map[int64]int64{h - 1: 40, h: 60}}
 	attribute(st, "codex", timed, "ann", false, t0, growth)
@@ -434,7 +429,7 @@ func TestLedgerPlacesHours(t *testing.T) {
 func TestSwitchedSessionKeepsEachAccountsHours(t *testing.T) {
 	h := func(at time.Time) int64 { return at.Unix() / 3600 }
 	day := 24 * time.Hour
-	st := &state.State{Accounts: map[string]*state.Account{}, Sessions: map[string]*state.Session{}}
+	st := state.NewState()
 	growth := map[string]snapshot.Tokens{}
 	s := logs.Session{ID: "s1", Project: "/p", Tokens: snapshot.Tokens{Input: 100}, Updated: t0.Add(-3 * day), Hours: map[int64]int64{h(t0.Add(-3 * day)): 100}}
 	attribute(st, "claude", s, "ann@acme.dev", false, t0.Add(-3*day), growth)
@@ -540,7 +535,7 @@ func TestUntimedHistoryFromBeforeHoursStays(t *testing.T) {
 // up to its tokens, and its account's days count no more than it spent.
 func TestHoursNeverExceedTheTokens(t *testing.T) {
 	h := t0.Unix() / 3600
-	st := &state.State{Accounts: map[string]*state.Account{}, Sessions: map[string]*state.Session{}}
+	st := state.NewState()
 	growth := map[string]snapshot.Tokens{}
 	// 100 used at h-5, and side calls of 100 spread over that hour.
 	s1 := logs.Session{ID: "s1", Tokens: snapshot.Tokens{Input: 200}, Updated: t0.Add(-5 * time.Hour), Hours: map[int64]int64{h - 5: 200}}
@@ -571,7 +566,7 @@ func TestHoursNeverExceedTheTokens(t *testing.T) {
 func TestGrowthIsNotPlacedInHoursTheLedgerDropped(t *testing.T) {
 	h := func(at time.Time) int64 { return at.Unix() / 3600 }
 	old, yesterday := t0.Add(-state.Retention-24*time.Hour), t0.Add(-24*time.Hour)
-	st := &state.State{Accounts: map[string]*state.Account{}, Sessions: map[string]*state.Session{}}
+	st := state.NewState()
 	growth := map[string]snapshot.Tokens{}
 	s := logs.Session{ID: "s1", Tokens: snapshot.Tokens{Input: 1100}, Updated: yesterday, Hours: map[int64]int64{h(old): 1000, h(yesterday): 100}}
 	attribute(st, "codex", s, "ann@acme.dev", false, yesterday, growth)

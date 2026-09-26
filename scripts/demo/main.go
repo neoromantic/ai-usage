@@ -198,14 +198,8 @@ type device struct {
 }
 
 func newDevice(rng *rand.Rand, id, host, user, home, version string, at time.Time, providers ...string) *device {
-	st := &state.State{
-		LastRunAt:     at,
-		LastSuccessAt: at,
-		Sources:       map[string]state.Source{},
-		Current:       map[string]string{},
-		Accounts:      map[string]*state.Account{},
-		Sessions:      map[string]*state.Session{},
-	}
+	st := state.NewState()
+	st.LastRunAt, st.LastSuccessAt = at, at
 	for _, p := range snapshot.Providers {
 		st.Sources[p] = state.Source{Status: "skipped"}
 	}

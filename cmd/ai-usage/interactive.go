@@ -65,7 +65,7 @@ func viewConfig(d state.Dir, res *collect.Result, endpoint string, disp *display
 		Stopping: func() {
 			fmt.Fprintln(os.Stderr, "ai-usage: stopping the collection r started")
 		},
-		Watch: []string{d.Path("state.json"), d.Path("team-cache.json")},
+		Watch: []string{d.StateFile(), d.TeamCacheFile()},
 		Now:   clock,
 	}
 }

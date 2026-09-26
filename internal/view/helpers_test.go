@@ -28,14 +28,7 @@ func win(name string, pct float64, reset time.Time) snapshot.Window {
 	return snapshot.Window{Name: name, Percent: pct, ResetsAt: &reset}
 }
 
-func emptyState() *state.State {
-	return &state.State{
-		Sources:  map[string]state.Source{},
-		Current:  map[string]string{},
-		Accounts: map[string]*state.Account{},
-		Sessions: map[string]*state.Session{},
-	}
-}
+func emptyState() *state.State { return state.NewState() }
 
 // addAccount puts an account with an optional quota and one session in st.
 func addAccount(st *state.State, provider, label string, current bool, q *state.Quota, tokens int64) {

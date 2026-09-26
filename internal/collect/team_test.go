@@ -108,7 +108,7 @@ func TestRelayPushAndPull(t *testing.T) {
 			t.Fatalf("own doc in cache collected at %v", d.CollectedAt)
 		}
 	}
-	if info, err := os.Stat(o.Dir.Path(teamCacheFile)); err != nil || info.Size() == 0 {
+	if info, err := os.Stat(o.Dir.TeamCacheFile()); err != nil || info.Size() == 0 {
 		t.Fatalf("team-cache.json: %v", err)
 	}
 }
@@ -459,7 +459,7 @@ func TestLoadTeamCache(t *testing.T) {
 		t.Fatalf("duplicate device: %+v, %v", c.Docs, err)
 	}
 
-	if err := fsutil.WriteFile(d.Path(teamCacheFile), []byte("{broken"), 0o600); err != nil {
+	if err := fsutil.WriteFile(d.TeamCacheFile(), []byte("{broken"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := LoadTeamCache(d); err == nil {

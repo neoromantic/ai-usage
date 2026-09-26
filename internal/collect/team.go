@@ -42,15 +42,13 @@ type Behind struct {
 // call it silent. Such a device cannot update itself.
 const silentAfter = 24 * time.Hour
 
-const teamCacheFile = "team-cache.json"
-
 // LoadTeamCache reads the cache. Documents are decoded again; they were
 // verified when they were pulled. A device listed twice, in a cache written
 // before pulls kept one document per device, keeps its newest document, so
 // its tokens are not added twice.
 func LoadTeamCache(dir state.Dir) (TeamCache, error) {
 	var c TeamCache
-	b, err := os.ReadFile(dir.Path(teamCacheFile))
+	b, err := os.ReadFile(dir.TeamCacheFile())
 	if errors.Is(err, os.ErrNotExist) {
 		return c, nil
 	}
@@ -105,7 +103,7 @@ func saveTeamCache(dir state.Dir, c TeamCache) error {
 	if err != nil {
 		return err
 	}
-	return fsutil.WriteFile(dir.Path(teamCacheFile), b, 0o600)
+	return fsutil.WriteFile(dir.TeamCacheFile(), b, 0o600)
 }
 
 // syncTeam publishes this device and reads the team back. The snapshot holds

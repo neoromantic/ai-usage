@@ -48,6 +48,8 @@ func DefaultDir() (Dir, error) {
 func (d Dir) Path(name string) string { return filepath.Join(string(d), name) }
 func (d Dir) KeyFile() string         { return d.Path("team.key") }
 func (d Dir) SamplesDir() string      { return d.Path("samples") }
+func (d Dir) StateFile() string       { return d.Path("state.json") }
+func (d Dir) TeamCacheFile() string   { return d.Path("team-cache.json") }
 
 // Config is set once and changed only by the person.
 type Config struct {
@@ -284,12 +286,35 @@ func Key(parts ...string) string { return strings.Join(parts, "\x00") }
 // SplitKey undoes Key.
 func SplitKey(k string) []string { return strings.Split(k, "\x00") }
 
+// NewState is an empty state, ready for a run to add to.
+func NewState() *State {
+	s := &State{}
+	s.fill()
+	return s
+}
+
+// fill makes the maps a run adds to, where they are nil.
+func (s *State) fill() {
+	if s.Sources == nil {
+		s.Sources = map[string]Source{}
+	}
+	if s.Current == nil {
+		s.Current = map[string]string{}
+	}
+	if s.Accounts == nil {
+		s.Accounts = map[string]*Account{}
+	}
+	if s.Sessions == nil {
+		s.Sessions = map[string]*Session{}
+	}
+}
+
 // LoadState reads state.json. A missing file is an empty state. So is one
 // that does not parse, such as a file cut short by a crash: otherwise every
 // later run, and the self-update that could fix it, would stop on it. Its
 // bytes are kept in state.json.bad, and Damage and LastError say so.
 func (d Dir) LoadState() (*State, error) {
-	path := d.Path("state.json")
+	path := d.StateFile()
 	s := &State{}
 	b, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -306,22 +331,11 @@ func (d Dir) LoadState() (*State, error) {
 			s.LastError, s.LastErrorAt = s.Damage, time.Now().UTC()
 		}
 	}
-	if s.Sources == nil {
-		s.Sources = map[string]Source{}
-	}
-	if s.Current == nil {
-		s.Current = map[string]string{}
-	}
-	if s.Accounts == nil {
-		s.Accounts = map[string]*Account{}
-	}
-	if s.Sessions == nil {
-		s.Sessions = map[string]*Session{}
-	}
+	s.fill()
 	return s, nil
 }
 
-func (d Dir) SaveState(s *State) error { return writeJSON(d.Path("state.json"), s) }
+func (d Dir) SaveState(s *State) error { return writeJSON(d.StateFile(), s) }
 
 // ErrBusy is Lock's error while another run holds the lock.
 var ErrBusy = errors.New("another ai-usage run is in progress")

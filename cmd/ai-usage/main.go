@@ -833,7 +833,7 @@ func joinTeam(ctx context.Context, d state.Dir, line string, stdout, stderr io.W
 	if err := fsutil.WriteFile(d.KeyFile(), []byte(next.Export()+"\n"), 0o600); err != nil {
 		return err
 	}
-	_ = os.Remove(d.Path("team-cache.json"))
+	_ = os.Remove(d.TeamCacheFile())
 	// Best effort: take this device out of the old team.
 	if endpoint := relayURL(cfg); endpoint != "" && prev != nil {
 		rctx, cancel := context.WithTimeout(ctx, 15*time.Second)
