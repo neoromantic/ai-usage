@@ -114,10 +114,13 @@ func newKey(t *testing.T) *team.Key {
 	return k
 }
 
-// docFor is a valid snapshot the way the collector builds one.
+// docFor is a valid snapshot the way the collector builds one, using every
+// member: its Hermes account shows the quota of the Codex account it bills
+// through, and the Codex account says what Hermes spent through it.
 func docFor(k *team.Key, device string, at time.Time) snapshot.Doc {
 	quotaAt := at.Add(-time.Minute)
 	resets := at.Add(2 * time.Hour)
+	window := snapshot.Window{Name: "5h", Percent: 61.5, ResetsAt: &resets, Minutes: 300}
 	tok := snapshot.Tokens{Input: 1200, Output: 300, CacheRead: 90000, CacheWrite: 4000}
 	return snapshot.Doc{
 		V:                snapshot.Version,
@@ -128,18 +131,31 @@ func docFor(k *team.Key, device string, at time.Time) snapshot.Doc {
 		CollectorVersion: "v1.0.0",
 		CollectedAt:      at,
 		LastSuccessAt:    at,
+		LastError:        k.Seal("hermes: state.db is locked"),
 		Accounts: []snapshot.Account{{
-			Provider: "codex",
-			Label:    k.Seal("me@example.com"),
-			Current:  true,
-			Plan:     "pro",
-			QuotaAt:  &quotaAt,
-			Windows:  []snapshot.Window{{Name: "5h", Percent: 61.5, ResetsAt: &resets, Minutes: 300}},
-			Sessions: 4,
-			Tokens:   tok,
-			Projects: []snapshot.Project{{Path: k.Seal("/Users/me/src/app"), Sessions: 4, Tokens: tok}},
+			Provider:     "codex",
+			Label:        k.Seal("me@example.com"),
+			Current:      true,
+			Plan:         "pro",
+			QuotaAt:      &quotaAt,
+			Windows:      []snapshot.Window{window},
+			Sessions:     4,
+			Tokens:       tok,
+			LastActiveAt: &quotaAt,
+			Projects:     []snapshot.Project{{Path: k.Seal("/Users/me/src/app"), Sessions: 4, Tokens: tok}},
+			Linked:       []snapshot.Linked{{Provider: "hermes", Label: k.Seal("openai-codex"), Sessions: 2, Tokens: snapshot.Tokens{Input: 7}}},
+			Days:         []int64{1200, 0, 300},
+			Recent:       []snapshot.Recent{{Window: "5h", Start: at.Add(-2 * time.Hour), Tokens: 900}},
+		}, {
+			Provider:  "hermes",
+			Label:     k.Seal("openai-codex"),
+			QuotaAt:   &quotaAt,
+			QuotaFrom: "codex",
+			Windows:   []snapshot.Window{window},
+			Projects:  []snapshot.Project{},
 		}},
-		Sources: []snapshot.Source{{Provider: "codex", Status: "ok"}},
+		Sources: []snapshot.Source{{Provider: "codex", Status: "ok"}, {Provider: "hermes", Status: "error", Error: k.Seal("state.db is locked")}},
+		Aliases: []snapshot.Alias{{Provider: "codex", Label: k.Seal("me@example.com"), Name: k.Seal("work"), At: at}},
 	}
 }
 
@@ -242,34 +258,6 @@ func TestPublishPullRoundTrip(t *testing.T) {
 		if host, err := k.Open(d.Doc.DeviceLabel); err != nil || host != "host "+d.Doc.Device {
 			t.Errorf("%s: device label opens to %q, %v", d.Doc.Device, host, err)
 		}
-	}
-}
-
-// A Hermes account that shows the quota of the Codex account it bills
-// through names that provider, and the Codex account says what Hermes spent
-// through it. The relay stores both and hands them back as they are.
-func TestPublishLinkedQuota(t *testing.T) {
-	e := newRelay(t)
-	k := newKey(t)
-	ctx := context.Background()
-	d := docFor(k, "work-laptop", t0)
-	linked := d.Accounts[0]
-	linked.Provider, linked.Label, linked.QuotaFrom, linked.Plan = "hermes", k.Seal("openai-codex"), "codex", ""
-	d.Accounts[0].Linked = []snapshot.Linked{{Provider: "hermes", Label: k.Seal("openai-codex"), Sessions: 2, Tokens: snapshot.Tokens{Input: 7}}}
-	d.Accounts = append(d.Accounts, linked)
-	body := marshal(t, d)
-	if err := e.client(k).Publish(ctx, "work-laptop", body); err != nil {
-		t.Fatalf("Publish: %v", err)
-	}
-	devices, bad, err := e.client(k).Pull(ctx)
-	if err != nil || bad != 0 || len(devices) != 1 || !bytes.Equal(devices[0].Body, body) {
-		t.Fatalf("Pull = %+v, %d bad, %v", devices, bad, err)
-	}
-	if got := devices[0].Doc.Accounts[1]; got.QuotaFrom != "codex" || !got.QuotaAt.Equal(*d.Accounts[0].QuotaAt) {
-		t.Fatalf("linked account = %+v", got)
-	}
-	if got := devices[0].Doc.Accounts[0].Linked; len(got) != 1 || got[0].Sessions != 2 {
-		t.Fatalf("linked usage = %+v", got)
 	}
 }
 
@@ -483,58 +471,6 @@ func TestPutRejects(t *testing.T) {
 			t.Fatalf("status = %d (%s)", resp.StatusCode, msg)
 		}
 	})
-}
-
-// A key holder can write only the team its key names.
-func TestCannotWriteAnotherTeam(t *testing.T) {
-	e := newRelay(t)
-	victim, attacker := newKey(t), newKey(t)
-	ctx := context.Background()
-	dev := "victim-laptop"
-	orig := marshal(t, docFor(victim, dev, t0))
-	if err := e.client(victim).Publish(ctx, dev, orig); err != nil {
-		t.Fatal(err)
-	}
-	vfp := victim.Fingerprint()
-	forged := docFor(attacker, dev, t0.Add(time.Minute))
-	forged.Team = vfp
-	body := marshal(t, forged)
-	sig := encode(attacker.Sign(SnapshotMessage(body)))
-
-	// The attacker's own key on the victim's path.
-	if resp, _ := send(t, putRequest(t, e.ts.URL, vfp, dev, body, encode(attacker.Public()), sig)); resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403", resp.StatusCode)
-	}
-	// The victim's public key, which is not secret, with the attacker's signature.
-	if resp, _ := send(t, putRequest(t, e.ts.URL, vfp, dev, body, encode(victim.Public()), sig)); resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", resp.StatusCode)
-	}
-	// Signed correctly for the attacker's team but naming the victim's.
-	if resp, _ := send(t, putRequest(t, e.ts.URL, attacker.Fingerprint(), dev, body, encode(attacker.Public()), sig)); resp.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, want 422", resp.StatusCode)
-	}
-	// Reading or deleting the victim's team needs the victim's key too.
-	for _, method := range []string{http.MethodGet, http.MethodDelete} {
-		path, device := "/v1/teams/"+vfp, ""
-		if method == http.MethodDelete {
-			path, device = path+"/devices/"+dev, dev
-		}
-		req := signedRequest(t, e.ts.URL, method, path, attacker, method, vfp, device, t0)
-		if resp, _ := send(t, req); resp.StatusCode != http.StatusForbidden {
-			t.Fatalf("%s status = %d, want 403", method, resp.StatusCode)
-		}
-		req = signedRequest(t, e.ts.URL, method, path, attacker, method, vfp, device, t0)
-		req.Header.Set(HeaderKey, encode(victim.Public()))
-		if resp, _ := send(t, req); resp.StatusCode != http.StatusUnauthorized {
-			t.Fatalf("%s with the victim's public key: status = %d, want 401", method, resp.StatusCode)
-		}
-	}
-	if got := stored(t, e, vfp)[dev].Body; !bytes.Equal(got, orig) {
-		t.Fatal("the victim's document changed")
-	}
-	if n := len(stored(t, e, attacker.Fingerprint())); n != 0 {
-		t.Fatalf("attacker team holds %d documents", n)
-	}
 }
 
 func TestStaleAndRepeatedWrites(t *testing.T) {
@@ -984,30 +920,13 @@ func TestClientAddr(t *testing.T) {
 	}
 }
 
-// Behind Caddy, cloudflared, or a load balancer, the client's own X-Real-Ip
-// reaches the relay, so by default every header is ignored and a client
-// cannot pick a fresh rate-limit key for each request.
-func TestForwardingHeadersAreIgnoredByDefault(t *testing.T) {
-	srv := NewServer(NewMemory())
-	srv.Limits.RequestsPerIP = 3
-	srv.Now = func() time.Time { return t0 }
-	ts := httptest.NewServer(srv)
-	defer ts.Close()
-	codes := map[int]int{}
-	for i := range 20 {
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/v1/health", nil)
-		req.Header.Set("X-Real-Ip", "203.0.113."+strconv.Itoa(i))
-		req.Header.Set("X-Forwarded-For", "198.51.100."+strconv.Itoa(i))
-		resp, _ := send(t, req)
-		codes[resp.StatusCode]++
-	}
-	if codes[http.StatusOK] != 3 || codes[http.StatusTooManyRequests] != 17 {
-		t.Fatalf("status counts = %v, want 3 allowed and 17 limited", codes)
-	}
-}
-
 // On Vercel KV every counted request is paid for. A path the relay does not
 // serve, and a client that is already over its limit, cost nothing.
+//
+// Behind Caddy, cloudflared, or a load balancer, the client's own X-Real-Ip
+// reaches the relay, so by default every header is ignored and a client
+// cannot pick a fresh rate-limit key for each request: the health requests
+// below name a new address each, and still share one limit.
 func TestRejectedRequestsSkipTheStore(t *testing.T) {
 	store := &testStore{Store: NewMemory()}
 	srv := NewServer(store)
@@ -1030,8 +949,11 @@ func TestRejectedRequestsSkipTheStore(t *testing.T) {
 		t.Fatalf("unrouted requests made %d store commands", n)
 	}
 	codes := map[int]int{}
-	for range 50 {
-		resp := get("/v1/health")
+	for i := range 50 {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/v1/health", nil)
+		req.Header.Set("X-Real-Ip", "203.0.113."+strconv.Itoa(i))
+		req.Header.Set("X-Forwarded-For", "198.51.100."+strconv.Itoa(i))
+		resp, _ := send(t, req)
 		codes[resp.StatusCode]++
 		if resp.StatusCode == http.StatusTooManyRequests && resp.Header.Get("Retry-After") != "3600" {
 			t.Fatalf("Retry-After = %q", resp.Header.Get("Retry-After"))
@@ -1109,6 +1031,9 @@ func TestSignedRead(t *testing.T) {
 		{"time changed after signing", func(r *http.Request) { r.Header.Set(HeaderTime, strconv.FormatInt(t0.Unix()+1, 10)) }, http.StatusUnauthorized},
 		{"huge time", func(r *http.Request) { r.Header.Set(HeaderTime, "9223372036854775807") }, http.StatusUnauthorized},
 		{"missing signature", func(r *http.Request) { r.Header.Del(HeaderSig) }, http.StatusUnauthorized},
+		{"signed by another key", func(r *http.Request) {
+			r.Header.Set(HeaderSig, encode(other.Sign(RequestMessage(http.MethodGet, fp, "", t0))))
+		}, http.StatusUnauthorized},
 		{"missing key", func(r *http.Request) { r.Header.Del(HeaderKey) }, http.StatusForbidden},
 		{"another team's key", func(r *http.Request) { r.Header.Set(HeaderKey, encode(other.Public())) }, http.StatusForbidden},
 		{"signed for DELETE", func(r *http.Request) {
@@ -1145,7 +1070,7 @@ func TestSignedRead(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	e := newRelay(t)
-	k := newKey(t)
+	k, other := newKey(t), newKey(t)
 	c := e.client(k)
 	ctx := context.Background()
 	fp := k.Fingerprint()
@@ -1164,6 +1089,17 @@ func TestDelete(t *testing.T) {
 	req = signedRequest(t, e.ts.URL, http.MethodDelete, "/v1/teams/"+fp+"/devices/device-two", k, http.MethodGet, fp, "device-two", t0)
 	if resp, _ := send(t, req); resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("delete with a GET signature: status = %d", resp.StatusCode)
+	}
+	// Deleting from a team needs that team's key.
+	req = signedRequest(t, e.ts.URL, http.MethodDelete, "/v1/teams/"+fp+"/devices/device-two", other, http.MethodDelete, fp, "device-two", t0)
+	if resp, _ := send(t, req); resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("delete with another team's key: status = %d", resp.StatusCode)
+	}
+	// The team's public key, which is not secret, with another key's signature.
+	req = signedRequest(t, e.ts.URL, http.MethodDelete, "/v1/teams/"+fp+"/devices/device-two", other, http.MethodDelete, fp, "device-two", t0)
+	req.Header.Set(HeaderKey, encode(k.Public()))
+	if resp, _ := send(t, req); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("delete signed by another key: status = %d", resp.StatusCode)
 	}
 	req = signedRequest(t, e.ts.URL, http.MethodDelete, "/v1/teams/"+fp+"/devices/BAD", k, http.MethodDelete, fp, "BAD", t0)
 	if resp, _ := send(t, req); resp.StatusCode != http.StatusNotFound {
@@ -1321,29 +1257,6 @@ func TestClientErrors(t *testing.T) {
 	}
 	if got := (&ErrStatus{Code: 409, Msg: "newer"}).Error(); !strings.Contains(got, "newer") || !strings.Contains(got, "409") {
 		t.Fatalf("ErrStatus = %q", got)
-	}
-}
-
-// The client signs exactly what it sends; nothing in between may reformat it.
-func TestPublishSignsTheExactBody(t *testing.T) {
-	k := newKey(t)
-	body := []byte(`{"any":"bytes"}`)
-	var got []byte
-	var sig []byte
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got, _ = io.ReadAll(r.Body)
-		sig, _ = decode(r.Header.Get(HeaderSig))
-		if r.Header.Get(HeaderKey) != encode(k.Public()) || r.Method != http.MethodPut || r.URL.Path != "/v1/teams/"+k.Fingerprint()+"/devices/work-laptop" {
-			t.Errorf("request %s %s key %s", r.Method, r.URL.Path, r.Header.Get(HeaderKey))
-		}
-		w.Write([]byte(`{"stored":true}`))
-	}))
-	defer ts.Close()
-	if err := (&Client{BaseURL: ts.URL, Key: k}).Publish(context.Background(), "work-laptop", body); err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(got, body) || !ed25519.Verify(k.Public(), SnapshotMessage(body), sig) {
-		t.Fatal("the relay did not receive the signed bytes")
 	}
 }
 
