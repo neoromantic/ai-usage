@@ -161,3 +161,12 @@ func (p *page) space(n int) chunk { return chunk{text: strings.Repeat(" ", max(n
 // left puts c at the start of a cell w wide, right at its end.
 func (p *page) left(c chunk, w int) chunks  { return chunks{c}.padTo(w) }
 func (p *page) right(c chunk, w int) chunks { return chunks{p.space(w - width(c.text)), c} }
+
+// align puts c at the end of a cell w wide where right is set, else at its
+// start.
+func (p *page) align(c chunks, w int, right bool) chunks {
+	if right {
+		return append(chunks{p.space(w - c.width())}, c...)
+	}
+	return c.padTo(w)
+}

@@ -89,13 +89,8 @@ func (p *page) deviceStatus() []chunks {
 			if i >= 0 {
 				cell = c.cells[i].cut(c.w, p.g.ell)
 			}
-			pad := p.space(c.w - cell.width())
 			l = append(l, p.space(c.x-cur))
-			if c.right {
-				l = append(append(l, pad), cell...)
-			} else {
-				l = append(append(l, cell...), pad)
-			}
+			l = append(l, p.align(cell, c.w, c.right)...)
 			cur = c.x + c.w
 		}
 		return l
