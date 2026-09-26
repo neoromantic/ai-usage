@@ -291,22 +291,15 @@ const codexLimitSkew = 15 * time.Minute
 func codexLimits(files []*codexFile) *Limits {
 	newest := map[string]*Limits{}
 	for _, f := range files {
-		if !f.fresh {
-			continue
-		}
 		for b, l := range f.limits {
-			if cur := newest[b]; cur == nil || l.ObservedAt.After(cur.ObservedAt) {
-				newest[b] = l
-			}
+			newest[b] = later(newest[b], l)
 		}
 	}
 	buckets := slices.Sorted(maps.Keys(newest))
 	anchor := newest[codexMainLimit]
 	if anchor == nil {
 		for _, b := range buckets {
-			if anchor == nil || newest[b].ObservedAt.After(anchor.ObservedAt) {
-				anchor = newest[b]
-			}
+			anchor = later(anchor, newest[b])
 		}
 	}
 	if anchor == nil {
@@ -419,9 +412,9 @@ func (f *codexFile) count(row codexLine) {
 		if f.limits == nil {
 			f.limits = map[string]*Limits{}
 		}
-		if cur := f.limits[bucket]; cur == nil || !l.ObservedAt.Before(cur.ObservedAt) {
-			f.limits[bucket] = l
-		}
+		// later keeps its first argument on a tie, so a newer line read at
+		// the same time wins.
+		f.limits[bucket] = later(l, f.limits[bucket])
 	}
 	info := row.Payload.Info
 	if info == nil || info.Total == nil {

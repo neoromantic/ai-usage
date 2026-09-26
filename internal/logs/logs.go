@@ -75,31 +75,14 @@ func AddHour(hours *map[int64]int64, t time.Time, n int64) {
 // InOut is the input plus output of t, the count the report's periods show.
 func InOut(t Tokens) int64 { return t.Input + t.Output }
 
-// fitHours makes a session's hours add up to its input plus output. The
-// part no time was recorded for, such as Claude's side calls, is spread
-// over the hours with a time in their proportion: side calls go along with
-// the work that makes them, and a resumed session does not move them all
-// to its newest day. With no hour placed, it all goes to the hour of the
-// last activity. A sum above the total, which only a reader's bug makes, is
-// scaled down.
+// fitHours makes a session's hours add up to its input plus output. What no
+// time was recorded for, such as Claude's side calls, is spread over the
+// timed hours in their proportion: side calls go along with the work that
+// makes them, and a resumed session does not move them all to its newest
+// day.
 func fitHours(s *Session) {
-	if s.Hours == nil {
-		return
-	}
-	want := InOut(s.Tokens)
-	var sum int64
-	for h, n := range s.Hours {
-		if n <= 0 {
-			delete(s.Hours, h)
-			continue
-		}
-		sum += n
-	}
-	switch {
-	case sum == 0 && want > 0 && !s.Updated.IsZero():
-		s.Hours[HourOf(s.Updated)] = want
-	case sum != want:
-		ScaleHours(s.Hours, want)
+	if s.Hours != nil {
+		ScaleHours(s.Hours, InOut(s.Tokens))
 	}
 }
 
