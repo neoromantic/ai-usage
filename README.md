@@ -191,9 +191,10 @@ The state folder is `~/Library/Application Support/ai-usage` on macOS, `$XDG_CON
 | `config.json` | this device's id, the relay, remembered and added homes, the `CLAUDE_CONFIG_DIR` value seen for them, which login each added Hermes home bills through, whether the schedule is off |
 | `team.key` | the team's private key; this is the secret |
 | `state.json` | the last good readings, sessions, and health, and whether the guide is still to be printed |
+| `state.json.bad` | a `state.json` that did not parse, kept when a run started again from an empty state |
 | `team-cache.json` | the team's snapshots from the last read |
 | `samples/` | one file per day of samples, kept for 90 days |
-| `run.lock`, `config.lock` | keep two runs from overlapping, and two commands from changing `config.json` at once; held with the system's file lock, which ends with its process |
+| `run.lock`, `config.lock`, `schedule.lock` | keep two runs from overlapping, two commands from changing `config.json` at once, and tell other runs that `schedule run` schedules this folder; held with the system's file lock, which ends with its process |
 
 ## Teams
 
