@@ -3,16 +3,17 @@ package probe
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -305,55 +306,64 @@ func codexLimits(raw json.RawMessage, now time.Time) (*Quota, string, error) {
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return nil, "", errors.New("codex rateLimits: unexpected result")
 	}
-	buckets := []*codexBucket{}
-	if len(res.ByLimitID) > 0 {
-		ids := make([]string, 0, len(res.ByLimitID))
-		for id := range res.ByLimitID {
-			ids = append(ids, id)
-		}
-		sort.Slice(ids, func(i, j int) bool {
-			if (ids[i] == logs.CodexMainLimit) != (ids[j] == logs.CodexMainLimit) {
-				return ids[i] == logs.CodexMainLimit
-			}
-			return ids[i] < ids[j]
-		})
-		for _, id := range ids {
-			if b := res.ByLimitID[id]; b != nil {
-				if b.LimitID == "" {
-					b.LimitID = id
-				}
-				buckets = append(buckets, b)
-			}
-		}
-	} else if res.RateLimits != nil {
-		buckets = append(buckets, res.RateLimits)
+	var plan string
+	var ws []snapshot.Window
+	for _, b := range codexBuckets(res.RateLimits, res.ByLimitID) {
+		plan = cmp.Or(plan, b.PlanType)
+		ws = append(ws, b.windows()...)
 	}
-	q := &Quota{At: now, Source: "harness"}
-	plan := ""
-	for _, b := range buckets {
-		if plan == "" {
-			plan = b.PlanType
-		}
-		for _, w := range []*codexWindow{b.Primary, b.Secondary} {
-			if w == nil {
-				continue
-			}
-			win := snapshot.Window{
-				Name:    logs.CodexWindowName(b.LimitID, w.WindowDurationMins),
-				Percent: w.UsedPercent,
-				Minutes: w.WindowDurationMins,
-			}
-			if w.ResetsAt > 0 {
-				t := time.Unix(w.ResetsAt, 0).UTC()
-				win.ResetsAt = &t
-			}
-			q.Windows = append(q.Windows, win)
-		}
-	}
-	if len(q.Windows) == 0 {
+	if len(ws) == 0 {
 		return nil, plan, nil
 	}
-	return q, plan, nil
+	return &Quota{At: now, Source: "harness", Windows: ws}, plan, nil
+}
+
+// codexBuckets are the limits of a rateLimits answer: those it lists by limit
+// id, the main limit first and the rest by id, or the single one when it lists
+// none by id. A bucket without its own id takes the one it is listed under.
+func codexBuckets(single *codexBucket, byID map[string]*codexBucket) []*codexBucket {
+	if len(byID) == 0 {
+		if single == nil {
+			return nil
+		}
+		return []*codexBucket{single}
+	}
+	var buckets []*codexBucket
+	for _, id := range slices.Sorted(maps.Keys(byID)) {
+		b := byID[id]
+		if b == nil {
+			continue
+		}
+		b.LimitID = cmp.Or(b.LimitID, id)
+		if id == logs.CodexMainLimit {
+			buckets = slices.Insert(buckets, 0, b)
+		} else {
+			buckets = append(buckets, b)
+		}
+	}
+	return buckets
+}
+
+// windows are the bucket's primary and secondary windows, named as the Codex
+// logs name them.
+func (b *codexBucket) windows() []snapshot.Window {
+	var ws []snapshot.Window
+	for _, w := range []*codexWindow{b.Primary, b.Secondary} {
+		if w == nil {
+			continue
+		}
+		win := snapshot.Window{
+			Name:    logs.CodexWindowName(b.LimitID, w.WindowDurationMins),
+			Percent: w.UsedPercent,
+			Minutes: w.WindowDurationMins,
+		}
+		if w.ResetsAt > 0 {
+			t := time.Unix(w.ResetsAt, 0).UTC()
+			win.ResetsAt = &t
+		}
+		ws = append(ws, win)
+	}
+	return ws
 }
 
 // codexRPC speaks newline-delimited JSON-RPC to codex app-server. One
