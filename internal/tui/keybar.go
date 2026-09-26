@@ -77,20 +77,6 @@ type item struct {
 	short *item
 }
 
-func (it item) width() int {
-	w := ansi.StringWidth(it.key)
-	if it.action != "" {
-		w += 1 + ansi.StringWidth(it.action)
-	}
-	for _, c := range it.options() {
-		w += 1 + ansi.StringWidth(c)
-		if c == it.pill {
-			w += 2
-		}
-	}
-	return w
-}
-
 // options are the options the key bar shows after the key and its action:
 // its choices, or the pill alone.
 func (it item) options() []string {
@@ -149,31 +135,19 @@ func (m Model) items() []item {
 	return append(its, item{key: "?", action: "help"}, item{key: "q", action: "quit"})
 }
 
-// barWidth is the key bar's width: a leading space, and ` · ` between keys.
-func barWidth(its []item) int {
-	w := 1
-	for i, it := range its {
-		if i > 0 {
-			w += 3
-		}
-		w += it.width()
-	}
-	return w
-}
-
 // keyBar is the bottom line. On a narrow terminal it shortens the keys that
 // have a short form, then drops keys, the least used first, down to `? help`
 // and `q quit`.
 func (m Model) keyBar() string {
 	its := m.items()
-	if barWidth(its) > m.width {
+	if ansi.StringWidth(m.drawBar(its)) > m.width {
 		for i, it := range its {
 			if it.short != nil {
 				its[i] = *it.short
 			}
 		}
 	}
-	for barWidth(its) > m.width {
+	for ansi.StringWidth(m.drawBar(its)) > m.width {
 		drop := -1
 		for i, it := range its {
 			if it.drop > 0 && (drop < 0 || it.drop < its[drop].drop) {
@@ -185,6 +159,11 @@ func (m Model) keyBar() string {
 		}
 		its = slices.Delete(its, drop, drop+1)
 	}
+	return fit(m.drawBar(its), m.width)
+}
+
+// drawBar draws its keys: a leading space, and ` · ` between keys.
+func (m Model) drawBar(its []item) string {
 	sep := "·"
 	if m.opts.ASCII {
 		sep = "."
@@ -207,5 +186,5 @@ func (m Model) keyBar() string {
 			}
 		}
 	}
-	return fit(b.String(), m.width)
+	return b.String()
 }
