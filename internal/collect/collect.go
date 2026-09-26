@@ -784,6 +784,29 @@ func homeErrors(errs [][2]string, homes int, userHome string) []string {
 // run claims at a later one, since the sessions it missed would stay unknown.
 // labels are this run's accounts by home.
 func claimUnknown(st *state.State, p string, homes []string, answers []answer, res logs.Result, labels map[string]string) {
+	claim := claims(st, p, homes, answers, res)
+	if len(claim) == 0 {
+		return
+	}
+	for _, rs := range res.Sessions {
+		label, ok := claim[rs.Home]
+		if l := servedBy(st, p, rs, labels); l != "" {
+			label, ok = l, slices.ContainsFunc(rs.Homes, func(h string) bool { return claim[h] == l })
+		}
+		if !ok {
+			continue
+		}
+		s := st.Sessions[state.Key(p, rs.ID)]
+		if s == nil {
+			continue
+		}
+		moveShare(s, UnknownAccount, label)
+	}
+}
+
+// claims records the homes of p that answer for the first time, and returns
+// the account each one that claims this run names, by home.
+func claims(st *state.State, p string, homes []string, answers []answer, res logs.Result) map[string]string {
 	claim := map[string]string{}
 	for i, home := range homes {
 		label := strings.TrimSpace(answers[i].reading.Account)
@@ -805,37 +828,27 @@ func claimUnknown(st *state.State, p string, homes []string, answers []answer, r
 		}
 		st.Answered[k] = true
 	}
-	if len(claim) == 0 {
+	return claim
+}
+
+// moveShare moves from's share of a session onto to: its tokens, its hours
+// and its last write.
+func moveShare(s *state.Session, from, to string) {
+	t, ok := s.By[from]
+	if !ok {
 		return
 	}
-	for _, rs := range res.Sessions {
-		label, ok := claim[rs.Home]
-		if l := servedBy(st, p, rs, labels); l != "" {
-			label, ok = l, slices.ContainsFunc(rs.Homes, func(h string) bool { return claim[h] == l })
+	s.By[to] = s.By[to].Add(t)
+	delete(s.By, from)
+	if h, ok := s.ByHours[from]; ok {
+		s.ByHours[to] = logs.AddHours(s.ByHours[to], h)
+		delete(s.ByHours, from)
+	}
+	if last, ok := s.Last[from]; ok {
+		if last.After(s.Last[to]) {
+			s.Last[to] = last
 		}
-		if !ok {
-			continue
-		}
-		s := st.Sessions[state.Key(p, rs.ID)]
-		if s == nil {
-			continue
-		}
-		t, ok := s.By[UnknownAccount]
-		if !ok {
-			continue
-		}
-		s.By[label] = s.By[label].Add(t)
-		delete(s.By, UnknownAccount)
-		if h, ok := s.ByHours[UnknownAccount]; ok {
-			s.ByHours[label] = logs.AddHours(s.ByHours[label], h)
-			delete(s.ByHours, UnknownAccount)
-		}
-		if last, ok := s.Last[UnknownAccount]; ok {
-			if last.After(s.Last[label]) {
-				s.Last[label] = last
-			}
-			delete(s.Last, UnknownAccount)
-		}
+		delete(s.Last, from)
 	}
 }
 
@@ -1224,10 +1237,6 @@ func (s *sampler) linkedAccount(hermesHome, billing string) *state.Link {
 // run. An account with no session read this run keeps its link, and so does
 // one whose homes were not all read: the rest would not be the majority.
 func (s *sampler) linkHermes(read []readSession, partial bool) {
-	type use struct {
-		tokens int64
-		last   time.Time
-	}
 	seen := map[string]bool{}
 	uses := map[string]map[state.Link]*use{}
 	for _, r := range read {
@@ -1237,18 +1246,7 @@ func (s *sampler) linkHermes(read []readSession, partial bool) {
 			if link == nil {
 				continue
 			}
-			if uses[billing] == nil {
-				uses[billing] = map[state.Link]*use{}
-			}
-			u := uses[billing][*link]
-			if u == nil {
-				u = &use{}
-				uses[billing][*link] = u
-			}
-			u.tokens += t.Total()
-			if r.s.Updated.After(u.last) {
-				u.last = r.s.Updated
-			}
+			addUse(uses, billing, *link, t.Total(), r.s.Updated)
 		}
 	}
 	for _, acct := range s.st.Accounts {
@@ -1262,16 +1260,46 @@ func (s *sampler) linkHermes(read []readSession, partial bool) {
 		if !seen[acct.Label] || (partial && acct.Link != nil) {
 			continue
 		}
-		var best *state.Link
-		var top *use
-		for l, u := range uses[acct.Label] {
-			if top == nil || u.tokens > top.tokens ||
-				(u.tokens == top.tokens && (u.last.After(top.last) || (u.last.Equal(top.last) && l.Label < best.Label))) {
-				best, top = &l, u
-			}
-		}
-		acct.Link = best
+		acct.Link = mostUsed(uses[acct.Label])
 	}
+}
+
+// use is how many tokens read this run went through one login, and the
+// newest update of the sessions that sent them.
+type use struct {
+	tokens int64
+	last   time.Time
+}
+
+// addUse adds tokens sent through link to billing's uses, with the update
+// time of the session that sent them.
+func addUse(uses map[string]map[state.Link]*use, billing string, link state.Link, tokens int64, updated time.Time) {
+	if uses[billing] == nil {
+		uses[billing] = map[state.Link]*use{}
+	}
+	u := uses[billing][link]
+	if u == nil {
+		u = &use{}
+		uses[billing][link] = u
+	}
+	u.tokens += tokens
+	if updated.After(u.last) {
+		u.last = updated
+	}
+}
+
+// mostUsed is the login the most tokens went through, then the one used
+// last, then the first by label. It is nil when there is none.
+func mostUsed(uses map[state.Link]*use) *state.Link {
+	var best *state.Link
+	var top *use
+	for l, u := range uses {
+		if top == nil || u.tokens > top.tokens ||
+			(u.tokens == top.tokens && (u.last.After(top.last) || (u.last.Equal(top.last) && l.Label < best.Label))) {
+			best, top = &l, u
+		}
+	}
+	return best
 }
 
 // linkGrowth records a Hermes session's growth on each subscription against
@@ -1351,16 +1379,7 @@ func prune(st *state.State, now time.Time) {
 			// An account's share of a session another account continued
 			// ages out on its own. The session stays for its counts.
 			if last, ok := s.Last[l]; ok && last.Before(cutoff) {
-				delete(s.By, l)
-				delete(s.Last, l)
-				for h, n := range s.ByHours[l] {
-					if s.Hours[h] > n {
-						s.Hours[h] -= n
-					} else {
-						delete(s.Hours, h)
-					}
-				}
-				delete(s.ByHours, l)
+				dropShare(s, l)
 				continue
 			}
 			used[state.Key(s.Provider, l)] = true
@@ -1369,6 +1388,27 @@ func prune(st *state.State, now time.Time) {
 			used[via] = true
 		}
 	}
+	pruneAccounts(st, used, cutoff)
+}
+
+// dropShare drops label's share of a session: its tokens, its last write and
+// its hours, which leave the session's hours too.
+func dropShare(s *state.Session, label string) {
+	delete(s.By, label)
+	delete(s.Last, label)
+	for h, n := range s.ByHours[label] {
+		if s.Hours[h] > n {
+			s.Hours[h] -= n
+		} else {
+			delete(s.Hours, h)
+		}
+	}
+	delete(s.ByHours, label)
+}
+
+// pruneAccounts drops the accounts that no kept session uses and nobody is
+// logged in to, when neither they nor their quota were seen since cutoff.
+func pruneAccounts(st *state.State, used map[string]bool, cutoff time.Time) {
 	current := map[string]bool{}
 	for k, l := range st.Current {
 		current[state.Key(state.SplitKey(k)[0], l)] = true
