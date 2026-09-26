@@ -36,6 +36,7 @@ ai-usage is one small binary for macOS, Linux, and Windows. The system scheduler
 - **Private by design.** The relay sees tools, plans, and numbers. Names, emails, and project paths are encrypted with the team key, and every snapshot is signed. See [Privacy](#privacy).
 - **Nothing to run or look after.** No daemon, no account, no config file. One line installs it, and it schedules and updates itself.
 - **Spends none of your quota.** It asks the tools you already have instead of calling Anthropic, OpenAI, or xAI, and never reads your credentials. Asking Claude Code for its usage spends no tokens. See [Other data folders](#other-data-folders).
+- **A menu bar app on macOS.** A ring in the menu bar shows what is left; a click says what is out or runs out, and when. See [Menu bar app](#menu-bar-app).
 - **JSON for agents,** with a versioned schema, so an agent can pick the account with room. See [JSON for agents](#json-for-agents).
 
 ## Quick start
@@ -44,7 +45,7 @@ ai-usage is one small binary for macOS, Linux, and Windows. The system scheduler
 curl -fsSL https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.sh | sh
 ```
 
-That line installs `ai-usage`, registers it with launchd or cron, and prints your report. From then on:
+That line installs `ai-usage`, registers it with launchd or cron, and prints your report. On macOS 14 and later it also installs the [menu bar app](#menu-bar-app). From then on:
 
 ```sh
 ai-usage             # collect now and open the page
@@ -162,26 +163,39 @@ When standard input and output are both terminals, `ai-usage` opens the same pag
 
 ## Menu bar app
 
-On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/Applications` and opens it. It shows the same report as the terminal, laid out for a popover.
+On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/Applications` and opens it. It starts at login and updates with `ai-usage`.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/demo/menubar-light.png">
-  <img alt="The AI Usage menu bar app with the made-up team's subscriptions" src="docs/demo/menubar.png">
+  <img alt="The AI Usage menu bar app with the made-up team's subscriptions: Claude mira's 5-hour window is out and back in 1h 25m" src="docs/demo/menubar.png">
 </picture>
 
-The menu bar shows a ring of what is left of the fullest window among the subscriptions logged in on this Mac, which drains as the window fills, and the percent left of it: each one's main window, and any other that limits the account more, such as a 5-hour window that is out, since any full window stops work. The ring turns orange when that window will run out before it resets, and becomes a solid red disc with a cross when it is out, with the time until it is back in place of the percent. Settings can show the time until reset instead, or the ring alone.
+**The menu bar** shows a ring of what is left of the fullest window among the subscriptions logged in on this Mac, with its percent left. The ring turns orange when the window will run out before its reset, and red with the time until it is back when it is out. Settings can show the time until reset instead, or the ring alone.
 
-The popover opens with one line that says what matters most: which window is out and when it is back, which will run out and when, or that all is on track and which subscription has the most room. The dot beside it is the collector's health and the age of the report; a click on it opens a menu with the collection, the relay, and self-update, and Collect Now, Settings, and Quit. Under the line, a chip for each thing to fix, such as devices with errors, devices not reporting, or devices that stopped updating themselves; a click shows those devices, and a second click shows all of them again. Then three tabs:
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/demo/app-menubar-light.png">
+  <img alt="The menu bar item in each state: on track, tight, used up, stale, over, out, time until reset, no reading, and the ring alone" src="docs/demo/app-menubar.png">
+</picture>
 
-- **Limits**, a row per subscription account with its main window, or the window that limits it when the main one has no reading: a bar of what is left, which drains as the window fills, with what the forecast says will be gone by the reset drawn faint at its end and a notch at its start when it runs out before then, the percent left, and the time until the reset. The row's mark is the account's state, and when another window stops the account, such as a 5-hour window that is out, the row counts down to when it is back and names that window under it. The accounts without a reading share one line at the end.
-- **Usage**, the tokens of each device over a period you pick, today, 7, 30, or 90 days, in whole millions, or of each subscription. With this machine alone in the team, it is a row per account, with the last two weeks as a sparkline.
-- **Projects**, one row per repository with its subfolders and worktrees, and how long ago it was last active; repositories next to each other in one folder show under its name.
+**The popover** opens with one line that answers the first question: what is out and when it is back, what runs out and when, or that all is on track and where the most room is. Chips under it name what to fix on the devices, such as errors or a device that stopped reporting; a click shows those devices. The dot beside it is the collector's health and the report's age, and opens a menu with Collect Now, Settings, and Quit. Then three tabs:
 
-Color means a problem: out is red, running out is orange, and tight is yellow. The rest is gray, including the arrow of a window that will be left mostly unused and the laptop that marks this Mac. A click on a row opens a few labeled lines under it: each window of an account in what is left and will be at its reset, and the devices that used it; a device's last report, release, tools, and errors; a project's folder and sessions; and the tokens of each period. Tooltips say who read a window and when. `⌘1` to `⌘3` switch the tabs and `⌘R` collects now.
+<table>
+<tr>
+<td><picture><source media="(prefers-color-scheme: light)" srcset="docs/demo/app-limits-light.png"><img alt="Limits: a row per subscription account with a bar of what is left, the percent left, and the time until reset" src="docs/demo/app-limits.png"></picture></td>
+<td><picture><source media="(prefers-color-scheme: light)" srcset="docs/demo/app-usage-light.png"><img alt="Usage: the tokens of each device over 7 days" src="docs/demo/app-usage.png"></picture></td>
+<td><picture><source media="(prefers-color-scheme: light)" srcset="docs/demo/app-projects-light.png"><img alt="Projects: this Mac's repositories, grouped by folder" src="docs/demo/app-projects.png"></picture></td>
+</tr>
+</table>
 
-Settings changes what the terminal commands change: this Mac's name in the team (`ai-usage name`), the names the team gives accounts (`ai-usage alias`), and the relay (`ai-usage relay`). It copies the team key, joins another team, opens the app at login, picks what the menu bar shows, and checks for or installs a new release.
+- **Limits:** a row per account: a bar of what is left, with the forecast's part faint, the percent left, and the time until the reset. When another window stops the account, such as a 5-hour window that is out, the row says so under it.
+- **Usage:** the tokens of each device or each subscription, today or over 7, 30, or 90 days, in whole millions.
+- **Projects:** this Mac's repositories, their worktrees counted in, grouped by the folder they share.
 
-The app reads what the terminal shows from `ai-usage report --json`, which it runs every minute and when the popover opens; it runs `ai-usage collect --json` for Collect Now, and the same commands a terminal would for Settings. Forecasts, states, the windows that limit each account, what needs attention, the collector's health, and the matrix all come from the report; the app itself only picks among them: the window for the menu bar, the subscription with the most room, and the entries each chip counts. It finds the binary through the launch agent that runs the collector, else in the folders the installer uses, and shows the install command, to copy or to open in Terminal, when there is none. It starts at login, and self-update keeps it at the binary's release; see [Updates](#updates). To go without it, install with `AI_USAGE_NO_APP=1`, or remove it as [Uninstall](#uninstall) shows: self-update does not bring it back, though running the installer again without `AI_USAGE_NO_APP` does.
+A click on a row opens its details: each window with its forecast, a device's release, tools, and errors, a project's sessions. Color means a problem only: red is out, orange runs out before the reset, yellow is tight. `⌘1` to `⌘3` switch the tabs and `⌘R` collects now.
+
+**Settings** does what the terminal commands do: this Mac's name in the team (`ai-usage name`), the names of accounts (`ai-usage alias`), the relay (`ai-usage relay`), the team key, open at login, what the menu bar shows, and updates.
+
+The app computes nothing itself. It runs `ai-usage report --json` every minute and when the popover opens, and shows what the report says: forecasts, states, what needs attention, and the collector's health. It finds the binary through the launch agent, or shows the install command when there is none. To go without it, install with `AI_USAGE_NO_APP=1`, or remove it as [Uninstall](#uninstall) shows; self-update does not bring it back.
 
 ## Install
 

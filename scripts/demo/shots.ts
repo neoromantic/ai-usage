@@ -74,9 +74,12 @@ const shots: Shot[] = [
     cols: 110,
     typed: "curl -fsSL https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.sh | sh",
     shell: `printf '%s\n' 'ai-usage install: downloading ai-usage_darwin_arm64' \
-      'ai-usage install: installed v0.2.4 to /Users/mira/.local/bin/ai-usage' \
+      'ai-usage install: downloading ai-usage_darwin_app.zip' \
+      'ai-usage install: installed v0.3.3 to /Users/mira/.local/bin/ai-usage' \
       'ai-usage install: first run: collecting and registering with the system scheduler'
-      go run ./scripts/demo guide 110`,
+      go run ./scripts/demo guide 110
+      printf '%s\n' 'ai-usage install: installed the menu bar app, AI Usage 0.3.3, to /Users/mira/Applications/AI Usage.app' \
+      'ai-usage install: the app is in the menu bar; it starts at login and updates with ai-usage'`,
     social: true,
   },
   {
@@ -338,6 +341,42 @@ async function shootTour() {
   console.log([mp4, gif].map((p) => p.replace(root + "/", "")).join("\n"));
 }
 
+// app draws the macOS menu bar app with its own renderer: its item in the
+// menu bar over the popover, the popover's tabs, and the menu bar's looks,
+// each dark and light, and for posts the three tabs side by side on the
+// backdrop. Only on macOS, with Xcode or the Command Line Tools.
+async function app() {
+  if (process.platform !== "darwin") return;
+  const macos = join(root, "macos");
+  await $`xcrun swift build --product AIUsageBar`.cwd(macos).quiet();
+  const exe = join((await $`xcrun swift build --show-bin-path`.cwd(macos).text()).trim(), "AIUsageBar");
+  const drawn = join(tmp, "app");
+  await $`${exe} --render ${join(out, "team.json")} ${drawn}`.env(env).quiet();
+  const pictures: [string, string][] = [
+    ["menubar", "menubar"],
+    ["popover-limits", "app-limits"],
+    ["popover-usage", "app-usage"],
+    ["popover-projects", "app-projects"],
+    ["menubar-states", "app-menubar"],
+  ];
+  for (const [from, to] of pictures) {
+    await $`cp -f ${join(drawn, from + "-dark.png")} ${join(out, to + ".png")}`;
+    await $`cp -f ${join(drawn, from + "-light.png")} ${join(out, to + "-light.png")}`;
+  }
+  const tabs = ["limits", "usage", "projects"].map((t) => `<img src="${join(drawn, `popover-${t}-dark.png`)}">`).join("");
+  const file = join(tmp, "app.html");
+  writeFileSync(file, `<!doctype html><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+.frame{display:inline-flex;gap:40px;align-items:flex-start;padding:64px 72px;background:${palette.dark.backdrop}}
+img{width:400px;border-radius:12px;box-shadow:0 24px 64px rgba(0,0,0,.45)}
+</style><body><div class="frame">${tabs}</div>
+<script>Promise.all([...document.images].map((i)=>i.decode())).then(()=>document.body.classList.add("ready"))</script>`);
+  const png = join(tmp, "app-tabs.png");
+  await photograph(file, [{ selector: ".frame", path: png }]);
+  await $`cp -f ${png} ${join(out, "social", "app-tabs.png")}`;
+  console.log(["menubar", ...pictures.slice(1).map((p) => p[1])].map((n) => `docs/demo/${n}.png`).concat("docs/demo/social/app-tabs.png").join("\n"));
+}
+
 // diagram photographs scripts/demo/diagram.html, the architecture.
 async function diagram() {
   const path = join(out, "social", "architecture.png");
@@ -354,6 +393,7 @@ try {
   await browser("set", "viewport", "1600", "2400", "2");
   for (const s of shots) if (wanted(s.name)) await shoot(s);
   if (wanted("architecture")) await diagram();
+  if (wanted("app") || wanted("menubar")) await app();
   if (wanted("tour")) await shootTour();
 } finally {
   await tmux("kill-server");
