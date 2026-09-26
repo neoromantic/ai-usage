@@ -356,8 +356,6 @@ team        pulled_at, latest_version, devices[] (error, silent, old, usage), pr
             per_device[], linked_usage[]), and matrix (columns[], rows[] with share, of cells with share)
 ```
 
-Version 4 made a matrix cell's `share` its part of the column's tokens in each period, where it was an estimate of how much of the window the device used, and gave each row a `share` of the team's tokens. Version 3 replaced `headline_percent`, `level`, and `pace`, with their 75% and 90% marks, by each window's `state` and `forecast`.
-
 `ai-usage status --json` prints `schema_version`, `collector`, and `sources[]`. Every field is described in [docs/json-schema.md](docs/json-schema.md).
 
 ## Privacy

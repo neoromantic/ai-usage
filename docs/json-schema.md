@@ -2,7 +2,7 @@
 
 `ai-usage --json`, `ai-usage collect --json`, and `ai-usage report --json` print one report object. `ai-usage status --json` prints a smaller object, described at the end.
 
-A field changes meaning only with a new `schema_version`. New fields can appear within a version, so ignore the ones you do not know. [Changes from version 3](#changes-from-version-3) lists what version 4 changed, and [Added within version 4](#added-within-version-4) what it added since. [Changes from version 2](#changes-from-version-2) lists what version 3 added and removed, and [Added within version 3](#added-within-version-3) what it added since.
+A field changes meaning only with a new `schema_version`. New fields can appear within a version, so ignore the ones you do not know. [Changes from version 3](#changes-from-version-3) lists what version 4 changed, and [Added within version 4](#added-within-version-4) what it added since.
 
 Conventions:
 
@@ -283,30 +283,6 @@ A cell:
 ## Added within version 4
 
 - `update_error` and `behind_since` on a team device, so that the team can see why a device does not update itself, and for how long it has not. An `error` entry in `attention` for an `old` device whose update check fails, and `at` on the `old` entry. No field changed meaning, so the version stays 4.
-
-## Added within version 3
-
-- `unknown` on the `usage` objects under `team`, and `window_unknown` on a matrix column and cell, for a device on a collector older than v0.2.0. Such a device's periods used to be `0`, even `90d`; it was not among `users`; and its `share` was `0`, so the other devices shared the whole window. Now `90d` has its tokens, and a share that is not known is `null`, which `share` already allowed. Such a device counts in `users` when it used the account since the window began. `busiest` names the only user even when its tokens are not known, and is `null` when none of two or more users has known tokens, which `busiest` already allowed, though `users` is then above 0. No field changed meaning, so the version stays 3. A reader that ignores the new fields takes the known part of a period as all of it, as it took the zeros before.
-- `runs_out_at`, and `at` on an `over` entry, for a forecast that rounds to 100 but is over it before it is rounded, such as 100.4. They were `null` and absent for every forecast of 100, although such a window runs out before it resets. An `over` entry without `at` now comes among the others by its `resets_at`, not after them.
-
-## Changes from version 2
-
-Added:
-
-- `attention` and `projects` in the report, and `team.latest_version` and `team.matrix`.
-- On an account: `name`, `state`, `usage`, and `days`. On a project: `usage`, `last_active_at`, and in the report's list `providers`.
-- On a window: `main`, `observed_at`, `stale`, `reset`, `unread`, `state`, and `forecast`.
-- On a team device: `error`, `silent`, `old`, and `usage`.
-- On a team account: `name`, `alias`, `subscription`, `current`, `state`, `usage`, `users`, `busiest`, and `last_active_at`; on its `per_device` entries, `usage`.
-
-Removed:
-
-- `headline_percent` and `level` on accounts and team accounts, and `level` and `pace` on windows. The levels `ok`, `warning`, and `critical`, at 75% and 90%, and the pace over the last 6 hours are gone. A window's `state` and `forecast` take their place: how full the window will be at its reset, from its average pace since it began.
-
-Changed:
-
-- `quota.stale` says a window's reading is stale, and a full window's reading no longer goes stale.
-- A team account's `quota` takes the newest reading of each window, so `quota.device` is the device whose reading is newest.
 
 ## Example
 
