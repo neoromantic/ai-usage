@@ -719,23 +719,7 @@ func cmdTeam(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 	sub, args := subcommand(args)
 	switch sub {
 	case "":
-		res, err := loadResult(d)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(stdout, "team %s\n", res.Key.Fingerprint())
-		fmt.Fprintf(stdout, "this device %s\n", res.Config.Device)
-		if res.Team.Team != res.Key.Fingerprint() || res.Team.PulledAt.IsZero() {
-			fmt.Fprintln(stdout, "the team has not been read from the relay yet")
-			return nil
-		}
-		fmt.Fprintf(stdout, "read from the relay %s\n", res.Team.PulledAt.Local().Format("2006-01-02 15:04"))
-		for _, doc := range res.Team.Docs {
-			label, _ := res.Key.Open(doc.DeviceLabel)
-			who, _ := res.Key.Open(doc.OSUser)
-			fmt.Fprintf(stdout, "  %s  %s (%s)  collected %s  %s\n", doc.Device, snapshot.Printable(label), snapshot.Printable(who), doc.CollectedAt.Local().Format("2006-01-02 15:04"), doc.CollectorVersion)
-		}
-		return nil
+		return showTeam(d, stdout)
 	case "key":
 		if len(args) > 0 {
 			return usageError("team key takes no arguments")
@@ -747,20 +731,7 @@ func cmdTeam(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 		fmt.Fprintln(stdout, key.Export())
 		return nil
 	case "join":
-		var line string
-		switch len(args) {
-		case 0:
-			// One line, so a key pasted at a terminal needs no end-of-input.
-			line, err = bufio.NewReader(io.LimitReader(stdin, 4096)).ReadString('\n')
-			if err != nil && !errors.Is(err, io.EOF) {
-				return err
-			}
-		case 1:
-			line = args[0]
-		default:
-			return usageError("team join takes one key")
-		}
-		return joinTeam(ctx, d, line, stdout, stderr)
+		return joinTeam(ctx, d, args, stdin, stdout, stderr)
 	case "forget-device":
 		if len(args) != 1 {
 			return usageError("team forget-device takes one device id")
@@ -768,36 +739,74 @@ func cmdTeam(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 		if !snapshot.ValidDevice(args[0]) {
 			return usageError("not a device id: " + args[0])
 		}
-		cfg, err := d.LoadConfig()
-		if err != nil {
-			return err
-		}
-		endpoint := relayURL(cfg)
-		if endpoint == "" {
-			return errors.New("no relay configured; set one with `ai-usage relay set URL`")
-		}
-		key, err := collect.LoadKey(d)
-		if err != nil {
-			return err
-		}
-		c := &relay.Client{BaseURL: endpoint, Key: key}
-		if err := c.Remove(ctx, args[0]); err != nil {
-			return err
-		}
-		fmt.Fprintf(stdout, "removed %s from team %s\n", args[0], key.Fingerprint())
-		// The cached team read no longer lists it either.
-		unlock, err := waitLock(ctx, d, stderr)
-		if err != nil {
-			return err
-		}
-		defer unlock()
-		return collect.ForgetCachedDevice(d, args[0])
+		return forgetDevice(ctx, d, args[0], stdout, stderr)
 	default:
 		return usageError("unknown team command " + sub)
 	}
 }
 
-func joinTeam(ctx context.Context, d state.Dir, line string, stdout, stderr io.Writer) error {
+func showTeam(d state.Dir, stdout io.Writer) error {
+	res, err := loadResult(d)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "team %s\n", res.Key.Fingerprint())
+	fmt.Fprintf(stdout, "this device %s\n", res.Config.Device)
+	if res.Team.Team != res.Key.Fingerprint() || res.Team.PulledAt.IsZero() {
+		fmt.Fprintln(stdout, "the team has not been read from the relay yet")
+		return nil
+	}
+	fmt.Fprintf(stdout, "read from the relay %s\n", res.Team.PulledAt.Local().Format("2006-01-02 15:04"))
+	for _, doc := range res.Team.Docs {
+		label, _ := res.Key.Open(doc.DeviceLabel)
+		who, _ := res.Key.Open(doc.OSUser)
+		fmt.Fprintf(stdout, "  %s  %s (%s)  collected %s  %s\n", doc.Device, snapshot.Printable(label), snapshot.Printable(who), doc.CollectedAt.Local().Format("2006-01-02 15:04"), doc.CollectorVersion)
+	}
+	return nil
+}
+
+func forgetDevice(ctx context.Context, d state.Dir, id string, stdout, stderr io.Writer) error {
+	cfg, err := d.LoadConfig()
+	if err != nil {
+		return err
+	}
+	endpoint := relayURL(cfg)
+	if endpoint == "" {
+		return errors.New("no relay configured; set one with `ai-usage relay set URL`")
+	}
+	key, err := collect.LoadKey(d)
+	if err != nil {
+		return err
+	}
+	c := &relay.Client{BaseURL: endpoint, Key: key}
+	if err := c.Remove(ctx, id); err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "removed %s from team %s\n", id, key.Fingerprint())
+	// The cached team read no longer lists it either.
+	unlock, err := waitLock(ctx, d, stderr)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return collect.ForgetCachedDevice(d, id)
+}
+
+func joinTeam(ctx context.Context, d state.Dir, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	var line string
+	switch len(args) {
+	case 0:
+		var err error
+		// One line, so a key pasted at a terminal needs no end-of-input.
+		line, err = bufio.NewReader(io.LimitReader(stdin, 4096)).ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return err
+		}
+	case 1:
+		line = args[0]
+	default:
+		return usageError("team join takes one key")
+	}
 	next, err := team.Import(line)
 	if err != nil {
 		return err
@@ -987,26 +996,31 @@ func cmdSchedule(ctx context.Context, args []string, stdout, stderr io.Writer) e
 		}
 		fmt.Fprintln(stdout, "removed from the system scheduler; later runs will not register again until `ai-usage schedule install`")
 	case "status":
-		if d.Foreground() {
-			fmt.Fprintf(stdout, "`ai-usage schedule run` collects every %s with state folder %s\n", schedule.Interval, home)
-			return nil
-		}
-		got, err := s.Lookup(ctx, exe, home)
-		if err != nil {
-			return err
-		}
-		switch got {
-		case schedule.Active:
-			fmt.Fprintf(stdout, "registered: %s runs every %s with state folder %s\n", exe, schedule.Interval, home)
-		case schedule.Other:
-			fmt.Fprintln(stdout, "registered, but for a different binary path or state folder; `ai-usage schedule install` registers this one")
-		case schedule.Disabled:
-			fmt.Fprintln(stdout, disabledByHand)
-		default:
-			fmt.Fprintln(stdout, "not registered")
-		}
+		return scheduleStatus(ctx, d, s, exe, home, stdout)
 	default:
 		return usageError("schedule takes install, remove, status, or run")
+	}
+	return nil
+}
+
+func scheduleStatus(ctx context.Context, d state.Dir, s schedule.Scheduler, exe, home string, stdout io.Writer) error {
+	if d.Foreground() {
+		fmt.Fprintf(stdout, "`ai-usage schedule run` collects every %s with state folder %s\n", schedule.Interval, home)
+		return nil
+	}
+	got, err := s.Lookup(ctx, exe, home)
+	if err != nil {
+		return err
+	}
+	switch got {
+	case schedule.Active:
+		fmt.Fprintf(stdout, "registered: %s runs every %s with state folder %s\n", exe, schedule.Interval, home)
+	case schedule.Other:
+		fmt.Fprintln(stdout, "registered, but for a different binary path or state folder; `ai-usage schedule install` registers this one")
+	case schedule.Disabled:
+		fmt.Fprintln(stdout, disabledByHand)
+	default:
+		fmt.Fprintln(stdout, "not registered")
 	}
 	return nil
 }
@@ -1092,27 +1106,7 @@ func cmdName(args []string, stdout io.Writer) error {
 		if len(args) != 0 {
 			return usageError("name show takes no arguments")
 		}
-		v, ok := envName()
-		if v != "" && !ok {
-			fmt.Fprintf(stdout, "AI_USAGE_NAME is ignored: %s\n", validName(v))
-		}
-		switch {
-		case ok:
-			saved := cfg.Name
-			if saved == "" {
-				saved = hostname()
-			}
-			if saved == v {
-				fmt.Fprintf(stdout, "%s (from AI_USAGE_NAME)\n", v)
-				break
-			}
-			// launchd and cron start runs without the shell's variables.
-			fmt.Fprintf(stdout, "%s (from AI_USAGE_NAME, in runs that see it; runs without it, such as the system scheduler's, use %s)\n", v, saved)
-		case cfg.Name != "":
-			fmt.Fprintln(stdout, cfg.Name)
-		default:
-			fmt.Fprintf(stdout, "%s (the host name; `ai-usage name set NAME` names this device)\n", hostname())
-		}
+		showName(cfg, stdout)
 		return nil
 	case "set":
 		if len(args) != 1 {
@@ -1146,6 +1140,30 @@ func cmdName(args []string, stdout io.Writer) error {
 		return nil
 	default:
 		return usageError("unknown name command " + sub)
+	}
+}
+
+func showName(cfg state.Config, stdout io.Writer) {
+	v, ok := envName()
+	if v != "" && !ok {
+		fmt.Fprintf(stdout, "AI_USAGE_NAME is ignored: %s\n", validName(v))
+	}
+	switch {
+	case ok:
+		saved := cfg.Name
+		if saved == "" {
+			saved = hostname()
+		}
+		if saved == v {
+			fmt.Fprintf(stdout, "%s (from AI_USAGE_NAME)\n", v)
+			break
+		}
+		// launchd and cron start runs without the shell's variables.
+		fmt.Fprintf(stdout, "%s (from AI_USAGE_NAME, in runs that see it; runs without it, such as the system scheduler's, use %s)\n", v, saved)
+	case cfg.Name != "":
+		fmt.Fprintln(stdout, cfg.Name)
+	default:
+		fmt.Fprintf(stdout, "%s (the host name; `ai-usage name set NAME` names this device)\n", hostname())
 	}
 }
 
