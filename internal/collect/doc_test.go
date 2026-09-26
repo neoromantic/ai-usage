@@ -88,11 +88,11 @@ func TestTotals(t *testing.T) {
 
 func TestSortAccounts(t *testing.T) {
 	in := []AccountTotals{
-		{Provider: "hermes", Label: "a", Tokens: tok(1000)},
-		{Provider: "claude", Label: "b", Tokens: tok(1)},
-		{Provider: "claude", Label: "c", Tokens: tok(50)},
-		{Provider: "claude", Label: "d", Tokens: tok(1), Current: true},
-		{Provider: "claude", Label: "a", Tokens: tok(1)},
+		{Provider: "hermes", Label: "a", usage: usage{Tokens: tok(1000)}},
+		{Provider: "claude", Label: "b", usage: usage{Tokens: tok(1)}},
+		{Provider: "claude", Label: "c", usage: usage{Tokens: tok(50)}},
+		{Provider: "claude", Label: "d", usage: usage{Tokens: tok(1)}, Current: true},
+		{Provider: "claude", Label: "a", usage: usage{Tokens: tok(1)}},
 		{Provider: "codex", Label: "x"},
 	}
 	SortAccounts(in)

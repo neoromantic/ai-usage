@@ -284,31 +284,9 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 
 	cache, _ := LoadTeamCache(o.Dir)
 	res.Team = cache
-	if s.Relay != nil {
-		// Publish with the key this run sealed and signed the snapshot for.
-		client := *s.Relay
-		client.Key = key
-		s.Relay = &client
-		last := st.Relay
-		syncTeam(ctx, s.Options, st, cfg.Device, &res.Doc, &res.Team, now)
-		if ctx.Err() != nil && st.Relay.LastErrorAt.Equal(now) && !st.Relay.LastPullAt.Equal(now) {
-			// A stop that cuts the exchange short before its read is no
-			// failure of the relay's. A snapshot it did not push stays
-			// pending, with the last run's error; once the snapshot is
-			// pushed, the cached read's error stands, as when a run skips
-			// the read.
-			st.Relay.LastError, st.Relay.LastErrorAt = last.LastError, last.LastErrorAt
-			if st.Relay.LastPushAt.Equal(now) {
-				st.Relay.LastError = res.Team.ReadError
-				if res.Team.ReadError != "" {
-					st.Relay.LastErrorAt = res.Team.PulledAt
-				}
-			}
-		}
-		if st.Relay.LastError != "" && st.Relay.LastErrorAt.Equal(now) {
-			problems = append(problems, st.Relay.LastError)
-			noteProblems()
-		}
+	if problem := s.publish(ctx, key, cfg.Device, res); problem != "" {
+		problems = append(problems, problem)
+		noteProblems()
 	}
 	// A stopped run leaves its housekeeping to the next one.
 	if o.After != nil && ctx.Err() == nil {
@@ -318,6 +296,37 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 		return res, err
 	}
 	return res, nil
+}
+
+// publish publishes res.Doc and reads the team back into res.Team, as
+// syncTeam does, when there is a relay. It returns the relay's error when
+// this run had one.
+func (s *sampler) publish(ctx context.Context, key *team.Key, device string, res *Result) string {
+	if s.Relay == nil {
+		return ""
+	}
+	// Publish with the key this run sealed and signed the snapshot for.
+	client := *s.Relay
+	client.Key = key
+	s.Relay = &client
+	st := s.st
+	last := st.Relay
+	syncTeam(ctx, s.Options, st, device, &res.Doc, &res.Team, s.now)
+	if ctx.Err() != nil && st.Relay.LastErrorAt.Equal(s.now) && !st.Relay.LastPullAt.Equal(s.now) {
+		// A stop that cuts the exchange short before its read is no
+		// failure of the relay's. A snapshot it did not push stays
+		// pending, with the last run's error; once the snapshot is
+		// pushed, the cached read's error stands, as when a run skips
+		// the read.
+		st.Relay.LastError, st.Relay.LastErrorAt = last.LastError, last.LastErrorAt
+		if st.Relay.LastPushAt.Equal(s.now) {
+			keepReadError(st, res.Team)
+		}
+	}
+	if st.Relay.LastError != "" && st.Relay.LastErrorAt.Equal(s.now) {
+		return st.Relay.LastError
+	}
+	return ""
 }
 
 // runInputs fingerprints what a run collects with: the release, the relay it
@@ -814,7 +823,7 @@ func claimUnknown(st *state.State, p string, homes []string, answers []answer, r
 		s.By[label] = s.By[label].Add(t)
 		delete(s.By, UnknownAccount)
 		if h, ok := s.ByHours[UnknownAccount]; ok {
-			s.ByHours[label] = addHours(s.ByHours[label], h)
+			s.ByHours[label] = logs.AddHours(s.ByHours[label], h)
 			delete(s.ByHours, UnknownAccount)
 		}
 		if last, ok := s.Last[UnknownAccount]; ok {
@@ -855,20 +864,10 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 		e.Seen = seenNow(e.Seen, s.Tokens, g, partial)
 		grown[label] = g
 	} else {
-		parts := map[string]snapshot.Tokens{}
-		for acct, t := range s.Parts {
-			// A part that names no account, as a row from before Hermes
-			// recorded billing, is the session's.
-			l := strings.TrimSpace(acct)
-			if l == "" {
-				l = label
-			}
-			parts[l] = parts[l].Add(t)
-		}
 		if e.Parts == nil {
 			e.Parts = map[string]snapshot.Tokens{}
 		}
-		for l, t := range parts {
+		for l, t := range partsOf(s, label) {
 			g := t.Growth(e.Parts[l])
 			e.Parts[l] = seenNow(e.Parts[l], t, g, partial)
 			grown[l] = g
@@ -904,6 +903,22 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 		growth[ak] = growth[ak].Add(g)
 	}
 	return grown
+}
+
+// partsOf is a session's tokens by the account each part names, label being
+// the session's own.
+func partsOf(s logs.Session, label string) map[string]snapshot.Tokens {
+	parts := map[string]snapshot.Tokens{}
+	for acct, t := range s.Parts {
+		// A part that names no account, as a row from before Hermes
+		// recorded billing, is the session's.
+		l := strings.TrimSpace(acct)
+		if l == "" {
+			l = label
+		}
+		parts[l] = parts[l].Add(t)
+	}
+	return parts
 }
 
 // placeHours adds the hours a session's growth this run went to, before the
@@ -944,7 +959,7 @@ func placeHours(e *state.Session, s logs.Session, grown map[string]snapshot.Toke
 		by := accountHours(e)
 		e.Hours = nil
 		for _, h := range by {
-			e.Hours = addHours(e.Hours, h)
+			e.Hours = logs.AddHours(e.Hours, h)
 		}
 		if many {
 			e.ByHours = by
@@ -958,9 +973,9 @@ func placeHours(e *state.Session, s logs.Session, grown map[string]snapshot.Toke
 		}
 		part := maps.Clone(add)
 		logs.ScaleHours(part, n)
-		e.Hours = addHours(e.Hours, part)
+		e.Hours = logs.AddHours(e.Hours, part)
 		if e.ByHours != nil {
-			e.ByHours[l] = addHours(e.ByHours[l], part)
+			e.ByHours[l] = logs.AddHours(e.ByHours[l], part)
 		}
 	}
 }
@@ -1212,7 +1227,7 @@ func (s *sampler) linkHermes(read []readSession, partial bool) {
 	seen := map[string]bool{}
 	uses := map[string]map[state.Link]*use{}
 	for _, r := range read {
-		for billing, t := range hermesParts(r.s) {
+		for billing, t := range partsOf(r.s, r.label) {
 			seen[billing] = true
 			link := s.linkedAccount(r.s.Home, billing)
 			if link == nil {
@@ -1253,26 +1268,6 @@ func (s *sampler) linkHermes(read []readSession, partial bool) {
 		}
 		acct.Link = best
 	}
-}
-
-// hermesParts is a Hermes session's tokens by billing provider, with a part
-// that names none credited to the session's own, as attribute does.
-func hermesParts(s logs.Session) map[string]snapshot.Tokens {
-	own := strings.TrimSpace(s.Account)
-	if s.Parts == nil {
-		return map[string]snapshot.Tokens{own: s.Tokens}
-	}
-	out := map[string]snapshot.Tokens{}
-	for b, t := range s.Parts {
-		if t.Zero() {
-			continue
-		}
-		if b = strings.TrimSpace(b); b == "" {
-			b = own
-		}
-		out[b] = out[b].Add(t)
-	}
-	return out
 }
 
 // linkGrowth records a Hermes session's growth on each subscription against

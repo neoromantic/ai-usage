@@ -47,7 +47,7 @@ func dedupeSessions(in []Session) []Session {
 // copy written last.
 func addCopy(have *Session, s Session) {
 	have.Tokens = have.Tokens.Add(s.Tokens)
-	addHours(have, s)
+	have.Hours = AddHours(have.Hours, s.Hours)
 	if s.Updated.After(have.Updated) {
 		have.Home = s.Home
 	}
@@ -94,16 +94,6 @@ func AddRejected(have []*Limits, add ...*Limits) []*Limits {
 		}
 	}
 	return out
-}
-
-// addHours adds src's hours onto dst's.
-func addHours(dst *Session, src Session) {
-	for h, n := range src.Hours {
-		if dst.Hours == nil {
-			dst.Hours = map[int64]int64{}
-		}
-		dst.Hours[h] += n
-	}
 }
 
 // addParts adds src's parts onto dst's.
@@ -161,7 +151,7 @@ func rollup(in []Session) []Session {
 		}
 		dst.Tokens = dst.Tokens.Add(in[i].Tokens)
 		addParts(dst, in[i])
-		addHours(dst, in[i])
+		dst.Hours = AddHours(dst.Hours, in[i].Hours)
 		if i != r {
 			fillFrom(dst, in[i])
 			dst.ParentID = ""

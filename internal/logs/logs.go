@@ -72,6 +72,17 @@ func AddHour(hours *map[int64]int64, t time.Time, n int64) {
 	(*hours)[HourOf(t)] += n
 }
 
+// AddHours adds b onto a and returns a, made when needed.
+func AddHours(a, b map[int64]int64) map[int64]int64 {
+	for h, n := range b {
+		if a == nil {
+			a = map[int64]int64{}
+		}
+		a[h] += n
+	}
+	return a
+}
+
 // fitHours makes a session's hours add up to its input plus output. What no
 // time was recorded for, such as Claude's side calls, is spread over the
 // timed hours in their proportion: side calls go along with the work that

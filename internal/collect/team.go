@@ -130,10 +130,7 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 	if fresh := now.Sub(cache.PulledAt); o.PullEvery > 0 && cache.Team == o.Relay.Key.Fingerprint() && fresh >= 0 && fresh < o.PullEvery {
 		// The write's own error is this run's; the cached read's stands
 		// until the next read.
-		st.Relay.LastError = cache.ReadError
-		if cache.ReadError != "" {
-			st.Relay.LastErrorAt = cache.PulledAt
-		}
+		keepReadError(st, *cache)
 		if conflict != nil {
 			fail(conflict)
 		}
@@ -180,6 +177,15 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 		return
 	}
 	st.Relay.LastError = ""
+}
+
+// keepReadError makes the relay's error the one the cached read had, if any,
+// as of that read.
+func keepReadError(st *state.State, c TeamCache) {
+	st.Relay.LastError = c.ReadError
+	if c.ReadError != "" {
+		st.Relay.LastErrorAt = c.PulledAt
+	}
 }
 
 // behindSince is, for each device in docs on an older release than the

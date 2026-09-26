@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"maps"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -27,32 +26,44 @@ type AccountTotals struct {
 	// through (Hermes on a Codex or Grok subscription). When that account has
 	// a quota reading, Quota is that same reading and QuotaFrom names its
 	// provider.
-	Link       *state.Link
-	QuotaFrom  string
-	Sessions   int
-	Tokens     snapshot.Tokens
-	LastActive time.Time
-	Projects   []ProjectTotals
+	Link      *state.Link
+	QuotaFrom string
+	usage
+	Projects []ProjectTotals
 	// Linked is what other providers spent through this account and are
 	// assumed to have billed to it, over LinkedSessions of their sessions
 	// (Hermes on this Codex login). It is counted in their Tokens, not here.
 	Linked         snapshot.Tokens
 	LinkedSessions int
-	// Hours is the account's input plus output tokens by the UTC hour they
-	// were spent in, keyed by logs.HourOf.
-	Hours map[int64]int64
 }
 
 type ProjectTotals struct {
-	Path     string
-	Sessions int
-	Tokens   snapshot.Tokens
-	// Hours is the project's input plus output tokens by UTC hour.
-	Hours      map[int64]int64
-	LastActive time.Time
+	Path string
+	usage
 	// Providers are the harnesses that used the project, most tokens first.
 	// Only Projects fills it.
 	Providers []string
+}
+
+// usage is an account's or a project's sessions and what they spent.
+type usage struct {
+	Sessions int
+	Tokens   snapshot.Tokens
+	// Hours is the input plus output tokens by the UTC hour they were spent
+	// in, keyed by logs.HourOf.
+	Hours      map[int64]int64
+	LastActive time.Time
+}
+
+// add counts one session's share: its tokens, their hours, and when it last
+// grew.
+func (u *usage) add(tok snapshot.Tokens, hours map[int64]int64, last time.Time) {
+	u.Sessions++
+	u.Tokens = u.Tokens.Add(tok)
+	u.Hours = logs.AddHours(u.Hours, hours)
+	if last.After(u.LastActive) {
+		u.LastActive = last
+	}
 }
 
 // Totals sums the ledger per account and project.
@@ -81,27 +92,15 @@ func Totals(st *state.State) []AccountTotals {
 			if tok.Zero() {
 				continue
 			}
-			a := get(s.Provider, label)
-			a.Sessions++
-			a.Tokens = a.Tokens.Add(tok)
-			last := lastActive(s, label)
-			if last.After(a.LastActive) {
-				a.LastActive = last
-			}
-			hours := labelHours(s, label)
-			a.Hours = addHours(a.Hours, hours)
+			last, hours := lastActive(s, label), labelHours(s, label)
+			get(s.Provider, label).add(tok, hours, last)
 			k := state.Key(s.Provider, label)
 			p := projects[k][s.Project]
 			if p == nil {
 				p = &ProjectTotals{Path: s.Project}
 				projects[k][s.Project] = p
 			}
-			p.Sessions++
-			p.Tokens = p.Tokens.Add(tok)
-			p.Hours = addHours(p.Hours, hours)
-			if last.After(p.LastActive) {
-				p.LastActive = last
-			}
+			p.add(tok, hours, last)
 		}
 		for k, tok := range s.Via {
 			parts := state.SplitKey(k)
@@ -118,12 +117,7 @@ func Totals(st *state.State) []AccountTotals {
 		for _, p := range projects[k] {
 			a.Projects = append(a.Projects, *p)
 		}
-		sort.Slice(a.Projects, func(i, j int) bool {
-			if a.Projects[i].Tokens.Total() != a.Projects[j].Tokens.Total() {
-				return a.Projects[i].Tokens.Total() > a.Projects[j].Tokens.Total()
-			}
-			return a.Projects[i].Path < a.Projects[j].Path
-		})
+		sortProjects(a.Projects)
 		if a.Sessions == 0 && a.Quota == nil && !a.Current && a.LinkedSessions == 0 {
 			continue
 		}
@@ -147,7 +141,7 @@ func Projects(st *state.State) []ProjectTotals {
 				continue
 			}
 			tok = tok.Add(t)
-			hours = addHours(hours, labelHours(s, label))
+			hours = logs.AddHours(hours, labelHours(s, label))
 			if l := lastActive(s, label); l.After(last) {
 				last = l
 			}
@@ -161,12 +155,7 @@ func Projects(st *state.State) []ProjectTotals {
 			byPath[s.Project] = p
 			byProvider[s.Project] = map[string]int64{}
 		}
-		p.Sessions++
-		p.Tokens = p.Tokens.Add(tok)
-		p.Hours = addHours(p.Hours, hours)
-		if last.After(p.LastActive) {
-			p.LastActive = last
-		}
+		p.add(tok, hours, last)
 		byProvider[s.Project][s.Provider] += tok.Total()
 	}
 	out := make([]ProjectTotals, 0, len(byPath))
@@ -180,13 +169,15 @@ func Projects(st *state.State) []ProjectTotals {
 		})
 		out = append(out, *p)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Tokens.Total() != out[j].Tokens.Total() {
-			return out[i].Tokens.Total() > out[j].Tokens.Total()
-		}
-		return out[i].Path < out[j].Path
-	})
+	sortProjects(out)
 	return out
+}
+
+// sortProjects orders projects by tokens, most first, then by path.
+func sortProjects(ps []ProjectTotals) {
+	slices.SortFunc(ps, func(a, b ProjectTotals) int {
+		return cmp.Or(cmp.Compare(b.Tokens.Total(), a.Tokens.Total()), strings.Compare(a.Path, b.Path))
+	})
 }
 
 // labelHours is label's part of a session's hours. Once a second account
@@ -232,17 +223,6 @@ func accountHours(s *state.Session) map[string]map[int64]int64 {
 		}
 	}
 	return out
-}
-
-// addHours adds b onto a and returns a, made when needed.
-func addHours(a, b map[int64]int64) map[int64]int64 {
-	for h, n := range b {
-		if a == nil {
-			a = map[int64]int64{}
-		}
-		a[h] += n
-	}
-	return a
 }
 
 // DaysOf buckets hours by UTC day, newest first: index 0 is now's UTC day.
