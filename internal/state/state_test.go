@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
@@ -211,7 +212,7 @@ func TestLoadConfigReplacesInvalidDeviceAndKeepsTheRest(t *testing.T) {
 
 func TestLoadConfigRejectsDamagedFile(t *testing.T) {
 	d := tempDir(t)
-	if err := WriteFile(d.Path("config.json"), []byte("{not json")); err != nil {
+	if err := fsutil.WriteFile(d.Path("config.json"), []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.LoadConfig(); err == nil {
@@ -232,7 +233,7 @@ func TestLoadStateMissingIsEmpty(t *testing.T) {
 func TestLoadStateStartsAgainFromADamagedFile(t *testing.T) {
 	for _, body := range []string{"{\"last_run_at\": \"2026-09", `{"sessions": 5}`} {
 		d := tempDir(t)
-		if err := WriteFile(d.Path("state.json"), []byte(body)); err != nil {
+		if err := fsutil.WriteFile(d.Path("state.json"), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		st, err := d.LoadState()
@@ -298,33 +299,6 @@ func TestStateRoundTrip(t *testing.T) {
 		t.Fatalf("round trip changed the state:\n in %+v\nout %+v", in, out)
 	}
 	checkPrivate(t, d.Path("state.json"))
-}
-
-func TestWriteFileReplacesAtomicallyAndPrivately(t *testing.T) {
-	d := tempDir(t)
-	path := filepath.Join(string(d), "nested", "file.json")
-	if err := WriteFile(path, []byte("one")); err != nil {
-		t.Fatal(err)
-	}
-	if err := WriteFile(path, []byte("two")); err != nil {
-		t.Fatal(err)
-	}
-	b, err := os.ReadFile(path)
-	if err != nil || string(b) != "two" {
-		t.Fatalf("content = %q, %v", b, err)
-	}
-	checkPrivate(t, path)
-	entries, err := os.ReadDir(filepath.Dir(path))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 1 {
-		var names []string
-		for _, e := range entries {
-			names = append(names, e.Name())
-		}
-		t.Fatalf("temporary files left behind: %v", names)
-	}
 }
 
 func checkPrivate(t *testing.T, path string) {

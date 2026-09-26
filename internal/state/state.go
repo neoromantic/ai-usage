@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
@@ -299,7 +300,7 @@ func (d Dir) LoadState() (*State, error) {
 	if err == nil {
 		if jerr := json.Unmarshal(b, s); jerr != nil {
 			s = &State{Damage: "state.json did not parse (" + jerr.Error() + "); started again from an empty state"}
-			if werr := WriteFile(path+".bad", b); werr == nil {
+			if werr := fsutil.WriteFile(path+".bad", b, 0o600); werr == nil {
 				s.Damage += ", the damaged file is state.json.bad"
 			}
 			s.LastError, s.LastErrorAt = s.Damage, time.Now().UTC()
@@ -422,34 +423,5 @@ func writeJSON(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	return WriteFile(path, append(b, '\n'))
-}
-
-// WriteFile writes through a temporary file and a rename.
-func WriteFile(path string, b []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
-	if err != nil {
-		return err
-	}
-	_, werr := tmp.Write(b)
-	if werr == nil {
-		// Without this a crash can leave the renamed file empty.
-		werr = tmp.Sync()
-	}
-	cerr := tmp.Close()
-	if werr != nil || cerr != nil {
-		_ = os.Remove(tmp.Name())
-		if werr != nil {
-			return werr
-		}
-		return cerr
-	}
-	if err := os.Chmod(tmp.Name(), 0o600); err != nil {
-		_ = os.Remove(tmp.Name())
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
+	return fsutil.WriteFile(path, append(b, '\n'), 0o600)
 }

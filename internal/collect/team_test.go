@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
@@ -458,7 +459,7 @@ func TestLoadTeamCache(t *testing.T) {
 		t.Fatalf("duplicate device: %+v, %v", c.Docs, err)
 	}
 
-	if err := state.WriteFile(d.Path(teamCacheFile), []byte("{broken")); err != nil {
+	if err := fsutil.WriteFile(d.Path(teamCacheFile), []byte("{broken"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := LoadTeamCache(d); err == nil {

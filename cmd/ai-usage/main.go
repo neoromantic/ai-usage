@@ -25,6 +25,7 @@ import (
 	"unicode"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/probe"
 	"github.com/neoromantic/ai-usage/internal/schedule"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
@@ -822,7 +823,7 @@ func joinTeam(ctx context.Context, d state.Dir, line string, stdout, stderr io.W
 			fmt.Fprintf(stdout, "already in team %s\n", next.Fingerprint())
 			return nil
 		}
-		if err := prev.Save(backup); err != nil {
+		if err := fsutil.WriteFile(backup, []byte(prev.Export()+"\n"), 0o600); err != nil {
 			return err
 		}
 	case errors.Is(err, os.ErrNotExist):
@@ -832,7 +833,7 @@ func joinTeam(ctx context.Context, d state.Dir, line string, stdout, stderr io.W
 			return err
 		}
 	}
-	if err := next.Save(d.KeyFile()); err != nil {
+	if err := fsutil.WriteFile(d.KeyFile(), []byte(next.Export()+"\n"), 0o600); err != nil {
 		return err
 	}
 	_ = os.Remove(d.Path("team-cache.json"))

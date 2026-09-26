@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
@@ -104,7 +105,7 @@ func saveTeamCache(dir state.Dir, c TeamCache) error {
 	if err != nil {
 		return err
 	}
-	return state.WriteFile(dir.Path(teamCacheFile), b)
+	return fsutil.WriteFile(dir.Path(teamCacheFile), b, 0o600)
 }
 
 // syncTeam publishes this device and reads the team back. The snapshot holds

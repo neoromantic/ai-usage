@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/logs"
 	"github.com/neoromantic/ai-usage/internal/probe"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
@@ -147,7 +148,7 @@ func LoadKey(dir state.Dir) (*team.Key, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	if err := k.Save(dir.KeyFile()); err != nil {
+	if err := fsutil.WriteFile(dir.KeyFile(), []byte(k.Export()+"\n"), 0o600); err != nil {
 		return nil, false, err
 	}
 	return k, true, nil

@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"unicode"
 )
@@ -107,39 +106,6 @@ func Load(path string) (*Key, error) {
 		return nil, err
 	}
 	return Import(string(body))
-}
-
-// Save writes the key file readable only by this OS user.
-func (k *Key) Save(path string) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	// CreateTemp always makes a new 0600 file. A fixed temp name would reuse a
-	// leftover file and keep whatever looser mode it had.
-	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+".*")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	_, werr := f.WriteString(k.Export() + "\n")
-	// The key is the only way back into the team, so it must reach the disk
-	// before it replaces the previous file.
-	if werr == nil {
-		werr = f.Sync()
-	}
-	if cerr := f.Close(); werr == nil {
-		werr = cerr
-	}
-	if werr != nil {
-		_ = os.Remove(tmp)
-		return werr
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	return nil
 }
 
 // Sign signs a message with the team private key.

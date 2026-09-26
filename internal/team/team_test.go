@@ -7,7 +7,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -119,38 +118,8 @@ func TestImportRejects(t *testing.T) {
 	}
 }
 
-func TestSaveLoad(t *testing.T) {
+func TestLoad(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "nested", "team.key")
-	k := mustGenerate(t)
-	if err := k.Save(path); err != nil {
-		t.Fatal(err)
-	}
-	got, err := Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Fingerprint() != k.Fingerprint() {
-		t.Fatal("Load gave another key")
-	}
-	body, _ := os.ReadFile(path)
-	if string(body) != k.Export()+"\n" {
-		t.Fatalf("key file = %q", body)
-	}
-
-	// Saving over an existing key replaces it and leaves no temp files.
-	k2 := mustGenerate(t)
-	if err := k2.Save(path); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := Load(path); got == nil || got.Fingerprint() != k2.Fingerprint() {
-		t.Fatal("second Save did not replace the key")
-	}
-	entries, _ := os.ReadDir(filepath.Dir(path))
-	if len(entries) != 1 {
-		t.Fatalf("directory holds %d entries, want only the key", len(entries))
-	}
-
 	if _, err := Load(filepath.Join(dir, "missing.key")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("Load(missing) err = %v, want os.ErrNotExist", err)
 	}
@@ -160,46 +129,6 @@ func TestSaveLoad(t *testing.T) {
 	}
 	if _, err := Load(bad); err == nil || errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("Load(garbage) err = %v, want a parse error", err)
-	}
-}
-
-func TestSaveFileMode(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Windows has no Unix permission bits")
-	}
-	dir := t.TempDir()
-	path := filepath.Join(dir, "sub", "team.key")
-	// A leftover temp file from an older build must not lend its mode to the key.
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path+".tmp", nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := mustGenerate(t).Save(path); err != nil {
-		t.Fatal(err)
-	}
-	fi, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if mode := fi.Mode().Perm(); mode != 0o600 {
-		t.Fatalf("key file mode = %o, want 600", mode)
-	}
-
-	fresh := filepath.Join(dir, "new", "team.key")
-	if err := mustGenerate(t).Save(fresh); err != nil {
-		t.Fatal(err)
-	}
-	di, err := os.Stat(filepath.Dir(fresh))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if mode := di.Mode().Perm(); mode&0o077 != 0 {
-		t.Fatalf("new key directory mode = %o, want no group or other access", mode)
 	}
 }
 

@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 )
 
 // AgentLabel names the macOS launch agent and its plist.
@@ -113,7 +115,9 @@ func (s Scheduler) installAgent(ctx context.Context, exe, home, path string) err
 	if err := os.MkdirAll(s.AgentDir, 0o755); err != nil {
 		return err
 	}
-	if err := writePlist(file, AgentPlist(exe, home, path)); err != nil {
+	// Replaced in one step, so launchd never loads half of it. launchd
+	// refuses a plist that others can write.
+	if err := fsutil.WriteFile(file, []byte(AgentPlist(exe, home, path)), 0o644); err != nil {
 		return err
 	}
 	if s.InAgent {
@@ -141,22 +145,6 @@ func (s Scheduler) installAgent(ctx context.Context, exe, home, path string) err
 		return fmt.Errorf("launch agent registered, but the crontab line from an older version stays: %w", err)
 	}
 	return nil
-}
-
-// writePlist replaces the plist in one step, so launchd never loads half of
-// it. launchd refuses a plist that others can write.
-func writePlist(file, body string) error {
-	f, err := os.CreateTemp(filepath.Dir(file), ".ai-usage-*.plist")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	_, werr := f.WriteString(body)
-	cerr := f.Close()
-	if err := errors.Join(werr, cerr, os.Chmod(f.Name(), 0o644)); err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), file)
 }
 
 // removeAgent removes the crontab line first, so a failure leaves the
