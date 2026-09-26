@@ -81,7 +81,7 @@ func TestReadersNeverWriteToTheHome(t *testing.T) {
 
 func TestReadMissingHome(t *testing.T) {
 	for _, p := range snapshot.Providers {
-		res, err := Read(p, filepath.Join(t.TempDir(), "absent"), since)
+		res, err := readOne(p, filepath.Join(t.TempDir(), "absent"), since)
 		if err != nil || len(res.Sessions) != 0 || res.Limits != nil || res.Unreadable != 0 {
 			t.Errorf("%s: res %+v err %v", p, res, err)
 		}
@@ -89,7 +89,7 @@ func TestReadMissingHome(t *testing.T) {
 }
 
 func TestReadUnknownProvider(t *testing.T) {
-	res, err := Read("gemini", t.TempDir(), since)
+	res, err := readOne("gemini", t.TempDir(), since)
 	if err == nil {
 		t.Fatal("no error")
 	}
@@ -119,7 +119,7 @@ func TestProviderFailureIsolation(t *testing.T) {
 	}
 
 	mustWrite(t, filepath.Join(homes["hermes"], "state.db"), "garbage")
-	if _, err := Read("hermes", homes["hermes"], since); err == nil {
+	if _, err := readOne("hermes", homes["hermes"], since); err == nil {
 		t.Fatal("corrupt hermes database read without error")
 	}
 

@@ -23,14 +23,14 @@ import (
 // hour that line was written.
 // xAI counts cached input inside inputTokens, so cached tokens are moved out of Input.
 // Chat transcripts and prompt history stay closed.
-func readGrok(home string, since time.Time) (Result, error) {
+func readGrok(home string, since time.Time) ([]Session, HomeRead) {
 	sessions := filepath.Join(home, "sessions")
 	root, err := resolveDir(sessions)
 	if errors.Is(err, os.ErrNotExist) {
-		return Result{}, nil
+		return nil, HomeRead{}
 	}
 	if err != nil {
-		return Result{}, err
+		return nil, HomeRead{Err: err}
 	}
 
 	type files struct {
@@ -39,10 +39,11 @@ func readGrok(home string, since time.Time) (Result, error) {
 		mod     time.Time
 	}
 	found := map[string]*files{}
-	var out Result
+	var out []Session
+	var hr HomeRead
 	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			out.Unreadable++
+			hr.Unreadable++
 			return nil
 		}
 		if d.IsDir() {
@@ -62,7 +63,7 @@ func readGrok(home string, since time.Time) (Result, error) {
 		}
 		info, err := d.Info()
 		if err != nil {
-			out.Unreadable++
+			hr.Unreadable++
 			return nil
 		}
 		dir := filepath.Dir(path)
@@ -83,7 +84,8 @@ func readGrok(home string, since time.Time) (Result, error) {
 		return nil
 	})
 	if err != nil {
-		return out, err
+		hr.Err = err
+		return out, hr
 	}
 
 	for _, dir := range slices.Sorted(maps.Keys(found)) {
@@ -98,9 +100,9 @@ func readGrok(home string, since time.Time) (Result, error) {
 		}
 		if slot.summary != "" {
 			id, project, bad, err := parseGrokSummary(slot.summary)
-			out.Malformed += bad
+			hr.Malformed += bad
 			if err != nil {
-				out.Unreadable++
+				hr.Unreadable++
 			} else {
 				sess.ID = cmp.Or(id, sess.ID)
 				sess.Project = cmp.Or(project, sess.Project)
@@ -108,15 +110,15 @@ func readGrok(home string, since time.Time) (Result, error) {
 		}
 		if slot.updates != "" {
 			tok, hours, bad, err := parseGrokUpdates(slot.updates)
-			out.Malformed += bad
+			hr.Malformed += bad
 			if err != nil {
-				out.Unreadable++
+				hr.Unreadable++
 			}
 			sess.Tokens, sess.Hours = tok, hours
 		}
-		out.Sessions = append(out.Sessions, sess)
+		out = append(out, sess)
 	}
-	return out, nil
+	return out, hr
 }
 
 func parseGrokSummary(path string) (id, project string, malformed int, err error) {

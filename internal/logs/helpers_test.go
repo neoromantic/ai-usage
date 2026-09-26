@@ -68,38 +68,57 @@ func needDeny(t *testing.T) {
 	}
 }
 
-func mustRead(t *testing.T, provider, home string, since time.Time) Result {
+// homeResult is a read of one home: its sessions, and how the read went.
+type homeResult struct {
+	Result
+	HomeRead
+}
+
+// readOne reads one provider home. Files older than since are skipped.
+// Sub-agent sessions are rolled into their parents.
+func readOne(provider, home string, since time.Time) (homeResult, error) {
+	res := ReadHomes(provider, []string{home}, since)
+	hr := res.Homes[home]
+	return homeResult{res, hr}, hr.Err
+}
+
+func mustRead(t *testing.T, provider, home string, since time.Time) homeResult {
 	t.Helper()
-	res, err := Read(provider, home, since)
+	res, err := readOne(provider, home, since)
 	if err != nil {
-		t.Fatalf("Read(%s): %v", provider, err)
+		t.Fatalf("readOne(%s): %v", provider, err)
 	}
 	return res
 }
 
-func byID(t *testing.T, res Result, id string) Session {
+// sessionSet is a read of one home or of several.
+type sessionSet interface{ sessions() []Session }
+
+func (r Result) sessions() []Session { return r.Sessions }
+
+func byID(t *testing.T, res sessionSet, id string) Session {
 	t.Helper()
-	for _, s := range res.Sessions {
+	for _, s := range res.sessions() {
 		if s.ID == id {
 			return s
 		}
 	}
-	t.Fatalf("no session %q in %+v", id, res.Sessions)
+	t.Fatalf("no session %q in %+v", id, res.sessions())
 	return Session{}
 }
 
-func ids(res Result) []string {
-	out := make([]string, 0, len(res.Sessions))
-	for _, s := range res.Sessions {
+func ids(res sessionSet) []string {
+	out := make([]string, 0, len(res.sessions()))
+	for _, s := range res.sessions() {
 		out = append(out, s.ID)
 	}
 	sort.Strings(out)
 	return out
 }
 
-func total(res Result) Tokens {
+func total(res sessionSet) Tokens {
 	var sum Tokens
-	for _, s := range res.Sessions {
+	for _, s := range res.sessions() {
 		sum = sum.Add(s.Tokens)
 	}
 	return sum
@@ -141,9 +160,9 @@ func showHours(hours map[int64]int64) string {
 }
 
 // noLeak fails when any session field carries log text.
-func noLeak(t *testing.T, res Result) {
+func noLeak(t *testing.T, res sessionSet) {
 	t.Helper()
-	for _, s := range res.Sessions {
+	for _, s := range res.sessions() {
 		for _, v := range []string{s.ID, s.ParentID, s.Project, s.Account} {
 			if strings.Contains(v, "SECRET") {
 				t.Fatalf("session %+v carries log text", s)

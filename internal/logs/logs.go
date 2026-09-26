@@ -132,19 +132,15 @@ func ScaleHours(hours map[int64]int64, total int64) {
 	}
 }
 
-// Result is a read. Malformed and Unreadable make a source partial.
+// Result is a read.
 type Result struct {
-	Sessions   []Session
-	Malformed  int
-	Unreadable int
-	// Limits is the newest quota the logs recorded, when they record one
-	// (Codex). Read sets it; ReadHomes keeps it per home.
-	Limits *Limits
-	// Homes is how each home's read went, for ReadHomes.
+	Sessions []Session
+	// Homes is how each home's read went.
 	Homes map[string]HomeRead
 }
 
-// HomeRead is one home's part of a read.
+// HomeRead is one home's part of a read. Malformed and Unreadable make a
+// source partial.
 type HomeRead struct {
 	// Err is set when the home could not be read. Sessions read before the
 	// error are still in the result.
@@ -161,16 +157,6 @@ type Limits struct {
 	ObservedAt time.Time
 	Plan       string
 	Windows    []snapshot.Window
-}
-
-// Read reads one provider home. Files older than since are skipped.
-// Sub-agent sessions are rolled into their parents.
-func Read(provider, home string, since time.Time) (Result, error) {
-	res := ReadHomes(provider, []string{home}, since)
-	h := res.Homes[home]
-	res.Limits = h.Limits
-	res.Homes = nil
-	return res, h.Err
 }
 
 // ReadHomes reads every home of one provider as one set of logs, so that a
@@ -198,12 +184,12 @@ func ReadHomes(provider string, homes []string, since time.Time) Result {
 			read = readHermes
 		}
 		for _, h := range homes {
-			r, err := read(h, since)
-			for i := range r.Sessions {
-				r.Sessions[i].Home = h
+			sessions, hr := read(h, since)
+			for i := range sessions {
+				sessions[i].Home = h
 			}
-			raw = append(raw, r.Sessions...)
-			res.Homes[h] = HomeRead{Err: err, Malformed: r.Malformed, Unreadable: r.Unreadable}
+			raw = append(raw, sessions...)
+			res.Homes[h] = hr
 		}
 	default:
 		for _, h := range homes {
@@ -222,10 +208,6 @@ func ReadHomes(provider string, homes []string, since time.Time) Result {
 				res.Sessions[i].Project = s.Home
 			}
 		}
-	}
-	for _, hr := range res.Homes {
-		res.Malformed += hr.Malformed
-		res.Unreadable += hr.Unreadable
 	}
 	return res
 }

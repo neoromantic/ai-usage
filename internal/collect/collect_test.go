@@ -30,13 +30,20 @@ type world struct {
 	now      time.Time
 	userHome string
 	env      map[string]string
-	logs     map[string]logs.Result // provider+home
+	logs     map[string]homeLogs // provider+home
 	readErr  map[string]error
 	readings map[string]probe.Reading // provider+home
 	askErr   map[string]error
 	asked    []string
 	// lastUse is when each asked home was last used, as the probe was told.
 	lastUse map[string]time.Time
+}
+
+// homeLogs is what a read of one home's logs finds.
+type homeLogs struct {
+	Sessions              []logs.Session
+	Limits                *logs.Limits
+	Malformed, Unreadable int
 }
 
 func newWorld(t *testing.T) (*world, Options) {
@@ -46,7 +53,7 @@ func newWorld(t *testing.T) (*world, Options) {
 		now:      t0,
 		userHome: filepath.Join(root, "home"),
 		env:      map[string]string{},
-		logs:     map[string]logs.Result{},
+		logs:     map[string]homeLogs{},
 		readErr:  map[string]error{},
 		readings: map[string]probe.Reading{},
 		askErr:   map[string]error{},
@@ -664,7 +671,7 @@ func TestCodexLogLimitsAreOnlyAFallback(t *testing.T) {
 
 	// The probe answers with a quota: the log reading is ignored.
 	w.login("codex", h, "ann", quota(t0, 10))
-	w.logs[k] = logs.Result{Limits: codexLimits(t0.Add(time.Minute), 99)}
+	w.logs[k] = homeLogs{Limits: codexLimits(t0.Add(time.Minute), 99)}
 	res := run(t, o)
 	q := totalsFor(t, res.State, "codex", "ann").Quota
 	if q.Source != "harness" || q.Windows[0].Percent != 10 {
@@ -674,7 +681,7 @@ func TestCodexLogLimitsAreOnlyAFallback(t *testing.T) {
 	// No quota from the probe: a log reading newer than the last run is used.
 	w.now = t0.Add(15 * time.Minute)
 	w.login("codex", h, "ann", nil)
-	w.logs[k] = logs.Result{Limits: codexLimits(t0.Add(10*time.Minute), 20)}
+	w.logs[k] = homeLogs{Limits: codexLimits(t0.Add(10*time.Minute), 20)}
 	res = run(t, o)
 	a := totalsFor(t, res.State, "codex", "ann")
 	if a.Quota.Source != "log" || a.Quota.Windows[0].Percent != 20 || a.Plan != "plus" {
@@ -687,7 +694,7 @@ func TestCodexLogLimitsFromBeforeASwitchStayWithTheOldAccount(t *testing.T) {
 	h := w.home(t, "codex")
 	k := state.Key("codex", h)
 	w.login("codex", h, "old", nil)
-	w.logs[k] = logs.Result{Limits: codexLimits(t0.Add(-time.Hour), 70)}
+	w.logs[k] = homeLogs{Limits: codexLimits(t0.Add(-time.Hour), 70)}
 	run(t, o)
 
 	// Logged into another account; the logs still hold old's last limits.
@@ -709,7 +716,7 @@ func TestCodexLogLimitsFromBeforeASwitchStayWithTheOldAccount(t *testing.T) {
 	}
 
 	// New usage writes new limits: those are the new account's.
-	w.logs[k] = logs.Result{Limits: codexLimits(t0.Add(40*time.Minute), 3)}
+	w.logs[k] = homeLogs{Limits: codexLimits(t0.Add(40*time.Minute), 3)}
 	w.now = t0.Add(45 * time.Minute)
 	res = run(t, o)
 	if q := totalsFor(t, res.State, "codex", "new").Quota; q == nil || q.Windows[0].Percent != 3 {
@@ -725,7 +732,7 @@ func TestLogLimitsNeverGoToTheUnknownAccount(t *testing.T) {
 	h := w.home(t, "codex")
 	k := state.Key("codex", h)
 	w.askErr[k] = errors.New("codex app-server: not answering")
-	w.logs[k] = logs.Result{Limits: codexLimits(t0, 50), Sessions: []logs.Session{sess("c1", "/p", 10, t0)}}
+	w.logs[k] = homeLogs{Limits: codexLimits(t0, 50), Sessions: []logs.Session{sess("c1", "/p", 10, t0)}}
 	res := run(t, o)
 	if q := totalsFor(t, res.State, "codex", UnknownAccount).Quota; q != nil {
 		t.Fatalf("unknown account got a quota: %+v", q)
@@ -1002,11 +1009,11 @@ func TestIncompleteReadDoesNotCountAgainLater(t *testing.T) {
 
 	// A sub-agent file cannot be opened this run, so s1 reads lower.
 	w.now = t0.Add(15 * time.Minute)
-	w.logs[k] = logs.Result{Sessions: []logs.Session{sess("s1", "/p", 100, t0)}, Unreadable: 1}
+	w.logs[k] = homeLogs{Sessions: []logs.Session{sess("s1", "/p", 100, t0)}, Unreadable: 1}
 	run(t, o)
 
 	w.now = t0.Add(30 * time.Minute)
-	w.logs[k] = logs.Result{Sessions: []logs.Session{sess("s1", "/p", 150, t0)}}
+	w.logs[k] = homeLogs{Sessions: []logs.Session{sess("s1", "/p", 150, t0)}}
 	res := run(t, o)
 	if got := totalsFor(t, res.State, "claude", "ann").Tokens; got != tok(150) {
 		t.Fatalf("tokens = %+v, want %+v", got, tok(150))

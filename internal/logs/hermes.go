@@ -31,29 +31,29 @@ import (
 //
 // Both tables hold running totals, not a time for each call, so a session
 // leaves Hours nil and the ledger places its growth at the run that sees it.
-func readHermes(home string, since time.Time) (Result, error) {
+func readHermes(home string, since time.Time) ([]Session, HomeRead) {
 	dbPath := filepath.Join(home, "state.db")
 	if _, err := os.Stat(dbPath); errors.Is(err, os.ErrNotExist) {
-		return Result{}, nil
+		return nil, HomeRead{}
 	} else if err != nil {
-		return Result{}, err
+		return nil, HomeRead{Err: err}
 	}
 	// SQLite keeps the -wal and -shm beside the file a link points to.
 	dbPath = fsutil.RealPath(dbPath)
 	for attempt := 1; ; attempt++ {
 		before, err := statDB(dbPath)
 		if err != nil {
-			return Result{}, err
+			return nil, HomeRead{Err: err}
 		}
-		res, live, err := readHermesDB(dbPath, since)
+		sessions, malformed, live, err := readHermesDB(dbPath, since)
 		afterHermesRead()
 		if live || attempt == hermesAttempts {
-			return res, err
+			return sessions, HomeRead{Err: err, Malformed: malformed}
 		}
 		// A read that took the database as unchanging, or a copy of it, can
 		// mix pages from before and after a Hermes that opened it meanwhile.
 		if after, serr := statDB(dbPath); serr == nil && after == before {
-			return res, err
+			return sessions, HomeRead{Err: err, Malformed: malformed}
 		}
 	}
 }
@@ -94,40 +94,40 @@ type querier interface {
 
 // readHermesDB reads state.db once. live is whether it was read in place
 // while Hermes had it open.
-func readHermesDB(dbPath string, since time.Time) (res Result, live bool, err error) {
+func readHermesDB(dbPath string, since time.Time) (sessions []Session, malformed int, live bool, err error) {
 	uri, live, cleanup, err := hermesURI(dbPath)
 	if err != nil {
-		return Result{}, false, err
+		return nil, 0, false, err
 	}
 	defer cleanup()
 
 	db, err := sql.Open("sqlite", uri)
 	if err != nil {
-		return Result{}, live, err
+		return nil, 0, live, err
 	}
 	defer db.Close()
 	// One transaction, so the usage and sessions queries see the same
 	// commit of a database Hermes is writing.
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
 	if err != nil {
-		return Result{}, live, err
+		return nil, 0, live, err
 	}
 	defer tx.Rollback()
-	res, err = readHermesTx(tx, since)
-	return res, live, err
+	sessions, malformed, err = readHermesTx(tx, since)
+	return sessions, malformed, live, err
 }
 
-func readHermesTx(db querier, since time.Time) (Result, error) {
+func readHermesTx(db querier, since time.Time) (sessions []Session, malformed int, err error) {
 	cols, err := tableColumns(db, "sessions")
 	if err != nil {
-		return Result{}, err
+		return nil, 0, err
 	}
 	if len(cols) == 0 {
-		return Result{}, errors.New("hermes state.db has no sessions table")
+		return nil, 0, errors.New("hermes state.db has no sessions table")
 	}
 	usage, err := hermesUsage(db)
 	if err != nil {
-		return Result{}, err
+		return nil, 0, err
 	}
 	betweenHermesQueries()
 	// Columns were added over Hermes releases. Token and time columns an older
@@ -166,20 +166,19 @@ func readHermesTx(db querier, since time.Time) (Result, error) {
 		ORDER BY id`
 	rows, err := db.Query(query)
 	if err != nil {
-		return Result{}, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
-	var out Result
 	for rows.Next() {
 		var id, parent, cwd, billing sql.NullString
 		var input, output, cacheRead, cacheWrite int64
 		var started, ended, active any
 		if err := rows.Scan(&id, &parent, &cwd, &billing, &input, &output, &cacheRead, &cacheWrite, &started, &ended, &active); err != nil {
-			return out, err
+			return sessions, malformed, err
 		}
 		if id.String == "" {
-			out.Malformed++
+			malformed++
 			continue
 		}
 		last := math.Max(hermesTime(started), math.Max(hermesTime(ended), hermesTime(active)))
@@ -212,9 +211,9 @@ func readHermesTx(db querier, since time.Time) (Result, error) {
 		for _, t := range sess.Parts {
 			sess.Tokens = sess.Tokens.Add(t)
 		}
-		out.Sessions = append(out.Sessions, sess)
+		sessions = append(sessions, sess)
 	}
-	return out, rows.Err()
+	return sessions, malformed, rows.Err()
 }
 
 // hermesSessionUsage is one session's session_model_usage rows by billing

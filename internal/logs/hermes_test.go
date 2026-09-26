@@ -325,7 +325,7 @@ func TestHermesUnusableDatabase(t *testing.T) {
 			home := t.TempDir()
 			tc.setup(t, home)
 			before := tree(t, home)
-			if _, err := Read("hermes", home, since); err == nil {
+			if _, err := readOne("hermes", home, since); err == nil {
 				t.Fatal("no error")
 			}
 			sameTree(t, before, tree(t, home))
@@ -339,7 +339,7 @@ func TestHermesUnreadableDatabase(t *testing.T) {
 	db := hermesDB(t, home, hermesColumns)
 	db.Close()
 	deny(t, filepath.Join(home, "state.db"))
-	if _, err := Read("hermes", home, since); err == nil {
+	if _, err := readOne("hermes", home, since); err == nil {
 		t.Fatal("no error")
 	}
 }

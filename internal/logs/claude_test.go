@@ -272,7 +272,7 @@ func TestClaudeMissingOrBrokenHome(t *testing.T) {
 			t.Fatal(err)
 		}
 		deny(t, filepath.Join(home, "projects"))
-		if _, err := Read("claude", home, since); err == nil {
+		if _, err := readOne("claude", home, since); err == nil {
 			t.Fatal("no error")
 		}
 	})
