@@ -222,7 +222,7 @@ func countCodex(files []*codexFile) []Session {
 				seen[ev] = true
 				t := delta.tokens()
 				own[i] = own[i].Add(t)
-				AddHour(&hours[i], c.at, InOut(t))
+				AddHour(&hours[i], c.at, t.InOut())
 			}
 			for _, r := range files[i].unrepeated {
 				if responses[r.response] {
@@ -231,7 +231,7 @@ func countCodex(files []*codexFile) []Session {
 				responses[r.response] = true
 				t := r.usage.tokens()
 				own[i] = own[i].Add(t)
-				AddHour(&hours[i], r.at, InOut(t))
+				AddHour(&hours[i], r.at, t.InOut())
 			}
 		}
 	}
@@ -508,14 +508,6 @@ var codexNameRe = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{
 // codexNameID is the thread id at the end of a rollout file name.
 func codexNameID(name string) string {
 	return codexNameRe.FindString(strings.TrimSuffix(name, ".jsonl"))
-}
-
-func parseTime(s string) time.Time {
-	t, err := time.Parse(time.RFC3339Nano, s)
-	if err != nil {
-		return time.Time{}
-	}
-	return t.UTC()
 }
 
 // Timestamps and ids stay strings so one odd value does not reject the line.

@@ -398,7 +398,11 @@ func TestHermesReadsInPlace(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			uri, live, cleanup, err := hermesURI(db)
+			st, err := statDB(db)
+			if err != nil {
+				t.Fatal(err)
+			}
+			uri, live, cleanup, err := hermesURI(db, st)
 			if err != nil {
 				t.Fatal(err)
 			}

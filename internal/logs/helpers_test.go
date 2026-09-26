@@ -141,8 +141,8 @@ func checkHours(t *testing.T, s Session, want map[string]int64) {
 	for _, n := range s.Hours {
 		sum += n
 	}
-	if !reflect.DeepEqual(s.Hours, w) || sum != InOut(s.Tokens) {
-		t.Fatalf("%s hours = %s, adding up to %d, want %s, adding up to %d", s.ID, showHours(s.Hours), sum, showHours(w), InOut(s.Tokens))
+	if !reflect.DeepEqual(s.Hours, w) || sum != s.Tokens.InOut() {
+		t.Fatalf("%s hours = %s, adding up to %d, want %s, adding up to %d", s.ID, showHours(s.Hours), sum, showHours(w), s.Tokens.InOut())
 	}
 }
 

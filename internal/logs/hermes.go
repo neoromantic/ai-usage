@@ -6,11 +6,10 @@ import (
 	"database/sql"
 	"errors"
 	"io"
-	"math"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
+	"slices"
 	"strings"
 	"time"
 
@@ -45,7 +44,7 @@ func readHermes(home string, since time.Time) ([]Session, HomeRead) {
 		if err != nil {
 			return nil, HomeRead{Err: err}
 		}
-		sessions, malformed, live, err := readHermesDB(dbPath, since)
+		sessions, malformed, live, err := readHermesDB(dbPath, before, since)
 		afterHermesRead()
 		if live || attempt == hermesAttempts {
 			return sessions, HomeRead{Err: err, Malformed: malformed}
@@ -87,15 +86,10 @@ func statDB(dbPath string) (dbState, error) {
 	return st, err
 }
 
-// querier is a database or a transaction.
-type querier interface {
-	Query(query string, args ...any) (*sql.Rows, error)
-}
-
-// readHermesDB reads state.db once. live is whether it was read in place
-// while Hermes had it open.
-func readHermesDB(dbPath string, since time.Time) (sessions []Session, malformed int, live bool, err error) {
-	uri, live, cleanup, err := hermesURI(dbPath)
+// readHermesDB reads state.db once, as st found it. live is whether it was
+// read in place while Hermes had it open.
+func readHermesDB(dbPath string, st dbState, since time.Time) (sessions []Session, malformed int, live bool, err error) {
+	uri, live, cleanup, err := hermesURI(dbPath, st)
 	if err != nil {
 		return nil, 0, false, err
 	}
@@ -117,15 +111,15 @@ func readHermesDB(dbPath string, since time.Time) (sessions []Session, malformed
 	return sessions, malformed, live, err
 }
 
-func readHermesTx(db querier, since time.Time) (sessions []Session, malformed int, err error) {
-	cols, err := tableColumns(db, "sessions")
+func readHermesTx(tx *sql.Tx, since time.Time) (sessions []Session, malformed int, err error) {
+	cols, err := tableColumns(tx, "sessions")
 	if err != nil {
 		return nil, 0, err
 	}
 	if len(cols) == 0 {
 		return nil, 0, errors.New("hermes state.db has no sessions table")
 	}
-	usage, err := hermesUsage(db)
+	usage, err := hermesUsage(tx)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -133,38 +127,27 @@ func readHermesTx(db querier, since time.Time) (sessions []Session, malformed in
 	// Columns were added over Hermes releases. Token and time columns an older
 	// table lacks read as zero or unknown; a table without the basic token
 	// counts is not one this reader knows, and the query fails visibly.
-	optional := func(name, fallback string) string {
-		if cols[name] {
-			return name
-		}
-		return fallback
-	}
-	count := func(name string) string {
-		if cols[name] {
-			return "COALESCE(" + name + ", 0)"
-		}
-		return "0"
-	}
+	//
 	// Times are REAL seconds, but a row can hold an ISO string instead, so
 	// each column is read as it is and parsed here.
-	started := optional("started_at", "NULL")
-	ended := optional("ended_at", "NULL")
-	activity := optional("last_activity_at", "NULL")
+	started := columnOr(cols, "started_at", "started_at", "NULL")
+	ended := columnOr(cols, "ended_at", "ended_at", "NULL")
+	activity := columnOr(cols, "last_activity_at", "last_activity_at", "NULL")
 	query := `
 		SELECT id,
-		       ` + optional("parent_session_id", "NULL") + `,
-		       ` + optional("cwd", "NULL") + `,
-		       ` + optional("billing_provider", "NULL") + `,
+		       ` + columnOr(cols, "parent_session_id", "parent_session_id", "NULL") + `,
+		       ` + columnOr(cols, "cwd", "cwd", "NULL") + `,
+		       ` + columnOr(cols, "billing_provider", "billing_provider", "NULL") + `,
 		       COALESCE(input_tokens, 0),
 		       COALESCE(output_tokens, 0),
-		       ` + count("cache_read_tokens") + `,
-		       ` + count("cache_write_tokens") + `,
+		       ` + columnOr(cols, "cache_read_tokens", "COALESCE(cache_read_tokens, 0)", "0") + `,
+		       ` + columnOr(cols, "cache_write_tokens", "COALESCE(cache_write_tokens, 0)", "0") + `,
 		       ` + started + `,
 		       ` + ended + `,
 		       ` + activity + `
 		FROM sessions
 		ORDER BY id`
-	rows, err := db.Query(query)
+	rows, err := tx.Query(query)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -181,13 +164,13 @@ func readHermesTx(db querier, since time.Time) (sessions []Session, malformed in
 			malformed++
 			continue
 		}
-		last := math.Max(hermesTime(started), math.Max(hermesTime(ended), hermesTime(active)))
+		last := slices.MaxFunc([]time.Time{looseTime(started), looseTime(ended), looseTime(active)}, time.Time.Compare)
 		u := usage[id.String]
-		if u != nil && u.last > last {
+		if u != nil && u.last.After(last) {
 			last = u.last
 		}
 		// A row with no time stays. Dropping it would hide usage we cannot date.
-		if !since.IsZero() && last > 0 && last < float64(since.Unix()) {
+		if !since.IsZero() && !last.IsZero() && last.Unix() < since.Unix() {
 			continue
 		}
 		sess := Session{
@@ -201,10 +184,7 @@ func readHermesTx(db querier, since time.Time) (sessions []Session, malformed in
 				CacheRead:  cacheRead,
 				CacheWrite: cacheWrite,
 			},
-		}
-		if last > 0 {
-			sec, frac := math.Modf(last)
-			sess.Updated = time.Unix(int64(sec), int64(frac*1e9)).UTC()
+			Updated: last,
 		}
 		sess.Parts = u.parts(sess.Account, sess.Tokens)
 		sess.Tokens = Tokens{}
@@ -221,8 +201,8 @@ func readHermesTx(db querier, since time.Time) (sessions []Session, malformed in
 type hermesSessionUsage struct {
 	main map[string]Tokens
 	aux  map[string]Tokens
-	// last is the newest last_seen, in Unix seconds.
-	last float64
+	// last is the newest last_seen.
+	last time.Time
 }
 
 // parts splits a session's tokens by billing provider. The main loop's rows
@@ -257,40 +237,23 @@ func (u *hermesSessionUsage) parts(billing string, row Tokens) map[string]Tokens
 // hermesUsage reads session_model_usage by session. A state.db from before
 // the table has none. One from before the task column holds main-loop rows
 // only.
-func hermesUsage(db querier) (map[string]*hermesSessionUsage, error) {
-	cols, err := tableColumns(db, "session_model_usage")
+func hermesUsage(tx *sql.Tx) (map[string]*hermesSessionUsage, error) {
+	cols, err := tableColumns(tx, "session_model_usage")
 	if err != nil || len(cols) == 0 {
 		return nil, err
 	}
-	count := func(name string) string {
-		if cols[name] {
-			return "COALESCE(SUM(" + name + "), 0)"
-		}
-		return "0"
-	}
-	aux := "0"
-	if cols["task"] {
-		aux = "COALESCE(task, '') <> ''"
-	}
 	// MAX over a column that mixes numbers and ISO strings returns a string,
 	// so each kind has its own.
-	seen, seenText := "0", "NULL"
-	if cols["last_seen"] {
-		seen = "COALESCE(MAX(CASE WHEN typeof(last_seen) IN ('integer', 'real') THEN last_seen END), 0)"
-		seenText = "MAX(CASE WHEN typeof(last_seen) = 'text' THEN last_seen END)"
-	}
-	provider := "''"
-	if cols["billing_provider"] {
-		provider = "COALESCE(billing_provider, '')"
-	}
-	rows, err := db.Query(`
-		SELECT session_id, ` + provider + `, ` + aux + `,
-		       ` + count("input_tokens") + `,
-		       ` + count("output_tokens") + `,
-		       ` + count("cache_read_tokens") + `,
-		       ` + count("cache_write_tokens") + `,
-		       ` + seen + `,
-		       ` + seenText + `
+	rows, err := tx.Query(`
+		SELECT session_id,
+		       ` + columnOr(cols, "billing_provider", "COALESCE(billing_provider, '')", "''") + `,
+		       ` + columnOr(cols, "task", "COALESCE(task, '') <> ''", "0") + `,
+		       ` + columnOr(cols, "input_tokens", "COALESCE(SUM(input_tokens), 0)", "0") + `,
+		       ` + columnOr(cols, "output_tokens", "COALESCE(SUM(output_tokens), 0)", "0") + `,
+		       ` + columnOr(cols, "cache_read_tokens", "COALESCE(SUM(cache_read_tokens), 0)", "0") + `,
+		       ` + columnOr(cols, "cache_write_tokens", "COALESCE(SUM(cache_write_tokens), 0)", "0") + `,
+		       ` + columnOr(cols, "last_seen", "COALESCE(MAX(CASE WHEN typeof(last_seen) IN ('integer', 'real') THEN last_seen END), 0)", "0") + `,
+		       ` + columnOr(cols, "last_seen", "MAX(CASE WHEN typeof(last_seen) = 'text' THEN last_seen END)", "NULL") + `
 		FROM session_model_usage
 		GROUP BY 1, 2, 3`)
 	if err != nil {
@@ -308,7 +271,6 @@ func hermesUsage(db querier) (map[string]*hermesSessionUsage, error) {
 		if err := rows.Scan(&id, &provider, &isAux, &t.Input, &t.Output, &t.CacheRead, &t.CacheWrite, &last, &lastText); err != nil {
 			return nil, err
 		}
-		last = math.Max(last, hermesTime(lastText))
 		u := out[id.String]
 		if u == nil {
 			u = &hermesSessionUsage{main: map[string]Tokens{}, aux: map[string]Tokens{}}
@@ -323,44 +285,13 @@ func hermesUsage(db querier) (map[string]*hermesSessionUsage, error) {
 		} else {
 			u.main[provider] = u.main[provider].Add(t)
 		}
-		if last > u.last {
-			u.last = last
-		}
+		u.last = slices.MaxFunc([]time.Time{u.last, looseTime(last), looseTime(lastText)}, time.Time.Compare)
 	}
 	return out, rows.Err()
 }
 
-// hermesTime is a time Hermes stored, in Unix seconds, or 0 when there is
-// none or it cannot be read. Hermes writes REAL seconds; some rows hold an
-// ISO 8601 string instead.
-func hermesTime(v any) float64 {
-	var s string
-	switch x := v.(type) {
-	case float64:
-		return math.Max(x, 0)
-	case int64:
-		return math.Max(float64(x), 0)
-	case []byte:
-		s = string(x)
-	case string:
-		s = x
-	default:
-		return 0
-	}
-	s = strings.TrimSpace(s)
-	if f, err := strconv.ParseFloat(s, 64); err == nil {
-		return math.Max(f, 0)
-	}
-	for _, layout := range []string{time.RFC3339Nano, "2006-01-02T15:04:05.999999999", "2006-01-02 15:04:05.999999999Z07:00", "2006-01-02 15:04:05.999999999"} {
-		if at, err := time.Parse(layout, s); err == nil {
-			return math.Max(float64(at.UnixNano())/1e9, 0)
-		}
-	}
-	return 0
-}
-
-func tableColumns(db querier, table string) (map[string]bool, error) {
-	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+func tableColumns(tx *sql.Tx, table string) (map[string]bool, error) {
+	rows, err := tx.Query(`SELECT name FROM pragma_table_info(?)`, table)
 	if err != nil {
 		return nil, err
 	}
@@ -376,6 +307,15 @@ func tableColumns(db querier, table string) (map[string]bool, error) {
 	return cols, rows.Err()
 }
 
+// columnOr is expr when the table has the column name, and fallback when it
+// is from a Hermes release before that column.
+func columnOr(cols map[string]bool, name, expr, fallback string) string {
+	if cols[name] {
+		return expr
+	}
+	return fallback
+}
+
 // hermesURI is how to read state.db without changing the harness directory.
 // Hermes keeps it in WAL mode. While Hermes has it open, the -wal and -shm
 // files exist, and a read-only connection uses them as every reader does,
@@ -383,24 +323,16 @@ func tableColumns(db querier, table string) (map[string]bool, error) {
 // as immutable, which creates neither. Otherwise, as with a -wal left
 // without its -shm, a private copy is read. Copying is the exception, not
 // the rule: on a server Hermes databases run to gigabytes, and the
-// scheduler reads them every 15 minutes. live is whether the database is
-// read in place with Hermes' own -wal and -shm.
-func hermesURI(dbPath string) (uri string, live bool, cleanup func(), err error) {
-	wal, err := exists(dbPath + "-wal")
-	if err != nil {
-		return "", false, nil, err
-	}
-	shm, err := exists(dbPath + "-shm")
-	if err != nil {
-		return "", false, nil, err
-	}
+// scheduler reads them every 15 minutes. st says which files exist. live is
+// whether the database is read in place with Hermes' own -wal and -shm.
+func hermesURI(dbPath string, st dbState) (uri string, live bool, cleanup func(), err error) {
 	switch {
-	case wal && shm:
+	case st.wal && st.shm:
 		return sqliteURI(dbPath), true, func() {}, nil
-	case !wal && !shm:
+	case !st.wal && !st.shm:
 		return sqliteURI(dbPath) + "&immutable=1", false, func() {}, nil
 	}
-	snapshot, cleanup, err := snapshotSQLite(dbPath)
+	snapshot, cleanup, err := snapshotSQLite(dbPath, st)
 	if err != nil {
 		return "", false, nil, err
 	}
@@ -415,7 +347,7 @@ func exists(path string) (bool, error) {
 	return err == nil, err
 }
 
-func snapshotSQLite(dbPath string) (string, func(), error) {
+func snapshotSQLite(dbPath string, st dbState) (string, func(), error) {
 	tmp, err := os.MkdirTemp("", "ai-usage-hermes-")
 	if err != nil {
 		return "", nil, err
@@ -426,15 +358,11 @@ func snapshotSQLite(dbPath string) (string, func(), error) {
 		cleanup()
 		return "", nil, err
 	}
-	wal := dbPath + "-wal"
-	if _, err := os.Stat(wal); err == nil {
-		if err := copyFile(filepath.Join(tmp, base+"-wal"), wal); err != nil {
+	if st.wal {
+		if err := copyFile(filepath.Join(tmp, base+"-wal"), dbPath+"-wal"); err != nil {
 			cleanup()
 			return "", nil, err
 		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		cleanup()
-		return "", nil, err
 	}
 	return filepath.Join(tmp, base), cleanup, nil
 }

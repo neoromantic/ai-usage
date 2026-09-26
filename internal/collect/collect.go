@@ -911,10 +911,10 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 func placeHours(e *state.Session, s logs.Session, grown map[string]snapshot.Tokens, updated, now time.Time) {
 	var had, spent int64
 	for _, t := range e.By {
-		had += logs.InOut(t)
+		had += t.InOut()
 	}
 	for _, g := range grown {
-		spent += logs.InOut(g)
+		spent += g.InOut()
 	}
 	if len(e.Hours) == 0 && len(s.Hours) > 0 {
 		// A session read for the first time, or kept from before the ledger
@@ -944,7 +944,7 @@ func placeHours(e *state.Session, s logs.Session, grown map[string]snapshot.Toke
 	}
 	add := grownHours(e.Hours, s.Hours, spent, updated, now)
 	for l, g := range grown {
-		n := logs.InOut(g)
+		n := g.InOut()
 		if n <= 0 {
 			continue
 		}
@@ -962,12 +962,12 @@ func placeHours(e *state.Session, s logs.Session, grown map[string]snapshot.Toke
 func spenders(e *state.Session, grown map[string]snapshot.Tokens) int {
 	n := 0
 	for l, t := range e.By {
-		if logs.InOut(t)+logs.InOut(grown[l]) > 0 {
+		if t.InOut()+grown[l].InOut() > 0 {
 			n++
 		}
 	}
 	for l, g := range grown {
-		if _, ok := e.By[l]; !ok && logs.InOut(g) > 0 {
+		if _, ok := e.By[l]; !ok && g.InOut() > 0 {
 			n++
 		}
 	}

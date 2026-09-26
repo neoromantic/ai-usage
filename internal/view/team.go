@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
-	"github.com/neoromantic/ai-usage/internal/logs"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
@@ -150,7 +149,7 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 		for i, a := range d.Accounts {
 			for _, u := range a.Linked {
 				k := state.Key(u.Provider, open(u.Label))
-				through[k] = append(through[k], login{Link{a.Provider, labels[i]}, logs.InOut(u.Tokens)})
+				through[k] = append(through[k], login{Link{a.Provider, labels[i]}, u.Tokens.InOut()})
 			}
 		}
 		for i, a := range d.Accounts {

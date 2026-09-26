@@ -126,7 +126,7 @@ func countClaude(files []*claudeFile) []Session {
 				claimed[key] = f.root()
 			}
 			f.sess.Tokens = f.sess.Tokens.Add(m.tokens)
-			AddHour(&f.sess.Hours, m.at, InOut(m.tokens))
+			AddHour(&f.sess.Hours, m.at, m.tokens.InOut())
 			if m.rejected != nil {
 				f.sess.Rejected = AddRejected(f.sess.Rejected, m.rejected)
 			}

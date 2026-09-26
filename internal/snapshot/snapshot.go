@@ -228,6 +228,9 @@ func (t Tokens) Growth(prev Tokens) Tokens {
 
 func (t Tokens) Zero() bool { return t == Tokens{} }
 
+// InOut is the input plus output of t, the count the report's periods show.
+func (t Tokens) InOut() int64 { return t.Input + t.Output }
+
 // Total is every counted token, used only to rank rows.
 func (t Tokens) Total() int64 { return t.Input + t.Output + t.CacheRead + t.CacheWrite }
 

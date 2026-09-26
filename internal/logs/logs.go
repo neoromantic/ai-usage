@@ -72,9 +72,6 @@ func AddHour(hours *map[int64]int64, t time.Time, n int64) {
 	(*hours)[HourOf(t)] += n
 }
 
-// InOut is the input plus output of t, the count the report's periods show.
-func InOut(t Tokens) int64 { return t.Input + t.Output }
-
 // fitHours makes a session's hours add up to its input plus output. What no
 // time was recorded for, such as Claude's side calls, is spread over the
 // timed hours in their proportion: side calls go along with the work that
@@ -82,7 +79,7 @@ func InOut(t Tokens) int64 { return t.Input + t.Output }
 // day.
 func fitHours(s *Session) {
 	if s.Hours != nil {
-		ScaleHours(s.Hours, InOut(s.Tokens))
+		ScaleHours(s.Hours, s.Tokens.InOut())
 	}
 }
 
@@ -190,15 +187,12 @@ func ReadHomes(provider string, homes []string, since time.Time) Result {
 	}
 	res.Sessions = rollup(dedupeSessions(raw))
 	for i := range res.Sessions {
-		fitHours(&res.Sessions[i])
-	}
-	if provider == "hermes" {
+		s := &res.Sessions[i]
+		fitHours(s)
 		// A gateway session, from Telegram and the like, has no working
 		// directory. Its Hermes home says which agent it was.
-		for i, s := range res.Sessions {
-			if s.Project == UnknownProject && s.Home != "" {
-				res.Sessions[i].Project = s.Home
-			}
+		if provider == "hermes" && s.Project == UnknownProject && s.Home != "" {
+			s.Project = s.Home
 		}
 	}
 	return res

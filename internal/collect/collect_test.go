@@ -407,7 +407,7 @@ func TestClaimTakesTheUnknownHours(t *testing.T) {
 	res := logs.Result{Sessions: []logs.Session{{ID: "s1", Home: home}}, Homes: map[string]logs.HomeRead{home: {}}}
 	claimUnknown(st, "codex", []string{home}, []answer{{reading: probe.Reading{Account: "ann@acme.dev"}}}, res, map[string]string{home: "ann@acme.dev"})
 	if a := totalsFor(t, st, "codex", "ann@acme.dev"); a.Tokens != tok(100) || !reflect.DeepEqual(a.Hours, map[int64]int64{h - 5: 110}) {
-		t.Errorf("ann = %d tokens in %v, want 110 at h-5", logs.InOut(a.Tokens), a.Hours)
+		t.Errorf("ann = %d tokens in %v, want 110 at h-5", a.Tokens.InOut(), a.Hours)
 	}
 	if hasTotals(st, "codex", UnknownAccount) {
 		t.Error("unknown kept its share")

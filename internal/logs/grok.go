@@ -8,13 +8,11 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
-	"math"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -138,7 +136,7 @@ func parseGrokUpdates(path string) (Tokens, map[int64]int64, int, error) {
 			anon++
 			prompt = fmt.Sprintf("#%d", anon)
 		}
-		at := row.Timestamp.Time
+		at := looseTime(row.Timestamp)
 		if prev, ok := latest[prompt]; !ok {
 			order = append(order, prompt)
 		} else if at.IsZero() {
@@ -157,7 +155,7 @@ func parseGrokUpdates(path string) (Tokens, map[int64]int64, int, error) {
 	for _, prompt := range order {
 		last := latest[prompt]
 		total = total.Add(last.tokens)
-		AddHour(&hours, last.at, InOut(last.tokens))
+		AddHour(&hours, last.at, last.tokens.InOut())
 	}
 	return total, hours, malformed + long, err
 }
@@ -171,7 +169,7 @@ func decodeGrokPath(enc string) string {
 }
 
 type grokLine struct {
-	Timestamp unixTime `json:"timestamp"`
+	Timestamp any `json:"timestamp"`
 	Params    struct {
 		Update struct {
 			SessionUpdate string `json:"sessionUpdate"`
@@ -184,31 +182,4 @@ type grokLine struct {
 			} `json:"usage"`
 		} `json:"update"`
 	} `json:"params"`
-}
-
-// unixTime is a time a log writes as Unix seconds or milliseconds, or as an
-// RFC 3339 string. A value it cannot read is the zero time rather than an
-// error, so one odd time does not reject the line.
-type unixTime struct{ time.Time }
-
-func (t *unixTime) UnmarshalJSON(b []byte) error {
-	t.Time = time.Time{}
-	if len(b) > 0 && b[0] == '"' {
-		var s string
-		if json.Unmarshal(b, &s) == nil {
-			t.Time = parseTime(strings.TrimSpace(s))
-		}
-		return nil
-	}
-	f, err := strconv.ParseFloat(string(b), 64)
-	if err != nil || !(f > 0 && f < 1e15) {
-		return nil
-	}
-	// Seconds stay below this until the year 5138; milliseconds pass it in 1973.
-	if f >= 1e11 {
-		f /= 1000
-	}
-	sec, frac := math.Modf(f)
-	t.Time = time.Unix(int64(sec), int64(frac*1e9)).UTC()
-	return nil
 }

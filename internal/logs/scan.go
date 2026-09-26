@@ -6,8 +6,10 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -104,6 +106,53 @@ func forEachReader(r io.Reader, max int, visit func(line []byte)) (long int, err
 			return long, err
 		}
 	}
+}
+
+func parseTime(s string) time.Time {
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t.UTC()
+}
+
+// looseTime is a time a log or database writes as Unix seconds or
+// milliseconds, or as an ISO 8601 string. A value it cannot read, or one at
+// or before the Unix epoch, is the zero time rather than an error, so one odd
+// time does not reject the line or row.
+func looseTime(v any) time.Time {
+	var f float64
+	switch x := v.(type) {
+	case float64:
+		f = x
+	case int64:
+		f = float64(x)
+	case []byte:
+		return looseTime(string(x))
+	case string:
+		s := strings.TrimSpace(x)
+		n, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			for _, layout := range []string{time.RFC3339Nano, "2006-01-02T15:04:05.999999999", "2006-01-02 15:04:05.999999999Z07:00", "2006-01-02 15:04:05.999999999"} {
+				if t, err := time.Parse(layout, s); err == nil && t.After(time.Unix(0, 0)) {
+					return t.UTC()
+				}
+			}
+			return time.Time{}
+		}
+		f = n
+	default:
+		return time.Time{}
+	}
+	if !(f > 0 && f < 1e15) {
+		return time.Time{}
+	}
+	// Seconds stay below this until the year 5138; milliseconds pass it in 1973.
+	if f >= 1e11 {
+		f /= 1000
+	}
+	sec, frac := math.Modf(f)
+	return time.Unix(int64(sec), int64(frac*1e9)).UTC()
 }
 
 func freshEnough(mod, since time.Time) bool {

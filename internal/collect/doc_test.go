@@ -557,8 +557,8 @@ func TestHoursNeverExceedTheTokens(t *testing.T) {
 		t.Errorf("hours = %v, want %v", got, want)
 	}
 	ann := totalsFor(t, st, "claude", "ann@acme.dev")
-	if got := DaysOf(ann.Hours, t0); len(got) != 1 || got[0] != logs.InOut(ann.Tokens) {
-		t.Errorf("days = %v for %d tokens", got, logs.InOut(ann.Tokens))
+	if got := DaysOf(ann.Hours, t0); len(got) != 1 || got[0] != ann.Tokens.InOut() {
+		t.Errorf("days = %v for %d tokens", got, ann.Tokens.InOut())
 	}
 }
 

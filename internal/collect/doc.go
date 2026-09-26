@@ -204,13 +204,13 @@ func labelHours(s *state.Session, label string) map[int64]int64 {
 	if s.ByHours != nil {
 		return s.ByHours[label]
 	}
-	own := logs.InOut(s.By[label])
+	own := s.By[label].InOut()
 	if own <= 0 {
 		return nil
 	}
 	var all, sum int64
 	for _, t := range s.By {
-		all += logs.InOut(t)
+		all += t.InOut()
 	}
 	for _, n := range s.Hours {
 		sum += n
