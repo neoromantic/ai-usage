@@ -129,14 +129,7 @@ Recorded on 2026-09-23 with the owner, and brought up to date on 2026-09-24. Not
   - A new device asks at its first run. A device that was never named by hand asks once, at its first run after the update. The answer is saved and is not regenerated when the host name or accounts change later.
   - A name set by hand, with `name set` or `AI_USAGE_NAME`, always wins and is never replaced.
   - Open: the model, the prompt, the 64-character limit, and how to avoid two devices in a team getting one name, since the relay cannot see the others' names.
-- **A refactoring review for short, expressive code.** Find and fix:
-  - repeated logic;
-  - long functions;
-  - layers, options, and branches nothing needs;
-  - dead code;
-  - comments that restate the code.
-
-  The CLI, the snapshot, the JSON (`schema_version` 3), and the relay protocol stay compatible, and behavior does not change.
+- **A refactoring review for short, expressive code.** In progress; [refactoring.md](refactoring.md) lists every change, its order, and how it is checked. It cuts repeated logic, long functions, files that grew too large, layers, options, and branches nothing needs, dead code, comments that restate the code, and tests that repeat others or guard what goes. It drops everything that exists only for collectors, snapshots, relay records, state files, schedules, or installs from before v0.2.3, since every device runs v0.2.3 or later before it ships. It keeps what deployed releases still need: the release file names, `checksums.txt`, and the `releases/latest` lookup they update through; the relay's acceptance of v0.2.3 snapshots and requests, since the relay deploys before a release; the key, signature, and sealing formats; and the snapshot, the relay protocol, and the JSON (`schema_version` 4) as they are. The current release's behavior does not change, except where refactoring.md says so and the owner agreed.
 - **Find why an account has no reading.** It began with one Mac in the team (then `Mac.localdomain`, on v0.1.1) that showed an account with no name and one with no reading. The cause comes first; the fix follows from it.
   - Done: its Codex usage was filed under `unknown` (2,875 sessions and 1.2G input tokens) while `codex initialize` got no answer from the app server. Once the device ran the current release on 2026-09-24, the harness named its account, and that history went to it.
   - Done: its Claude Max account had 90 days of usage but never a quota reading, and a second Mac in the team, on v0.2.0, showed the same. The reading was lost in the harness. Claude Code writes its usage cache only when it reads the usage, as its /usage dialog does, so an account whose person never opens /usage never had a reading, and one who opened it days ago had a reading that old, which could be far off. The probe now has Claude Code read the usage when its cache is missing or at least 10 minutes old and the home was used in the last hour and since its last reading (see "Probes"). Check both Macs once they run the release with it.
