@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
 const (
@@ -39,9 +41,6 @@ func newUI(r *Report, o Options) *ui {
 	return u
 }
 
-// defaultHomes are the harness homes that sit directly in the user's home.
-var defaultHomes = []string{".claude", ".codex", ".grok", ".hermes"}
-
 // homeOf is the user's home folder, taken from a default harness home, so
 // paths print with ~ without the renderer asking the OS.
 func homeOf(r *Report) string {
@@ -51,7 +50,8 @@ func homeOf(r *Report) string {
 			if claudeAppHome.MatchString(h) {
 				continue
 			}
-			for _, d := range defaultHomes {
+			for _, name := range snapshot.Providers {
+				d := "." + name
 				for _, sep := range []string{"/", `\`} {
 					if strings.HasSuffix(h, sep+d) {
 						return strings.TrimSuffix(h, sep+d)

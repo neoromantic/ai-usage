@@ -246,7 +246,7 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 		}
 	}
 
-	for _, p := range collect.Providers {
+	for _, p := range snapshot.Providers {
 		m := byProv[p]
 		if len(m) == 0 {
 			continue
@@ -626,7 +626,7 @@ func matrix(providers []TeamProvider, byProv map[string]map[string]*teamAccount,
 			}
 		}
 	}
-	for _, p := range collect.Providers {
+	for _, p := range snapshot.Providers {
 		k := colKey{p, "", true}
 		if _, ok := index[k]; ok {
 			index[k] = len(mx.Columns)

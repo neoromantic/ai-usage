@@ -10,16 +10,16 @@ import (
 	"testing"
 	"testing/iotest"
 	"time"
-)
 
-var providers = []string{"claude", "codex", "grok", "hermes"}
+	"github.com/neoromantic/ai-usage/internal/snapshot"
+)
 
 // fullHomes writes one small home per provider under root and returns them by
 // provider. Each home also holds the credential files the readers must skip.
 func fullHomes(t *testing.T, root string) map[string]string {
 	t.Helper()
 	homes := map[string]string{}
-	for _, p := range providers {
+	for _, p := range snapshot.Providers {
 		homes[p] = filepath.Join(root, p)
 	}
 
@@ -69,7 +69,7 @@ func TestReadersNeverWriteToTheHome(t *testing.T) {
 	root := t.TempDir()
 	homes := fullHomes(t, root)
 	before := tree(t, root)
-	for _, p := range providers {
+	for _, p := range snapshot.Providers {
 		res := mustRead(t, p, homes[p], since)
 		if len(res.Sessions) == 0 || res.Unreadable != 0 || res.Malformed != 0 {
 			t.Errorf("%s: %+v", p, res)
@@ -80,7 +80,7 @@ func TestReadersNeverWriteToTheHome(t *testing.T) {
 }
 
 func TestReadMissingHome(t *testing.T) {
-	for _, p := range providers {
+	for _, p := range snapshot.Providers {
 		res, err := Read(p, filepath.Join(t.TempDir(), "absent"), since)
 		if err != nil || len(res.Sessions) != 0 || res.Limits != nil || res.Unreadable != 0 {
 			t.Errorf("%s: res %+v err %v", p, res, err)

@@ -102,7 +102,7 @@ func TestAliasSetListAndClear(t *testing.T) {
 func namedIn(out string) map[string]string {
 	named := map[string]string{}
 	for line := range strings.SplitSeq(out, "\n") {
-		if f := strings.Fields(line); len(f) >= 3 && known(f[0]) {
+		if f := strings.Fields(line); len(f) >= 3 && snapshot.KnownProvider(f[0]) {
 			named[f[0]+" "+f[1]] = f[2]
 		}
 	}

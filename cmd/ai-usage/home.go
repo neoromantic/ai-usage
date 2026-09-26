@@ -14,6 +14,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
 
@@ -73,8 +74,8 @@ func cmdHome(ctx context.Context, args []string, stdout, stderr io.Writer) error
 		return usageError("home " + sub + " takes a provider and at least one directory")
 	}
 	p := rest[0]
-	if !known(p) {
-		return usageError("unknown provider " + p + "; one of " + strings.Join(collect.Providers, ", "))
+	if !snapshot.KnownProvider(p) {
+		return usageError("unknown provider " + p + "; one of " + strings.Join(snapshot.Providers, ", "))
 	}
 	var homes []string
 	for _, h := range rest[1:] {
@@ -155,15 +156,6 @@ func cmdHome(ctx context.Context, args []string, stdout, stderr io.Writer) error
 		fmt.Fprintf(stdout, "forgot %d %s counted from these homes; the team sees the change after the next collection\n\n", n, word)
 	}
 	return listHomes(cfg, userHome, stdout)
-}
-
-func known(p string) bool {
-	for _, v := range collect.Providers {
-		if v == p {
-			return true
-		}
-	}
-	return false
 }
 
 // homeRef is one harness home.
@@ -278,7 +270,7 @@ func listHomes(cfg state.Config, userHome string, stdout io.Writer) error {
 	found := collect.Discover(userHome, os.Getenv, cfg.Homes)
 	var buf bytes.Buffer
 	tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	for _, p := range collect.Providers {
+	for _, p := range snapshot.Providers {
 		if len(found[p]) == 0 {
 			fmt.Fprintf(tw, "%s\t(none)\t\n", p)
 			continue
@@ -300,7 +292,7 @@ func listHomes(cfg state.Config, userHome string, stdout io.Writer) error {
 	}
 	// A home added or named that is gone is not read; say so rather than
 	// drop it.
-	for _, p := range collect.Providers {
+	for _, p := range snapshot.Providers {
 		var missing []string
 		gone := map[string]bool{}
 		for _, h := range cfg.Homes[p] {
@@ -341,7 +333,7 @@ func listHomes(cfg state.Config, userHome string, stdout io.Writer) error {
 // quotaNotes says, by harness, where a Hermes home takes its quota from.
 func quotaNotes(refs map[string]string, userHome string) []string {
 	var out []string
-	for _, p := range collect.Providers {
+	for _, p := range snapshot.Providers {
 		if at := refs[p]; at != "" {
 			out = append(out, "quota from "+p+" "+tilde(at, userHome))
 		}

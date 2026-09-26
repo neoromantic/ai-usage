@@ -206,7 +206,7 @@ func newDevice(rng *rand.Rand, id, host, user, home, version string, at time.Tim
 		Accounts:      map[string]*state.Account{},
 		Sessions:      map[string]*state.Session{},
 	}
-	for _, p := range collect.Providers {
+	for _, p := range snapshot.Providers {
 		st.Sources[p] = state.Source{Status: "skipped"}
 	}
 	for _, p := range providers {

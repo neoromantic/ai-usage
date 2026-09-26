@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -321,14 +322,10 @@ func lastActive(s *state.Session, label string) time.Time {
 
 // SortAccounts orders by provider, then logged-in accounts, then tokens.
 func SortAccounts(out []AccountTotals) {
-	rank := map[string]int{}
-	for i, p := range Providers {
-		rank[p] = i
-	}
 	sort.Slice(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if a.Provider != b.Provider {
-			return rank[a.Provider] < rank[b.Provider]
+			return slices.Index(snapshot.Providers, a.Provider) < slices.Index(snapshot.Providers, b.Provider)
 		}
 		if a.Current != b.Current {
 			return a.Current
@@ -377,7 +374,7 @@ func BuildDoc(st *state.State, key *team.Key, cfg state.Config, hostname, osUser
 		Accounts:         []snapshot.Account{},
 		Sources:          []snapshot.Source{},
 	}
-	for _, p := range Providers {
+	for _, p := range snapshot.Providers {
 		src, ok := st.Sources[p]
 		if !ok {
 			continue
@@ -434,7 +431,7 @@ func aliases(set map[string]state.Alias, seal func(string) string) []snapshot.Al
 	var out []snapshot.Alias
 	for k, a := range set {
 		parts := state.SplitKey(k)
-		if len(parts) != 2 || parts[1] == "" || a.At.IsZero() || !knownProvider(parts[0]) {
+		if len(parts) != 2 || parts[1] == "" || a.At.IsZero() || !snapshot.KnownProvider(parts[0]) {
 			continue
 		}
 		sa := snapshot.Alias{Provider: parts[0], Label: parts[1], At: a.At.UTC()}
@@ -462,15 +459,6 @@ func aliases(set map[string]state.Alias, seal func(string) string) []snapshot.Al
 		}
 	}
 	return out
-}
-
-func knownProvider(p string) bool {
-	for _, k := range Providers {
-		if p == k {
-			return true
-		}
-	}
-	return false
 }
 
 // fitDoc drops the smallest projects, then the oldest days, then the

@@ -7,10 +7,9 @@ import (
 	"slices"
 	"sort"
 	"strings"
-)
 
-// Providers in display order.
-var Providers = []string{"claude", "codex", "grok", "hermes"}
+	"github.com/neoromantic/ai-usage/internal/snapshot"
+)
 
 var homeEnv = map[string]string{
 	"claude": "CLAUDE_CONFIG_DIR",
@@ -35,7 +34,7 @@ var profiles = map[string]struct{ dir, marker string }{
 // order: where two homes hold the same log, the first one holds the session.
 func Discover(userHome string, getenv func(string) string, remembered map[string][]string) map[string][]string {
 	out := map[string][]string{}
-	for _, p := range Providers {
+	for _, p := range snapshot.Providers {
 		var def string
 		var cands []string
 		if userHome != "" {

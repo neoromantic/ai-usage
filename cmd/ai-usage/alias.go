@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -156,7 +157,7 @@ func loadAliasBook(d state.Dir, cfg state.Config, st *state.State) *aliasBook {
 	seen := map[string]bool{}
 	add := func(p, l string) {
 		k := state.Key(p, l)
-		if l == "" || l == collect.UnknownAccount || !known(p) || seen[k] {
+		if l == "" || l == collect.UnknownAccount || !snapshot.KnownProvider(p) || seen[k] {
 			return
 		}
 		seen[k] = true
@@ -211,14 +212,10 @@ func loadAliasBook(d state.Dir, cfg state.Config, st *state.State) *aliasBook {
 			}
 		}
 	}
-	order := map[string]int{}
-	for i, p := range collect.Providers {
-		order[p] = i
-	}
 	sort.Slice(b.accounts, func(i, j int) bool {
 		x, y := b.accounts[i], b.accounts[j]
 		if x.provider != y.provider {
-			return order[x.provider] < order[y.provider]
+			return slices.Index(snapshot.Providers, x.provider) < slices.Index(snapshot.Providers, y.provider)
 		}
 		return x.label < y.label
 	})
@@ -252,7 +249,7 @@ func (b *aliasBook) nameOf(as []account) string {
 func (b *aliasBook) match(q string) ([]account, error) {
 	q = strings.TrimSpace(q)
 	provider := ""
-	if p, rest, ok := strings.Cut(q, ":"); ok && known(p) {
+	if p, rest, ok := strings.Cut(q, ":"); ok && snapshot.KnownProvider(p) {
 		provider, q = p, strings.TrimSpace(rest)
 	}
 	if q == "" {

@@ -61,7 +61,7 @@ func newFixture(t *testing.T, st *state.State) *fixture {
 	key := mustKey(t)
 	cfg := state.Config{Device: "d-this-device"}
 	st.LastRunAt, st.LastSuccessAt = now, now
-	for _, p := range collect.Providers {
+	for _, p := range snapshot.Providers {
 		if _, ok := st.Sources[p]; !ok {
 			st.Sources[p] = state.Source{Status: "ok", Homes: []string{"/home/." + p}}
 		}
@@ -177,7 +177,7 @@ func olderTeam(t *testing.T) Report {
 		return &state.Quota{At: at, Source: "harness", Windows: []snapshot.Window{week7(pct, start.Add(week))}}
 	}
 	homes := func(st *state.State, home string) {
-		for _, p := range collect.Providers {
+		for _, p := range snapshot.Providers {
 			st.Sources[p] = state.Source{Status: "ok", Homes: []string{home + "/." + p}}
 		}
 	}

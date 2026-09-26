@@ -1145,13 +1145,13 @@ func TestSkippedProviderForgetsCurrent(t *testing.T) {
 
 func TestNothingInstalledIsASuccessfulRun(t *testing.T) {
 	_, o := newWorld(t)
-	for _, p := range Providers {
+	for _, p := range snapshot.Providers {
 		if o.Probe.Find(p) {
 			t.Skipf("a %s binary is installed system-wide on this machine", p)
 		}
 	}
 	res := run(t, o)
-	for _, p := range Providers {
+	for _, p := range snapshot.Providers {
 		if res.State.Sources[p].Status != "skipped" {
 			t.Fatalf("%s = %+v", p, res.State.Sources[p])
 		}
@@ -1159,7 +1159,7 @@ func TestNothingInstalledIsASuccessfulRun(t *testing.T) {
 	if !res.State.LastSuccessAt.Equal(t0) || res.State.LastError != "" {
 		t.Fatalf("state = %+v", res.State)
 	}
-	if len(res.Doc.Accounts) != 0 || len(res.Doc.Sources) != len(Providers) {
+	if len(res.Doc.Accounts) != 0 || len(res.Doc.Sources) != len(snapshot.Providers) {
 		t.Fatalf("doc = %+v", res.Doc)
 	}
 }

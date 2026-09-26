@@ -7,6 +7,7 @@ import (
 
 	"github.com/neoromantic/ai-usage/internal/collect"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
+	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
 
@@ -49,7 +50,7 @@ func Build(in Input) Report {
 	}
 
 	totals := collect.Totals(st)
-	for _, p := range collect.Providers {
+	for _, p := range snapshot.Providers {
 		src := st.Sources[p]
 		pv := Provider{Provider: p, Status: cmp.Or(src.Status, "skipped"), Error: strPtr(src.Error), Homes: src.Homes, Accounts: []Account{}}
 		if pv.Homes == nil {

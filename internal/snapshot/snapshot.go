@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -40,7 +41,8 @@ const (
 	futureSkewAllowed = 10 * time.Minute
 )
 
-// Providers the collector knows. The relay rejects any other name.
+// Providers the collector knows, in display order. The relay rejects any
+// other name.
 var Providers = []string{"claude", "codex", "grok", "hermes"}
 
 // Doc is one device's snapshot. Sealed fields hold team-encrypted text.
@@ -303,7 +305,7 @@ func (d Doc) Validate(now time.Time) error {
 		return fmt.Errorf("%d aliases, limit %d", len(d.Aliases), MaxAliases)
 	}
 	for i, a := range d.Aliases {
-		if !knownProvider(a.Provider) {
+		if !KnownProvider(a.Provider) {
 			return fmt.Errorf("aliases[%d]: unknown provider", i)
 		}
 		if err := checkSealed("label", a.Label, true); err != nil {
@@ -320,7 +322,7 @@ func (d Doc) Validate(now time.Time) error {
 		return fmt.Errorf("%d sources, limit %d", len(d.Sources), MaxSources)
 	}
 	for i, s := range d.Sources {
-		if !knownProvider(s.Provider) {
+		if !KnownProvider(s.Provider) {
 			return fmt.Errorf("sources[%d]: unknown provider", i)
 		}
 		if !statuses[s.Status] {
@@ -334,7 +336,7 @@ func (d Doc) Validate(now time.Time) error {
 }
 
 func (a Account) validate() error {
-	if !knownProvider(a.Provider) {
+	if !KnownProvider(a.Provider) {
 		return errors.New("unknown provider")
 	}
 	if err := checkSealed("label", a.Label, true); err != nil {
@@ -352,7 +354,7 @@ func (a Account) validate() error {
 	if len(a.Windows) > 0 && a.QuotaAt == nil {
 		return errors.New("windows without quota_at")
 	}
-	if a.QuotaFrom != "" && (!knownProvider(a.QuotaFrom) || a.QuotaFrom == a.Provider || len(a.Windows) == 0) {
+	if a.QuotaFrom != "" && (!KnownProvider(a.QuotaFrom) || a.QuotaFrom == a.Provider || len(a.Windows) == 0) {
 		return errors.New("quota_from must name another provider and come with its windows")
 	}
 	for i, w := range a.Windows {
@@ -406,7 +408,7 @@ func (a Account) validate() error {
 		return fmt.Errorf("%d linked, limit %d", len(a.Linked), MaxLinked)
 	}
 	for i, l := range a.Linked {
-		if !knownProvider(l.Provider) || l.Provider == a.Provider {
+		if !KnownProvider(l.Provider) || l.Provider == a.Provider {
 			return fmt.Errorf("linked[%d]: must name another provider", i)
 		}
 		if err := checkSealed("label", l.Label, true); err != nil {
@@ -457,14 +459,8 @@ func checkPlain(name, s string, required bool) error {
 	return nil
 }
 
-func knownProvider(p string) bool {
-	for _, k := range Providers {
-		if p == k {
-			return true
-		}
-	}
-	return false
-}
+// KnownProvider reports whether p is one of Providers.
+func KnownProvider(p string) bool { return slices.Contains(Providers, p) }
 
 // PlainLabel trims s to a string Validate accepts in a plain field.
 func PlainLabel(s string) string {

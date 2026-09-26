@@ -237,7 +237,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 		problems = append(problems, st.Damage)
 	}
 	failed := false
-	for _, p := range Providers {
+	for _, p := range snapshot.Providers {
 		src := collectSource(ctx, o, st, p, homes[p], now, since, prevRun, growth)
 		st.Sources[p] = src
 		if src.Error != "" {
@@ -1260,7 +1260,7 @@ func QuotaHomesOf(named map[string]map[string]string, hermesHome string) map[str
 	r := paths{}
 	links := quotaLinks(named, r)
 	out := map[string]string{}
-	for _, p := range Providers {
+	for _, p := range snapshot.Providers {
 		if at := quotaHome(links, r, hermesHome, p); at != "" {
 			out[p] = at
 		}
