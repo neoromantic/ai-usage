@@ -165,11 +165,7 @@ func (st claudeStatus) label() string {
 func claudeAuthStatus(ctx context.Context, env Env, bin, configDir string) (claudeStatus, error) {
 	ctx, cancel := context.WithTimeout(ctx, env.timeout())
 	defer cancel()
-	cmd := env.command(ctx, bin, "auth", "status", "--json")
-	cmd.Env = env.pathFor(env.harnessEnv("CLAUDE_CONFIG_DIR", configDir), bin)
-	cmd.Stdin = nil
-	// A child the CLI leaves behind can hold stdout open after the kill.
-	cmd.WaitDelay = time.Second
+	cmd := env.command(ctx, bin, []string{"CLAUDE_CONFIG_DIR", configDir}, "auth", "status", "--json")
 	out, runErr := cmd.Output()
 	var st claudeStatus
 	// auth status exits non-zero when logged out and still prints JSON.
@@ -268,25 +264,25 @@ func claudeUsageError(why, version, cache, said string) error {
 
 // claudeRefresh has Claude Code read the account's usage and cache it, as
 // its /usage dialog does. In print mode /usage is a local command: it calls
-// no model, and --no-session-persistence leaves no session behind. The
-// person's hooks and the updater are off; hooks an organization manages
-// still run. Nonessential traffic is left on, since without it Claude Code
-// does not read the usage. Like any of its sessions, Claude Code renews its
-// own login on the way when that has expired. Only the start of what it
-// prints and the end of its errors are kept, to tell why a read failed.
+// no model, and --no-session-persistence leaves no session behind. It gets
+// no input: there is no prompt to wait for. The person's hooks and the
+// updater are off; hooks an organization manages still run. Nonessential
+// traffic is left on, since without it Claude Code does not read the usage.
+// Like any of its sessions, Claude Code renews its own login on the way when
+// that has expired. Only the start of what it prints and the end of its
+// errors are kept, to tell why a read failed.
 func claudeRefresh(ctx context.Context, env Env, bin, configDir string) claudeRun {
 	ctx, cancel := context.WithTimeout(ctx, claudeUsageTimeout)
 	defer cancel()
-	cmd := env.command(ctx, bin, "-p", "/usage", "--no-session-persistence",
+	cmd := env.command(ctx, bin, []string{
+		"CLAUDE_CONFIG_DIR", configDir,
+		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "",
+		"DISABLE_AUTOUPDATER", "1",
+	}, "-p", "/usage", "--no-session-persistence",
 		"--model", claudeGuardModel, "--settings", `{"disableAllHooks":true}`)
-	child := env.withEnv("CLAUDE_CONFIG_DIR", configDir).withEnv("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "")
-	cmd.Env = env.pathFor(child.harnessEnv("DISABLE_AUTOUPDATER", "1"), bin)
-	// The null device: there is no prompt to wait for.
-	cmd.Stdin = nil
 	var out firstBytes
 	var errOut lastLine
 	cmd.Stdout, cmd.Stderr = &out, &errOut
-	cmd.WaitDelay = time.Second
 	err := cmd.Run()
 	return claudeRun{
 		err:      err,

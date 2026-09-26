@@ -74,7 +74,8 @@ func (j joinedErrors) Error() string {
 
 func (j joinedErrors) Unwrap() []error { return j }
 
-// Env is how probes reach the outside world. Tests replace it.
+// Env is how probes reach the outside world. Tests replace it. A zero
+// Command, LookPath, Environ, Now or Timeout means the real thing.
 type Env struct {
 	// Command builds a command. It defaults to exec.CommandContext.
 	Command func(ctx context.Context, name string, args ...string) *exec.Cmd
@@ -105,15 +106,11 @@ type Env struct {
 func DefaultEnv() Env {
 	home, _ := os.UserHomeDir()
 	return Env{
-		Command:       exec.CommandContext,
-		LookPath:      exec.LookPath,
 		Environ:       os.Environ(),
 		HomeDir:       home,
 		SystemBinDirs: systemBinDirs(),
 		AppDirs:       appDirs(),
 		ClaudeManaged: claudeManaged(runtime.GOOS),
-		Now:           time.Now,
-		Timeout:       20 * time.Second,
 	}
 }
 
@@ -128,16 +125,20 @@ func (e Env) now() time.Time {
 // under the system scheduler, because Claude Code applies the settings of the
 // project it starts in, and those can point it at another provider and so
 // another account. It runs in a process group of its own, so that a timeout
-// also stops whatever a wrapper script started.
-func (e Env) command(ctx context.Context, name string, args ...string) *exec.Cmd {
+// also stops whatever a wrapper script started. Its environment is
+// harnessEnv's for set, with PATH as pathFor extends it.
+func (e Env) command(ctx context.Context, bin string, set []string, args ...string) *exec.Cmd {
 	var cmd *exec.Cmd
 	if e.Command == nil {
-		cmd = exec.CommandContext(ctx, name, args...)
+		cmd = exec.CommandContext(ctx, bin, args...)
 	} else {
-		cmd = e.Command(ctx, name, args...)
+		cmd = e.Command(ctx, bin, args...)
 	}
 	cmd.Dir = e.HomeDir
 	ownGroup(cmd)
+	cmd.Env = e.pathFor(e.harnessEnv(set...), bin)
+	// A child the CLI leaves behind can hold stdout open after the kill.
+	cmd.WaitDelay = time.Second
 	return cmd
 }
 
@@ -148,15 +149,19 @@ func (e Env) timeout() time.Duration {
 	return e.Timeout
 }
 
-// getenv is the last value Environ gives key, or this process's value when
-// Environ is nil.
-func (e Env) getenv(key string) string {
-	base := e.Environ
-	if base == nil {
-		base = os.Environ()
+// environ is the environment harness commands start from. A nil Environ
+// means this process's environment, as it does for exec.Cmd.
+func (e Env) environ() []string {
+	if e.Environ == nil {
+		return os.Environ()
 	}
+	return e.Environ
+}
+
+// getenv is the last value environ gives key.
+func (e Env) getenv(key string) string {
 	value := ""
-	for _, kv := range base {
+	for _, kv := range e.environ() {
 		if name, v, ok := strings.Cut(kv, "="); ok && sameEnvName(name, key) {
 			value = v
 		}
@@ -164,30 +169,23 @@ func (e Env) getenv(key string) string {
 	return value
 }
 
-// withEnv returns a copy of e whose harness commands get key set to value,
-// or not set at all when value is empty.
-func (e Env) withEnv(key, value string) Env {
-	e.Environ = e.harnessEnv(key, value)
-	return e
-}
-
-// harnessEnv returns Environ with key removed, then set to value when value
-// is not empty. A nil Environ means this process's environment, as it does for
-// exec.Cmd.
-func (e Env) harnessEnv(key, value string) []string {
-	base := e.Environ
-	if base == nil {
-		base = os.Environ()
-	}
-	out := make([]string, 0, len(base)+1)
-	for _, kv := range base {
-		if name, _, ok := strings.Cut(kv, "="); ok && sameEnvName(name, key) {
-			continue
+// harnessEnv returns environ with each variable named in set removed, then
+// added with its value, in order, where that value is not empty. set holds
+// pairs of a name and its value.
+func (e Env) harnessEnv(set ...string) []string {
+	out := slices.DeleteFunc(slices.Clone(e.environ()), func(kv string) bool {
+		name, _, ok := strings.Cut(kv, "=")
+		for i := 0; ok && i < len(set); i += 2 {
+			if sameEnvName(name, set[i]) {
+				return true
+			}
 		}
-		out = append(out, kv)
-	}
-	if value != "" {
-		out = append(out, key+"="+value)
+		return false
+	})
+	for i := 0; i < len(set); i += 2 {
+		if set[i+1] != "" {
+			out = append(out, set[i]+"="+set[i+1])
+		}
 	}
 	return out
 }

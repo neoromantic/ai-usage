@@ -55,12 +55,11 @@ func codexAt(ctx context.Context, env Env, bin, home string) (r Reading, served 
 	ctx, cancel := context.WithTimeout(ctx, env.timeout())
 	defer cancel()
 
-	cmd := env.command(ctx, bin, "app-server")
 	custom := ""
 	if !isDefaultHome(env.HomeDir, home, ".codex") {
 		custom = home
 	}
-	cmd.Env = env.pathFor(env.harnessEnv("CODEX_HOME", custom), bin)
+	cmd := env.command(ctx, bin, []string{"CODEX_HOME", custom}, "app-server")
 	cmd.WaitDelay = 2 * time.Second
 	var said lastLine
 	cmd.Stderr = &said
