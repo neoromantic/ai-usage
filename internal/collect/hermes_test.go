@@ -318,3 +318,51 @@ func TestHermesQuotaFromLinkedProfileAndPartialRead(t *testing.T) {
 		t.Fatalf("hermes after a partial read = %+v", h.Link)
 	}
 }
+
+func TestHermesAttributesByBillingProvider(t *testing.T) {
+	w, o := newWorld(t)
+	h := w.home(t, "hermes")
+	bill := func(id, acct string, in int64, at time.Time) logs.Session {
+		s := sess(id, "/h", in, at)
+		s.Account = acct
+		return s
+	}
+	w.sessions("hermes", h,
+		bill("h1", "openrouter", 100, t0.Add(-3*time.Hour)),
+		bill("h2", "anthropic", 50, t0.Add(-2*time.Hour)),
+		bill("h3", "", 7, t0.Add(-4*time.Hour)),
+	)
+	res := run(t, o)
+	for label, want := range map[string]snapshot.Tokens{"openrouter": tok(100), "anthropic": tok(50), UnknownAccount: tok(7)} {
+		if got := totalsFor(t, res.State, "hermes", label).Tokens; got != want {
+			t.Fatalf("hermes %s tokens = %+v, want %+v", label, got, want)
+		}
+	}
+	if !IsCurrent(res.State, "hermes", "anthropic") || IsCurrent(res.State, "hermes", "openrouter") {
+		t.Fatalf("current = %v", res.State.Current)
+	}
+
+	// h1 switches billing to anthropic and grows; it becomes the newest.
+	w.now = t0.Add(15 * time.Minute)
+	w.sessions("hermes", h,
+		bill("h1", "anthropic", 160, w.now.Add(-time.Minute)),
+		bill("h2", "anthropic", 50, t0.Add(-2*time.Hour)),
+		bill("h3", "", 7, t0.Add(-4*time.Hour)),
+	)
+	res = run(t, o)
+	if got := res.State.Sessions[state.Key("hermes", "h1")].By; got["openrouter"] != tok(100) || got["anthropic"] != tok(60) {
+		t.Fatalf("h1 split = %+v", got)
+	}
+	// The newest session bills anthropic now. Its earlier openrouter share
+	// must not make openrouter current, on any run.
+	for i := range 10 {
+		w.now = w.now.Add(15 * time.Minute)
+		res = run(t, o)
+		if !IsCurrent(res.State, "hermes", "anthropic") || IsCurrent(res.State, "hermes", "openrouter") {
+			t.Fatalf("run %d: current = %v", i, res.State.Current)
+		}
+	}
+	if src := res.State.Sources["hermes"]; src.Status != "ok" {
+		t.Fatalf("hermes source = %+v", src)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
+	"github.com/neoromantic/ai-usage/internal/team"
 	"github.com/neoromantic/ai-usage/relay"
 )
 
@@ -92,6 +94,56 @@ func saveTeamCache(dir state.Dir, c TeamCache) error {
 		return err
 	}
 	return fsutil.WriteFile(dir.TeamCacheFile(), b, 0o600)
+}
+
+// LoadKey reads the team key, generating one on the first run.
+func LoadKey(dir state.Dir) (*team.Key, error) {
+	k, err := team.Load(dir.KeyFile())
+	if err == nil {
+		return k, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("team key: %w", err)
+	}
+	k, err = team.Generate()
+	if err != nil {
+		return nil, err
+	}
+	if err := fsutil.WriteFile(dir.KeyFile(), []byte(k.Export()+"\n"), 0o600); err != nil {
+		return nil, err
+	}
+	return k, nil
+}
+
+// publish publishes res.Doc and reads the team back into res.Team, as
+// syncTeam does, when there is a relay. It returns the relay's error when
+// this run had one.
+func (s *sampler) publish(ctx context.Context, key *team.Key, device string, res *Result) string {
+	if s.Relay == nil {
+		return ""
+	}
+	// Publish with the key this run sealed and signed the snapshot for.
+	client := *s.Relay
+	client.Key = key
+	s.Relay = &client
+	st := s.st
+	last := st.Relay
+	syncTeam(ctx, s.Options, st, device, &res.Doc, &res.Team, s.now)
+	if ctx.Err() != nil && st.Relay.LastErrorAt.Equal(s.now) && !st.Relay.LastPullAt.Equal(s.now) {
+		// A stop that cuts the exchange short before its read is no
+		// failure of the relay's. A snapshot it did not push stays
+		// pending, with the last run's error; once the snapshot is
+		// pushed, the cached read's error stands, as when a run skips
+		// the read.
+		st.Relay.LastError, st.Relay.LastErrorAt = last.LastError, last.LastErrorAt
+		if st.Relay.LastPushAt.Equal(s.now) {
+			keepReadError(st, res.Team)
+		}
+	}
+	if st.Relay.LastError != "" && st.Relay.LastErrorAt.Equal(s.now) {
+		return st.Relay.LastError
+	}
+	return ""
 }
 
 // syncTeam publishes this device and reads the team back. The snapshot holds
