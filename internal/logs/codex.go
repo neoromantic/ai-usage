@@ -179,6 +179,21 @@ func linkedCodexFiles(files []*codexFile, stale map[string]string) []*codexFile 
 // countCodex gives each fresh file the requests no earlier thread in its
 // family already logged, and merges files of one thread into one session.
 func countCodex(files []*codexFile) []Session {
+	for _, family := range codexFamilies(files) {
+		countFamily(family)
+	}
+	var rows []Session
+	for _, f := range files {
+		if f.fresh {
+			rows = append(rows, f.session())
+		}
+	}
+	return mergeByID(rows, addCopy)
+}
+
+// codexFamilies groups the files whose threads link to each other, each
+// group in the order its threads started.
+func codexFamilies(files []*codexFile) [][]*codexFile {
 	fam := unionFind{}
 	for _, f := range files {
 		fam.add(f.id)
@@ -186,61 +201,58 @@ func countCodex(files []*codexFile) []Session {
 			fam.union(f.id, id)
 		}
 	}
-	families := map[string][]int{}
-	for i, f := range files {
+	at := map[string]int{}
+	var families [][]*codexFile
+	for _, f := range files {
 		root := fam.find(f.id)
-		families[root] = append(families[root], i)
+		i, ok := at[root]
+		if !ok {
+			i = len(families)
+			at[root] = i
+			families = append(families, nil)
+		}
+		families[i] = append(families[i], f)
 	}
-	own := make([]Tokens, len(files))
-	hours := make([]map[int64]int64, len(files))
-	for _, members := range families {
-		slices.SortStableFunc(members, func(a, b int) int {
-			x, y := files[a], files[b]
+	for _, family := range families {
+		slices.SortStableFunc(family, func(x, y *codexFile) int {
 			return cmp.Or(x.start.Compare(y.start), cmp.Compare(x.id, y.id), cmp.Compare(x.path, y.path))
 		})
-		seen := map[codexEvent]bool{}
-		responses := map[string]bool{}
-		for _, i := range members {
-			var prev codexUsage
-			for _, c := range files[i].events {
-				ev := c.event
-				delta := ev.last
-				if !ev.hasLast {
-					delta = ev.total.since(prev)
-				}
-				prev = ev.total
-				if seen[ev] {
-					continue
-				}
-				seen[ev] = true
-				t := delta.tokens()
-				own[i] = own[i].Add(t)
-				AddHour(&hours[i], c.at, t.InOut())
-			}
-			for _, r := range files[i].unrepeated {
-				if responses[r.response] {
-					continue
-				}
-				responses[r.response] = true
-				t := r.usage.tokens()
-				own[i] = own[i].Add(t)
-				AddHour(&hours[i], r.at, t.InOut())
-			}
-		}
 	}
+	return families
+}
 
-	var rows []Session
-	for i, f := range files {
-		if !f.fresh {
-			continue
+// countFamily gives each file of one family the requests no earlier file in
+// it already logged.
+func countFamily(family []*codexFile) {
+	seen := map[codexEvent]bool{}
+	responses := map[string]bool{}
+	for _, f := range family {
+		var prev codexUsage
+		for _, c := range f.events {
+			ev := c.event
+			delta := ev.last
+			if !ev.hasLast {
+				delta = ev.total.since(prev)
+			}
+			prev = ev.total
+			if seen[ev] {
+				continue
+			}
+			seen[ev] = true
+			t := delta.tokens()
+			f.own = f.own.Add(t)
+			AddHour(&f.hours, c.at, t.InOut())
 		}
-		s := Session{ID: f.id, ParentID: f.parent, Project: f.project, Tokens: own[i], Hours: hours[i], Updated: f.updated, Home: f.home, Limits: f.limits[CodexMainLimit]}
-		if len(f.mirrors) > 0 {
-			s.Homes = append([]string{f.home}, f.mirrors...)
+		for _, r := range f.unrepeated {
+			if responses[r.response] {
+				continue
+			}
+			responses[r.response] = true
+			t := r.usage.tokens()
+			f.own = f.own.Add(t)
+			AddHour(&f.hours, r.at, t.InOut())
 		}
-		rows = append(rows, s)
 	}
-	return mergeByID(rows, addCopy)
 }
 
 // codexLimitSkew is how long before the main limit's reading another limit's
@@ -303,6 +315,18 @@ type codexFile struct {
 	// limits is the newest reading per limit id.
 	limits map[string]*Limits
 	fresh  bool
+	// own and hours are what this file counts once replays are matched.
+	own   Tokens
+	hours map[int64]int64
+}
+
+// session is the file's row, with the usage countFamily gave it.
+func (f *codexFile) session() Session {
+	s := Session{ID: f.id, ParentID: f.parent, Project: f.project, Tokens: f.own, Hours: f.hours, Updated: f.updated, Home: f.home, Limits: f.limits[CodexMainLimit]}
+	if len(f.mirrors) > 0 {
+		s.Homes = append([]string{f.home}, f.mirrors...)
+	}
+	return s
 }
 
 // codexRecord is one response's usage from a token_usage_record line.
