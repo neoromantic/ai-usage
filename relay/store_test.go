@@ -543,7 +543,8 @@ func TestKVErrors(t *testing.T) {
 // The relay runs the same over KV as over memory.
 func TestRelayOverKV(t *testing.T) {
 	kv, f, c := newKV(t)
-	srv := NewServer(kv, Limits{DevicesPerTeam: 2})
+	srv := NewServer(kv)
+	srv.Limits.DevicesPerTeam = 2
 	srv.Now = c.Now
 	ts := httptest.NewServer(srv)
 	defer ts.Close()

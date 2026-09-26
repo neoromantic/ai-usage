@@ -82,43 +82,9 @@ type Server struct {
 	blocked        overLimit
 }
 
-// withDefaults fills each unset limit from DefaultLimits, so setting one limit
-// does not leave a zero Window to divide by.
-func (l Limits) withDefaults() Limits {
-	d := DefaultLimits()
-	if l.DevicesPerTeam <= 0 {
-		l.DevicesPerTeam = d.DevicesPerTeam
-	}
-	if l.WritesPerTeam <= 0 {
-		l.WritesPerTeam = d.WritesPerTeam
-	}
-	if l.RequestsPerIP <= 0 {
-		l.RequestsPerIP = d.RequestsPerIP
-	}
-	if l.NewTeamsPerIP <= 0 {
-		l.NewTeamsPerIP = d.NewTeamsPerIP
-	}
-	if l.NewDevicesPerIP <= 0 {
-		l.NewDevicesPerIP = d.NewDevicesPerIP
-	}
-	if l.Window < time.Second {
-		l.Window = d.Window
-	}
-	if l.NewWindow < time.Second {
-		l.NewWindow = d.NewWindow
-	}
-	if l.RecordTTL < time.Second {
-		l.RecordTTL = d.RecordTTL
-	}
-	if l.MinRecordTTL < time.Second {
-		l.MinRecordTTL = d.MinRecordTTL
-	}
-	return l
-}
-
-// NewServer wires routes. A zero field in limits takes its DefaultLimits value.
-func NewServer(store Store, limits Limits) *Server {
-	s := &Server{Store: store, Limits: limits.withDefaults(), Now: time.Now}
+// NewServer wires routes, with DefaultLimits.
+func NewServer(store Store) *Server {
+	s := &Server{Store: store, Limits: DefaultLimits(), Now: time.Now}
 	mux := http.NewServeMux()
 	// Only routed requests are counted, so a path the relay does not serve
 	// costs no store command.

@@ -27,7 +27,7 @@ type testRelay struct {
 func newRelay(t *testing.T, w *world) *testRelay {
 	t.Helper()
 	store := relay.NewMemory()
-	s := relay.NewServer(store, relay.Limits{})
+	s := relay.NewServer(store)
 	s.Now = func() time.Time { return w.now }
 	srv := httptest.NewServer(s)
 	t.Cleanup(srv.Close)

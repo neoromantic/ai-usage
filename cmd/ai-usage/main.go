@@ -866,7 +866,7 @@ func cmdRelay(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 			return usageError("--client-ip-header takes a header name, such as X-Real-Ip")
 		}
 		store, kind := relay.StoreFromEnv()
-		handler := relay.NewServer(store, relay.Limits{})
+		handler := relay.NewServer(store)
 		// Behind a reverse proxy, the header it sets names the client.
 		handler.ClientIPHeader = header
 		srv := &http.Server{

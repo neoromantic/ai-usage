@@ -45,7 +45,7 @@ func build() http.Handler {
 	if kind == "memory" && os.Getenv("VERCEL") != "" && os.Getenv("VERCEL_ENV") != "development" {
 		return http.HandlerFunc(unconfigured)
 	}
-	srv := relay.NewServer(store, relay.Limits{})
+	srv := relay.NewServer(store)
 	// Vercel's edge sets X-Real-Ip to the client's address, replacing any the
 	// client sent. The Go bridge copies it into RemoteAddr too; naming it also
 	// covers a runtime that leaves RemoteAddr empty or connects over loopback.

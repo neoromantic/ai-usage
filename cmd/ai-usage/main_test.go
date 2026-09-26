@@ -818,7 +818,7 @@ func TestRelayCommands(t *testing.T) {
 
 func TestTwoDevicesShareATeam(t *testing.T) {
 	hermetic(t)
-	srv := httptest.NewServer(relay.NewServer(relay.NewMemory(), relay.Limits{}))
+	srv := httptest.NewServer(relay.NewServer(relay.NewMemory()))
 	defer srv.Close()
 	t.Setenv("AI_USAGE_RELAY", srv.URL)
 
@@ -1285,7 +1285,7 @@ func TestScheduleRunStartsACollection(t *testing.T) {
 // report and in the team's, and AI_USAGE_NAME overrides both.
 func TestDeviceName(t *testing.T) {
 	hermetic(t)
-	srv := httptest.NewServer(relay.NewServer(relay.NewMemory(), relay.Limits{}))
+	srv := httptest.NewServer(relay.NewServer(relay.NewMemory()))
 	defer srv.Close()
 	t.Setenv("AI_USAGE_RELAY", srv.URL)
 	t.Setenv("AI_USAGE_NAME", "")
@@ -1602,7 +1602,7 @@ func TestGuideAfterInstall(t *testing.T) {
 	t.Setenv("AI_USAGE_NO_SCHEDULE", "")
 	releaseBuild(t, "v1.3.0")
 	newScheduler = (&fakeCrontab{}).scheduler
-	srv := httptest.NewServer(relay.NewServer(relay.NewMemory(), relay.Limits{}))
+	srv := httptest.NewServer(relay.NewServer(relay.NewMemory()))
 	defer srv.Close()
 	t.Setenv("AI_USAGE_RELAY", srv.URL)
 

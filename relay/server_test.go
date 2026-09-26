@@ -53,12 +53,12 @@ type relayEnv struct {
 	ts    *httptest.Server
 }
 
-func newRelay(t *testing.T, limits Limits) *relayEnv {
+func newRelay(t *testing.T) *relayEnv {
 	t.Helper()
 	c := &clock{t: t0}
 	mem := NewMemory()
 	mem.now = c.Now
-	srv := NewServer(mem, limits)
+	srv := NewServer(mem)
 	srv.Now = c.Now
 	srv.ClientIPHeader = "X-Real-Ip"
 	ts := httptest.NewServer(srv)
@@ -191,7 +191,7 @@ func stored(t *testing.T, e *relayEnv, teamFP string) map[string]Record {
 }
 
 func TestPublishPullRoundTrip(t *testing.T) {
-	e := newRelay(t, Limits{})
+	e := newRelay(t)
 	k := newKey(t)
 	ctx := context.Background()
 	bodies := map[string][]byte{}
@@ -231,7 +231,7 @@ func TestPublishPullRoundTrip(t *testing.T) {
 // through names that provider, and the Codex account says what Hermes spent
 // through it. The relay stores both and hands them back as they are.
 func TestPublishLinkedQuota(t *testing.T) {
-	e := newRelay(t, Limits{})
+	e := newRelay(t)
 	k := newKey(t)
 	ctx := context.Background()
 	d := docFor(k, "work-laptop", t0)
@@ -256,7 +256,7 @@ func TestPublishLinkedQuota(t *testing.T) {
 }
 
 func TestPullCountsDocumentsThatDoNotVerify(t *testing.T) {
-	e := newRelay(t, Limits{})
+	e := newRelay(t)
 	k, other := newKey(t), newKey(t)
 	ctx := context.Background()
 	fp := k.Fingerprint()
@@ -357,7 +357,7 @@ func TestPullRejectsAMalformedTeamRead(t *testing.T) {
 }
 
 func TestPutRejects(t *testing.T) {
-	e := newRelay(t, Limits{})
+	e := newRelay(t)
 	k, other := newKey(t), newKey(t)
 	fp, dev := k.Fingerprint(), "work-laptop"
 	body := marshal(t, docFor(k, dev, t0))
@@ -469,7 +469,7 @@ func TestPutRejects(t *testing.T) {
 
 // A key holder can write only the team its key names.
 func TestCannotWriteAnotherTeam(t *testing.T) {
-	e := newRelay(t, Limits{})
+	e := newRelay(t)
 	victim, attacker := newKey(t), newKey(t)
 	ctx := context.Background()
 	dev := "victim-laptop"
@@ -520,7 +520,7 @@ func TestCannotWriteAnotherTeam(t *testing.T) {
 }
 
 func TestStaleAndRepeatedWrites(t *testing.T) {
-	e := newRelay(t, Limits{})
+	e := newRelay(t)
 	k := newKey(t)
 	c := e.client(k)
 	ctx := context.Background()
@@ -562,7 +562,9 @@ func TestStaleAndRepeatedWrites(t *testing.T) {
 }
 
 func TestDeviceCap(t *testing.T) {
-	e := newRelay(t, Limits{DevicesPerTeam: 2, RecordTTL: 24 * time.Hour})
+	e := newRelay(t)
+	e.srv.Limits.DevicesPerTeam = 2
+	e.srv.Limits.RecordTTL = 24 * time.Hour
 	k := newKey(t)
 	c := e.client(k)
 	ctx := context.Background()
@@ -595,7 +597,8 @@ func TestDeviceCap(t *testing.T) {
 // First writes racing each other can pass the cap; the team read still lists
 // only as many devices as the cap, those that joined first.
 func TestTeamReadListsNoMoreThanTheCap(t *testing.T) {
-	e := newRelay(t, Limits{DevicesPerTeam: 3})
+	e := newRelay(t)
+	e.srv.Limits.DevicesPerTeam = 3
 	k := newKey(t)
 	c := e.client(k)
 	ctx := context.Background()
@@ -636,7 +639,8 @@ func (r *racing) List(ctx context.Context, teamFP string) (map[string]Record, er
 }
 
 func TestFirstWritePastTheCapGivesWay(t *testing.T) {
-	e := newRelay(t, Limits{DevicesPerTeam: 2})
+	e := newRelay(t)
+	e.srv.Limits.DevicesPerTeam = 2
 	k := newKey(t)
 	c := e.client(k)
 	ctx := context.Background()
@@ -693,7 +697,8 @@ func (f *failing) Delete(ctx context.Context, teamFP, device string) error {
 func TestFirstWritePastTheCapFailsClosed(t *testing.T) {
 	for _, broken := range []string{"list", "delete"} {
 		t.Run(broken, func(t *testing.T) {
-			e := newRelay(t, Limits{DevicesPerTeam: 2})
+			e := newRelay(t)
+			e.srv.Limits.DevicesPerTeam = 2
 			k := newKey(t)
 			c := e.client(k)
 			ctx := context.Background()
@@ -726,7 +731,8 @@ func TestFirstWritePastTheCapFailsClosed(t *testing.T) {
 // so a device that was told it was stored can find itself past the cap once
 // a slower first write with an earlier time lands. Its next write says so.
 func TestDevicePushedPastTheCapIsTold(t *testing.T) {
-	e := newRelay(t, Limits{DevicesPerTeam: 2})
+	e := newRelay(t)
+	e.srv.Limits.DevicesPerTeam = 2
 	k := newKey(t)
 	c := e.client(k)
 	ctx := context.Background()
@@ -759,7 +765,8 @@ func TestDevicePushedPastTheCapIsTold(t *testing.T) {
 }
 
 func TestTeamWriteLimit(t *testing.T) {
-	e := newRelay(t, Limits{WritesPerTeam: 2})
+	e := newRelay(t)
+	e.srv.Limits.WritesPerTeam = 2
 	k, other := newKey(t), newKey(t)
 	ctx := context.Background()
 	publish := func(k *team.Key) error {
@@ -791,7 +798,8 @@ func TestTeamWriteLimit(t *testing.T) {
 }
 
 func TestPerIPLimit(t *testing.T) {
-	e := newRelay(t, Limits{RequestsPerIP: 3})
+	e := newRelay(t)
+	e.srv.Limits.RequestsPerIP = 3
 	health := func(ip string) *http.Response {
 		req, _ := http.NewRequest(http.MethodGet, e.ts.URL+"/v1/health", nil)
 		if ip != "" {
@@ -828,7 +836,8 @@ func TestPerIPLimit(t *testing.T) {
 }
 
 func TestNewTeamsPerIP(t *testing.T) {
-	e := newRelay(t, Limits{NewTeamsPerIP: 1})
+	e := newRelay(t)
+	e.srv.Limits.NewTeamsPerIP = 1
 	a, b := newKey(t), newKey(t)
 	ctx := context.Background()
 	publish := func(k *team.Key, ip, dev string) error {
@@ -868,7 +877,7 @@ func TestNewTeamsPerIP(t *testing.T) {
 // However many keys one address makes, it adds one full team's worth of
 // devices a day, so it cannot fill the store.
 func TestNewDevicesPerIP(t *testing.T) {
-	e := newRelay(t, Limits{})
+	e := newRelay(t)
 	ctx := context.Background()
 	stored, limited := 0, 0
 	var keys []*team.Key
@@ -929,7 +938,7 @@ func TestFullTeamReadFitsVercel(t *testing.T) {
 // week and at most RecordTTL, so a key made to fill the store and dropped
 // leaves its snapshots for a week, not 90 days.
 func TestRecordLifetimeGrowsWithTheDevice(t *testing.T) {
-	e := newRelay(t, Limits{})
+	e := newRelay(t)
 	k := newKey(t)
 	c := e.client(k)
 	ctx := context.Background()
@@ -1030,7 +1039,8 @@ func TestClientAddr(t *testing.T) {
 // reaches the relay, so by default every header is ignored and a client
 // cannot pick a fresh rate-limit key for each request.
 func TestForwardingHeadersAreIgnoredByDefault(t *testing.T) {
-	srv := NewServer(NewMemory(), Limits{RequestsPerIP: 3})
+	srv := NewServer(NewMemory())
+	srv.Limits.RequestsPerIP = 3
 	srv.Now = func() time.Time { return t0 }
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
@@ -1062,7 +1072,8 @@ func (c *countingStore) Count(ctx context.Context, key string, window time.Durat
 // serve, and a client that is already over its limit, cost nothing.
 func TestRejectedRequestsSkipTheStore(t *testing.T) {
 	store := &countingStore{Memory: NewMemory()}
-	srv := NewServer(store, Limits{RequestsPerIP: 5})
+	srv := NewServer(store)
+	srv.Limits.RequestsPerIP = 5
 	c := &clock{t: t0}
 	srv.Now = c.Now
 	ts := httptest.NewServer(srv)
@@ -1126,7 +1137,7 @@ func TestOverLimitIsBounded(t *testing.T) {
 }
 
 func TestSignedRead(t *testing.T) {
-	e := newRelay(t, Limits{})
+	e := newRelay(t)
 	k, other := newKey(t), newKey(t)
 	ctx := context.Background()
 	if err := e.client(k).Publish(ctx, "work-laptop", marshal(t, docFor(k, "work-laptop", t0))); err != nil {
@@ -1195,7 +1206,7 @@ func TestSignedRead(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	e := newRelay(t, Limits{})
+	e := newRelay(t)
 	k := newKey(t)
 	c := e.client(k)
 	ctx := context.Background()
@@ -1234,7 +1245,7 @@ func TestDelete(t *testing.T) {
 }
 
 func TestHealth(t *testing.T) {
-	e := newRelay(t, Limits{})
+	e := newRelay(t)
 	resp, body := send(t, func() *http.Request { r, _ := http.NewRequest(http.MethodGet, e.ts.URL+"/v1/health", nil); return r }())
 	if resp.StatusCode != http.StatusOK || resp.Header.Get("Cache-Control") != "no-store" || resp.Header.Get("Content-Type") != "application/json" {
 		t.Fatalf("status %d, headers %v", resp.StatusCode, resp.Header)
@@ -1245,25 +1256,6 @@ func TestHealth(t *testing.T) {
 	}
 	if err := json.Unmarshal([]byte(body), &h); err != nil || !h.OK || h.Version != snapshot.Version {
 		t.Fatalf("health = %s", body)
-	}
-}
-
-func TestNewServerFillsUnsetLimits(t *testing.T) {
-	s := NewServer(NewMemory(), Limits{DevicesPerTeam: 3})
-	want := DefaultLimits()
-	want.DevicesPerTeam = 3
-	if s.Limits != want {
-		t.Fatalf("Limits = %+v, want %+v", s.Limits, want)
-	}
-	if NewServer(NewMemory(), Limits{}).Limits != DefaultLimits() {
-		t.Fatal("zero Limits is not DefaultLimits")
-	}
-	// A window under a second set after NewServer must not divide by zero.
-	s.Limits.Window = 0
-	rec := httptest.NewRecorder()
-	s.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/health", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d", rec.Code)
 	}
 }
 
@@ -1324,7 +1316,7 @@ func TestStoreFailuresAre503(t *testing.T) {
 	for _, op := range []string{"count", "get", "list", "put", "delete"} {
 		t.Run(op, func(t *testing.T) {
 			store := brokenStore{Memory: NewMemory(), fail: map[string]bool{}}
-			srv := NewServer(store, Limits{})
+			srv := NewServer(store)
 			srv.Now = func() time.Time { return t0 }
 			ts := httptest.NewServer(srv)
 			defer ts.Close()
@@ -1413,7 +1405,7 @@ func TestPublishSignsTheExactBody(t *testing.T) {
 // The canonical check must accept whatever json.Marshal makes of a collector
 // document: zone offsets, nanoseconds, awkward floats, omitted fields.
 func TestCollectorEncodingIsCanonical(t *testing.T) {
-	e := newRelay(t, Limits{})
+	e := newRelay(t)
 	k := newKey(t)
 	ctx := context.Background()
 	zones := map[string]*time.Location{
@@ -1447,7 +1439,7 @@ func TestSlowBodyTimesOut(t *testing.T) {
 	old := bodyTimeout
 	bodyTimeout = 200 * time.Millisecond
 	t.Cleanup(func() { bodyTimeout = old })
-	e := newRelay(t, Limits{})
+	e := newRelay(t)
 	k := newKey(t)
 	conn, err := net.Dial("tcp", e.ts.Listener.Addr().String())
 	if err != nil {

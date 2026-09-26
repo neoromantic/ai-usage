@@ -211,7 +211,7 @@ func TestAliasTravelsSealed(t *testing.T) {
 	hermetic(t)
 	var mu sync.Mutex
 	pushed := map[string][]byte{}
-	store := relay.NewServer(relay.NewMemory(), relay.Limits{})
+	store := relay.NewServer(relay.NewMemory())
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut {
 			body, _ := io.ReadAll(r.Body)
