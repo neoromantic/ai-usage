@@ -68,204 +68,58 @@ type device struct {
 	accts       []devAccount
 }
 
+// merger merges the device docs into the team.
+type merger struct {
+	in  Input
+	now time.Time
+	// local holds this device's links, by account.
+	local  map[string]*Link
+	byProv map[string]map[string]*teamAccount
+	// linked holds, by the account billed, what linked accounts spent.
+	linked map[string]map[string]*LinkedUsage
+	devs   []*device
+	// aliases holds the newest alias of each account, and aliasBy the
+	// device it came from.
+	aliases map[string]snapshot.Alias
+	aliasBy map[string]string
+	behind  map[string]collect.Behind
+}
+
 func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 	t := Team{Devices: []TeamDevice{}, Providers: []TeamProvider{}}
+	m := &merger{
+		in: in, now: now, local: map[string]*Link{},
+		byProv: map[string]map[string]*teamAccount{}, linked: map[string]map[string]*LinkedUsage{},
+		aliases: map[string]snapshot.Alias{}, aliasBy: map[string]string{},
+	}
 	docs := []snapshot.Doc{in.Doc}
-	var behind map[string]collect.Behind
 	if in.Team.Team == in.Key.Fingerprint() {
 		t.PulledAt = timePtr(in.Team.PulledAt)
-		behind = in.Team.Behind
+		m.behind = in.Team.Behind
 		for _, d := range in.Team.Docs {
 			if d.Device != in.Doc.Device {
 				docs = append(docs, d)
 			}
 		}
 	}
-	// raw is a sealed string as it was sealed, line breaks and all.
-	raw := func(s string) string {
-		v, err := in.Key.Open(s)
-		if err != nil {
-			return "(unreadable)"
-		}
-		return v
-	}
-	open := func(s string) string { return snapshot.Printable(raw(s)) }
 	// This device knows its links even when the linked account has no
 	// reading to match on the wire.
-	localLinks := map[string]*Link{}
 	for _, a := range totals {
-		localLinks[state.Key(a.Provider, a.Label)] = linkView(a.Link)
+		m.local[state.Key(a.Provider, a.Label)] = linkView(a.Link)
 	}
-
-	byProv := map[string]map[string]*teamAccount{}
-	// linked holds, by the account billed, what linked accounts spent.
-	linked := map[string]map[string]*LinkedUsage{}
-	var devs []*device
-	aliases := map[string]snapshot.Alias{}
-	aliasBy := map[string]string{}
 	for _, d := range docs {
-		label := open(d.DeviceLabel)
-		lastErr, updateErr := snapshot.SplitLastError(raw(d.LastError))
-		dev := &TeamDevice{
-			Device:           d.Device,
-			Label:            label,
-			OSUser:           open(d.OSUser),
-			This:             d.Device == in.Doc.Device,
-			CollectorVersion: d.CollectorVersion,
-			CollectedAt:      d.CollectedAt,
-			AgeSeconds:       int64(now.Sub(d.CollectedAt).Seconds()),
-			LastSuccessAt:    timePtr(d.LastSuccessAt),
-			LastError:        strPtr(snapshot.Printable(lastErr)),
-			Sources:          []Source{},
-			Silent:           now.Sub(d.CollectedAt) > collect.SilentAfter,
-		}
-		// This device's own update shows in the header and ATTENTION.
-		if !dev.This {
-			dev.UpdateError = strPtr(snapshot.Printable(updateErr))
-		}
-		for _, s := range d.Sources {
-			dev.Sources = append(dev.Sources, Source{Provider: s.Provider, Status: s.Status, Error: strPtr(open(s.Error))})
-		}
-		dev.Error = deviceError(*dev)
-		dv := &device{dev: dev, name: label + " (" + dev.OSUser + ")", collectedAt: d.CollectedAt, shift: dayShift(d.CollectedAt, now)}
-		devs = append(devs, dv)
-		for _, a := range d.Aliases {
-			if a.Name != "" {
-				// A name the alias command would refuse is not one.
-				if a.Name = open(a.Name); snapshot.CheckAlias(a.Name) != nil {
-					continue
-				}
-			}
-			k := aliasKey(a.Provider, open(a.Label))
-			if cur, ok := aliases[k]; !ok || snapshot.AliasWins(a.At, d.Device, cur.At, aliasBy[k]) {
-				aliases[k], aliasBy[k] = a, d.Device
-			}
-		}
-
-		labels := make([]string, len(d.Accounts))
-		for i, a := range d.Accounts {
-			labels[i] = open(a.Label)
-		}
-		// through is, by Hermes account, what it spent through each login.
-		through := map[string][]login{}
-		for i, a := range d.Accounts {
-			for _, u := range a.Linked {
-				k := state.Key(u.Provider, open(u.Label))
-				through[k] = append(through[k], login{Link{a.Provider, labels[i]}, u.Tokens.InOut()})
-			}
-		}
-		for i, a := range d.Accounts {
-			if byProv[a.Provider] == nil {
-				byProv[a.Provider] = map[string]*teamAccount{}
-			}
-			l := labels[i]
-			x := byProv[a.Provider][l]
-			if x == nil {
-				x = &teamAccount{
-					provider: a.Provider,
-					ta: TeamAccount{
-						Label: l, Subscription: subscription(a.Provider),
-						Devices: []string{}, State: StateUnknown, PerDevice: []DeviceUsage{},
-					},
-					wins: map[string]*winReading{},
-				}
-				byProv[a.Provider][l] = x
-			}
-			usage := usageOf(a.Days, dv.shift)
-			dev.Usage = dev.Usage.add(usage)
-			x.ta.Devices = append(x.ta.Devices, dv.name)
-			x.ta.Sessions += a.Sessions
-			x.ta.Tokens = x.ta.Tokens.Add(a.Tokens)
-			x.ta.Usage = x.ta.Usage.add(usage)
-			if dev.This && a.Current {
-				x.ta.Current = true
-			}
-			x.ta.PerDevice = append(x.ta.PerDevice, DeviceUsage{
-				Device: dv.name, DeviceID: d.Device, Current: a.Current,
-				Sessions: a.Sessions, Tokens: a.Tokens, Usage: usage, LastActiveAt: timeOf(a.LastActiveAt),
-			})
-			x.active(a.LastActiveAt)
-			if a.Plan != "" && (x.ta.Plan == nil || d.CollectedAt.After(x.planAt)) {
-				x.ta.Plan, x.planAt = strPtr(a.Plan), d.CollectedAt
-			}
-			link := wireLink(d.Accounts, labels, i)
-			if dev.This {
-				link = localLinks[state.Key(a.Provider, l)]
-				x.local = link
-			}
-			if a.QuotaAt != nil {
-				for _, w := range a.Windows {
-					cur := x.wins[w.Name]
-					if cur == nil {
-						x.order = append(x.order, w.Name)
-					}
-					if cur == nil || a.QuotaAt.After(cur.at) {
-						x.wins[w.Name] = &winReading{w: w, at: *a.QuotaAt, dev: dv.name, from: a.QuotaFrom}
-					}
-				}
-				if len(a.Windows) > 0 && a.QuotaAt.After(x.qAt) {
-					x.qAt, x.qLink = *a.QuotaAt, link
-				}
-			}
-			for _, u := range a.Linked {
-				addLinked(linked, a.Provider, l, u.Provider, open(u.Label), dv.name, u)
-			}
-			da := devAccount{provider: a.Provider, label: l, usage: usage, days: a.Days, recent: a.Recent,
-				last: a.LastActiveAt, link: link}
-			dv.accts = append(dv.accts, da.split(through[state.Key(a.Provider, l)], dv.shift)...)
-		}
+		m.addDoc(d)
 	}
-	// What Hermes spends through a login is that login's use, and its newest
-	// activity is the login's too. A device whose Hermes spent through
-	// several logins gives each one its newest activity, since its snapshot
-	// does not say which login that went through.
-	for _, dv := range devs {
-		for _, a := range dv.accts {
-			if x := billsTo(a, byProv); x != nil && !subscription(a.provider) {
-				x.active(a.last)
-			}
-		}
-	}
-
-	t.Latest = strPtr(latestVersion(in.State.Update.Latest, devs))
-	for _, dv := range devs {
-		d := dv.dev
-		d.Old = t.Latest != nil && selfupdate.Newer(*t.Latest, d.CollectorVersion)
-		if b, ok := behind[d.Device]; ok && d.Old && b.Version == d.CollectorVersion {
-			d.BehindSince = timePtr(b.Since)
-		}
-	}
-
+	m.hermesActivity()
+	t.Latest = strPtr(latestVersion(in.State.Update.Latest, m.devs))
+	m.markOld(t.Latest)
 	for _, p := range snapshot.Providers {
-		m := byProv[p]
-		if len(m) == 0 {
-			continue
+		if tp, ok := m.provider(p); ok {
+			t.Providers = append(t.Providers, tp)
 		}
-		tp := TeamProvider{Provider: p}
-		for _, x := range m {
-			x.ta.Link = cmp.Or(x.local, x.qLink)
-			if len(x.wins) > 0 {
-				x.ta.Quota = x.quota(p, now)
-				if mw := knownMain(x.ta.Quota); mw != nil {
-					if s, ok := x.wins[mw.Name].w.Start(); ok {
-						x.start, x.main = s, mw.Name
-					}
-				}
-			}
-			sort.Strings(x.ta.Devices)
-			sortPerDevice(x.ta.PerDevice)
-			x.ta.LinkedUsage = linkedList(linked[state.Key(p, x.ta.Label)])
-		}
-		names(p, m, aliases)
-		users(p, m, devs)
-		for _, x := range m {
-			tp.Accounts = append(tp.Accounts, x.ta)
-		}
-		sortTeamAccounts(tp.Accounts)
-		t.Providers = append(t.Providers, tp)
 	}
-	t.Matrix = matrix(t.Providers, byProv, devs)
-	for _, dv := range devs {
+	t.Matrix = matrix(t.Providers, m.byProv, m.devs)
+	for _, dv := range m.devs {
 		t.Devices = append(t.Devices, *dv.dev)
 	}
 	slices.SortFunc(t.Devices, func(a, b TeamDevice) int {
@@ -278,6 +132,227 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 		return cmp.Or(cmp.Compare(a.Label, b.Label), cmp.Compare(a.Device, b.Device))
 	})
 	return t
+}
+
+// raw is a sealed string as it was sealed, line breaks and all.
+func (m *merger) raw(s string) string {
+	v, err := m.in.Key.Open(s)
+	if err != nil {
+		return "(unreadable)"
+	}
+	return v
+}
+
+func (m *merger) open(s string) string { return snapshot.Printable(m.raw(s)) }
+
+// addDoc merges one device doc: the device, its aliases and its accounts.
+func (m *merger) addDoc(d snapshot.Doc) {
+	dev := m.teamDevice(d)
+	dv := &device{dev: dev, name: dev.Label + " (" + dev.OSUser + ")", collectedAt: d.CollectedAt, shift: dayShift(d.CollectedAt, m.now)}
+	m.devs = append(m.devs, dv)
+	m.addAliases(d)
+	m.addAccounts(dv, d)
+}
+
+// teamDevice is a device doc's device, before its usage and release.
+func (m *merger) teamDevice(d snapshot.Doc) *TeamDevice {
+	label := m.open(d.DeviceLabel)
+	this := d.Device == m.in.Doc.Device
+	lastErr, updateErr := m.lastErrors(d, this)
+	dev := &TeamDevice{
+		Device:           d.Device,
+		Label:            label,
+		OSUser:           m.open(d.OSUser),
+		This:             this,
+		CollectorVersion: d.CollectorVersion,
+		CollectedAt:      d.CollectedAt,
+		AgeSeconds:       int64(m.now.Sub(d.CollectedAt).Seconds()),
+		LastSuccessAt:    timePtr(d.LastSuccessAt),
+		LastError:        lastErr,
+		UpdateError:      updateErr,
+		Sources:          []Source{},
+		Silent:           m.now.Sub(d.CollectedAt) > collect.SilentAfter,
+	}
+	for _, s := range d.Sources {
+		dev.Sources = append(dev.Sources, Source{Provider: s.Provider, Status: s.Status, Error: strPtr(m.open(s.Error))})
+	}
+	dev.Error = deviceError(*dev)
+	return dev
+}
+
+// lastErrors are a device doc's last error and update error, printable.
+func (m *merger) lastErrors(d snapshot.Doc, this bool) (lastErr, updateErr *string) {
+	last, update := snapshot.SplitLastError(m.raw(d.LastError))
+	// This device's own update shows in the header and ATTENTION.
+	if !this {
+		updateErr = strPtr(snapshot.Printable(update))
+	}
+	return strPtr(snapshot.Printable(last)), updateErr
+}
+
+// addAliases keeps the newest alias of each account a device doc names.
+func (m *merger) addAliases(d snapshot.Doc) {
+	for _, a := range d.Aliases {
+		if a.Name != "" {
+			// A name the alias command would refuse is not one.
+			if a.Name = m.open(a.Name); snapshot.CheckAlias(a.Name) != nil {
+				continue
+			}
+		}
+		k := aliasKey(a.Provider, m.open(a.Label))
+		if cur, ok := m.aliases[k]; !ok || snapshot.AliasWins(a.At, d.Device, cur.At, m.aliasBy[k]) {
+			m.aliases[k], m.aliasBy[k] = a, d.Device
+		}
+	}
+}
+
+// account is the team account of provider and label, made when it is new.
+func (m *merger) account(provider, label string) *teamAccount {
+	if m.byProv[provider] == nil {
+		m.byProv[provider] = map[string]*teamAccount{}
+	}
+	x := m.byProv[provider][label]
+	if x == nil {
+		x = &teamAccount{
+			provider: provider,
+			ta: TeamAccount{
+				Label: label, Subscription: subscription(provider),
+				Devices: []string{}, State: StateUnknown, PerDevice: []DeviceUsage{},
+			},
+			wins: map[string]*winReading{},
+		}
+		m.byProv[provider][label] = x
+	}
+	return x
+}
+
+// addAccounts adds a device doc's accounts to the team accounts and to the
+// device dv.
+func (m *merger) addAccounts(dv *device, d snapshot.Doc) {
+	dev := dv.dev
+	labels := make([]string, len(d.Accounts))
+	for i, a := range d.Accounts {
+		labels[i] = m.open(a.Label)
+	}
+	// through is, by Hermes account, what it spent through each login.
+	through := map[string][]login{}
+	for i, a := range d.Accounts {
+		for _, u := range a.Linked {
+			k := state.Key(u.Provider, m.open(u.Label))
+			through[k] = append(through[k], login{Link{a.Provider, labels[i]}, u.Tokens.InOut()})
+		}
+	}
+	for i, a := range d.Accounts {
+		l := labels[i]
+		x := m.account(a.Provider, l)
+		usage := usageOf(a.Days, dv.shift)
+		dev.Usage = dev.Usage.add(usage)
+		x.ta.Devices = append(x.ta.Devices, dv.name)
+		x.ta.Sessions += a.Sessions
+		x.ta.Tokens = x.ta.Tokens.Add(a.Tokens)
+		x.ta.Usage = x.ta.Usage.add(usage)
+		if dev.This && a.Current {
+			x.ta.Current = true
+		}
+		x.ta.PerDevice = append(x.ta.PerDevice, DeviceUsage{
+			Device: dv.name, DeviceID: d.Device, Current: a.Current,
+			Sessions: a.Sessions, Tokens: a.Tokens, Usage: usage, LastActiveAt: timeOf(a.LastActiveAt),
+		})
+		x.active(a.LastActiveAt)
+		if a.Plan != "" && (x.ta.Plan == nil || d.CollectedAt.After(x.planAt)) {
+			x.ta.Plan, x.planAt = strPtr(a.Plan), d.CollectedAt
+		}
+		link := wireLink(d.Accounts, labels, i)
+		if dev.This {
+			link = m.local[state.Key(a.Provider, l)]
+			x.local = link
+		}
+		x.addReading(a, dv.name, link)
+		for _, u := range a.Linked {
+			addLinked(m.linked, a.Provider, l, u.Provider, m.open(u.Label), dv.name, u)
+		}
+		da := devAccount{provider: a.Provider, label: l, usage: usage, days: a.Days, recent: a.Recent,
+			last: a.LastActiveAt, link: link}
+		dv.accts = append(dv.accts, da.split(through[state.Key(a.Provider, l)], dv.shift)...)
+	}
+}
+
+// addReading merges a's reading, sent by device dev, into the newest
+// reading of each window, and keeps link when a's reading is the newest.
+func (x *teamAccount) addReading(a snapshot.Account, dev string, link *Link) {
+	if a.QuotaAt == nil {
+		return
+	}
+	for _, w := range a.Windows {
+		cur := x.wins[w.Name]
+		if cur == nil {
+			x.order = append(x.order, w.Name)
+		}
+		if cur == nil || a.QuotaAt.After(cur.at) {
+			x.wins[w.Name] = &winReading{w: w, at: *a.QuotaAt, dev: dev, from: a.QuotaFrom}
+		}
+	}
+	if len(a.Windows) > 0 && a.QuotaAt.After(x.qAt) {
+		x.qAt, x.qLink = *a.QuotaAt, link
+	}
+}
+
+// hermesActivity gives the logins Hermes spent through its newest activity.
+// What Hermes spends through a login is that login's use, and its newest
+// activity is the login's too. A device whose Hermes spent through several
+// logins gives each one its newest activity, since its snapshot does not
+// say which login that went through.
+func (m *merger) hermesActivity() {
+	for _, dv := range m.devs {
+		for _, a := range dv.accts {
+			if x := billsTo(a, m.byProv); x != nil && !subscription(a.provider) {
+				x.active(a.last)
+			}
+		}
+	}
+}
+
+// markOld marks the devices on a release older than latest and, when the
+// team cache found a device behind on the release it runs, since when.
+func (m *merger) markOld(latest *string) {
+	for _, dv := range m.devs {
+		d := dv.dev
+		d.Old = latest != nil && selfupdate.Newer(*latest, d.CollectorVersion)
+		if b, ok := m.behind[d.Device]; ok && d.Old && b.Version == d.CollectorVersion {
+			d.BehindSince = timePtr(b.Since)
+		}
+	}
+}
+
+// provider is provider p's part of the team, and false when no device has
+// an account of it.
+func (m *merger) provider(p string) (TeamProvider, bool) {
+	accts := m.byProv[p]
+	if len(accts) == 0 {
+		return TeamProvider{}, false
+	}
+	tp := TeamProvider{Provider: p}
+	for _, x := range accts {
+		x.ta.Link = cmp.Or(x.local, x.qLink)
+		if len(x.wins) > 0 {
+			x.ta.Quota = x.quota(p, m.now)
+			if mw := knownMain(x.ta.Quota); mw != nil {
+				if s, ok := x.wins[mw.Name].w.Start(); ok {
+					x.start, x.main = s, mw.Name
+				}
+			}
+		}
+		sort.Strings(x.ta.Devices)
+		sortPerDevice(x.ta.PerDevice)
+		x.ta.LinkedUsage = linkedList(m.linked[state.Key(p, x.ta.Label)])
+	}
+	names(p, accts, m.aliases)
+	users(p, accts, m.devs)
+	for _, x := range accts {
+		tp.Accounts = append(tp.Accounts, x.ta)
+	}
+	sortTeamAccounts(tp.Accounts)
+	return tp, true
 }
 
 // subscription says a provider's accounts have a quota of their own. Hermes
