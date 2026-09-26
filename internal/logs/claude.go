@@ -194,7 +194,8 @@ type claudeMsg struct {
 }
 
 // key matches the message across files: by its request id when it has one,
-// otherwise by its id within the session. An anon message has no key.
+// otherwise by its id within the session. An anon message without a request
+// id has no key.
 func (m claudeMsg) key(session string) string {
 	switch {
 	case m.request != "":
