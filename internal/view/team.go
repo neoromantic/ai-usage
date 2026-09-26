@@ -609,49 +609,18 @@ func idLike(s string) bool {
 	return digits
 }
 
+// colKey is a matrix column's key: a subscription's provider and label, or
+// a provider whose tokens have no quota.
+type colKey struct {
+	provider, label string
+	noQuota         bool
+}
+
 // matrix is every device against every subscription, and the tokens with
 // no quota, one column per provider.
 func matrix(providers []TeamProvider, byProv map[string]map[string]*teamAccount, devs []*device) Matrix {
-	mx := Matrix{Columns: []Column{}, Rows: []Row{}}
-	type colKey struct {
-		provider, label string
-		noQuota         bool
-	}
-	index := map[colKey]int{}
-	for _, tp := range providers {
-		for _, a := range tp.Accounts {
-			if !a.Subscription {
-				continue
-			}
-			c := Column{Provider: tp.Provider, Label: a.Label, Name: a.Name, State: a.State}
-			if mw := knownMain(a.Quota); mw != nil {
-				p := mw.Percent
-				c.Percent = &p
-			}
-			index[colKey{tp.Provider, a.Label, false}] = len(mx.Columns)
-			mx.Columns = append(mx.Columns, c)
-		}
-	}
-	// Tokens with no quota get a column per provider after the rest.
-	for _, dv := range devs {
-		for _, a := range dv.accts {
-			if billsTo(a, byProv) != nil {
-				continue
-			}
-			k := colKey{a.provider, "", true}
-			if _, ok := index[k]; !ok {
-				index[k] = -1
-			}
-		}
-	}
-	for _, p := range snapshot.Providers {
-		k := colKey{p, "", true}
-		if _, ok := index[k]; ok {
-			index[k] = len(mx.Columns)
-			mx.Columns = append(mx.Columns, Column{Provider: p, Name: p, NoQuota: true, State: StateUnknown})
-		}
-	}
-
+	cols, index := matrixColumns(providers, byProv, devs)
+	mx := Matrix{Columns: cols, Rows: []Row{}}
 	for _, dv := range devs {
 		row := Row{Device: dv.dev.Label, DeviceID: dv.dev.Device, Cells: make([]Cell, len(mx.Columns))}
 		for _, a := range dv.accts {
@@ -689,6 +658,43 @@ func matrix(providers []TeamProvider, byProv map[string]map[string]*teamAccount,
 		return cmp.Or(cmp.Compare(b.Usage.Week, a.Usage.Week), cmp.Compare(a.Device, b.Device), cmp.Compare(a.DeviceID, b.DeviceID))
 	})
 	return mx
+}
+
+// matrixColumns is the matrix's columns, the subscriptions in the order of
+// providers, and each column's index by its key.
+func matrixColumns(providers []TeamProvider, byProv map[string]map[string]*teamAccount, devs []*device) ([]Column, map[colKey]int) {
+	cols := []Column{}
+	index := map[colKey]int{}
+	for _, tp := range providers {
+		for _, a := range tp.Accounts {
+			if !a.Subscription {
+				continue
+			}
+			c := Column{Provider: tp.Provider, Label: a.Label, Name: a.Name, State: a.State}
+			if mw := knownMain(a.Quota); mw != nil {
+				p := mw.Percent
+				c.Percent = &p
+			}
+			index[colKey{tp.Provider, a.Label, false}] = len(cols)
+			cols = append(cols, c)
+		}
+	}
+	// Tokens with no quota get a column per provider after the rest.
+	noQuota := map[string]bool{}
+	for _, dv := range devs {
+		for _, a := range dv.accts {
+			if billsTo(a, byProv) == nil {
+				noQuota[a.provider] = true
+			}
+		}
+	}
+	for _, p := range snapshot.Providers {
+		if noQuota[p] {
+			index[colKey{p, "", true}] = len(cols)
+			cols = append(cols, Column{Provider: p, Name: p, NoQuota: true, State: StateUnknown})
+		}
+	}
+	return cols, index
 }
 
 // shareOf is part's share of whole in each period.
