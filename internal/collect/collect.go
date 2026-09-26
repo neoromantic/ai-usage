@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"math/bits"
 	"os"
 	"path/filepath"
 	"slices"
@@ -880,24 +879,13 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 			}
 			parts[l] = parts[l].Add(t)
 		}
-		// A ledger from before parts were kept has each account's share, but
-		// split by when it grew rather than by route: a sub-agent on another
-		// route was counted under its parent's. Its first read with parts
-		// counts only what the session grew in all.
-		migrating := e.Parts == nil
-		if migrating {
+		if e.Parts == nil {
 			e.Parts = map[string]snapshot.Tokens{}
-			for l, t := range e.By {
-				e.Parts[l] = t
-			}
 		}
 		for l, t := range parts {
 			g := t.Growth(e.Parts[l])
 			e.Parts[l] = seenNow(e.Parts[l], t, g, partial)
 			grown[l] = g
-		}
-		if migrating {
-			fitGrowth(grown, s.Tokens.Growth(e.Seen))
 		}
 		e.Seen = snapshot.Tokens{}
 		for _, t := range e.Parts {
@@ -1040,50 +1028,6 @@ func dropHours(hours map[int64]int64, cutoff time.Time) {
 			delete(hours, h)
 		}
 	}
-}
-
-// fitGrowth scales grown down, field by field and in proportion, so that it
-// adds up to no more than total. What rounding leaves goes to the largest.
-func fitGrowth(grown map[string]snapshot.Tokens, total snapshot.Tokens) {
-	labels := make([]string, 0, len(grown))
-	for l := range grown {
-		labels = append(labels, l)
-	}
-	sort.Strings(labels)
-	shares := make([]snapshot.Tokens, len(labels))
-	for i, l := range labels {
-		shares[i] = grown[l]
-	}
-	for f, limit := range tokenFields(&total) {
-		var sum int64
-		largest := 0
-		for i := range shares {
-			v := *tokenFields(&shares[i])[f]
-			sum += v
-			if v > *tokenFields(&shares[largest])[f] {
-				largest = i
-			}
-		}
-		if sum <= *limit {
-			continue
-		}
-		left := *limit
-		for i := range shares {
-			v := tokenFields(&shares[i])[f]
-			hi, lo := bits.Mul64(uint64(*v), uint64(*limit))
-			q, _ := bits.Div64(hi, lo, uint64(sum))
-			*v = int64(q)
-			left -= *v
-		}
-		*tokenFields(&shares[largest])[f] += left
-	}
-	for i, l := range labels {
-		grown[l] = shares[i]
-	}
-}
-
-func tokenFields(t *snapshot.Tokens) [4]*int64 {
-	return [4]*int64{&t.Input, &t.Output, &t.CacheRead, &t.CacheWrite}
 }
 
 // seenNow is the count to remember after a read that found cur, g past prev.
@@ -1375,7 +1319,7 @@ func markHermesCurrent(st *state.State, read []readSession) {
 	var newest *readSession
 	for i := range read {
 		r := &read[i]
-		if strings.TrimSpace(r.s.Account) == "" && r.s.Parts != nil && r.s.Parts[r.s.Account].Zero() {
+		if strings.TrimSpace(r.s.Account) == "" && r.s.Parts[r.s.Account].Zero() {
 			continue
 		}
 		if newest == nil || r.s.Updated.After(newest.s.Updated) ||

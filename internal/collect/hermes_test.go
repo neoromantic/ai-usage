@@ -155,24 +155,6 @@ func TestHermesPartsGrowOnTheirOwn(t *testing.T) {
 	}
 }
 
-// A ledger from before parts were kept counted each Hermes session under the
-// accounts in By. Its first read with parts adds only what grew.
-func TestHermesPartsContinueOldLedger(t *testing.T) {
-	w, o := newWorld(t)
-	h := w.home(t, "hermes")
-	w.sessions("hermes", h, logs.Session{ID: "h1", Account: "openai-codex", Tokens: tok(100), Updated: t0})
-	run(t, o)
-
-	w.now = t0.Add(15 * time.Minute)
-	w.sessions("hermes", h, hermesSess("h1", "openai-codex", w.now, map[string]snapshot.Tokens{
-		"openai-codex": tok(120), "openrouter": tok(7),
-	}))
-	res := run(t, o)
-	if by := res.State.Sessions[state.Key("hermes", "h1")].By; !reflect.DeepEqual(by, map[string]snapshot.Tokens{"openai-codex": tok(120), "openrouter": tok(7)}) {
-		t.Fatalf("by = %+v", by)
-	}
-}
-
 // A session whose own row names no billing provider, as a row Hermes makes
 // for auxiliary calls alone, bills only through its parts. Being the newest,
 // it does not make an account with no tokens the one Hermes bills now.
@@ -189,47 +171,6 @@ func TestHermesSessionWithoutRouteKeepsCurrent(t *testing.T) {
 	}
 	if a := totalsFor(t, res.State, "hermes", "openai-codex"); a.Tokens != tok(140) || a.Sessions != 2 {
 		t.Fatalf("openai-codex = %+v", a)
-	}
-}
-
-// A ledger from before parts were kept counted a session under the route
-// its row billed, sub-agents on other routes included. The first read with
-// parts splits the same tokens by route, and counts only what the session
-// grew in all. From then on each part grows on its own.
-func TestHermesPartsDoNotRecountOldLedger(t *testing.T) {
-	w, o := newWorld(t)
-	h := w.home(t, "hermes")
-	// The old reader: a Codex-route session with a SuperGrok sub-agent.
-	w.sessions("hermes", h, logs.Session{ID: "h1", Account: "openai-codex", Tokens: tok(150), Updated: t0})
-	run(t, o)
-
-	sum := func(res *Result) snapshot.Tokens {
-		var total snapshot.Tokens
-		for _, t := range res.State.Sessions[state.Key("hermes", "h1")].By {
-			total = total.Add(t)
-		}
-		return total
-	}
-	// The same tokens, by route, plus a title call the old reader never saw.
-	w.now = t0.Add(15 * time.Minute)
-	w.sessions("hermes", h, hermesSess("h1", "openai-codex", t0, map[string]snapshot.Tokens{
-		"openai-codex": tok(100), "xai-oauth": tok(50), "openrouter": tok(6),
-	}))
-	res := run(t, o)
-	if got := sum(res); got != tok(156) {
-		t.Fatalf("after the first read with parts: %+v, want %+v", res.State.Sessions[state.Key("hermes", "h1")].By, tok(156))
-	}
-
-	w.now = t0.Add(30 * time.Minute)
-	w.sessions("hermes", h, hermesSess("h1", "openai-codex", w.now, map[string]snapshot.Tokens{
-		"openai-codex": tok(100), "xai-oauth": tok(80), "openrouter": tok(6),
-	}))
-	res = run(t, o)
-	if got := sum(res); got != tok(186) {
-		t.Fatalf("after growth: %+v", res.State.Sessions[state.Key("hermes", "h1")].By)
-	}
-	if g := growthOf(lastSample(t, o), "hermes", "xai-oauth"); g != tok(30) {
-		t.Fatalf("xai-oauth growth = %+v", g)
 	}
 }
 

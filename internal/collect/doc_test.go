@@ -499,7 +499,8 @@ func TestUntimedHistoryFromBeforeHoursStays(t *testing.T) {
 	for _, parts := range []map[string]snapshot.Tokens{nil, {"openrouter": {Input: 510}}} {
 		st := &state.State{Accounts: map[string]*state.Account{}, Sessions: map[string]*state.Session{
 			state.Key("hermes", "s2"): {Provider: "hermes", Project: "/srv1", Seen: snapshot.Tokens{Input: 500}, Updated: t0.Add(-2 * day),
-				By: map[string]snapshot.Tokens{"openrouter": {Input: 500}}, Last: map[string]time.Time{"openrouter": t0.Add(-2 * day)}},
+				By: map[string]snapshot.Tokens{"openrouter": {Input: 500}}, Last: map[string]time.Time{"openrouter": t0.Add(-2 * day)},
+				Parts: map[string]snapshot.Tokens{"openrouter": {Input: 500}}},
 		}}
 		if got := DaysOf(totalsFor(t, st, "hermes", "openrouter").Hours, t0); !reflect.DeepEqual(got, []int64{0, 0, 500}) {
 			t.Fatalf("days before = %v", got)
@@ -515,8 +516,9 @@ func TestUntimedHistoryFromBeforeHoursStays(t *testing.T) {
 	// A session on two routes keeps each route's history in its own day.
 	st := &state.State{Accounts: map[string]*state.Account{}, Sessions: map[string]*state.Session{
 		state.Key("hermes", "s3"): {Provider: "hermes", Project: "/srv1", Seen: snapshot.Tokens{Input: 700}, Updated: t0.Add(-day),
-			By:   map[string]snapshot.Tokens{"openrouter": {Input: 500}, "nous": {Input: 200}},
-			Last: map[string]time.Time{"openrouter": t0.Add(-2 * day), "nous": t0.Add(-day)}},
+			By:    map[string]snapshot.Tokens{"openrouter": {Input: 500}, "nous": {Input: 200}},
+			Last:  map[string]time.Time{"openrouter": t0.Add(-2 * day), "nous": t0.Add(-day)},
+			Parts: map[string]snapshot.Tokens{"openrouter": {Input: 500}, "nous": {Input: 200}}},
 	}}
 	s := logs.Session{ID: "s3", Project: "/srv1", Tokens: snapshot.Tokens{Input: 710}, Updated: t0, Account: "openrouter",
 		Parts: map[string]snapshot.Tokens{"openrouter": {Input: 510}, "nous": {Input: 200}}}
