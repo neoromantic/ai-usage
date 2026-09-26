@@ -1,8 +1,9 @@
 package view
 
 import (
+	"cmp"
 	"math"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -33,12 +34,8 @@ func (p *page) viewPills() chunks {
 // tokens in the period first, then by name. The status view shows its rows
 // in the same order.
 func sortRows(rows []Row, per Period) {
-	sort.SliceStable(rows, func(i, j int) bool {
-		a, b := per.Of(rows[i].Usage), per.Of(rows[j].Usage)
-		if a != b {
-			return a > b
-		}
-		return rows[i].Device < rows[j].Device
+	slices.SortStableFunc(rows, func(a, b Row) int {
+		return cmp.Or(cmp.Compare(per.Of(b.Usage), per.Of(a.Usage)), cmp.Compare(a.Device, b.Device))
 	})
 }
 

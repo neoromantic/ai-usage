@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -188,12 +187,8 @@ func loadAliasBook(d state.Dir, cfg state.Config, st *state.State) *aliasBook {
 			}
 		}
 	}
-	sort.Slice(b.accounts, func(i, j int) bool {
-		x, y := b.accounts[i], b.accounts[j]
-		if x.provider != y.provider {
-			return slices.Index(snapshot.Providers, x.provider) < slices.Index(snapshot.Providers, y.provider)
-		}
-		return x.label < y.label
+	slices.SortFunc(b.accounts, func(x, y account) int {
+		return cmp.Or(cmp.Compare(slices.Index(snapshot.Providers, x.provider), slices.Index(snapshot.Providers, y.provider)), cmp.Compare(x.label, y.label))
 	})
 	return b
 }

@@ -1,7 +1,9 @@
 package view
 
 import (
+	"cmp"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -269,15 +271,14 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 	for _, dv := range devs {
 		t.Devices = append(t.Devices, *dv.dev)
 	}
-	sort.Slice(t.Devices, func(i, j int) bool {
-		a, b := t.Devices[i], t.Devices[j]
+	slices.SortFunc(t.Devices, func(a, b TeamDevice) int {
 		if a.This != b.This {
-			return a.This
+			if a.This {
+				return -1
+			}
+			return 1
 		}
-		if a.Label != b.Label {
-			return a.Label < b.Label
-		}
-		return a.Device < b.Device
+		return cmp.Or(cmp.Compare(a.Label, b.Label), cmp.Compare(a.Device, b.Device))
 	})
 	return t
 }
@@ -623,15 +624,8 @@ func matrix(providers []TeamProvider, byProv map[string]map[string]*teamAccount,
 		}
 		row.Share = shareOf(row.Usage, all)
 	}
-	sort.SliceStable(mx.Rows, func(i, j int) bool {
-		a, b := mx.Rows[i], mx.Rows[j]
-		if a.Usage.Week != b.Usage.Week {
-			return a.Usage.Week > b.Usage.Week
-		}
-		if a.Device != b.Device {
-			return a.Device < b.Device
-		}
-		return a.DeviceID < b.DeviceID
+	slices.SortStableFunc(mx.Rows, func(a, b Row) int {
+		return cmp.Or(cmp.Compare(b.Usage.Week, a.Usage.Week), cmp.Compare(a.Device, b.Device), cmp.Compare(a.DeviceID, b.DeviceID))
 	})
 	return mx
 }
@@ -652,15 +646,8 @@ func shareOf(part, whole Usage) Share {
 // sortTeamAccounts puts the worst state first, ties to the one with less
 // left, then by label.
 func sortTeamAccounts(as []TeamAccount) {
-	sort.SliceStable(as, func(i, j int) bool {
-		a, b := as[i], as[j]
-		if ra, rb := stateRank(a.State), stateRank(b.State); ra != rb {
-			return ra < rb
-		}
-		if la, lb := left(a.Quota), left(b.Quota); la != lb {
-			return la < lb
-		}
-		return a.Label < b.Label
+	slices.SortStableFunc(as, func(a, b TeamAccount) int {
+		return cmp.Or(cmp.Compare(stateRank(a.State), stateRank(b.State)), cmp.Compare(left(a.Quota), left(b.Quota)), cmp.Compare(a.Label, b.Label))
 	})
 }
 
@@ -743,29 +730,15 @@ func linkedList(m map[string]*LinkedUsage) []LinkedUsage {
 		sort.Strings(u.Devices)
 		out = append(out, *u)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		a, b := out[i], out[j]
-		if a.Tokens.Total() != b.Tokens.Total() {
-			return a.Tokens.Total() > b.Tokens.Total()
-		}
-		if a.Provider != b.Provider {
-			return a.Provider < b.Provider
-		}
-		return a.Label < b.Label
+	slices.SortFunc(out, func(a, b LinkedUsage) int {
+		return cmp.Or(cmp.Compare(b.Tokens.Total(), a.Tokens.Total()), cmp.Compare(a.Provider, b.Provider), cmp.Compare(a.Label, b.Label))
 	})
 	return out
 }
 
 // sortPerDevice puts the device that used the account most first.
 func sortPerDevice(ds []DeviceUsage) {
-	sort.Slice(ds, func(i, j int) bool {
-		a, b := ds[i], ds[j]
-		if a.Tokens.Total() != b.Tokens.Total() {
-			return a.Tokens.Total() > b.Tokens.Total()
-		}
-		if a.Device != b.Device {
-			return a.Device < b.Device
-		}
-		return a.DeviceID < b.DeviceID
+	slices.SortFunc(ds, func(a, b DeviceUsage) int {
+		return cmp.Or(cmp.Compare(b.Tokens.Total(), a.Tokens.Total()), cmp.Compare(a.Device, b.Device), cmp.Compare(a.DeviceID, b.DeviceID))
 	})
 }

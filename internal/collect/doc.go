@@ -175,12 +175,8 @@ func Projects(st *state.State) []ProjectTotals {
 			p.Providers = append(p.Providers, prov)
 		}
 		used := byProvider[path]
-		sort.Slice(p.Providers, func(i, j int) bool {
-			a, b := p.Providers[i], p.Providers[j]
-			if used[a] != used[b] {
-				return used[a] > used[b]
-			}
-			return a < b
+		slices.SortFunc(p.Providers, func(a, b string) int {
+			return cmp.Or(cmp.Compare(used[b], used[a]), cmp.Compare(a, b))
 		})
 		out = append(out, *p)
 	}
@@ -322,18 +318,18 @@ func lastActive(s *state.Session, label string) time.Time {
 
 // SortAccounts orders by provider, then logged-in accounts, then tokens.
 func SortAccounts(out []AccountTotals) {
-	sort.Slice(out, func(i, j int) bool {
-		a, b := out[i], out[j]
-		if a.Provider != b.Provider {
-			return slices.Index(snapshot.Providers, a.Provider) < slices.Index(snapshot.Providers, b.Provider)
+	slices.SortFunc(out, func(a, b AccountTotals) int {
+		if a.Provider == b.Provider && a.Current != b.Current {
+			if a.Current {
+				return -1
+			}
+			return 1
 		}
-		if a.Current != b.Current {
-			return a.Current
-		}
-		if a.Tokens.Total() != b.Tokens.Total() {
-			return a.Tokens.Total() > b.Tokens.Total()
-		}
-		return a.Label < b.Label
+		return cmp.Or(
+			cmp.Compare(slices.Index(snapshot.Providers, a.Provider), slices.Index(snapshot.Providers, b.Provider)),
+			cmp.Compare(b.Tokens.Total(), a.Tokens.Total()),
+			cmp.Compare(a.Label, b.Label),
+		)
 	})
 }
 
@@ -437,14 +433,8 @@ func aliases(set map[string]state.Alias, seal func(string) string) []snapshot.Al
 		sa := snapshot.Alias{Provider: parts[0], Label: parts[1], Name: a.Name, At: a.At.UTC()}
 		out = append(out, sa)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if !out[i].At.Equal(out[j].At) {
-			return out[i].At.After(out[j].At)
-		}
-		if out[i].Provider != out[j].Provider {
-			return out[i].Provider < out[j].Provider
-		}
-		return out[i].Label < out[j].Label
+	slices.SortFunc(out, func(a, b snapshot.Alias) int {
+		return cmp.Or(b.At.Compare(a.At), cmp.Compare(a.Provider, b.Provider), cmp.Compare(a.Label, b.Label))
 	})
 	if len(out) > snapshot.MaxAliases {
 		out = out[:snapshot.MaxAliases]

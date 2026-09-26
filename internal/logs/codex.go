@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -195,15 +194,9 @@ func countCodex(files []*codexFile) []Session {
 	own := make([]Tokens, len(files))
 	hours := make([]map[int64]int64, len(files))
 	for _, members := range families {
-		sort.SliceStable(members, func(a, b int) bool {
-			x, y := files[members[a]], files[members[b]]
-			if !x.start.Equal(y.start) {
-				return x.start.Before(y.start)
-			}
-			if x.id != y.id {
-				return x.id < y.id
-			}
-			return x.path < y.path
+		slices.SortStableFunc(members, func(a, b int) int {
+			x, y := files[a], files[b]
+			return cmp.Or(x.start.Compare(y.start), cmp.Compare(x.id, y.id), cmp.Compare(x.path, y.path))
 		})
 		seen := map[codexEvent]bool{}
 		responses := map[string]bool{}

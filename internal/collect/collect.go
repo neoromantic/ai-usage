@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -247,12 +246,8 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 		}
 		sample.Accounts = append(sample.Accounts, sa)
 	}
-	sort.Slice(sample.Accounts, func(i, j int) bool {
-		a, b := sample.Accounts[i], sample.Accounts[j]
-		if a.Provider != b.Provider {
-			return a.Provider < b.Provider
-		}
-		return a.Label < b.Label
+	slices.SortFunc(sample.Accounts, func(a, b state.SampleAccount) int {
+		return cmp.Or(cmp.Compare(a.Provider, b.Provider), cmp.Compare(a.Label, b.Label))
 	})
 	// A run stopped before it writes, as when the view that started it
 	// closes, saves nothing: what failed in it failed because it stopped,

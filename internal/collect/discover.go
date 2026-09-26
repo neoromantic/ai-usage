@@ -1,6 +1,7 @@
 package collect
 
 import (
+	"cmp"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -64,12 +65,14 @@ func Discover(userHome string, getenv func(string) string, remembered map[string
 		for h := range found {
 			out[p] = append(out[p], h)
 		}
-		sort.Slice(out[p], func(i, j int) bool {
-			a, b := out[p][i], out[p][j]
+		slices.SortFunc(out[p], func(a, b string) int {
 			if (a == def) != (b == def) {
-				return a == def
+				if a == def {
+					return -1
+				}
+				return 1
 			}
-			return a < b
+			return cmp.Compare(a, b)
 		})
 	}
 	return out

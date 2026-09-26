@@ -9,7 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -90,17 +90,17 @@ func countClaude(files []*claudeFile) []Session {
 	for i := range order {
 		order[i] = i
 	}
-	sort.SliceStable(order, func(a, b int) bool {
-		x, y := files[order[a]], files[order[b]]
-		if !x.start.Equal(y.start) {
-			return x.start.Before(y.start)
-		}
+	slices.SortStableFunc(order, func(a, b int) int {
+		x, y := files[a], files[b]
 		// A copy that kept the original times still names the original
 		// session in its lines; the original keeps the messages.
-		if x.native != y.native {
-			return x.native
+		if x.start.Equal(y.start) && x.native != y.native {
+			if x.native {
+				return -1
+			}
+			return 1
 		}
-		return x.path < y.path
+		return cmp.Or(x.start.Compare(y.start), cmp.Compare(x.path, y.path))
 	})
 	// claimed names the session each message counts in. A session whose file
 	// repeats another session's messages is a copy of that session.

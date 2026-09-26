@@ -2,7 +2,7 @@ package view
 
 import (
 	"cmp"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
@@ -167,15 +167,8 @@ func projectView(p collect.ProjectTotals, now time.Time) Project {
 // sortProjects puts the most tokens in the period first, then the most in
 // 90 days, then by path.
 func sortProjects(ps []Project, p Period) {
-	sort.SliceStable(ps, func(i, j int) bool {
-		a, b := ps[i], ps[j]
-		if p.Of(a.Usage) != p.Of(b.Usage) {
-			return p.Of(a.Usage) > p.Of(b.Usage)
-		}
-		if a.Usage.Quarter != b.Usage.Quarter {
-			return a.Usage.Quarter > b.Usage.Quarter
-		}
-		return a.Path < b.Path
+	slices.SortStableFunc(ps, func(a, b Project) int {
+		return cmp.Or(cmp.Compare(p.Of(b.Usage), p.Of(a.Usage)), cmp.Compare(b.Usage.Quarter, a.Usage.Quarter), cmp.Compare(a.Path, b.Path))
 	})
 }
 
