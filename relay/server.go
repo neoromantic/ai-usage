@@ -384,8 +384,7 @@ func firstDevices(recs map[string]Record, n int) []string {
 
 // recordTTL keeps a snapshot for as long as its device has been writing,
 // between MinRecordTTL and RecordTTL, so a key made only to fill the store
-// leaves its snapshots for days, not months. A record stored before the relay
-// kept Since has a zero one and keeps the full lifetime.
+// leaves its snapshots for days, not months.
 func (s *Server) recordTTL(since time.Time) time.Duration {
 	return min(max(s.now().Sub(since), s.Limits.MinRecordTTL), s.Limits.RecordTTL)
 }

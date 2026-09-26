@@ -477,7 +477,7 @@ The reference relay keeps a record, after each write, for as long as its device 
 ttl = min(max(now − since, 7 days), 90 days)
 ```
 
-A record stored before the relay kept *since* keeps the full 90 days. A `PUT` of an identical body writes nothing and does not extend it. A key made only to fill the store leaves its snapshots for a week, and a device that reported for a month and then went quiet is kept for a month.
+A `PUT` of an identical body writes nothing and does not extend it. A key made only to fill the store leaves its snapshots for a week, and a device that reported for a month and then went quiet is kept for a month.
 
 A relay SHOULD keep records at least 7 days after their last write. Readers MUST NOT count on any record being there.
 
@@ -518,18 +518,6 @@ A relay rejects a member it does not know with `422`, and the reference reader d
 2. Collectors start sending it.
 
 A collector that sends a member its relay does not know gets `422`. The reference collector then keeps the snapshot pending and does not read the team either, so the device sees only itself until the relay is updated. A reader older than the member drops documents that carry it, so those devices drop out of its team view until it is updated too. A document without the member stays valid everywhere.
-
-Optional members added to version 1 so far:
-
-| Member | In | Meaning |
-| --- | --- | --- |
-| `quota_from` | Account | whose account the windows belong to |
-| `linked` | Account | what accounts of other providers spent through this one |
-| `days` | Account | tokens per UTC day, newest first, up to 90 days |
-| `recent` | Account | tokens since each unreset window with a known start began, up to 8 |
-| `aliases` | Document | the short names this device gave accounts, sealed, up to 48 |
-
-The same relay build also raised the body limit from 32768 to 65536 bytes and lowered the device cap from 100 to 50. A relay older than that answers `413` to a body over 32768 bytes, and `422` to a document with `days`, `recent`, or `aliases`.
 
 ## 12. Security notes
 

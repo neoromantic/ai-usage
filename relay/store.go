@@ -17,7 +17,7 @@ import (
 
 // Record is one stored snapshot: the exact bytes that were signed, and the
 // signature. Since is when the relay first stored the device, which sets how
-// long the record is kept; it is zero on records stored before it existed.
+// long the record is kept.
 type Record struct {
 	Body  []byte    `json:"body"`
 	Sig   []byte    `json:"sig"`
