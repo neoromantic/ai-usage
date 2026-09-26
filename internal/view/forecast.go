@@ -3,6 +3,7 @@ package view
 import (
 	"cmp"
 	"math"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -241,6 +242,21 @@ func mainWindow(ws []Window) *Window {
 		}
 	}
 	return nil
+}
+
+var lengthPrefix = regexp.MustCompile(`^(\d+[mhd]) (.+)$`)
+
+// trimLength drops the length before a window's name when it is the main
+// window's length: "7d Fable" is "Fable" beside "7d".
+func trimLength(name, mainName string) string {
+	m := lengthPrefix.FindStringSubmatch(name)
+	if m == nil {
+		return name
+	}
+	if mm := lengthPrefix.FindStringSubmatch(mainName + " x"); mm != nil && mm[1] == m[1] {
+		return m[2]
+	}
+	return name
 }
 
 // knownMain is a quota's main window when how full it is now is known, or

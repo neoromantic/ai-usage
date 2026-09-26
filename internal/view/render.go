@@ -215,8 +215,6 @@ const (
 	// minWidth and maxWidth are the widths the page is laid out for.
 	minWidth = 80
 	maxWidth = 160
-	// attentionLines is how many ATTENTION lines the static page shows.
-	attentionLines = 6
 	// topProjects is how many projects PROJECTS shows without AllProjects.
 	topProjects = 10
 )
