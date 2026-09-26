@@ -434,10 +434,7 @@ func aliases(set map[string]state.Alias, seal func(string) string) []snapshot.Al
 		if len(parts) != 2 || parts[1] == "" || a.At.IsZero() || !snapshot.KnownProvider(parts[0]) {
 			continue
 		}
-		sa := snapshot.Alias{Provider: parts[0], Label: parts[1], At: a.At.UTC()}
-		if a.Name != "" {
-			sa.Name = a.Name
-		}
+		sa := snapshot.Alias{Provider: parts[0], Label: parts[1], Name: a.Name, At: a.At.UTC()}
 		out = append(out, sa)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -471,26 +468,14 @@ func fitDoc(doc *snapshot.Doc) {
 		if err != nil || len(b) <= snapshot.MaxBytes {
 			return
 		}
-		longest := -1
-		for i, a := range doc.Accounts {
-			if len(a.Projects) > 0 && (longest < 0 || len(a.Projects) > len(doc.Accounts[longest].Projects)) {
-				longest = i
-			}
-		}
-		if longest >= 0 {
-			ps := doc.Accounts[longest].Projects
-			doc.Accounts[longest].Projects = ps[:len(ps)-1]
+		if i := longest(doc.Accounts, func(a snapshot.Account) int { return len(a.Projects) }, 0); i >= 0 {
+			ps := doc.Accounts[i].Projects
+			doc.Accounts[i].Projects = ps[:len(ps)-1]
 			continue
 		}
-		longest = -1
-		for i, a := range doc.Accounts {
-			if len(a.Days) > 7 && (longest < 0 || len(a.Days) > len(doc.Accounts[longest].Days)) {
-				longest = i
-			}
-		}
-		if longest >= 0 {
-			ds := doc.Accounts[longest].Days
-			doc.Accounts[longest].Days = ds[:len(ds)-1]
+		if i := longest(doc.Accounts, func(a snapshot.Account) int { return len(a.Days) }, 7); i >= 0 {
+			ds := doc.Accounts[i].Days
+			doc.Accounts[i].Days = ds[:len(ds)-1]
 			continue
 		}
 		if len(doc.Accounts) == 0 {
@@ -498,6 +483,18 @@ func fitDoc(doc *snapshot.Doc) {
 		}
 		doc.Accounts = doc.Accounts[:len(doc.Accounts)-1]
 	}
+}
+
+// longest returns the index of the first account with the largest n above
+// above, or -1 when no account's n is above it.
+func longest(accts []snapshot.Account, n func(snapshot.Account) int, above int) int {
+	at, most := -1, above
+	for i, a := range accts {
+		if k := n(a); k > most {
+			at, most = i, k
+		}
+	}
+	return at
 }
 
 // clip keeps the end of a long string, where a path's distinctive part is.
