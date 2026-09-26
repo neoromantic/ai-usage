@@ -17,13 +17,6 @@ import (
 	"github.com/neoromantic/ai-usage/internal/view"
 )
 
-// argError is an argument that names nothing, or more than one thing, this
-// device knows. It exits 2 like a usage error, but says what there is instead
-// of printing the usage.
-type argError string
-
-func (e argError) Error() string { return string(e) }
-
 // cmdAlias lists the short names the team gave accounts, or gives an account
 // one. The name travels sealed in this device's snapshot, and the newest name
 // for an account, from any device, is the one the team sees.

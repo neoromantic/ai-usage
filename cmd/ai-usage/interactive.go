@@ -70,19 +70,3 @@ func viewConfig(d state.Dir, res *collect.Result, disp *display, offline bool, s
 	c.Now = clock
 	return c
 }
-
-// reportAt is the report of a run result as of now.
-func reportAt(d state.Dir, res *collect.Result, now time.Time) view.Report {
-	return view.Build(view.Input{
-		Version:  version,
-		RelayURL: relayURL(res.Config),
-		Config:   res.Config,
-		State:    liveSchedule(d, res.State),
-		Key:      res.Key,
-		Doc:      res.Doc,
-		Team:     res.Team,
-		Hostname: deviceName(res.Config),
-		OSUser:   osUser(),
-		Now:      now,
-	})
-}
