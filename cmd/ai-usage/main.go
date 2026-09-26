@@ -317,7 +317,6 @@ func takeGuide(d state.Dir) bool {
 	return d.SaveState(st) == nil
 }
 
-// panicError is a collection that panicked.
 type panicError struct {
 	value any
 	stack []byte

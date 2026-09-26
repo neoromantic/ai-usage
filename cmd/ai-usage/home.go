@@ -156,7 +156,6 @@ func cmdHome(ctx context.Context, args []string, stdout, stderr io.Writer) error
 	return listHomes(cfg, userHome, stdout)
 }
 
-// homeRef is one harness home.
 type homeRef struct{ provider, home string }
 
 // homePath makes h absolute. A home being added must be a directory.

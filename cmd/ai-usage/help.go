@@ -11,10 +11,8 @@ import (
 	"github.com/neoromantic/ai-usage/internal/view"
 )
 
-// helpIntro is the first line of the help.
 const helpIntro = "`ai-usage` collects AI harness usage on this device and shares it with a team."
 
-// helpSection is a heading of the help and its lines.
 type helpSection struct {
 	title string
 	lines []helpLine
@@ -230,7 +228,6 @@ func (p helpPaint) syntax(s string) string {
 	return b.String()
 }
 
-// helpSectionNamed is whether a section of the help is titled s.
 func helpSectionNamed(s string) bool {
 	for _, sec := range help {
 		if sec.title == s {
@@ -240,7 +237,6 @@ func helpSectionNamed(s string) bool {
 	return false
 }
 
-// helpPunct is the punctuation of what to type.
 const helpPunct = "[]|,=."
 
 // syntaxWords splits s into words, spaces, and runs of punctuation.

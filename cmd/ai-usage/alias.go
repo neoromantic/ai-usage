@@ -110,7 +110,6 @@ func cmdAlias(args []string, stdout io.Writer) error {
 	return nil
 }
 
-// account is one account this device knows of.
 type account struct{ provider, label string }
 
 // aliasSet is the newest name an account was given, or its clearing.
