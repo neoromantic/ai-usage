@@ -369,13 +369,21 @@ func TestPutRejects(t *testing.T) {
 	body := marshal(t, docFor(k, dev, t0))
 	pub := encode(k.Public())
 	sig := func(key *team.Key, b []byte) string { return encode(key.Sign(SnapshotMessage(b))) }
-	signedBy := func(b []byte) (string, []byte, string) { return pub, b, sig(k, b) }
 
+	type req struct {
+		team, device string
+		key          string
+		body         []byte
+		sig          string
+	}
+	signed := func(b []byte) req { return req{fp, dev, pub, b, sig(k, b)} }
 	withDoc := func(edit func(*snapshot.Doc)) []byte {
 		d := docFor(k, dev, t0)
 		edit(&d)
 		return marshal(t, d)
 	}
+	edited := func(edit func(*snapshot.Doc)) req { return signed(withDoc(edit)) }
+
 	str := string(body)
 	// A repeated key: the first value is free text that Validate never sees.
 	smuggled := []byte(`{"os_user":"free text, not sealed <b>hi</b>",` + str[1:])
@@ -384,12 +392,6 @@ func TestPutRejects(t *testing.T) {
 	unknown := []byte(strings.Replace(str, `{"v":1,`, `{"v":1,"note":"x",`, 1))
 	big := append(bytes.Clone(body), bytes.Repeat([]byte(" "), snapshot.MaxBytes-len(body)+1)...)
 
-	type req struct {
-		team, device string
-		key          string
-		body         []byte
-		sig          string
-	}
 	cases := []struct {
 		name string
 		req  req
@@ -405,40 +407,19 @@ func TestPutRejects(t *testing.T) {
 		{"signature over another body", req{fp, dev, pub, body, sig(k, withDoc(func(d *snapshot.Doc) { d.Accounts[0].Sessions = 9 }))}, http.StatusUnauthorized},
 		{"request signature", req{fp, dev, pub, body, encode(k.Sign(RequestMessage("PUT", fp, dev, t0)))}, http.StatusUnauthorized},
 		{"bare body signature", req{fp, dev, pub, body, encode(k.Sign(body))}, http.StatusUnauthorized},
-		{"names another device", func() req {
-			p, b, s := signedBy(withDoc(func(d *snapshot.Doc) { d.Device = "other-device" }))
-			return req{fp, dev, p, b, s}
-		}(), http.StatusUnprocessableEntity},
-		{"names another team", func() req {
-			p, b, s := signedBy(withDoc(func(d *snapshot.Doc) { d.Team = other.Fingerprint() }))
-			return req{fp, dev, p, b, s}
-		}(), http.StatusUnprocessableEntity},
-		{"unknown field", func() req { p, b, s := signedBy(unknown); return req{fp, dev, p, b, s} }(), http.StatusUnprocessableEntity},
-		{"repeated key", func() req { p, b, s := signedBy(smuggled); return req{fp, dev, p, b, s} }(), http.StatusUnprocessableEntity},
-		{"case variant key", func() req { p, b, s := signedBy(caseVariant); return req{fp, dev, p, b, s} }(), http.StatusUnprocessableEntity},
-		{"pretty printed", func() req { p, b, s := signedBy(pretty); return req{fp, dev, p, b, s} }(), http.StatusUnprocessableEntity},
-		{"trailing newline", func() req { p, b, s := signedBy(append(bytes.Clone(body), '\n')); return req{fp, dev, p, b, s} }(), http.StatusUnprocessableEntity},
-		{"wrong version", func() req {
-			p, b, s := signedBy(withDoc(func(d *snapshot.Doc) { d.V = 2 }))
-			return req{fp, dev, p, b, s}
-		}(), http.StatusUnprocessableEntity},
-		{"plain text label", func() req {
-			p, b, s := signedBy(withDoc(func(d *snapshot.Doc) { d.Accounts[0].Label = "me@example.com" }))
-			return req{fp, dev, p, b, s}
-		}(), http.StatusUnprocessableEntity},
-		{"quota_from its own provider", func() req {
-			p, b, s := signedBy(withDoc(func(d *snapshot.Doc) { d.Accounts[0].QuotaFrom = "codex" }))
-			return req{fp, dev, p, b, s}
-		}(), http.StatusUnprocessableEntity},
-		{"quota_from not a provider", func() req {
-			p, b, s := signedBy(withDoc(func(d *snapshot.Doc) { d.Accounts[0].QuotaFrom = "free text" }))
-			return req{fp, dev, p, b, s}
-		}(), http.StatusUnprocessableEntity},
-		{"collected in the future", func() req {
-			p, b, s := signedBy(withDoc(func(d *snapshot.Doc) { d.CollectedAt = t0.Add(11 * time.Minute) }))
-			return req{fp, dev, p, b, s}
-		}(), http.StatusUnprocessableEntity},
-		{"over 64 KB", func() req { p, b, s := signedBy(big); return req{fp, dev, p, b, s} }(), http.StatusRequestEntityTooLarge},
+		{"names another device", edited(func(d *snapshot.Doc) { d.Device = "other-device" }), http.StatusUnprocessableEntity},
+		{"names another team", edited(func(d *snapshot.Doc) { d.Team = other.Fingerprint() }), http.StatusUnprocessableEntity},
+		{"unknown field", signed(unknown), http.StatusUnprocessableEntity},
+		{"repeated key", signed(smuggled), http.StatusUnprocessableEntity},
+		{"case variant key", signed(caseVariant), http.StatusUnprocessableEntity},
+		{"pretty printed", signed(pretty), http.StatusUnprocessableEntity},
+		{"trailing newline", signed(append(bytes.Clone(body), '\n')), http.StatusUnprocessableEntity},
+		{"wrong version", edited(func(d *snapshot.Doc) { d.V = 2 }), http.StatusUnprocessableEntity},
+		{"plain text label", edited(func(d *snapshot.Doc) { d.Accounts[0].Label = "me@example.com" }), http.StatusUnprocessableEntity},
+		{"quota_from its own provider", edited(func(d *snapshot.Doc) { d.Accounts[0].QuotaFrom = "codex" }), http.StatusUnprocessableEntity},
+		{"quota_from not a provider", edited(func(d *snapshot.Doc) { d.Accounts[0].QuotaFrom = "free text" }), http.StatusUnprocessableEntity},
+		{"collected in the future", edited(func(d *snapshot.Doc) { d.CollectedAt = t0.Add(11 * time.Minute) }), http.StatusUnprocessableEntity},
+		{"over 64 KB", signed(big), http.StatusRequestEntityTooLarge},
 		{"team path not a fingerprint", req{"not-a-team", dev, pub, body, sig(k, body)}, http.StatusNotFound},
 		{"device path bad", req{fp, "UPPER_CASE", pub, body, sig(k, body)}, http.StatusNotFound},
 		{"device path escaped slash", req{fp, "a%2Fbcdefgh", pub, body, sig(k, body)}, http.StatusNotFound},
