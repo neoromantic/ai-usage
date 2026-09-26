@@ -1,12 +1,84 @@
-# ai-usage
+<div align="center">
 
-ai-usage shows how much of your Claude Code, Codex, Grok, and Hermes quota you have used, and how many tokens went where. It can also show the same numbers for every machine in your team.
+<h1>ai-usage</h1>
 
-It is one small binary for macOS, Linux, and Windows. The system scheduler runs it every 15 minutes. Each run reads what those tools already record on disk, asks the installed tools for your account and quota, and exits. A run can also publish an encrypted summary for this machine to a small relay, and read the summaries of the other machines in your team.
+<p><strong>How much of your Claude Code, Codex, and Grok quota is left, for you and every machine on your team,<br>and whether it lasts until the reset.</strong></p>
 
-![The ai-usage report of a made-up team: two laptops, a server, and nine bots that share one Codex login](docs/demo/social/team.png)
+<a href="https://github.com/neoromantic/ai-usage/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/neoromantic/ai-usage?label=release&color=5fafff"></a>
+<a href="https://github.com/neoromantic/ai-usage/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/neoromantic/ai-usage/actions/workflows/ci.yml/badge.svg"></a>
+<a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/neoromantic/ai-usage?color=87d75f"></a>
+<a href="https://t.me/usualguy"><img alt="Telegram: @usualguy" src="https://img.shields.io/badge/Telegram-@usualguy-26A5E4?logo=telegram&logoColor=white"></a>
 
-That team is made up; [docs/demo](docs/demo) has its report and more pictures, and `ai-usage report --from docs/demo/team.json` shows it in your terminal. The same page as text, for another made-up team:
+<p>
+<a href="#quick-start"><b>Quick start</b></a> ·
+<a href="#what-it-shows"><b>What it shows</b></a> ·
+<a href="#install"><b>Install</b></a> ·
+<a href="#teams"><b>Teams</b></a> ·
+<a href="#privacy"><b>Privacy</b></a> ·
+<a href="#json-for-agents"><b>JSON for agents</b></a> ·
+<a href="#commands"><b>Commands</b></a>
+</p>
+
+</div>
+
+![The top of the ai-usage page for a made-up team: ATTENTION lists a full Claude window, a Codex login that runs out on Friday, a failing tool, a silent bot, and an old release; below it, every subscription with how full it will be at its reset](docs/demo/social/team-attention.png)
+
+<p align="center"><sub>A made-up team: two laptops, a Linux server, and nine bots on one Codex login. <a href="#what-it-shows">The whole page</a> · <a href="docs/demo">more pictures</a></sub></p>
+
+ai-usage is one small binary for macOS, Linux, and Windows. The system scheduler runs it every 15 minutes. Each run reads what Claude Code, Codex, Grok, and Hermes already record on disk, asks the installed tools for your account and quota, and exits. Machines that share a team key see each other through a small relay, which sees the numbers but not the names.
+
+## Highlights
+
+- **Every subscription on one page.** Claude Code and the Claude app's agent-mode sessions, Codex from its CLI, the ChatGPT app, or an IDE extension, Grok, and Hermes. Each account shows its 5-hour, weekly, and per-model windows, and its tokens today and over 7, 30, and 90 days.
+- **A forecast, not just a percentage.** Each window says how full it will be at its reset at your pace so far: `over`, `tight`, `ok`, or `under`. An `over` window says when it runs out.
+- **ATTENTION, only when something is wrong.** A full window, one that will run out before its reset, a machine whose tool fails or that stopped reporting, an old release, a subscription nobody uses.
+- **The whole team.** Laptops, servers, and bots in containers, every machine against every subscription, with each one's share. A colleague joins with one command. See [Teams](#teams).
+- **Private by design.** The relay sees tools, plans, and numbers. Names, emails, and project paths are encrypted with the team key, and every snapshot is signed. See [Privacy](#privacy).
+- **Nothing to run or look after.** No daemon, no account, no config file. One line installs it, and it schedules and updates itself.
+- **Spends none of your quota.** It asks the tools you already have instead of calling Anthropic, OpenAI, or xAI, and never reads your credentials. Asking Claude Code for its usage spends no tokens. See [Other data folders](#other-data-folders).
+- **JSON for agents,** with a versioned schema, so an agent can pick the account with room. See [JSON for agents](#json-for-agents).
+
+## Quick start
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.sh | sh
+```
+
+That line installs `ai-usage`, registers it with launchd or cron, and prints your report. From then on:
+
+```sh
+ai-usage             # collect now and open the page
+ai-usage team key    # print the key a colleague installs with to join your team
+```
+
+A colleague joins your team with that key:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.sh |
+  AI_USAGE_TEAM_KEY='aiu-team-1:…' sh
+```
+
+Questions, ideas, a tool you want supported: write me on Telegram, [@usualguy](https://t.me/usualguy), or [open an issue](https://github.com/neoromantic/ai-usage/issues).
+
+## Contents
+
+- [What it shows](#what-it-shows)
+- [Install](#install) and the [first run](#first-run)
+- [Teams](#teams) and the [relay](#relay)
+- [Commands](#commands)
+- [Other data folders](#other-data-folders), and ai-usage [in a container](#in-a-container)
+- [JSON for agents](#json-for-agents)
+- [Privacy](#privacy)
+- [Updates](#updates), [uninstall](#uninstall), and [building from source](#build-from-source)
+
+## What it shows
+
+![The whole ai-usage page for a made-up team: two laptops, a server, and nine bots that share one Codex login](docs/demo/social/team.png)
+
+The team in the picture is made up. [docs/demo](docs/demo) has its report and more pictures, and `ai-usage report --from docs/demo/team.json` shows it in your terminal.
+
+<details>
+<summary>The same page as text, for another made-up team</summary>
 
 ```
 ai-usage · annbook · team qmvrtzpa                                  ● collected 7m ago  ● relay 7m ago  ● up to date
@@ -69,6 +141,8 @@ PROJECTS  annbook · by 7d · M tokens in+out
 
 ━ used  ─ left  ┃╋ even use  ┈ no reading  ~ stale  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
 ```
+
+</details>
 
 The header names this machine and the team, and says whether collection, the relay, and self-update are healthy; when one of them fails, its error is in ATTENTION. ATTENTION appears only when something is wrong: a subscription that is out, or will run out by its reset at its pace so far; a machine whose collector or one of its tools fails, or that has not reported for a day; machines on an older release; and a subscription past half its window that will be left mostly unused.
 
