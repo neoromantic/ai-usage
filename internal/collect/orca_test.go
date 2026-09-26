@@ -233,7 +233,7 @@ func TestHomesAreAskedTogether(t *testing.T) {
 	all := make(chan struct{})
 	go func() { arrived.Wait(); close(all) }()
 	ask := o.Ask
-	o.Ask = func(ctx context.Context, p, home string) (probe.Reading, error) {
+	o.Ask = func(ctx context.Context, p, home string, lastUse time.Time) (probe.Reading, error) {
 		if p == "codex" {
 			arrived.Done()
 			select {
@@ -242,7 +242,7 @@ func TestHomesAreAskedTogether(t *testing.T) {
 				return probe.Reading{}, errors.New("homes were asked one at a time")
 			}
 		}
-		return ask(ctx, p, home)
+		return ask(ctx, p, home, lastUse)
 	}
 	res := run(t, o)
 	if got := res.State.Sources["codex"]; got.Status != "ok" {
@@ -263,11 +263,11 @@ func TestPanicInProbeIsItsSourceError(t *testing.T) {
 	w.login("claude", ch, "ann", nil)
 	w.login("codex", xh, "bob", nil)
 	ask := o.Ask
-	o.Ask = func(ctx context.Context, p, home string) (probe.Reading, error) {
+	o.Ask = func(ctx context.Context, p, home string, lastUse time.Time) (probe.Reading, error) {
 		if p == "claude" {
 			panic("boom")
 		}
-		return ask(ctx, p, home)
+		return ask(ctx, p, home, lastUse)
 	}
 	res := run(t, o)
 	if src := res.State.Sources["claude"]; src.Status != "error" || !strings.Contains(src.Error, "stopped by a bug") {

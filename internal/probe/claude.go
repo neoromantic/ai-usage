@@ -35,10 +35,13 @@ import (
 // expire, and an idle home has spent nothing since. The cache is as fresh as
 // Claude Code last made it. Its age is reported, and when the read leaves it
 // stale, why.
-func Claude(ctx context.Context, env Env, home string) (Reading, error) {
+//
+// remembered is the CLAUDE_CONFIG_DIR an earlier run saw for home, and
+// lastUse is when home was last used, as its logs show.
+func Claude(ctx context.Context, env Env, home, remembered string, lastUse time.Time) (Reading, error) {
 	var r Reading
 	var errs []error
-	configDir := env.claudeConfigDir(home)
+	configDir := env.claudeConfigDir(home, remembered)
 	file := claudeConfigFile(env.HomeDir, home, configDir)
 
 	var st claudeStatus
@@ -58,7 +61,7 @@ func Claude(ctx context.Context, env Env, home string) (Reading, error) {
 	// A zero st is no subscription, so a missing binary is never asked. A
 	// config that cannot be read is not refreshed either: Claude Code would
 	// meet the same file, and its error is reported below.
-	if st.subscription() && cfgErr == nil && cfg.hasAccount() && cfg.usedSince(LastUse(ctx), env.now()) && claudeOwned(file, home) && cfg.stale(env.now()) {
+	if st.subscription() && cfgErr == nil && cfg.hasAccount() && cfg.usedSince(lastUse, env.now()) && claudeOwned(file, home) && cfg.stale(env.now()) {
 		var err error
 		if cfg, err = claudeReadUsage(ctx, env, bin, configDir, home, file, cfg); err != nil {
 			errs = append(errs, err)
@@ -86,15 +89,19 @@ func isDefaultHome(userHome, home, leaf string) bool {
 // to run it without one. Once the variable is set, even to the default
 // ~/.claude, Claude Code keeps its config inside the directory and its login
 // under a keychain entry named after the exact string. So a value in Environ
-// that names this home is passed on as it is. Otherwise a custom home is
-// passed, and the default home runs without the variable.
-func (e Env) claudeConfigDir(home string) string {
-	if v := e.getenv("CLAUDE_CONFIG_DIR"); v != "" && samePath(v, home) {
-		if filepath.IsAbs(v) {
-			return v
+// that names this home is passed on as it is. When Environ does not name it,
+// as under the system scheduler, the exact string remembered from a run that
+// saw the home through the variable is passed the same way. Otherwise a
+// custom home is passed, and the default home runs without the variable.
+func (e Env) claudeConfigDir(home, remembered string) string {
+	for _, v := range []string{e.getenv("CLAUDE_CONFIG_DIR"), remembered} {
+		if v != "" && samePath(v, home) {
+			if filepath.IsAbs(v) {
+				return v
+			}
+			// Relative to the caller's directory, not the one claude starts in.
+			return home
 		}
-		// Relative to the caller's directory, not the one claude starts in.
-		return home
 	}
 	if isDefaultHome(e.HomeDir, home, ".claude") {
 		return ""
@@ -272,7 +279,7 @@ func claudeRefresh(ctx context.Context, env Env, bin, configDir string) claudeRu
 	defer cancel()
 	cmd := env.command(ctx, bin, "-p", "/usage", "--no-session-persistence",
 		"--model", claudeGuardModel, "--settings", `{"disableAllHooks":true}`)
-	child := env.WithEnv("CLAUDE_CONFIG_DIR", configDir).WithEnv("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "")
+	child := env.withEnv("CLAUDE_CONFIG_DIR", configDir).withEnv("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "")
 	cmd.Env = env.pathFor(child.harnessEnv("DISABLE_AUTOUPDATER", "1"), bin)
 	// The null device: there is no prompt to wait for.
 	cmd.Stdin = nil
@@ -612,20 +619,6 @@ func (cfg claudeConfig) stale(now time.Time) bool {
 	}
 	age := now.Sub(time.UnixMilli(c.FetchedAtMs))
 	return age < 0 || age >= claudeFresh
-}
-
-type lastUseKey struct{}
-
-// WithLastUse tells a probe when the home it asks about was last used, as
-// its logs show.
-func WithLastUse(ctx context.Context, t time.Time) context.Context {
-	return context.WithValue(ctx, lastUseKey{}, t)
-}
-
-// LastUse is the time WithLastUse gave, or zero.
-func LastUse(ctx context.Context) time.Time {
-	t, _ := ctx.Value(lastUseKey{}).(time.Time)
-	return t
 }
 
 // claudeInUse is how recently a home must have been used for Claude Code to

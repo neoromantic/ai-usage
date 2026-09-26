@@ -176,6 +176,7 @@ func TestClaudeConfigFile(t *testing.T) {
 // variable, and a custom home.
 func TestClaudeConfigDir(t *testing.T) {
 	user := filepath.Join(string(filepath.Separator)+"u", "me")
+	def := filepath.Join(user, ".claude")
 	custom := filepath.Join(user, "work-claude")
 	sep := string(filepath.Separator)
 	wd, err := os.Getwd()
@@ -183,15 +184,19 @@ func TestClaudeConfigDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	tests := []struct {
-		name, env, home, want string
+		name, env, remembered, home, want string
 	}{
-		{"custom home keeps the exact string", "CLAUDE_CONFIG_DIR=" + custom + sep, custom, custom + sep},
-		{"a relative value becomes the home", "CLAUDE_CONFIG_DIR=rel-claude", filepath.Join(wd, "rel-claude"), filepath.Join(wd, "rel-claude")},
+		{"custom home keeps the exact string", "CLAUDE_CONFIG_DIR=" + custom + sep, "", custom, custom + sep},
+		{"a relative value becomes the home", "CLAUDE_CONFIG_DIR=rel-claude", "", filepath.Join(wd, "rel-claude"), filepath.Join(wd, "rel-claude")},
+		{"variable names another home", "CLAUDE_CONFIG_DIR=" + custom, def + sep, def, def + sep},
+		{"variable unset", "", def + sep, def, def + sep},
+		{"nothing remembered at the default home", "", "", def, ""},
+		{"variable naming this home beats remembered", "CLAUDE_CONFIG_DIR=" + custom, custom + sep, custom, custom},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			env := Env{HomeDir: user, Environ: []string{"PATH=/bin", tc.env}}
-			if got := env.claudeConfigDir(tc.home); got != tc.want {
+			if got := env.claudeConfigDir(tc.home, tc.remembered); got != tc.want {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
@@ -223,7 +228,7 @@ func TestClaudeDefaultHome(t *testing.T) {
 	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
 	writeFile(t, filepath.Join(home, ".claude.json"), `{"oauthAccount":{"accountUuid":"acct-1"},"cachedUsageUtilization":{"fetchedAtMs":1,"accountUuid":"acct-1","utilization":{"limits":[{"kind":"session","percent":99}]}}}`)
 
-	r, err := Claude(context.Background(), env, home)
+	r, err := Claude(context.Background(), env, home, "", time.Time{})
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
@@ -255,7 +260,7 @@ func TestClaudeDefaultHomeNamedByEnv(t *testing.T) {
 	writeFile(t, filepath.Join(home, ".claude.json"), claudeCache)
 	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), `{"oauthAccount":{"accountUuid":"acct-1"},"cachedUsageUtilization":{"fetchedAtMs":1,"accountUuid":"acct-1","utilization":{"limits":[{"kind":"session","percent":99}]}}}`)
 
-	r, err := Claude(context.Background(), env, home)
+	r, err := Claude(context.Background(), env, home, "", time.Time{})
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
@@ -273,7 +278,7 @@ func TestClaudeCustomHome(t *testing.T) {
 	home := filepath.Join(env.HomeDir, "work-claude")
 	writeFile(t, filepath.Join(home, ".claude.json"), claudeCache)
 
-	r, err := Claude(context.Background(), env, home)
+	r, err := Claude(context.Background(), env, home, "", time.Time{})
 	if err != nil || r.Account != "dev@example.com" || r.Quota == nil {
 		t.Fatalf("reading = %+v, %v", r, err)
 	}
@@ -305,7 +310,7 @@ func TestClaudeAnswers(t *testing.T) {
 			env, _ := fakeEnv(t, tc.mode)
 			home := filepath.Join(env.HomeDir, ".claude")
 			writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
-			r, err := Claude(context.Background(), env, home)
+			r, err := Claude(context.Background(), env, home, "", time.Time{})
 			if (err == nil) != (tc.wantErr == "") || !strings.Contains(errText(err), tc.wantErr) {
 				t.Errorf("error = %q, want one with %q", errText(err), tc.wantErr)
 			}
@@ -327,7 +332,7 @@ func TestClaudeBinaryMissing(t *testing.T) {
 	home := t.TempDir()
 	writeFile(t, filepath.Join(home, ".claude.json"), claudeCache)
 	env := Env{LookPath: notOnPath, HomeDir: home, Environ: []string{}}
-	r, err := Claude(context.Background(), env, filepath.Join(home, ".claude"))
+	r, err := Claude(context.Background(), env, filepath.Join(home, ".claude"), "", time.Time{})
 	if !strings.Contains(errText(err), "not found") {
 		t.Errorf("error = %v", err)
 	}
@@ -339,7 +344,7 @@ func TestClaudeBinaryMissing(t *testing.T) {
 func TestClaudeBadCacheKeepsAccount(t *testing.T) {
 	env, _ := fakeEnv(t, "claude-ok")
 	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), `{`)
-	r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"))
+	r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", time.Time{})
 	if r.Account != "dev@example.com" || r.Quota != nil || err == nil {
 		t.Errorf("reading = %+v, %v", r, err)
 	}
@@ -352,7 +357,7 @@ func TestClaudeTimeout(t *testing.T) {
 	env, record := fakeEnv(t, "claude-orphan", "PROBE_RELEASE="+release)
 	env.Timeout = 300 * time.Millisecond
 	start := time.Now()
-	r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"))
+	r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", time.Time{})
 	if took := time.Since(start); took > 8*time.Second {
 		t.Errorf("took %v", took)
 	}
@@ -399,7 +404,7 @@ func TestClaudeRefreshesUsage(t *testing.T) {
 			env.Environ = append(env.Environ, "PROBE_CACHE="+file)
 			start := time.Now()
 
-			r, err := Claude(WithLastUse(context.Background(), start.Add(-tc.idle)), env, home)
+			r, err := Claude(context.Background(), env, home, "", start.Add(-tc.idle))
 			if err != nil {
 				t.Fatalf("error: %v", err)
 			}
@@ -483,7 +488,7 @@ func TestClaudeSkipsUsageRefresh(t *testing.T) {
 			if tc.idle < 0 {
 				used = time.Time{}
 			}
-			_, err := Claude(WithLastUse(context.Background(), used), env, filepath.Join(env.HomeDir, ".claude"))
+			_, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", used)
 			if runs := readRuns(t, record); len(runs) != 1 {
 				t.Errorf("ran %d commands, the last %q", len(runs), runs[len(runs)-1].Args)
 			}
@@ -501,7 +506,6 @@ func TestClaudeStopsAskingOnceTheHomeIsIdle(t *testing.T) {
 	env, record := fakeEnv(t, "claude-ok", "PROBE_USAGE=offline")
 	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
 	used := testNow
-	ctx := WithLastUse(context.Background(), used)
 	runs := 0
 	for _, tc := range []struct {
 		after time.Duration
@@ -514,7 +518,7 @@ func TestClaudeStopsAskingOnceTheHomeIsIdle(t *testing.T) {
 	} {
 		now := used.Add(tc.after)
 		env.Now = func() time.Time { return now }
-		_, err := Claude(ctx, env, filepath.Join(env.HomeDir, ".claude"))
+		_, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", used)
 		n := len(readRuns(t, record))
 		if asked := n-runs == 2; asked != tc.ask {
 			t.Errorf("%v after the last use: asked %v", tc.after, asked)
@@ -570,7 +574,7 @@ func TestClaudeUsageRefreshFails(t *testing.T) {
 			file := filepath.Join(env.HomeDir, ".claude.json")
 			writeFile(t, file, claudeCache)
 			env.Environ = append(env.Environ, "PROBE_CACHE="+file)
-			r, err := Claude(WithLastUse(context.Background(), time.Now()), env, filepath.Join(env.HomeDir, ".claude"))
+			r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", time.Now())
 			if (err == nil) != (tc.wantErr == "") || !strings.Contains(errText(err), tc.wantErr) || saysLoggedOut(err) {
 				t.Errorf("error = %q, want one with %q", errText(err), tc.wantErr)
 			}
@@ -592,7 +596,7 @@ func TestClaudeUsageRefreshTimeout(t *testing.T) {
 	env, record := fakeEnv(t, "claude-ok", "PROBE_USAGE=hang", "PROBE_RELEASE="+release)
 	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
 	start := time.Now()
-	r, err := Claude(WithLastUse(context.Background(), testNow), env, filepath.Join(env.HomeDir, ".claude"))
+	r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", testNow)
 	if took := time.Since(start); took > 8*time.Second {
 		t.Errorf("took %v", took)
 	}
@@ -644,7 +648,7 @@ func TestClaudeUsageRefreshSaysWhy(t *testing.T) {
 		t.Run(tc.usage, func(t *testing.T) {
 			env, record := fakeEnv(t, "claude-ok", "PROBE_USAGE="+tc.usage)
 			writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
-			r, err := Claude(WithLastUse(context.Background(), testNow), env, filepath.Join(env.HomeDir, ".claude"))
+			r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", testNow)
 			if runs := readRuns(t, record); len(runs) != 2 {
 				t.Errorf("ran %d commands", len(runs))
 			}
@@ -795,7 +799,7 @@ func TestClaudeOldVersionIsNotAsked(t *testing.T) {
 			env.LookPath = func(string) (string, error) { return bin, nil }
 			writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
 			for range 2 {
-				r, err := Claude(WithLastUse(context.Background(), testNow), env, filepath.Join(env.HomeDir, ".claude"))
+				r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", testNow)
 				if errText(err) != tc.want {
 					t.Errorf("error = %q\nwant    %q", errText(err), tc.want)
 				}
@@ -826,7 +830,7 @@ func TestClaudeBehindAShimIsAsked(t *testing.T) {
 	link(t, shim, bin)
 	env.LookPath = func(string) (string, error) { return bin, nil }
 	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
-	_, err := Claude(WithLastUse(context.Background(), testNow), env, filepath.Join(env.HomeDir, ".claude"))
+	_, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", testNow)
 	if want := "claude /usage: no new reading: could not read the usage (cache 1d old)"; errText(err) != want {
 		t.Errorf("error = %q\nwant    %q", errText(err), want)
 	}
@@ -950,7 +954,7 @@ func TestClaudeNoTrafficIsNotAsked(t *testing.T) {
 			}
 			writeFile(t, file, claudeCache)
 			for range 2 {
-				_, err := Claude(WithLastUse(context.Background(), testNow), env, home)
+				_, err := Claude(context.Background(), env, home, "", testNow)
 				want := "claude /usage: nonessential traffic is off in Claude Code's settings (cache 1d old)"
 				if tc.asked {
 					want = "claude /usage: no new reading: could not read the usage (cache 1d old)"

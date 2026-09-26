@@ -5,12 +5,9 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"slices"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/neoromantic/ai-usage/internal/probe"
 )
 
 func TestRememberEnvKeepsClaudeConfigDirVerbatim(t *testing.T) {
@@ -47,33 +44,6 @@ func TestRememberEnvKeepsClaudeConfigDirVerbatim(t *testing.T) {
 		if _, changed := RememberEnv(got, getenv, found); changed {
 			t.Fatalf("%q was remembered", v)
 		}
-	}
-}
-
-// The scheduler run and a variable naming this home are covered end to end
-// by TestSchedulerRunProbesClaudeWithRememberedConfigDir.
-func TestClaudeEnvUsesRememberedValueWhenUnset(t *testing.T) {
-	home := filepath.Join(t.TempDir(), ".claude")
-	remembered := home + string(filepath.Separator)
-	other := "CLAUDE_CONFIG_DIR=" + filepath.Join(filepath.Dir(home), "other")
-
-	for _, tc := range []struct {
-		name, remembered string
-		environ          []string
-		want             string
-	}{
-		{"variable names another home", remembered, []string{"PATH=/usr/bin", other}, remembered},
-		{"nothing remembered", "", []string{"PATH=/usr/bin"}, ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			env := claudeEnv(probe.Env{Environ: tc.environ}, home, tc.remembered)
-			if got := env.Getenv("CLAUDE_CONFIG_DIR"); got != tc.want {
-				t.Fatalf("CLAUDE_CONFIG_DIR = %q, want %q", got, tc.want)
-			}
-			if !slices.Contains(env.Environ, "PATH=/usr/bin") {
-				t.Fatalf("environ lost PATH: %v", env.Environ)
-			}
-		})
 	}
 }
 

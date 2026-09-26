@@ -276,11 +276,3 @@ func RememberEnv(remembered map[string]map[string]string, getenv func(string) st
 	}
 	return remembered, changed
 }
-
-// samePath reports whether a and b name the same directory, relative paths
-// taken from this process's directory.
-func samePath(a, b string) bool {
-	a, errA := filepath.Abs(a)
-	b, errB := filepath.Abs(b)
-	return errA == nil && errB == nil && a == b
-}

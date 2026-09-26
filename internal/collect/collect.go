@@ -58,7 +58,7 @@ type Options struct {
 	// Readers and prober are replaced in tests. ReadLogs reads all homes of
 	// one provider together and tags each session with its home.
 	ReadLogs func(provider string, homes []string, since time.Time) logs.Result
-	Ask      func(ctx context.Context, provider, home string) (probe.Reading, error)
+	Ask      func(ctx context.Context, provider, home string, lastUse time.Time) (probe.Reading, error)
 	// After runs under the run lock before the state is saved. The command
 	// layer uses it for scheduler registration and self-update bookkeeping.
 	After func(ctx context.Context, cfg *state.Config, st *state.State)
@@ -104,11 +104,11 @@ func (o *Options) fill() {
 
 // askHarness asks the installed harnesses. homeEnv is the remembered
 // variable values of the config, by provider and home.
-func askHarness(env probe.Env, homeEnv map[string]map[string]string) func(ctx context.Context, provider, home string) (probe.Reading, error) {
-	return func(ctx context.Context, provider, home string) (probe.Reading, error) {
+func askHarness(env probe.Env, homeEnv map[string]map[string]string) func(ctx context.Context, provider, home string, lastUse time.Time) (probe.Reading, error) {
+	return func(ctx context.Context, provider, home string, lastUse time.Time) (probe.Reading, error) {
 		switch provider {
 		case "claude":
-			return probe.Claude(ctx, claudeEnv(env, home, homeEnv["claude"][home]), home)
+			return probe.Claude(ctx, env, home, homeEnv["claude"][home], lastUse)
 		case "codex":
 			return probe.Codex(ctx, env, home)
 		case "grok":
@@ -117,21 +117,6 @@ func askHarness(env probe.Env, homeEnv map[string]map[string]string) func(ctx co
 			return probe.Reading{}, nil
 		}
 	}
-}
-
-// claudeEnv is env for probing the Claude home at home. Claude Code keeps its
-// config inside a home named by CLAUDE_CONFIG_DIR, even the default ~/.claude,
-// and names its login after the exact string. So a home once seen through the
-// variable is probed with the exact string remembered for it whenever this
-// run's environment does not name it, as under the system scheduler.
-func claudeEnv(env probe.Env, home, remembered string) probe.Env {
-	if remembered == "" {
-		return env
-	}
-	if v := env.Getenv("CLAUDE_CONFIG_DIR"); v != "" && samePath(v, home) {
-		return env
-	}
-	return env.WithEnv("CLAUDE_CONFIG_DIR", remembered)
 }
 
 // LoadKey reads the team key, generating one on the first run.
@@ -444,7 +429,7 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 			if _, ok := apps[home]; ok {
 				return probe.Reading{}, nil
 			}
-			return o.Ask(probe.WithLastUse(ctx, lastUse[home]), p, home)
+			return o.Ask(ctx, p, home, lastUse[home])
 		}, p, homes)
 	}
 	// partial means some home's read was incomplete, so a lower count than

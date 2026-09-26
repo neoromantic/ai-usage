@@ -120,12 +120,12 @@ func (w *world) read(p string, homes []string, since time.Time) logs.Result {
 	return out
 }
 
-func (w *world) ask(ctx context.Context, p, home string) (probe.Reading, error) {
+func (w *world) ask(ctx context.Context, p, home string, lastUse time.Time) (probe.Reading, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	k := state.Key(p, home)
 	w.asked = append(w.asked, k)
-	w.lastUse[k] = probe.LastUse(ctx)
+	w.lastUse[k] = lastUse
 	return w.readings[k], w.askErr[k]
 }
 

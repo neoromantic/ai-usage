@@ -164,13 +164,9 @@ func (e Env) getenv(key string) string {
 	return value
 }
 
-// Getenv is the value harness commands get for key: the last one Environ
-// gives it, or this process's value when Environ is nil.
-func (e Env) Getenv(key string) string { return e.getenv(key) }
-
-// WithEnv returns a copy of e whose harness commands get key set to value,
+// withEnv returns a copy of e whose harness commands get key set to value,
 // or not set at all when value is empty.
-func (e Env) WithEnv(key, value string) Env {
+func (e Env) withEnv(key, value string) Env {
 	e.Environ = e.harnessEnv(key, value)
 	return e
 }
