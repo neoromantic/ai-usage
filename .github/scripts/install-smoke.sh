@@ -7,11 +7,18 @@
 # It builds this machine's release file, serves it on 127.0.0.1, and points the
 # installer there instead of GitHub. The build is a development version, and
 # AI_USAGE_NO_SCHEDULE is set, so the first run neither registers with the
-# system scheduler nor updates itself. On Windows it then registers the task
-# with `schedule install`, checks it, and removes it. On macOS and Linux it
-# then installs into homes of its own under $RUNNER_TEMP, to check which
-# folder the binary goes to and which shell profile puts it on PATH. Work
-# files go under $RUNNER_TEMP.
+# system scheduler nor updates itself. On macOS it builds the menu bar app too,
+# and checks that the installer puts it in ~/Applications, under a home of its
+# own, and that the upgrade replaces it. In CI the installer also quits any
+# copy that runs and opens the new one, which the script checks and quits at
+# the end. Elsewhere, as on a Mac someone uses, the installer gets a pkill
+# and a launchctl that find nothing, so it neither quits the real app nor
+# opens the test build, which would set itself up to open at login and share
+# the real app's settings. On Windows it then
+# registers the task with `schedule install`, checks it, and removes it. On
+# macOS and Linux it then installs into homes of its own under $RUNNER_TEMP,
+# to check which folder the binary goes to and which shell profile puts it on
+# PATH. Work files go under $RUNNER_TEMP.
 set -eu
 
 fail() {
@@ -35,14 +42,32 @@ cd "$root"
 goos=$(go env GOOS)
 goarch=$(go env GOARCH)
 exe=$(go env GOEXE)
+if [ "$goos" = darwin ] && [ -z "${CI:-}" ]; then
+	mkdir -p "$work/no-gui"
+	for tool in pkill launchctl; do
+		printf '#!/bin/sh\nexit 1\n' >"$work/no-gui/$tool"
+		chmod +x "$work/no-gui/$tool"
+	done
+	PATH="$work/no-gui:$PATH"
+fi
 version=v0.0.0-smoke
-TARGETS="$goos/$goarch" sh .github/scripts/dist.sh "$version" "$work/dist"
+targets="$goos/$goarch"
+if [ "$goos" = darwin ]; then
+	targets="$targets darwin/app"
+fi
+TARGETS=$targets sh .github/scripts/dist.sh "$version" "$work/dist"
 built="$work/dist/ai-usage_${goos}_${goarch}$exe"
 
 go build -o "$work/serve$exe" .github/scripts/serve.go
 "$work/serve$exe" "127.0.0.1:$port" "$work/dist" &
 server=$!
-trap 'kill "$server" 2>/dev/null || true' EXIT
+cleanup() {
+	kill "$server" 2>/dev/null || true
+	if [ "$goos" = darwin ]; then
+		pkill -x -U "$(id -u)" AIUsageBar || true
+	fi
+}
+trap cleanup EXIT
 up=0
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
 	if curl -fs -o /dev/null "http://127.0.0.1:$port/checksums.txt"; then
@@ -64,6 +89,12 @@ export AI_USAGE_BIN_DIR="$work/bin"
 # Nothing listens there: the first run must record the relay error and succeed.
 export AI_USAGE_RELAY=http://127.0.0.1:9
 export AI_USAGE_TEAM_KEY="$key"
+# The installer puts the menu bar app in $HOME/Applications.
+if [ "$goos" = darwin ]; then
+	export HOME="$work/mac-home"
+	mkdir -p "$HOME"
+fi
+app="$work/mac-home/Applications/AI Usage.app"
 
 if [ "$goos" = windows ]; then
 	# The documented `irm | iex` path under Windows PowerShell 5.1, then an
@@ -87,9 +118,33 @@ else
 	[ ! -e "$work/bin" ] || fail "the installer wrote files under sudo"
 
 	sh install.sh
+	if [ "$goos" = darwin ]; then
+		[ "$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")" = "${version#v}" ] ||
+			fail "the installer did not put the menu bar app of $version in $app"
+		# Not a file left inside it: macOS refuses writes into an app while
+		# it checks the app's first launch.
+		first=$(stat -f %i "$app")
+	fi
 	# Running it again upgrades in place.
 	sh install.sh
 	bin="$work/bin/ai-usage"
+	if [ "$goos" = darwin ]; then
+		[ "$(stat -f %i "$app")" != "$first" ] || fail "the upgrade did not replace the menu bar app"
+		[ -x "$app/Contents/MacOS/AIUsageBar" ] || fail "the upgrade left no menu bar app"
+		codesign --verify --strict "$app" || fail "the menu bar app's signature does not verify"
+		# With someone logged in at the screen, the installer opened it.
+		if launchctl print "gui/$(id -u)" >/dev/null 2>&1; then
+			running=0
+			for _ in 1 2 3 4 5 6 7 8 9 10; do
+				if pgrep -x -U "$(id -u)" AIUsageBar >/dev/null; then
+					running=1
+					break
+				fi
+				sleep 1
+			done
+			[ "$running" = 1 ] || fail "the menu bar app is not running after the upgrade"
+		fi
+	fi
 fi
 
 unset AI_USAGE_RELAY AI_USAGE_TEAM_KEY
@@ -120,6 +175,8 @@ else
 	# folders on PATH, so no real profile or earlier install is involved.
 	unset AI_USAGE_BIN_DIR ZDOTDIR XDG_CONFIG_HOME
 	sys=/usr/bin:/bin:/usr/sbin:/sbin
+	# These are about the binary; the app was checked above.
+	export AI_USAGE_NO_APP=1
 
 	# A folder already on PATH is used, and an upgrade stays in it even when
 	# a folder that comes first appears on PATH.

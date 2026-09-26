@@ -14,8 +14,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  # Linux runs most collectors, so its tests and its binary run here too
+  # before anything is published.
+  linux:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: false
+      - run: go vet ./...
+      - run: go test ./...
+      - name: Build and run the Linux binary
+        env:
+          AI_USAGE_RELAY_URL: ${{ vars.AI_USAGE_RELAY_URL }}
+        run: |
+          TARGETS=linux/amd64 sh .github/scripts/dist.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/dist"
+          test "$("$RUNNER_TEMP/dist/ai-usage_linux_amd64" version)" = "$GITHUB_REF_NAME"
+
+  release:
+    needs: linux
+    # macOS, because the menu bar app builds only there. Go cross-compiles
+    # the other binaries.
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
       # No module or build cache: release binaries build from a clean slate.
@@ -25,6 +47,9 @@ jobs:
           cache: false
       - run: go vet ./...
       - run: go test ./...
+      - name: Check the menu bar app
+        working-directory: macos
+        run: xcrun swift run AIUsageChecks
       # The repository variable AI_USAGE_RELAY_URL, if set, becomes the
       # binaries' default relay. It reaches dist.sh through the environment,
       # never pasted into the script.
@@ -32,11 +57,17 @@ jobs:
         env:
           AI_USAGE_RELAY_URL: ${{ vars.AI_USAGE_RELAY_URL }}
         run: sh .github/scripts/dist.sh "$GITHUB_REF_NAME" dist
+      # The app's version is the tag without its v.
       - name: Check the build
         run: |
-          test "$(./dist/ai-usage_linux_amd64 version)" = "$GITHUB_REF_NAME"
-          test "$(wc -l <dist/checksums.txt)" -eq 6
-          (cd dist && sha256sum --strict -c checksums.txt)
+          test "$(./dist/ai-usage_darwin_arm64 version)" = "$GITHUB_REF_NAME"
+          test "$(wc -l <dist/checksums.txt)" -eq 7
+          (cd dist && shasum -a 256 --strict -c checksums.txt)
+          ditto -x -k dist/ai-usage_darwin_app.zip "$RUNNER_TEMP/app"
+          app="$RUNNER_TEMP/app/AI Usage.app"
+          test "$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")" = "${GITHUB_REF_NAME#v}"
+          for arch in arm64 x86_64; do lipo "$app/Contents/MacOS/AIUsageBar" -verify_arch "$arch"; done
+          codesign --verify --strict "$app"
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}

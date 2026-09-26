@@ -11,11 +11,15 @@
 #   AI_USAGE_DOWNLOAD_URL    where release files are fetched from (mirrors, tests)
 #   AI_USAGE_ALLOW_ROOT      set to install for root from a sudo shell
 #   AI_USAGE_NO_MODIFY_PATH  set to leave shell profiles alone
+#   AI_USAGE_NO_APP          set to skip the menu bar app on macOS
 #
 # The script downloads the release file for this OS and CPU, checks it against
 # the release's checksums.txt, installs it, and runs it once. That first run
 # registers the collector with the system scheduler (cron on Linux, launchd
-# on macOS). Running the script again upgrades in place.
+# on macOS). On macOS 14 and later, the script then installs the menu bar
+# app from the same release into ~/Applications/AI Usage.app and opens it;
+# the app is for the person at the screen, so root never gets it. Running the
+# script again upgrades in place.
 #
 # The binary goes where an earlier install is, else into the first of
 # ~/.local/bin, ~/bin, /opt/homebrew/bin, and /usr/local/bin that is on PATH,
@@ -50,6 +54,7 @@ main() {
 	os=$(detect_os)
 	arch=$(detect_arch "$os")
 	asset="ai-usage_${os}_${arch}"
+	app_asset=ai-usage_darwin_app.zip
 
 	tmp=$(mktemp -d 2>/dev/null || mktemp -d -t ai-usage)
 	trap 'rm -rf "$tmp"' EXIT
@@ -63,6 +68,14 @@ main() {
 	[ -n "$want" ] || fail "checksums.txt does not list $asset"
 	got=$(sha256 "$tmp/$asset")
 	[ "$got" = "$want" ] || fail "$asset does not match its checksum (got $got, want $want)"
+
+	# The menu bar app comes now, from the release the binary does: a
+	# release published during the first run would not match these
+	# checksums. It is installed after that run. The subshells keep a failure
+	# to the app.
+	if [ "$os" = darwin ] && [ -z "${AI_USAGE_NO_APP:-}" ] && [ "$(id -u)" != 0 ]; then
+		(fetch_app) || say "the menu bar app is not installed; ai-usage works without it"
+	fi
 
 	mkdir -p "$bin_dir"
 	# Copy beside the target and rename, so a scheduled run never sees half a file.
@@ -90,6 +103,12 @@ main() {
 		fail "the first run failed; the binary is installed, run $bin to retry"
 	fi
 
+	# After the first run, so the app finds a report and the launch agent
+	# that names the binary.
+	if [ -f "$tmp/$app_asset" ]; then
+		(install_app) || say "the menu bar app is not installed; ai-usage works without it"
+	fi
+
 	# find_bin_dir picks a folder on PATH or ~/.local/bin, so only
 	# ~/.local/bin can be off PATH here, unless AI_USAGE_BIN_DIR named another.
 	# Under sudo HOME can still be the person's, whose profile root must not write.
@@ -108,6 +127,84 @@ main() {
 	else
 		say "$bin_dir is not on PATH; add it to your shell profile:
   export PATH=\"$bin_dir:\$PATH\""
+	fi
+}
+
+# fetch_app downloads the menu bar app of the release in $tmp/checksums.txt
+# to $tmp/$app_asset and checks it, on macOS 14 and later. main runs it and
+# install_app in subshells, where set -e is off and fail ends only the
+# subshell, so each step checks its own result.
+fetch_app() {
+	macos=$(sw_vers -productVersion 2>/dev/null || true)
+	major=${macos%%.*}
+	case $major in
+	'' | *[!0-9]*) fail "cannot tell this Mac's macOS version" ;;
+	esac
+	if [ "$major" -lt 14 ]; then
+		say "the menu bar app needs macOS 14 or later; this Mac has $macos"
+		return 0
+	fi
+	want=$(awk -v f="$app_asset" '$2 == f || $2 == "*" f { print tolower($1); exit }' "$tmp/checksums.txt")
+	if [ -z "$want" ]; then
+		say "this release has no menu bar app"
+		return 0
+	fi
+	say "downloading $app_asset"
+	fetch "$base/$app_asset" "$tmp/app.part"
+	got=$(sha256 "$tmp/app.part")
+	[ "$got" = "$want" ] || fail "$app_asset does not match its checksum (got $got, want $want)"
+	mv "$tmp/app.part" "$tmp/$app_asset" || fail "cannot write $tmp/$app_asset"
+}
+
+# install_app puts the menu bar app fetch_app downloaded in ~/Applications,
+# in place of an earlier copy, and opens it when someone is logged in at the
+# screen.
+install_app() {
+	ditto -x -k "$tmp/$app_asset" "$tmp/app" || fail "cannot unpack $app_asset"
+	[ -d "$tmp/app/AI Usage.app" ] || fail "$app_asset has no AI Usage.app"
+
+	apps=$HOME/Applications
+	app="$apps/AI Usage.app"
+	mkdir -p "$apps" || fail "cannot create $apps"
+	# Moved beside the old copy first, so renames swap the two, and the old
+	# copy goes back when the new one cannot take its place. Self-update
+	# stages under names of its own; what a stopped install left under these
+	# goes now.
+	rm -rf "$apps"/.ai-usage-install-*
+	new="$apps/.ai-usage-install-$$"
+	old="$apps/.ai-usage-install-old-$$"
+	mv "$tmp/app/AI Usage.app" "$new" || fail "cannot write into $apps"
+	if [ -e "$app" ] && ! mv "$app" "$old"; then
+		rm -rf "$new"
+		fail "cannot replace $app"
+	fi
+	if ! mv "$new" "$app"; then
+		if [ -e "$old" ]; then
+			mv "$old" "$app"
+		fi
+		rm -rf "$new"
+		fail "cannot replace $app"
+	fi
+	rm -rf "$old"
+	app_version=$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist" 2>/dev/null || echo "of unknown version")
+	say "installed the menu bar app, AI Usage $app_version, to $app"
+
+	# A copy that runs keeps its old code; quit it, and wait until it has
+	# gone, since the new one quits when it finds another running.
+	uid=$(id -u)
+	if pkill -x -U "$uid" AIUsageBar; then
+		for _ in 1 2 3 4 5 6 7 8 9 10; do
+			pgrep -x -U "$uid" AIUsageBar >/dev/null || break
+			sleep 1
+		done
+	fi
+	# Over SSH with no one logged in at the screen, there is nowhere to open it.
+	if ! launchctl print "gui/$uid" >/dev/null 2>&1; then
+		say "log in at the screen and open $app once; from then on it starts at login"
+	elif open "$app"; then
+		say "the app is in the menu bar; it starts at login and updates with ai-usage"
+	else
+		say "could not open $app; open it in Finder"
 	fi
 }
 

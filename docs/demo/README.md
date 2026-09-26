@@ -37,11 +37,12 @@ TZ=Europe/Berlin ai-usage report --from docs/demo/solo.json --plain --width 110
 | `install.png` | `curl … \| sh` through the first report and the guide printed under it, for `solo.json`'s developer |
 | `relay-view.png` | what the relay keeps for `mira-mbp`, trimmed: names, emails, and paths sealed, numbers plain |
 | `json.png` | `ai-usage --json` through `jq`: what an agent reads |
+| `menubar.png`, `menubar-light.png` | the macOS menu bar app for the team: its item in the menu bar, and under it the popover on Subscriptions, dark and light; the README's picture of the app |
 | `social/architecture.png` | how a team's numbers travel, drawn from `scripts/demo/diagram.html` |
 | `social/*.png` | the pictures marked for posts, on a backdrop; the README shows these |
 | `social/tour.mp4`, `social/tour.gif` | the interactive view, key by key: the page, `s` status, `%` share, `p` 30 days, `?` help |
 
-The pictures are at twice the size of the page, drawn in JetBrains Mono.
+The pictures are at twice the size of the page, drawn in JetBrains Mono. The menu bar app's are at twice its size in points, in the system font.
 
 ## Making them again
 
@@ -56,3 +57,20 @@ The script regenerates the two reports and builds `ai-usage`. It shows each pict
 - **Another story:** add a report in `scripts/demo/main.go`: its machines, their logins and readings, and how much each spends a day on which project.
 - **The first run and the relay's view:** `go run ./scripts/demo guide 110` prints the solo report with the guide a first run prints under it, and `go run ./scripts/demo snapshot` the snapshot `mira-mbp` would publish, sealed with a made-up team key. `install` and `relay-view` are made from them.
 - **After a change to the report's schema:** run the script again. `--from` refuses a report of another `schema_version`.
+
+The menu bar app draws its own pictures; `shots.ts` does not make them. `AIUsageBar --render REPORT OUTDIR` draws them in light and dark as PNGs into `OUTDIR`, and exits. It reads the report instead of running `ai-usage`, and takes its `generated_at` as the time now, so the ages and countdowns match the terminal pictures. For each look, `light` or `dark`, it writes:
+
+- `popover-TAB-LOOK.png`, each tab of the popover as tall as the app shows it, and `popover-TAB-full-LOOK.png`, the whole tab. TAB is `subscriptions`, `usage`, `usage-share` (Usage in shares), `devices`, and `projects`; a report of one device has no `usage-share` or `devices`
+- `popover-STATE-LOOK.png`, the popover with no report to show: `not-installed`, `not-collected`, `mismatch` (a report of another schema), and `failed`
+- `settings-PANE-LOOK.png`, each Settings pane: `general`, `accounts`, and `team`
+- `menubar-LOOK.png`, the app's item in the menu bar with the popover on Subscriptions under it
+
+```sh
+cd macos
+xcrun swift build --product AIUsageBar
+TZ=Europe/Berlin "$(xcrun swift build --show-bin-path)/AIUsageBar" --render ../docs/demo/team.json /tmp/menubar
+cp /tmp/menubar/menubar-dark.png ../docs/demo/menubar.png
+cp /tmp/menubar/menubar-light.png ../docs/demo/menubar-light.png
+```
+
+It needs macOS 14 or later with Xcode or the Command Line Tools. `AIUsageBar --demo REPORT` runs the app in the menu bar on a report the same way, to try it by hand.

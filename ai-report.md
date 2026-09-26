@@ -207,9 +207,11 @@ Done, in short:
 - **Generic.** Code, tests, fixtures, and docs carry no names, hosts, private paths, or stories of the team that wrote them. Test data uses neutral names such as `ann` and `~/src/acme/app`.
 - **Lean tests.** Tests check behavior. None pins exact wording, a helper whose callers are already tested, or the data of one real machine, and none repeats another. Each behavior in this document keeps a test, the console keeps its golden files, and the relay's checks and the ledger's attribution keep full coverage.
 - **Status**: `ai-usage status` shows the version, the last success, the last error, and the relay, schedule, and update health.
+- **Menu bar app** (`macos/`): on macOS 14 and later, `install.sh` also puts AI Usage, a SwiftUI menu bar app, in `~/Applications` and opens it, and self-update keeps it at the binary's release (`ai-usage_darwin_app.zip`, universal and ad-hoc signed). It shows `ai-usage report --json` and changes settings through the same commands a terminal would, so every number, state, forecast, window that limits an account (`limits`), and the collector's health (`collector.health`) comes from the Go report. It starts at login. `AI_USAGE_NO_APP=1` installs without it.
 
 Deferred or not done. These are cumbersome, or they need an action outside this repository:
 
+- **The menu bar app is not notarized.** It is ad-hoc signed. `install.sh` and self-update download it with curl and Go, which set no quarantine flag, so Gatekeeper does not check it; a copy downloaded with a browser would be refused.
 - **CI runs on GitHub.** Tests run on Linux and macOS. Windows only cross-compiles and runs the installer smoke test: Windows is not a supported collector host for now.
 - **Windows is not supported yet. Nothing has run on real Windows.** Task Scheduler registration from XML (the task has no explicit user, so it relies on `schtasks /Create /XML` using the caller), the `.old` rename during self-update, and `install.ps1` are covered only by unit tests and the CI definitions.
   - `schtasks` starts a console program, so a console window can flash every 15 minutes. Fixing that needs a GUI-subsystem launcher, or `conhost --headless`, which only newer Windows builds have.

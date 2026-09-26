@@ -33,16 +33,28 @@ jobs:
       - run: go build ./...
       - name: Shell scripts
         run: |
-          for f in install.sh scripts/*.sh .github/scripts/*.sh; do sh -n "$f"; done
-          shellcheck -s sh install.sh scripts/*.sh .github/scripts/*.sh
+          for f in install.sh scripts/*.sh .github/scripts/*.sh macos/build.sh; do sh -n "$f"; done
+          shellcheck -s sh install.sh scripts/*.sh .github/scripts/*.sh macos/build.sh
       - name: PowerShell script
         shell: pwsh
         run: |
           $errors = $null
           [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD/install.ps1", [ref]$null, [ref]$errors)
           if ($errors) { $errors | Format-List | Out-String | Write-Host; exit 1 }
+      # All but the menu bar app, which builds only on macOS; see app.
       - name: Cross-compile every release target
         run: sh .github/scripts/dist.sh v0.0.0-ci "$RUNNER_TEMP/dist"
+
+  # The menu bar app: its checks, then the release build of the bundle.
+  app:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Checks
+        working-directory: macos
+        run: xcrun swift run AIUsageChecks
+      - name: Build
+        run: sh macos/build.sh v0.0.0-ci "$RUNNER_TEMP/app.zip"
 
   # Windows builds and installs (see lint and install), but its unit tests are
   # not a release gate: Windows is not a supported collector host yet.
@@ -86,8 +98,9 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: stable
-      # Builds this runner's release file, serves it on 127.0.0.1, and runs
-      # install.sh or install.ps1 against it twice: a fresh install, then an upgrade.
+      # Builds this runner's release file, and on macOS the menu bar app,
+      # serves them on 127.0.0.1, and runs install.sh or install.ps1 against
+      # them twice: a fresh install, then an upgrade.
       - name: Install from a local release
         shell: bash
         run: sh .github/scripts/install-smoke.sh

@@ -160,6 +160,21 @@ When standard input and output are both terminals, `ai-usage` opens the same pag
 
 ![The interactive view, key by key: the page, s for status, % for each machine's share, p for 30 days, and ? for help](docs/demo/social/tour.gif)
 
+## Menu bar app
+
+On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/Applications` and opens it. It shows the same report as the terminal, laid out for a popover.
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/demo/menubar-light.png">
+  <img alt="The AI Usage menu bar app with the made-up team's subscriptions" src="docs/demo/menubar.png">
+</picture>
+
+The menu bar shows a gauge and the percent left of the fullest window among the subscriptions logged in on this Mac: each one's main window, and any other that limits the account more, such as a 5-hour window that is out, since any full window stops work. Those other windows are the ones the terminal gives rows of their own. The popover has this machine's name and team, whether collection, the relay, and self-update are healthy, what needs attention, and four tabs: Subscriptions, each account's windows with when they reset and where they are headed; Usage, the matrix of machines against subscriptions over a period you pick, in tokens or shares; Devices, each machine's status; and Projects. With this machine alone in the team, there is no Devices, and Usage is a row per account, with today, 7, 30, and 90 days. Details are in tooltips. Refresh collects now.
+
+Settings changes what the terminal commands change: this Mac's name in the team (`ai-usage name`), the names the team gives accounts (`ai-usage alias`), and the relay (`ai-usage relay`). It copies the team key, joins another team, and has switches for opening at login and for the percent in the menu bar.
+
+The app reads what the terminal shows from `ai-usage report --json`, which it runs every minute and when the popover opens; it runs `ai-usage collect --json` for Refresh, and the same commands a terminal would for Settings. Forecasts, states, the windows that limit each account, what needs attention, the collector's health, and the matrix all come from the report; the app itself only picks, among those windows, the one for the menu bar. It finds the binary through the launch agent that runs the collector, else in the folders the installer uses, and shows the install command when there is none. It starts at login, and self-update keeps it at the binary's release; see [Updates](#updates). To go without it, install with `AI_USAGE_NO_APP=1`, or remove it as [Uninstall](#uninstall) shows: self-update does not bring it back, though running the installer again without `AI_USAGE_NO_APP` does.
+
 ## Install
 
 macOS and Linux:
@@ -174,13 +189,14 @@ Windows, in PowerShell:
 irm https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.ps1 | iex
 ```
 
-Releases are built for amd64 and arm64 on each OS. The installer:
+Releases are built for amd64 and arm64 on each OS, and the menu bar app is one build for Apple silicon and Intel Macs. The installer:
 
-1. downloads the release file for your OS and CPU, and `checksums.txt` from the same release
-2. checks the SHA-256 checksum
+1. downloads the release file for your OS and CPU, and `checksums.txt` from the same release, and on macOS 14 and later the [menu bar app](#menu-bar-app) from that release too
+2. checks the SHA-256 checksums
 3. installs the binary into a folder on your `PATH` (see below), or to `%LOCALAPPDATA%\Programs\ai-usage\ai-usage.exe` on Windows, where it also adds that folder to your user `PATH`
 4. saves the relay and joins the team, if you gave them
 5. runs `ai-usage` once, which registers it with the scheduler and prints the report with a short guide under it
+6. on macOS 14 and later, puts the menu bar app in `~/Applications/AI Usage.app` in place of an earlier copy, quits the copy that runs, and opens the new one; with no one logged in at the screen, as over SSH, it says to open the app there once instead
 
 On macOS and Linux, an upgrade replaces the binary where it is: `~/.local/bin/ai-usage`, or the `ai-usage` found on `PATH` when you can write to its folder. A new install goes into the first of `~/.local/bin`, `~/bin`, `/opt/homebrew/bin`, and `/usr/local/bin` that is on your `PATH` and that you can write to, and never into a folder that belongs to another tool, such as `~/.cargo/bin`.
 
@@ -210,6 +226,7 @@ The installer asks no questions. Run it again to upgrade in place. It reads thes
 | `AI_USAGE_TEAM_KEY` | team key to join before the first run |
 | `AI_USAGE_DOWNLOAD_URL` | where to download release files from, instead of the latest GitHub release |
 | `AI_USAGE_ALLOW_ROOT` | install for root even though the installer runs under `sudo` |
+| `AI_USAGE_NO_APP` | leave out the menu bar app on macOS |
 
 To join a team while installing, which is how a teammate's machine joins yours (`ai-usage team key` prints the key and `ai-usage relay show` the relay):
 
@@ -229,6 +246,8 @@ A key typed on the command line stays in your shell history. To avoid that, inst
 Run the installer as the person whose usage you want to collect. Under `sudo` it stops, because the collector would register root's schedule and read root's tools, and could leave root-owned files in your home. On a server whose bots run as root, install it as root itself, with `AI_USAGE_ALLOW_ROOT=1` if you got there through `sudo`. For a container, see [In a container](#in-a-container).
 
 On Linux the schedule needs `crontab`, which containers and some minimal systems lack; `ai-usage schedule run` takes its place there. The installer needs `curl` or `wget`, and `sha256sum`, `shasum`, or `openssl`.
+
+The menu bar app is for the person at the screen, so root never gets it. When it cannot be installed, for example on macOS 13, the installer says why and the rest of the install stands.
 
 ## First run
 
@@ -415,12 +434,12 @@ The collector runs in a container as on any Linux machine: install it inside, as
 ```
 schema_version, generated_at
 collector   version, device, team, last run, last success, last error,
-            relay, schedule, and update state
+            relay, schedule, and update state, and health[] as the header shows it
 attention[] out, over, error, silent, old, under: the account or devices, when, and why
 providers[] claude, codex, grok, hermes: status (ok, partial, error, skipped), error, homes,
             accounts[]: label, name, home, plan, state (out, over, tight, ok, under, unknown),
-                        quota with from and windows[] (percent, resets_at, main, stale, reset,
-                        state, forecast), link, sessions, tokens, usage (today, 7d, 30d, 90d),
+                        quota with from and windows[] (percent, resets_at, main, limits, stale,
+                        reset, state, forecast), link, sessions, tokens, usage (today, 7d, 30d, 90d),
                         days[], linked_usage[], last_active_at, projects[]
 projects[]  this machine's projects over every account, with usage and providers
 team        pulled_at, latest_version, devices[] (error, silent, old, usage), providers[] with
@@ -468,6 +487,8 @@ Self-update cannot be turned off. It skips prereleases, such as `v1.3.0-rc.1`. A
 
 The team sees why a machine does not update itself. While its last check failed, its snapshot carries the error, from the next run on, and the status view's NOTE shows it; on a machine that runs an older release, it is an error in ATTENTION too. Once your machine's reads of the team have found another reporting on the same older release for 7 hours, longer than any release takes to update itself, NOTE says how long it has not updated, and so does OLD in ATTENTION. The hours count from its first run found after a newer release was out, so a laptop that was closed meanwhile is not counted, and they start again after it has not reported for a day. A GitHub refusal names its reason, such as a rate limit, without your IP address.
 
+On macOS, the check also keeps the [menu bar app](#menu-bar-app) at the binary's release, once the binary is at it. When `~/Applications/AI Usage.app` is an earlier release, it downloads `ai-usage_darwin_app.zip` from the binary's release, checks it against `checksums.txt`, unpacks it beside the app, requires the unpacked app to report that release, and swaps it in with two renames. The running app sees the new version on disk and restarts into it. An app built from source, which reports no release, is left alone, and a missing one is not installed. A failure is an update error in `ai-usage status` that starts with `menu bar app:`. An app that downloads but does not install is, like a release, not downloaded again for 6 hours; `ai-usage update` tries again at once, and says what became of the binary first.
+
 The checksum guards against a broken download. It does not protect against a compromised release, since both files come from the same place.
 
 A binary built from source reports version `dev`. It never updates itself and never registers with the scheduler on its own; run `ai-usage schedule install` for that.
@@ -479,11 +500,17 @@ Run these while the binary is still installed. `forget-device` is optional: it r
 macOS:
 
 ```sh
+pkill -x AIUsageBar
+rm -r ~/Applications/AI\ Usage.app
+rm -f ~/Library/LaunchAgents/io.github.neoromantic.ai-usage.bar.plist
+defaults delete io.github.neoromantic.ai-usage.bar
 ai-usage schedule remove
 ai-usage team forget-device d-…
 rm "$(command -v ai-usage)"
 rm -r ~/Library/Application\ Support/ai-usage
 ```
+
+The first four quit the menu bar app and remove it and its settings. It opens at login as a login item; when macOS does not let it register as one, it writes that launch agent instead. Its settings remember that it set this up, so without the fourth line a later install would not open at login.
 
 Linux:
 
@@ -515,6 +542,14 @@ Go 1.25 or newer:
 ```sh
 go build -o ai-usage ./cmd/ai-usage
 go test ./...
+```
+
+The menu bar app builds on macOS with Xcode or the Command Line Tools, and runs on macOS 14 and later. `macos/build.sh` builds it for both CPUs, signs it ad hoc, and zips it; a version that is not plain `vX.Y.Z` keeps self-update away from it:
+
+```sh
+(cd macos && xcrun swift run AIUsageChecks)
+sh macos/build.sh v0.0.0-dev /tmp/ai-usage-app.zip
+ditto -x -k /tmp/ai-usage-app.zip ~/Applications
 ```
 
 How releases are built and published: [docs/releasing.md](docs/releasing.md). The requirements this project follows: [ai-report.md](ai-report.md).
