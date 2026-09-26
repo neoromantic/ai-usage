@@ -84,18 +84,14 @@ type Server struct {
 
 // NewServer wires routes, with DefaultLimits.
 func NewServer(store Store) *Server {
-	s := &Server{Store: store, Limits: DefaultLimits(), Now: time.Now}
-	mux := http.NewServeMux()
-	// Only routed requests are counted, so a path the relay does not serve
-	// costs no store command.
-	handle := func(pattern string, h http.HandlerFunc) { mux.HandleFunc(pattern, s.perIP(h)) }
-	handle("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
+	s := &Server{Store: store, Limits: DefaultLimits(), Now: time.Now, mux: http.NewServeMux()}
+	s.route("GET /v1/health", func(w http.ResponseWriter, r *http.Request) *ErrStatus {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "snapshot_version": snapshot.Version})
+		return nil
 	})
-	handle("PUT /v1/teams/{team}/devices/{device}", s.put)
-	handle("DELETE /v1/teams/{team}/devices/{device}", s.del)
-	handle("GET /v1/teams/{team}", s.list)
-	s.mux = mux
+	s.route("PUT /v1/teams/{team}/devices/{device}", s.put)
+	s.route("DELETE /v1/teams/{team}/devices/{device}", s.del)
+	s.route("GET /v1/teams/{team}", s.list)
 	return s
 }
 
@@ -104,21 +100,33 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r)
 }
 
-// perIP counts a request against the caller's address before h serves it.
-func (s *Server) perIP(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if s.allow(w, r, "ip:"+s.clientKey(r, 64), s.Limits.RequestsPerIP, s.Limits.Window) {
-			h(w, r)
+var (
+	errUnavailable = &ErrStatus{Code: http.StatusServiceUnavailable, Msg: "store unavailable"}
+	errTeamFull    = &ErrStatus{Code: http.StatusForbidden, Msg: "team has the most devices allowed"}
+)
+
+// route serves pattern with h, after counting the request against the
+// caller's address, and answers with the failure h returns. Only routed
+// requests are counted, so a path the relay does not serve costs no store
+// command.
+func (s *Server) route(pattern string, h func(http.ResponseWriter, *http.Request) *ErrStatus) {
+	s.mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+		e := s.allow(w, r, "ip:"+s.clientKey(r, 64), s.Limits.RequestsPerIP, s.Limits.Window)
+		if e == nil {
+			e = h(w, r)
 		}
-	}
+		if e != nil {
+			fail(w, e.Code, e.Msg)
+		}
+	})
 }
 
 func (s *Server) now() time.Time { return s.Now().UTC() }
 
-// allow counts one hit against key in a fixed window and answers 429 past the
-// limit. A key found over its limit is remembered until its window ends, so a
-// client that keeps sending costs no more store commands.
-func (s *Server) allow(w http.ResponseWriter, r *http.Request, key string, limit int64, window time.Duration) bool {
+// allow counts one hit against key in a fixed window and fails with 429 past
+// the limit. A key found over its limit is remembered until its window ends,
+// so a client that keeps sending costs no more store commands.
+func (s *Server) allow(w http.ResponseWriter, r *http.Request, key string, limit int64, window time.Duration) *ErrStatus {
 	// Server.Limits is exported and may be set after NewServer.
 	win := max(int64(window/time.Second), 1)
 	now := s.now().Unix()
@@ -128,17 +136,15 @@ func (s *Server) allow(w http.ResponseWriter, r *http.Request, key string, limit
 	if !s.blocked.has(key, now) {
 		n, err := s.Store.Count(r.Context(), key, time.Duration(win)*time.Second)
 		if err != nil {
-			fail(w, http.StatusServiceUnavailable, "store unavailable")
-			return false
+			return errUnavailable
 		}
 		if n <= limit {
-			return true
+			return nil
 		}
 		s.blocked.add(key, end, now)
 	}
 	w.Header().Set("Retry-After", strconv.FormatInt(end-now, 10))
-	fail(w, http.StatusTooManyRequests, "rate limit")
-	return false
+	return &ErrStatus{Code: http.StatusTooManyRequests, Msg: "rate limit"}
 }
 
 // overLimit holds rate keys that went over their limit, each with the Unix
@@ -189,33 +195,63 @@ func (o *overLimit) sweep(now int64) {
 	o.swept = now
 }
 
-func (s *Server) put(w http.ResponseWriter, r *http.Request) {
-	teamFP, device := r.PathValue("team"), r.PathValue("device")
+func devicePath(r *http.Request) (teamFP, device string, e *ErrStatus) {
+	teamFP, device = r.PathValue("team"), r.PathValue("device")
 	if !snapshot.ValidTeam(teamFP) || !snapshot.ValidDevice(device) {
-		fail(w, http.StatusNotFound, "no such team or device")
-		return
+		return "", "", &ErrStatus{Code: http.StatusNotFound, Msg: "no such team or device"}
 	}
+	return teamFP, device, nil
+}
+
+func (s *Server) put(w http.ResponseWriter, r *http.Request) *ErrStatus {
+	teamFP, device, e := devicePath(r)
+	if e != nil {
+		return e
+	}
+	rec, doc, e := s.readSnapshot(w, r, teamFP, device)
+	if e != nil {
+		return e
+	}
+	if e = s.allow(w, r, "team:"+teamFP, s.Limits.WritesPerTeam, s.Limits.Window); e != nil {
+		return e
+	}
+	prev, err := s.Store.Get(r.Context(), teamFP, device)
+	if err != nil {
+		return errUnavailable
+	}
+	if prev != nil {
+		e = s.putAgain(r.Context(), teamFP, device, rec, doc, prev)
+	} else {
+		e = s.putNew(w, r, teamFP, device, rec)
+	}
+	if e != nil {
+		return e
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"stored": true})
+	return nil
+}
+
+// readSnapshot reads a PUT's body and checks that the team's key signed it,
+// that it is a valid snapshot in canonical form, and that it names the team
+// and device of the path.
+func (s *Server) readSnapshot(w http.ResponseWriter, r *http.Request, teamFP, device string) (Record, snapshot.Doc, *ErrStatus) {
 	pub, err := publicKey(r.Header.Get(HeaderKey), teamFP)
 	if err != nil {
-		fail(w, http.StatusForbidden, err.Error())
-		return
+		return Record{}, snapshot.Doc{}, &ErrStatus{Code: http.StatusForbidden, Msg: err.Error()}
 	}
 	// A body that trickles in would hold a connection open for as long as the
 	// client likes. Adapters without deadlines return an error we can ignore.
 	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(bodyTimeout))
 	body, err := io.ReadAll(io.LimitReader(r.Body, snapshot.MaxBytes+1))
 	if err != nil {
-		fail(w, http.StatusBadRequest, "could not read body")
-		return
+		return Record{}, snapshot.Doc{}, &ErrStatus{Code: http.StatusBadRequest, Msg: "could not read body"}
 	}
 	if len(body) > snapshot.MaxBytes {
-		fail(w, http.StatusRequestEntityTooLarge, "snapshot is larger than 64 KB")
-		return
+		return Record{}, snapshot.Doc{}, &ErrStatus{Code: http.StatusRequestEntityTooLarge, Msg: "snapshot is larger than 64 KB"}
 	}
 	sig, err := decode(r.Header.Get(HeaderSig))
 	if err != nil || !team.Verify(pub, SnapshotMessage(body), sig) {
-		fail(w, http.StatusUnauthorized, "signature does not verify")
-		return
+		return Record{}, snapshot.Doc{}, &ErrStatus{Code: http.StatusUnauthorized, Msg: "signature does not verify"}
 	}
 	doc, err := snapshot.Decode(body)
 	if err == nil && doc.FromFuture(s.now()) {
@@ -225,97 +261,86 @@ func (s *Server) put(w http.ResponseWriter, r *http.Request) {
 		err = errors.New("snapshot is not in canonical form")
 	}
 	if err != nil {
-		fail(w, http.StatusUnprocessableEntity, err.Error())
-		return
+		return Record{}, snapshot.Doc{}, &ErrStatus{Code: http.StatusUnprocessableEntity, Msg: err.Error()}
 	}
 	if doc.Team != teamFP || doc.Device != device {
-		fail(w, http.StatusUnprocessableEntity, "snapshot names another team or device")
-		return
+		return Record{}, snapshot.Doc{}, &ErrStatus{Code: http.StatusUnprocessableEntity, Msg: "snapshot names another team or device"}
 	}
-	if !s.allow(w, r, "team:"+teamFP, s.Limits.WritesPerTeam, s.Limits.Window) {
-		return
-	}
+	return Record{Body: body, Sig: sig}, doc, nil
+}
 
-	ctx := r.Context()
-	prev, err := s.Store.Get(ctx, teamFP, device)
+// putAgain stores rec for a device the team already has, prev being its
+// stored record. The same body again is not written.
+func (s *Server) putAgain(ctx context.Context, teamFP, device string, rec Record, doc snapshot.Doc, prev *Record) *ErrStatus {
+	// A device that racing first writes left past the cap is out of every
+	// team read, so its writes are turned away too, and it is told. Its
+	// record goes, so it stops counting against the cap.
+	out, err := s.pastCap(ctx, teamFP, device)
 	if err != nil {
-		fail(w, http.StatusServiceUnavailable, "store unavailable")
-		return
+		return errUnavailable
 	}
-	since := s.now()
-	if prev != nil {
-		// A device that racing first writes left past the cap is out of
-		// every team read, so its writes are turned away too, and it is
-		// told. Its record goes, so it stops counting against the cap.
-		out, err := s.pastCap(ctx, teamFP, device)
-		if err != nil {
-			fail(w, http.StatusServiceUnavailable, "store unavailable")
-			return
-		}
-		if out {
-			_ = s.Store.Delete(context.WithoutCancel(ctx), teamFP, device)
-			fail(w, http.StatusForbidden, "team has the most devices allowed")
-			return
-		}
-		if bytes.Equal(prev.Body, body) {
-			writeJSON(w, http.StatusOK, map[string]any{"stored": true})
-			return
-		}
-		if old, err := snapshot.Decode(prev.Body); err == nil && doc.CollectedAt.Before(old.CollectedAt) {
-			fail(w, http.StatusConflict, "a newer snapshot is already stored")
-			return
-		}
-		since = prev.Since
-	} else {
-		devices, err := s.Store.List(ctx, teamFP)
-		if err != nil {
-			fail(w, http.StatusServiceUnavailable, "store unavailable")
-			return
-		}
-		// List then Put is not atomic, so first writes from new devices racing
-		// each other can pass the cap. Each looks again once it is stored, below.
-		if len(devices) >= s.Limits.DevicesPerTeam {
-			fail(w, http.StatusForbidden, "team has the most devices allowed")
-			return
-		}
-		// A new device is a new document to keep. Group IPv6 by /48, which one
-		// customer or one free tunnel gets, rather than /64.
-		who := s.clientKey(r, 48)
-		if len(devices) == 0 && !s.allow(w, r, "newteam:"+who, s.Limits.NewTeamsPerIP, s.Limits.NewWindow) {
-			return
-		}
-		if !s.allow(w, r, "newdevice:"+who, s.Limits.NewDevicesPerIP, s.Limits.NewWindow) {
-			return
+	if out {
+		_ = s.Store.Delete(context.WithoutCancel(ctx), teamFP, device)
+		return errTeamFull
+	}
+	if bytes.Equal(prev.Body, rec.Body) {
+		return nil
+	}
+	if old, err := snapshot.Decode(prev.Body); err == nil && doc.CollectedAt.Before(old.CollectedAt) {
+		return &ErrStatus{Code: http.StatusConflict, Msg: "a newer snapshot is already stored"}
+	}
+	rec.Since = prev.Since
+	if err := s.Store.Put(ctx, teamFP, device, rec, s.recordTTL(rec.Since)); err != nil {
+		return errUnavailable
+	}
+	return nil
+}
+
+// putNew stores rec as a device's first write to the team.
+func (s *Server) putNew(w http.ResponseWriter, r *http.Request, teamFP, device string, rec Record) *ErrStatus {
+	ctx := r.Context()
+	rec.Since = s.now()
+	devices, err := s.Store.List(ctx, teamFP)
+	if err != nil {
+		return errUnavailable
+	}
+	// List then Put is not atomic, so first writes from new devices racing
+	// each other can pass the cap. Each looks again once it is stored, below.
+	if len(devices) >= s.Limits.DevicesPerTeam {
+		return errTeamFull
+	}
+	// A new device is a new document to keep. Group IPv6 by /48, which one
+	// customer or one free tunnel gets, rather than /64.
+	who := s.clientKey(r, 48)
+	if len(devices) == 0 {
+		if e := s.allow(w, r, "newteam:"+who, s.Limits.NewTeamsPerIP, s.Limits.NewWindow); e != nil {
+			return e
 		}
 	}
-	rec := Record{Body: body, Sig: sig, Since: since}
-	if err := s.Store.Put(ctx, teamFP, device, rec, s.recordTTL(since)); err != nil {
-		fail(w, http.StatusServiceUnavailable, "store unavailable")
-		return
+	if e := s.allow(w, r, "newdevice:"+who, s.Limits.NewDevicesPerIP, s.Limits.NewWindow); e != nil {
+		return e
 	}
-	if prev == nil {
-		// A new device that raced others past the cap would be left out of
-		// every team read while its writes succeed. The read lists the
-		// devices that joined first, so one past them gives way and is told.
-		// A client that hangs up does not stop this; when the answer is not
-		// known, the record goes and the device tries again later.
-		ctx := context.WithoutCancel(ctx)
-		out, err := s.pastCap(ctx, teamFP, device)
-		switch {
-		case err != nil:
-			_ = s.Store.Delete(ctx, teamFP, device)
-			fail(w, http.StatusServiceUnavailable, "store unavailable")
-			return
-		case out:
-			if err := s.Store.Delete(ctx, teamFP, device); err != nil {
-				fail(w, http.StatusServiceUnavailable, "store unavailable")
-				return
-			}
-			fail(w, http.StatusForbidden, "team has the most devices allowed")
-			return
+	if err := s.Store.Put(ctx, teamFP, device, rec, s.recordTTL(rec.Since)); err != nil {
+		return errUnavailable
+	}
+	// A new device that raced others past the cap would be left out of every
+	// team read while its writes succeed. The read lists the devices that
+	// joined first, so one past them gives way and is told. A client that
+	// hangs up does not stop this; when the answer is not known, the record
+	// goes and the device tries again later.
+	ctx = context.WithoutCancel(ctx)
+	out, err := s.pastCap(ctx, teamFP, device)
+	switch {
+	case err != nil:
+		_ = s.Store.Delete(ctx, teamFP, device)
+		return errUnavailable
+	case out:
+		if err := s.Store.Delete(ctx, teamFP, device); err != nil {
+			return errUnavailable
 		}
+		return errTeamFull
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"stored": true})
+	return nil
 }
 
 // pastCap reports whether the team has more devices than the cap and device
@@ -364,22 +389,19 @@ func canonical(doc snapshot.Doc, body []byte) bool {
 	return err == nil && bytes.Equal(b, body)
 }
 
-// signedRequest checks a read or delete signature.
-func (s *Server) signedRequest(w http.ResponseWriter, r *http.Request, teamFP, device string) bool {
+// verifyRequest checks a read or delete signature.
+func (s *Server) verifyRequest(r *http.Request, teamFP, device string) *ErrStatus {
 	pub, err := publicKey(r.Header.Get(HeaderKey), teamFP)
 	if err != nil {
-		fail(w, http.StatusForbidden, err.Error())
-		return false
+		return &ErrStatus{Code: http.StatusForbidden, Msg: err.Error()}
 	}
 	unix, err := strconv.ParseInt(r.Header.Get(HeaderTime), 10, 64)
 	if err != nil {
-		fail(w, http.StatusUnauthorized, "missing request time")
-		return false
+		return &ErrStatus{Code: http.StatusUnauthorized, Msg: "missing request time"}
 	}
 	at := time.Unix(unix, 0)
 	if d := s.now().Sub(at); d > ClockSkew || d < -ClockSkew {
-		fail(w, http.StatusUnauthorized, "request time is too far from server time")
-		return false
+		return &ErrStatus{Code: http.StatusUnauthorized, Msg: "request time is too far from server time"}
 	}
 	// HEAD is a GET without the body, and is signed as one.
 	method := r.Method
@@ -388,25 +410,22 @@ func (s *Server) signedRequest(w http.ResponseWriter, r *http.Request, teamFP, d
 	}
 	sig, err := decode(r.Header.Get(HeaderSig))
 	if err != nil || !team.Verify(pub, RequestMessage(method, teamFP, device, at), sig) {
-		fail(w, http.StatusUnauthorized, "signature does not verify")
-		return false
+		return &ErrStatus{Code: http.StatusUnauthorized, Msg: "signature does not verify"}
 	}
-	return true
+	return nil
 }
 
-func (s *Server) list(w http.ResponseWriter, r *http.Request) {
+func (s *Server) list(w http.ResponseWriter, r *http.Request) *ErrStatus {
 	teamFP := r.PathValue("team")
 	if !snapshot.ValidTeam(teamFP) {
-		fail(w, http.StatusNotFound, "no such team")
-		return
+		return &ErrStatus{Code: http.StatusNotFound, Msg: "no such team"}
 	}
-	if !s.signedRequest(w, r, teamFP, "") {
-		return
+	if e := s.verifyRequest(r, teamFP, ""); e != nil {
+		return e
 	}
 	recs, err := s.Store.List(r.Context(), teamFP)
 	if err != nil {
-		fail(w, http.StatusServiceUnavailable, "store unavailable")
-		return
+		return errUnavailable
 	}
 	// A write that raced past the cap may not have given way yet, and the
 	// read must still fit in one response: the devices that joined first are
@@ -418,22 +437,22 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 		out.Devices = append(out.Devices, ListedDevice{Device: dev, Body: encode(rec.Body), Sig: encode(rec.Sig)})
 	}
 	writeJSON(w, http.StatusOK, out)
+	return nil
 }
 
-func (s *Server) del(w http.ResponseWriter, r *http.Request) {
-	teamFP, device := r.PathValue("team"), r.PathValue("device")
-	if !snapshot.ValidTeam(teamFP) || !snapshot.ValidDevice(device) {
-		fail(w, http.StatusNotFound, "no such team or device")
-		return
+func (s *Server) del(w http.ResponseWriter, r *http.Request) *ErrStatus {
+	teamFP, device, e := devicePath(r)
+	if e != nil {
+		return e
 	}
-	if !s.signedRequest(w, r, teamFP, device) {
-		return
+	if e = s.verifyRequest(r, teamFP, device); e != nil {
+		return e
 	}
 	if err := s.Store.Delete(r.Context(), teamFP, device); err != nil {
-		fail(w, http.StatusServiceUnavailable, "store unavailable")
-		return
+		return errUnavailable
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
+	return nil
 }
 
 // ListResponse is the team read. Body and Sig are base64url, so the exact
@@ -513,17 +532,4 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 
 func fail(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, map[string]string{"error": msg})
-}
-
-// ErrStatus is an HTTP error from the relay.
-type ErrStatus struct {
-	Code int
-	Msg  string
-}
-
-func (e *ErrStatus) Error() string {
-	if e.Msg == "" {
-		return "relay: HTTP " + strconv.Itoa(e.Code)
-	}
-	return "relay: " + e.Msg + " (HTTP " + strconv.Itoa(e.Code) + ")"
 }

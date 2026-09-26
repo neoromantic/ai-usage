@@ -59,3 +59,17 @@ func publicKey(header, teamFP string) (ed25519.PublicKey, error) {
 	}
 	return pub, nil
 }
+
+// ErrStatus is an HTTP error from the relay: what a server handler fails
+// with, and what the client returns when the relay answers with one.
+type ErrStatus struct {
+	Code int
+	Msg  string
+}
+
+func (e *ErrStatus) Error() string {
+	if e.Msg == "" {
+		return "relay: HTTP " + strconv.Itoa(e.Code)
+	}
+	return "relay: " + e.Msg + " (HTTP " + strconv.Itoa(e.Code) + ")"
+}
