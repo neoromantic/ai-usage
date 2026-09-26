@@ -251,8 +251,7 @@ func countCodex(files []*codexFile) []Session {
 		}
 	}
 
-	byID := map[string]int{}
-	out := []Session{}
+	var rows []Session
 	for i, f := range files {
 		if !f.fresh {
 			continue
@@ -261,23 +260,9 @@ func countCodex(files []*codexFile) []Session {
 		if len(f.mirrors) > 0 {
 			s.Homes = append([]string{f.home}, f.mirrors...)
 		}
-		if j, ok := byID[f.id]; ok {
-			// Pages and copies of one thread: each already counts only its own requests.
-			merged := out[j]
-			merged.Tokens = merged.Tokens.Add(s.Tokens)
-			addHours(&merged, s)
-			// A thread kept in two homes grows in the one written last.
-			if s.Updated.After(merged.Updated) {
-				merged.Home = s.Home
-			}
-			fillFrom(&merged, s)
-			out[j] = merged
-			continue
-		}
-		byID[f.id] = len(out)
-		out = append(out, s)
+		rows = append(rows, s)
 	}
-	return out
+	return mergeByID(rows, addCopy)
 }
 
 // codexLimitSkew is how long before the main limit's reading another limit's

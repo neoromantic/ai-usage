@@ -13,30 +13,45 @@ const UnknownProject = "unknown"
 // on a fallback route).
 const UnknownAccount = "unknown"
 
+// mergeByID keeps one row per session id, in first-seen order, and merges
+// each later row with the same id into it. Rows with no id never merge.
+func mergeByID(in []Session, merge func(have *Session, s Session)) []Session {
+	at := map[string]int{}
+	out := make([]Session, 0, len(in))
+	for _, s := range in {
+		if i, ok := at[s.ID]; ok {
+			merge(&out[i], s)
+			continue
+		}
+		if s.ID != "" {
+			at[s.ID] = len(out)
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
 // dedupeSessions keeps one row per session id, the one with the most tokens.
 // The same session can appear twice when two homes share a directory.
 func dedupeSessions(in []Session) []Session {
-	seen := map[string]int{}
-	out := []Session{}
-	for _, s := range in {
-		if s.ID == "" {
-			out = append(out, s)
-			continue
+	return mergeByID(in, func(have *Session, s Session) {
+		if s.Tokens.Total() > have.Tokens.Total() {
+			*have, s = s, *have
 		}
-		i, ok := seen[s.ID]
-		if !ok {
-			seen[s.ID] = len(out)
-			out = append(out, s)
-			continue
-		}
-		keep, other := out[i], s
-		if s.Tokens.Total() > out[i].Tokens.Total() {
-			keep, other = s, out[i]
-		}
-		fillFrom(&keep, other)
-		out[i] = keep
+		fillFrom(have, s)
+	})
+}
+
+// addCopy adds a copy that counts only its own part (a page, or the same
+// session in another project directory or home); the session grows in the
+// copy written last.
+func addCopy(have *Session, s Session) {
+	have.Tokens = have.Tokens.Add(s.Tokens)
+	addHours(have, s)
+	if s.Updated.After(have.Updated) {
+		have.Home = s.Home
 	}
-	return out
+	fillFrom(have, s)
 }
 
 func fillFrom(dst *Session, src Session) {

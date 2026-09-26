@@ -159,26 +159,11 @@ func countClaude(files []*claudeFile) []Session {
 			}
 		}
 	}
-	// Merge here, not in dedupeSessions: that keeps the larger row, and after
-	// the claims above each row holds only part of the session.
-	out := make([]Session, 0, len(files))
-	at := map[string]int{}
-	for _, f := range files {
-		i, ok := at[f.sess.ID]
-		if !ok {
-			at[f.sess.ID] = len(out)
-			out = append(out, f.sess)
-			continue
-		}
-		out[i].Tokens = out[i].Tokens.Add(f.sess.Tokens)
-		addHours(&out[i], f.sess)
-		// A session kept in two homes grows in the one written last.
-		if f.sess.Updated.After(out[i].Updated) {
-			out[i].Home = f.sess.Home
-		}
-		fillFrom(&out[i], f.sess)
+	rows := make([]Session, len(files))
+	for i, f := range files {
+		rows[i] = f.sess
 	}
-	return addTracked(out, files, copied)
+	return addTracked(mergeByID(rows, addCopy), files, copied)
 }
 
 // addTracked raises each session, field by field, to the usage Claude Code
