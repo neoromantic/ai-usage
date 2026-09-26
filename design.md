@@ -2,7 +2,7 @@
 
 The design of the console report, static and interactive. Decided on 2026-09-23 with the owner. [ai-report.md](ai-report.md) has the product requirements.
 
-Built on 2026-09-24 for v0.2.0. Where the build decides what this text leaves open, the golden files in `internal/view/testdata/` show the result: the matrix rows go by total, and OVER lines by when they run out.
+Built on 2026-09-24 for v0.2.0. Where the build decides what this text leaves open, the golden files in `internal/view/testdata/` show the result.
 
 ## What the report answers
 
@@ -25,58 +25,7 @@ Top to bottom, in order of urgency:
 
 ## The page
 
-Real quota readings of the team on 23 September, 17:38. The token counts for 7 days are made up.
-
-```
-ai-usage · annbook · team qmvrtzpa                     ● collected 7m ago  ● relay 7m ago  ● up to date
-
-ATTENTION
- OUT    codex ann@acme.dev          back Fri 17:09, in 1d 23h
- OUT    claude ann · Fable          back Sun 01:00, in 3d 7h
- OVER   codex sam@mail.test         runs out ~Sat 06:54 at this week's pace, 2d 13h before reset
- OVER   claude ann@acme.dev         runs out ~Thu 01:17 at this week's pace, 2d 23h before reset · reading 1d old
- ERROR  Mac.localdomain             codex: app-server exited without answering
- OLD    2 devices on v0.1.1         Mac.localdomain, MacBook-Pro-Kim · latest v0.1.3
-
-SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
-
-  CLAUDE                 PLAN        THIS WEEK                  LEFT  RESETS               AT RESET  USERS                LAST
-● ann@acme.dev           max         ━━━━━━━━━╋━━━━━━────────   ~33%  3d 7h  Sun 01:00   ~174% over   2  annbook             7m
-    Fable                            ━━━━━━━━━╋━━━━━━━━━━━━━━     0%  3d 7h  Sun 01:00          out
-  kim@corp.test          max         ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈      ?                              —   1  Mac.localdomain     1h
-
-  CODEX
-● ann@acme.dev           pro         ━━━━━━━━━━━━━━━━━╋━━━━━━     0%  1d 23h Fri 17:09          out   2  annbook             1h
-  sam@mail.test          prolite     ━━━━━━╋━━━──────────────    58%  5d 2h  Mon 20:12    157% over   1  MacBook-Pro-Kim     3h
-● lee@corp.test          pro         ━━━─┃───────────────────    88%  5d 22h Tue 16:30       81% ok  10  srv1               34m
-  unknown                            ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈      ?                              —   1  Mac.localdomain    16m
-
-  GROK
-● a4c2e917               SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈      ?                              —   1  annbook            11h
-
-DEVICES × SUBSCRIPTIONS  13 · 7d · M tokens in+out      ‹usage›  status   ‹tokens›  share
-                      CLAUDE ─────────  CODEX ────────────────────────────  GROK     NO QUOTA
-                          ann      kim      ann      sam      lee  unknown a4c2e917   hermes   TOTAL
-● annbook                  19        ·      180        ·        ·        ·        3        ·     202
-  srv1                      2        ·       12        ·      240        ·        ·        8     262
-× Mac.localdomain           ·       10        ·        ·        ·       95        ·        ·     105
-↓ MacBook-Pro-Kim           ·        ·        ·       60        ·        ·        ·        ·      60
-  bot-a                     ·        ·        ·        ·       30        ·        ·        ·      30
-  bot-b                     ·        ·        ·        ·       25        ·        ·        1      26
-  ⋮
-  TOTAL                    21       10      192       60      345       95        3       10     736
-
-PROJECTS  annbook · by 7d · M tokens in+out
-  PROJECT                             7D   90D  SESS  VIA            LAST
-  ~/src/acme/app                      60   162    43  codex, claude    1h
-  ~/Vault                             22    52    56  codex            3h
-  ~/src/site                           9    30     6  codex            2d
-  ~/src/ai-usage                       8     8     3  claude, grok     7m
-  ~/src/acme/os                        3    10     3  claude, grok    11h
-  + 237 more
-
- ↑↓ scroll · ←→ matrix · s ‹usage› status · p period ‹7d› · % share · r refresh · ? help · q quit
-```
+The page at 160 columns is the example at the top of [README.md](README.md), which is `internal/view/testdata/team-160.golden`; the golden files are exact where this text is not.
 
 ## Header
 
@@ -238,6 +187,10 @@ With every mark on screen it is one line from 120 columns on. Below that, where 
 - The header stays at the top and the key bar at the bottom. The page scrolls between them.
 - Scrolled into DEVICES, the page keeps the section's three lines over its rows at its top, in either view, as a sticky table header. It stays from the line its title would scroll off on, with the first row right under it the line before, until TOTAL comes up under it, and then lets go. A screen down starts under it with the line after the last one shown, so no row is skipped.
 - It reflows on resize. Relative times tick, and the page reloads when a scheduled run saves new state.
+
+```
+ ↑↓ scroll · ←→ matrix · s ‹usage› status · p period ‹7d› · % share · r refresh · ? help · q quit
+```
 
 Keys:
 

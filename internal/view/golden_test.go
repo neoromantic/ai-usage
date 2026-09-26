@@ -31,7 +31,7 @@ func loadReport(t *testing.T, name string) Report {
 // teamDir is the data directory the team fixture's status shows.
 const teamDir = "/Users/ann/Library/Application Support/ai-usage"
 
-// sampleZone is the zone of design.md's sample page: the fixtures' 14:38
+// sampleZone is the zone of README.md's sample page: the fixtures' 14:38
 // UTC is its 17:38.
 var sampleZone = time.FixedZone("UTC+3", 3*60*60)
 
