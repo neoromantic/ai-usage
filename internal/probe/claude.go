@@ -29,7 +29,10 @@ import (
 // dialog does. So for a claude.ai subscription whose config names its
 // account and whose cache is missing or older than claudeFresh, in a home
 // this OS user owns and used in the last claudeInUse and since that cache,
-// Claude Code is first asked to read it again. The cache is as fresh as
+// Claude Code is first asked to read it again. Claude Code renews an expired
+// login when it reads the usage, so it is asked only for a home in use,
+// whose own sessions keep that login alive anyway. An idle login is left to
+// expire, and an idle home has spent nothing since. The cache is as fresh as
 // Claude Code last made it. Its age is reported, and when the read leaves it
 // stale, why.
 func Claude(ctx context.Context, env Env, home string) (Reading, error) {
@@ -39,30 +42,35 @@ func Claude(ctx context.Context, env Env, home string) (Reading, error) {
 	file := claudeConfigFile(env.HomeDir, home, configDir)
 
 	var st claudeStatus
-	if bin, ok := env.find("claude"); ok {
+	bin, found := env.find("claude")
+	if found {
 		var err error
 		st, err = claudeAuthStatus(ctx, env, bin, configDir)
 		if err != nil {
 			errs = append(errs, err)
 		}
 		r.Account, r.Plan = st.label(), st.SubscriptionType
-		if st.subscription() && claudeHasAccount(file) && claudeUsedSince(file, LastUse(ctx), env.now()) && claudeOwned(file, home) && claudeStale(file, env.now()) {
-			if err := claudeReadUsage(ctx, env, bin, configDir, home, file); err != nil {
-				errs = append(errs, err)
-			}
-		}
 	} else {
 		errs = append(errs, errors.New("claude binary not found; account unknown"))
 	}
 
-	quota, err := claudeCachedUsage(file)
-	if err != nil {
-		errs = append(errs, err)
+	cfg, cfgErr := readClaudeConfig(file)
+	// A zero st is no subscription, so a missing binary is never asked. A
+	// config that cannot be read is not refreshed either: Claude Code would
+	// meet the same file, and its error is reported below.
+	if st.subscription() && cfgErr == nil && cfg.hasAccount() && cfg.usedSince(LastUse(ctx), env.now()) && claudeOwned(file, home) && cfg.stale(env.now()) {
+		var err error
+		if cfg, err = claudeReadUsage(ctx, env, bin, configDir, home, file, cfg); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if cfgErr != nil {
+		errs = append(errs, cfgErr)
 	}
 	// The cache holds a claude.ai subscription's limits. An API key or a
 	// cloud provider has none, even with a claude.ai account in the config.
 	if st.AuthMethod == "claude.ai" {
-		r.Quota = quota
+		r.Quota = cfg.quota()
 	}
 	return r, joinErrors(errs)
 }
@@ -209,33 +217,37 @@ const claudeCaching = "2.1.208"
 // Claude Code is not run when it cannot cache the usage: when it is too old
 // to, or its settings turn off the traffic the read needs. Neither goes away
 // by itself, so it is said at every run instead.
-func claudeReadUsage(ctx context.Context, env Env, bin, configDir, home, file string) error {
+//
+// It returns the config to take the quota from: cfg, or the file as the
+// read left it once Claude Code ran.
+func claudeReadUsage(ctx context.Context, env Env, bin, configDir, home, file string, cfg claudeConfig) (claudeConfig, error) {
 	version := claudeVersion(bin)
 	if version != "" && selfupdate.Newer(claudeCaching, version) {
 		why := fmt.Sprintf("Claude Code %s does not cache the usage; update it to %s or later", version, claudeCaching)
-		return claudeUsageError(why, "", file, env.now(), "")
+		return cfg, claudeUsageError(why, "", cfg.cacheState(env.now()), "")
 	}
 	if claudeNoTraffic(env, home) {
-		return claudeUsageError("nonessential traffic is off in Claude Code's settings", version, file, env.now(), "")
+		return cfg, claudeUsageError("nonessential traffic is off in Claude Code's settings", version, cfg.cacheState(env.now()), "")
 	}
 	run := claudeRefresh(ctx, env, bin, configDir)
-	if !claudeStale(file, env.now()) {
-		return nil
+	after, err := readClaudeConfig(file)
+	if err != nil || !after.stale(env.now()) {
+		return after, err
 	}
 	why, said := run.why(version)
-	return claudeUsageError(why, version, file, env.now(), said)
+	return after, claudeUsageError(why, version, after.cacheState(env.now()), said)
 }
 
 // claudeUsageError says why a read left no new reading, then which Claude
 // Code it was when that is known and what cache there is, and last a line of
 // what it printed, if any, so that an error cut short loses that first.
-func claudeUsageError(why, version, file string, now time.Time, said string) error {
+func claudeUsageError(why, version, cache, said string) error {
 	var about []string
 	if version != "" {
 		about = append(about, "Claude Code "+version)
 	}
-	if c := claudeCacheState(file, now); c != "" {
-		about = append(about, c)
+	if cache != "" {
+		about = append(about, cache)
 	}
 	msg := "claude /usage: " + why
 	if len(about) > 0 {
@@ -388,15 +400,9 @@ func (f *firstBytes) String() string {
 	return string(f.head)
 }
 
-// claudeCacheState says in a few words what usage cache the config file at
-// path holds for the account logged in: none, another account's, or one of
-// what age. It says nothing of a config that cannot be read, whose error is
-// reported when the cache is read.
-func claudeCacheState(path string, now time.Time) string {
-	cfg, err := readClaudeConfig(path)
-	if err != nil {
-		return ""
-	}
+// cacheState says in a few words what usage cache the config holds for the
+// account logged in: none, another account's, or one of what age.
+func (cfg claudeConfig) cacheState(now time.Time) string {
 	c := cfg.Cached
 	switch {
 	case c == nil || c.FetchedAtMs <= 0:
@@ -596,16 +602,10 @@ func (cfg claudeConfig) cache() *claudeUsageCache {
 	return c
 }
 
-// claudeStale reports whether Claude Code should read the usage again: the
-// cache in the config file at path is missing, another account's, or older
-// than claudeFresh. One from the future is stale too, as it is to Claude
-// Code. A config that cannot be read is not: Claude Code would meet the
-// same file, and reading the cache reports it.
-func claudeStale(path string, now time.Time) bool {
-	cfg, err := readClaudeConfig(path)
-	if err != nil {
-		return false
-	}
+// stale reports whether Claude Code should read the usage again: the cache
+// is missing, another account's, or older than claudeFresh. One from the
+// future is stale too, as it is to Claude Code.
+func (cfg claudeConfig) stale(now time.Time) bool {
 	c := cfg.cache()
 	if c == nil {
 		return true
@@ -633,19 +633,11 @@ func LastUse(ctx context.Context) time.Time {
 // read that keeps failing stops being made soon after the home goes idle.
 const claudeInUse = time.Hour
 
-// claudeUsedSince reports whether the home was used in the last claudeInUse,
-// and after the cache in the config file at path was fetched when there is
-// one. A cache fetched after now counts as none, as it does to Claude Code.
-// Claude Code renews an expired login when it reads the usage, so it is
-// asked only for a home in use, whose own sessions keep that login alive
-// anyway. An idle login is left to expire, and an idle home has spent
-// nothing since.
-func claudeUsedSince(path string, used, now time.Time) bool {
+// usedSince reports whether the home was used in the last claudeInUse, and
+// after the cache was fetched when there is one. A cache fetched after now
+// counts as none, as it does to Claude Code.
+func (cfg claudeConfig) usedSince(used, now time.Time) bool {
 	if used.IsZero() || now.Sub(used) > claudeInUse {
-		return false
-	}
-	cfg, err := readClaudeConfig(path)
-	if err != nil {
 		return false
 	}
 	c := cfg.cache()
@@ -656,13 +648,12 @@ func claudeUsedSince(path string, used, now time.Time) bool {
 	return fetched.After(now) || used.After(fetched)
 }
 
-// claudeHasAccount reports whether the config file at path names the account
-// logged in. Claude Code tags the usage it caches with that account, and a
-// cache without one is not read. So for a config that names none, as one
-// reset while the login stays, a read would leave no reading, every run.
-func claudeHasAccount(path string) bool {
-	cfg, err := readClaudeConfig(path)
-	return err == nil && cfg.OAuthAccount != nil && cfg.OAuthAccount.AccountUUID != ""
+// hasAccount reports whether the config names the account logged in. Claude
+// Code tags the usage it caches with that account, and a cache without one
+// is not read. So for a config that names none, as one reset while the login
+// stays, a read would leave no reading, every run.
+func (cfg claudeConfig) hasAccount() bool {
+	return cfg.OAuthAccount != nil && cfg.OAuthAccount.AccountUUID != ""
 }
 
 // claudeOwned reports whether this OS user owns the home and the config
@@ -703,16 +694,11 @@ type claudeLimit struct {
 	} `json:"scope"`
 }
 
-// claudeCachedUsage reads cachedUsageUtilization. A missing file or cache is
-// no reading, not an error.
-func claudeCachedUsage(path string) (*Quota, error) {
-	cfg, err := readClaudeConfig(path)
-	if err != nil {
-		return nil, err
-	}
+// quota reads cachedUsageUtilization. A missing cache is no reading.
+func (cfg claudeConfig) quota() *Quota {
 	c := cfg.cache()
 	if c == nil {
-		return nil, nil
+		return nil
 	}
 	q := &Quota{At: time.UnixMilli(c.FetchedAtMs).UTC(), Source: "cache"}
 	if raw, ok := c.Utilization["limits"]; ok {
@@ -742,9 +728,9 @@ func claudeCachedUsage(path string) (*Quota, error) {
 		}
 	}
 	if len(q.Windows) == 0 {
-		return nil, nil
+		return nil
 	}
-	return q, nil
+	return q
 }
 
 func claudeLimitName(l claudeLimit) (string, int) {

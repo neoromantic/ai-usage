@@ -2,6 +2,7 @@ package probe
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -112,11 +113,11 @@ func TestClaudeCachedUsage(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tc.body), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			got, err := claudeCachedUsage(path)
+			cfg, err := readClaudeConfig(path)
 			if err != nil {
 				t.Fatalf("error: %v", err)
 			}
-			if !reflect.DeepEqual(got, tc.want) {
+			if got := cfg.quota(); !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("got  %+v\nwant %+v", describe(got), describe(tc.want))
 			}
 		})
@@ -138,21 +139,21 @@ func describe(q *Quota) any {
 	return out
 }
 
-func TestClaudeCachedUsageErrors(t *testing.T) {
+func TestReadClaudeConfigErrors(t *testing.T) {
 	dir := t.TempDir()
-	if q, err := claudeCachedUsage(filepath.Join(dir, "missing.json")); q != nil || err != nil {
-		t.Errorf("missing file: %v, %v", q, err)
+	if cfg, err := readClaudeConfig(filepath.Join(dir, "missing.json")); !reflect.DeepEqual(cfg, claudeConfig{}) || err != nil {
+		t.Errorf("missing file: %+v, %v", cfg, err)
 	}
 	bad := filepath.Join(dir, "bad.json")
 	if err := os.WriteFile(bad, []byte(`{"oauthAccount":`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if q, err := claudeCachedUsage(bad); q != nil || err == nil {
-		t.Errorf("bad JSON: %v, %v", q, err)
+	if _, err := readClaudeConfig(bad); err == nil {
+		t.Error("bad JSON: no error")
 	}
 	// A directory where the file should be is an error, not "no reading".
-	if q, err := claudeCachedUsage(dir); q != nil || err == nil {
-		t.Errorf("unreadable: %v, %v", q, err)
+	if _, err := readClaudeConfig(dir); err == nil {
+		t.Error("unreadable: no error")
 	}
 }
 
@@ -671,11 +672,12 @@ func TestClaudeCacheState(t *testing.T) {
 		{claudeCacheAt(testNow.Add(-3*time.Hour - 20*time.Minute)), "cache 3h old"},
 		{claudeCacheAt(testNow.Add(-90 * 24 * time.Hour)), "cache 90d old"},
 		{claudeCacheAt(testNow.Add(time.Hour)), "cache from the future"},
-		{`{`, ""},
 	} {
-		file := filepath.Join(t.TempDir(), ".claude.json")
-		writeFile(t, file, tc.config)
-		if got := claudeCacheState(file, testNow); got != tc.want {
+		var cfg claudeConfig
+		if err := json.Unmarshal([]byte(tc.config), &cfg); err != nil {
+			t.Fatal(err)
+		}
+		if got := cfg.cacheState(testNow); got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.config, got, tc.want)
 		}
 	}
@@ -842,6 +844,7 @@ func TestClaudeUsageErrorFitsTwice(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, ".claude.json")
 	writeFile(t, file, strings.Replace(claudeCache, `"acct-1"}`, `"acct-2"}`, 1))
+	cfg, _ := readClaudeConfig(file)
 	var msgs []string
 	for _, version := range []string{"", "2.1.281"} {
 		for _, run := range []claudeRun{
@@ -856,18 +859,20 @@ func TestClaudeUsageErrorFitsTwice(t *testing.T) {
 			{out: []string{"Something unexpected happened"}},
 		} {
 			why, _ := run.why(version)
-			msgs = append(msgs, errText(claudeUsageError(why, version, file, testNow, "")))
+			msgs = append(msgs, errText(claudeUsageError(why, version, cfg.cacheState(testNow), "")))
 		}
 	}
 	// The reasons Claude Code is not run for, which run nothing.
 	env := Env{HomeDir: dir, Now: func() time.Time { return testNow }}
 	old := filepath.Join(dir, "Caskroom", "claude-code", "2.1.207", "claude")
 	writeExe(t, old)
-	msgs = append(msgs, errText(claudeReadUsage(context.Background(), env, old, "", filepath.Join(dir, ".claude"), file)))
+	_, err := claudeReadUsage(context.Background(), env, old, "", filepath.Join(dir, ".claude"), file, cfg)
+	msgs = append(msgs, errText(err))
 	writeFile(t, filepath.Join(dir, ".claude", "settings.json"), `{"env":{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":"1"}}`)
 	current := filepath.Join(dir, "Caskroom", "claude-code", "2.1.281", "claude")
 	writeExe(t, current)
-	msgs = append(msgs, errText(claudeReadUsage(context.Background(), env, current, "", filepath.Join(dir, ".claude"), file)))
+	_, err = claudeReadUsage(context.Background(), env, current, "", filepath.Join(dir, ".claude"), file, cfg)
+	msgs = append(msgs, errText(err))
 	for _, msg := range msgs {
 		if !strings.HasPrefix(msg, "claude /usage: ") || !strings.Contains(msg, "cache of another account") {
 			t.Errorf("error = %q", msg)
