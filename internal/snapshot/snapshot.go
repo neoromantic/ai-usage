@@ -260,11 +260,17 @@ func Decode(body []byte) (Doc, error) {
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 		return d, errors.New("snapshot: trailing data")
 	}
-	return d, d.Validate(time.Time{})
+	return d, d.Validate()
 }
 
-// Validate checks limits. A non-zero now also rejects a collected_at in the future.
-func (d Doc) Validate(now time.Time) error {
+// FromFuture reports whether collected_at is further ahead of now than clocks
+// may drift.
+func (d Doc) FromFuture(now time.Time) bool {
+	return d.CollectedAt.After(now.Add(futureSkewAllowed))
+}
+
+// Validate checks limits.
+func (d Doc) Validate() error {
 	if d.V != Version {
 		return fmt.Errorf("snapshot version %d, want %d", d.V, Version)
 	}
@@ -287,9 +293,6 @@ func (d Doc) Validate(now time.Time) error {
 	}
 	if d.CollectedAt.IsZero() {
 		return errors.New("collected_at is missing")
-	}
-	if !now.IsZero() && d.CollectedAt.After(now.Add(futureSkewAllowed)) {
-		return errors.New("collected_at is in the future")
 	}
 	if len(d.Accounts) > MaxAccounts {
 		return fmt.Errorf("%d accounts, limit %d", len(d.Accounts), MaxAccounts)

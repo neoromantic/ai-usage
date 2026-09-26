@@ -1321,7 +1321,7 @@ func TestBadWindowValuesAreClamped(t *testing.T) {
 	if got := totalsFor(t, res.State, "claude", "ann").Quota.Windows; len(got) != snapshot.MaxWindows {
 		t.Fatalf("%d windows kept", len(got))
 	}
-	if err := res.Doc.Validate(time.Time{}); err != nil {
+	if err := res.Doc.Validate(); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := o.Dir.LoadState(); err != nil {

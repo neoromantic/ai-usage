@@ -277,7 +277,7 @@ func TestValidate(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			d := validDoc()
 			c.edit(&d)
-			err := d.Validate(t0)
+			err := d.Validate()
 			if (err == nil) != c.ok {
 				t.Fatalf("Validate err = %v, want ok=%v", err, c.ok)
 			}
@@ -299,7 +299,7 @@ func repeat[T any](v T, n int) []T {
 	return out
 }
 
-func TestValidateFutureCollectedAt(t *testing.T) {
+func TestFromFuture(t *testing.T) {
 	cases := []struct {
 		name string
 		at   time.Time
@@ -315,15 +315,8 @@ func TestValidateFutureCollectedAt(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			d := validDoc()
 			d.CollectedAt = c.at
-			if err := d.Validate(t0); (err == nil) != c.ok {
-				t.Fatalf("Validate(now) err = %v, want ok=%v", err, c.ok)
-			}
-			// A zero now skips the check; Decode has no clock.
-			if err := d.Validate(time.Time{}); err != nil {
-				t.Fatalf("Validate(zero) err = %v", err)
-			}
-			if _, err := Decode(encode(t, d)); err != nil {
-				t.Fatalf("Decode err = %v", err)
+			if d.FromFuture(t0) != !c.ok {
+				t.Fatalf("FromFuture = %v, want %v", d.FromFuture(t0), !c.ok)
 			}
 		})
 	}
@@ -468,7 +461,7 @@ func FuzzDecode(f *testing.F) {
 		if len(b) > MaxBytes {
 			t.Fatalf("accepted %d bytes", len(b))
 		}
-		if err := d.Validate(time.Time{}); err != nil {
+		if err := d.Validate(); err != nil {
 			t.Fatalf("accepted a document Validate rejects: %v", err)
 		}
 	})

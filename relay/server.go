@@ -218,8 +218,8 @@ func (s *Server) put(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	doc, err := snapshot.Decode(body)
-	if err == nil {
-		err = doc.Validate(s.now())
+	if err == nil && doc.FromFuture(s.now()) {
+		err = errors.New("collected_at is in the future")
 	}
 	if err == nil && !canonical(doc, body) {
 		err = errors.New("snapshot is not in canonical form")

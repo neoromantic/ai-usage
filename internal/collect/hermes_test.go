@@ -87,7 +87,7 @@ func TestHermesLinksSubscriptionsToDefaultHomes(t *testing.T) {
 	if !found {
 		t.Fatal("snapshot has no linked hermes account")
 	}
-	if err := res.Doc.Validate(time.Time{}); err != nil {
+	if err := res.Doc.Validate(); err != nil {
 		t.Fatal(err)
 	}
 

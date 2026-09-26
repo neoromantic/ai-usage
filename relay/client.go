@@ -57,12 +57,7 @@ func (c *Client) url(path string) (string, error) {
 
 // Publish stores this device's snapshot. body must be the exact JSON to sign.
 func (c *Client) Publish(ctx context.Context, device string, body []byte) error {
-	path := "/v1/teams/" + c.Key.Fingerprint() + "/devices/" + device
-	u, err := c.url(path)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, u, bytes.NewReader(body))
+	req, err := c.request(ctx, http.MethodPut, device, body)
 	if err != nil {
 		return err
 	}
@@ -129,8 +124,21 @@ func (c *Client) Remove(ctx context.Context, device string) error {
 }
 
 func (c *Client) signed(ctx context.Context, method, device string) (*http.Request, error) {
-	fp := c.Key.Fingerprint()
-	path := "/v1/teams/" + fp
+	req, err := c.request(ctx, method, device, nil)
+	if err != nil {
+		return nil, err
+	}
+	at := c.now()
+	req.Header.Set(HeaderKey, encode(c.Key.Public()))
+	req.Header.Set(HeaderTime, strconv.FormatInt(at.Unix(), 10))
+	req.Header.Set(HeaderSig, encode(c.Key.Sign(RequestMessage(method, c.Key.Fingerprint(), device, at))))
+	return req, nil
+}
+
+// request builds a request for the team, or for one device of it when device
+// is set.
+func (c *Client) request(ctx context.Context, method, device string, body []byte) (*http.Request, error) {
+	path := "/v1/teams/" + c.Key.Fingerprint()
 	if device != "" {
 		path += "/devices/" + device
 	}
@@ -138,15 +146,7 @@ func (c *Client) signed(ctx context.Context, method, device string) (*http.Reque
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u, nil)
-	if err != nil {
-		return nil, err
-	}
-	at := c.now()
-	req.Header.Set(HeaderKey, encode(c.Key.Public()))
-	req.Header.Set(HeaderTime, strconv.FormatInt(at.Unix(), 10))
-	req.Header.Set(HeaderSig, encode(c.Key.Sign(RequestMessage(method, fp, device, at))))
-	return req, nil
+	return http.NewRequestWithContext(ctx, method, u, bytes.NewReader(body))
 }
 
 func (c *Client) do(req *http.Request) ([]byte, error) {

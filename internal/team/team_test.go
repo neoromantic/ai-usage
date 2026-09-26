@@ -238,7 +238,7 @@ func TestSealOpen(t *testing.T) {
 		}
 		// The relay accepts it as a sealed field.
 		d := validDocWith(k, sealed)
-		if err := d.Validate(d.CollectedAt); err != nil {
+		if err := d.Validate(); err != nil {
 			t.Fatalf("snapshot rejects a sealed label of %d bytes: %v", len(plain), err)
 		}
 		got, err := k.Open(sealed)
