@@ -125,7 +125,8 @@ equal("left unknown", Format.left(team.teamAccount(provider: "codex", label: "le
 for (n, want) in [(0, "–"), (999_999, "<1M"), (1_000_000, "1M"), (167_400_000, "167M"), (1_975_000_000, "1,975M")] {
     equal("tokensM \(n)", Format.tokensM(n), want)
 }
-equal("spoken durations", [30, 85 * 60, 3600, 2 * 86400 + 9 * 3600, 86400].map { Format.spokenDuration(TimeInterval($0)) },
+let spokenSeconds: [TimeInterval] = [30, 5100, 3600, 205_200, 86400]
+equal("spoken durations", spokenSeconds.map { Format.spokenDuration($0) },
       ["under a minute", "1 hour 25 minutes", "1 hour", "2 days 9 hours", "1 day"])
 // The sparkline is the last 14 days, oldest first, zeros where the list
 // does not reach.

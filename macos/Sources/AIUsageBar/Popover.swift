@@ -446,7 +446,12 @@ enum StatusMenu {
     /// where no list shows them, with this Mac's errors.
     static func show(_ store: Store, entries: [Attention]? = nil) {
         guard let anchor = store.statusAnchor else { return }
-        let shown = entries ?? (store.report.map { r in r.solo ? r.attention.filter { $0.kind == .error || $0.kind == .silent } : [] } ?? [])
+        var shown: [Attention] = []
+        if let entries {
+            shown = entries
+        } else if let r = store.report, r.solo {
+            shown = r.attention.filter { $0.kind == .error || $0.kind == .silent }
+        }
         let menu = build(store, entries: shown)
         let y = anchor.isFlipped ? anchor.bounds.height + 4 : -4
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: y), in: anchor)
