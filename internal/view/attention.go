@@ -1,21 +1,15 @@
 package view
 
 import (
+	"slices"
 	"sort"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 )
 
-// attentionRank orders the kinds, most urgent first.
-var attentionRank = map[string]int{
-	AttentionOut:    0,
-	AttentionOver:   1,
-	AttentionError:  2,
-	AttentionSilent: 3,
-	AttentionOld:    4,
-	AttentionUnder:  5,
-}
+// attentionOrder is the kinds, most urgent first.
+var attentionOrder = []string{AttentionOut, AttentionOver, AttentionError, AttentionSilent, AttentionOld, AttentionUnder}
 
 // attention is what needs attention now, most urgent first: windows that
 // are out or will run out, devices that fail or are silent, devices on an
@@ -100,8 +94,8 @@ func attention(t Team, c Collector, now time.Time) []Attention {
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
-		if attentionRank[a.Kind] != attentionRank[b.Kind] {
-			return attentionRank[a.Kind] < attentionRank[b.Kind]
+		if ra, rb := slices.Index(attentionOrder, a.Kind), slices.Index(attentionOrder, b.Kind); ra != rb {
+			return ra < rb
 		}
 		switch a.Kind {
 		case AttentionOut, AttentionOver, AttentionSilent:

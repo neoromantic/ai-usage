@@ -96,11 +96,7 @@ func (p *page) subscriptions() []chunks {
 			case !known(main):
 				noReading++
 			}
-			label := a.Label
-			if a.Alias != nil && a.Name == *a.Alias {
-				label = *a.Alias
-			}
-			row := subRow{here: a.Current, name: p.txt(shortID(label)), win: main, users: a.Users, last: g.none}
+			row := subRow{here: a.Current, name: p.txt(shownLabel(a)), win: main, users: a.Users, last: g.none}
 			if a.Plan != nil {
 				row.plan = p.txt(*a.Plan)
 			}
@@ -286,10 +282,6 @@ func (p *page) subLine(l subLayout, r subRow) chunks {
 	}
 	return out
 }
-
-// known says how full a window is now is known: it has a reading, the
-// window has not reset since, and it was read since any refusal.
-func known(w *Window) bool { return w != nil && !w.Reset && !unread(w) }
 
 // unread says a window was not read since Claude refused a request: how
 // full it is now is not known.

@@ -69,7 +69,7 @@ type device struct {
 }
 
 func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
-	t := Team{Devices: []TeamDevice{}, Providers: []TeamProvider{}, Matrix: Matrix{Columns: []Column{}, Rows: []Row{}}}
+	t := Team{Devices: []TeamDevice{}, Providers: []TeamProvider{}}
 	docs := []snapshot.Doc{in.Doc}
 	var behind map[string]collect.Behind
 	if in.Team.Team == in.Key.Fingerprint() {
@@ -164,8 +164,8 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 				x = &teamAccount{
 					provider: a.Provider,
 					ta: TeamAccount{
-						Label: l, Name: l, Subscription: subscription(a.Provider),
-						Devices: []string{}, State: StateUnknown, PerDevice: []DeviceUsage{}, LinkedUsage: []LinkedUsage{},
+						Label: l, Subscription: subscription(a.Provider),
+						Devices: []string{}, State: StateUnknown, PerDevice: []DeviceUsage{},
 					},
 					wins: map[string]*winReading{},
 				}
@@ -243,13 +243,10 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 		}
 		tp := TeamProvider{Provider: p}
 		for _, x := range m {
-			x.ta.Link = x.local
-			if x.ta.Link == nil {
-				x.ta.Link = x.qLink
-			}
+			x.ta.Link = cmp.Or(x.local, x.qLink)
 			if len(x.wins) > 0 {
 				x.ta.Quota = x.quota(p, now)
-				if mw := mainWindow(x.ta.Quota.Windows); mw != nil && !mw.Reset && !mw.Unread {
+				if mw := knownMain(x.ta.Quota); mw != nil {
 					if s, ok := x.wins[mw.Name].w.Start(); ok {
 						x.start, x.main = s, mw.Name
 					}
@@ -343,10 +340,8 @@ func (x *teamAccount) quota(provider string, now time.Time) *Quota {
 			newest = wr
 		}
 	}
-	q := quotaView(newest.at, "", newest.dev, now)
-	q.From = newest.from
-	q.Windows, x.ta.State = readQuota(withUnread(provider, rs), now)
-	q.Stale = anyStale(q.Windows)
+	var q *Quota
+	q, x.ta.State = quotaOf(Quota{Device: newest.dev, From: newest.from}, provider, rs, newest.at, now)
 	return q
 }
 
@@ -359,7 +354,7 @@ func (a devAccount) sinceStart(window string, start time.Time, collectedAt time.
 		return 0
 	}
 	for _, r := range a.recent {
-		if r.Window == window && absDuration(r.Start.Sub(start)) <= time.Hour {
+		if r.Window == window && r.Start.Sub(start).Abs() <= time.Hour {
 			return r.Tokens
 		}
 	}
@@ -369,13 +364,6 @@ func (a devAccount) sinceStart(window string, start time.Time, collectedAt time.
 		sum += a.days[i]
 	}
 	return sum
-}
-
-func absDuration(d time.Duration) time.Duration {
-	if d < 0 {
-		return -d
-	}
-	return d
 }
 
 // split divides a Hermes account on one device among the logins it spent
@@ -561,11 +549,9 @@ func matrix(providers []TeamProvider, byProv map[string]map[string]*teamAccount,
 				continue
 			}
 			c := Column{Provider: tp.Provider, Label: a.Label, Name: a.Name, State: a.State}
-			if a.Quota != nil {
-				if mw := mainWindow(a.Quota.Windows); mw != nil && !mw.Reset && !mw.Unread {
-					p := mw.Percent
-					c.Percent = &p
-				}
+			if mw := knownMain(a.Quota); mw != nil {
+				p := mw.Percent
+				c.Percent = &p
 			}
 			index[colKey{tp.Provider, a.Label, false}] = len(mx.Columns)
 			mx.Columns = append(mx.Columns, c)
@@ -654,11 +640,8 @@ func sortTeamAccounts(as []TeamAccount) {
 // left is what is left of a quota's main window, in percent; 101 with none,
 // so an account with no reading sorts after one with a reading.
 func left(q *Quota) float64 {
-	if q == nil {
-		return 101
-	}
-	m := mainWindow(q.Windows)
-	if m == nil || m.Reset || m.Unread {
+	m := knownMain(q)
+	if m == nil {
 		return 101
 	}
 	return max(100-m.Percent, 0)
@@ -687,16 +670,12 @@ func wireLink(accts []snapshot.Account, labels []string, i int) *Link {
 }
 
 func sameReading(a, b snapshot.Account) bool {
-	if a.QuotaAt == nil || b.QuotaAt == nil || !a.QuotaAt.Equal(*b.QuotaAt) || len(a.Windows) != len(b.Windows) {
+	if a.QuotaAt == nil || b.QuotaAt == nil || !a.QuotaAt.Equal(*b.QuotaAt) {
 		return false
 	}
-	for i, w := range a.Windows {
-		v := b.Windows[i]
-		if w.Name != v.Name || w.Percent != v.Percent || w.Minutes != v.Minutes || !sameTime(w.ResetsAt, v.ResetsAt) {
-			return false
-		}
-	}
-	return true
+	return slices.EqualFunc(a.Windows, b.Windows, func(w, v snapshot.Window) bool {
+		return w.Name == v.Name && w.Percent == v.Percent && w.Minutes == v.Minutes && sameTime(w.ResetsAt, v.ResetsAt)
+	})
 }
 
 func sameTime(a, b *time.Time) bool {

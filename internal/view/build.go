@@ -43,10 +43,8 @@ func Build(in Input) Report {
 				Error:     strPtr(st.Update.Error),
 			},
 		},
-		Attention: []Attention{},
 		Providers: []Provider{},
 		Projects:  []Project{},
-		Team:      Team{Devices: []TeamDevice{}, Providers: []TeamProvider{}, Matrix: Matrix{Columns: []Column{}, Rows: []Row{}}},
 	}
 
 	totals := collect.Totals(st)
@@ -57,40 +55,9 @@ func Build(in Input) Report {
 			pv.Homes = []string{}
 		}
 		for _, a := range totals {
-			if a.Provider != p {
-				continue
+			if a.Provider == p {
+				pv.Accounts = append(pv.Accounts, accountView(st, p, pv.Homes, a, now))
 			}
-			days := collect.DaysOf(a.Hours, now)
-			acct := Account{
-				Label:        a.Label,
-				Name:         a.Label,
-				Current:      a.Current,
-				Home:         currentHome(st, p, pv.Homes, a.Label),
-				Plan:         strPtr(a.Plan),
-				State:        StateUnknown,
-				Link:         linkView(a.Link),
-				Sessions:     a.Sessions,
-				Tokens:       a.Tokens,
-				Usage:        usageOf(days, 0),
-				Days:         orEmpty(days),
-				LinkedUsage:  []LinkedUsage{},
-				LastActiveAt: timePtr(a.LastActive),
-				Projects:     []Project{},
-			}
-			if a.Quota != nil {
-				acct.Quota = quotaView(a.Quota.At, a.Quota.Source, "", now)
-				acct.Quota.Windows, acct.State = readQuota(withUnread(p, readings(a.Quota.Windows, a.Quota.At)), now)
-				acct.Quota.Stale = anyStale(acct.Quota.Windows)
-				acct.Quota.From = a.QuotaFrom
-			}
-			if a.LinkedSessions > 0 {
-				// Only Hermes bills through another harness's login.
-				acct.LinkedUsage = append(acct.LinkedUsage, LinkedUsage{Provider: "hermes", Sessions: a.LinkedSessions, Tokens: a.Linked})
-			}
-			for _, pr := range a.Projects {
-				acct.Projects = append(acct.Projects, projectView(pr, now))
-			}
-			pv.Accounts = append(pv.Accounts, acct)
 		}
 		r.Providers = append(r.Providers, pv)
 	}
@@ -107,6 +74,38 @@ func Build(in Input) Report {
 	}
 	r.Attention = attention(r.Team, r.Collector, now)
 	return r
+}
+
+// accountView is one of this device's accounts of provider, whose homes are
+// homes, without its name, which comes from the team.
+func accountView(st *state.State, provider string, homes []string, a collect.AccountTotals, now time.Time) Account {
+	days := collect.DaysOf(a.Hours, now)
+	acct := Account{
+		Label:        a.Label,
+		Current:      a.Current,
+		Home:         currentHome(st, provider, homes, a.Label),
+		Plan:         strPtr(a.Plan),
+		State:        StateUnknown,
+		Link:         linkView(a.Link),
+		Sessions:     a.Sessions,
+		Tokens:       a.Tokens,
+		Usage:        usageOf(days, 0),
+		Days:         orEmpty(days),
+		LinkedUsage:  []LinkedUsage{},
+		LastActiveAt: timePtr(a.LastActive),
+		Projects:     []Project{},
+	}
+	if a.Quota != nil {
+		acct.Quota, acct.State = quotaOf(Quota{Source: a.Quota.Source, From: a.QuotaFrom}, provider, readings(a.Quota.Windows, a.Quota.At), a.Quota.At, now)
+	}
+	if a.LinkedSessions > 0 {
+		// Only Hermes bills through another harness's login.
+		acct.LinkedUsage = append(acct.LinkedUsage, LinkedUsage{Provider: "hermes", Sessions: a.LinkedSessions, Tokens: a.Linked})
+	}
+	for _, pr := range a.Projects {
+		acct.Projects = append(acct.Projects, projectView(pr, now))
+	}
+	return acct
 }
 
 // teamName is an account's short name in the team, or its default name
@@ -142,15 +141,16 @@ func linkView(l *state.Link) *Link {
 	return &Link{Provider: l.Provider, Label: l.Label}
 }
 
-// quotaView is a quota's reading, without its windows.
-func quotaView(at time.Time, source, device string, now time.Time) *Quota {
-	return &Quota{
-		ObservedAt: at.UTC(),
-		AgeSeconds: int64(now.Sub(at).Seconds()),
-		Source:     source,
-		Device:     device,
-		Windows:    []Window{},
-	}
+// quotaOf is q, a reading of provider's account whose newest window was read
+// at at, with its age and its windows rs as they read at now, and the
+// account's state.
+func quotaOf(q Quota, provider string, rs []reading, at, now time.Time) (*Quota, string) {
+	q.ObservedAt = at.UTC()
+	q.AgeSeconds = int64(now.Sub(at).Seconds())
+	var state string
+	q.Windows, state = readQuota(withUnread(provider, rs), now)
+	q.Stale = slices.ContainsFunc(q.Windows, func(w Window) bool { return w.Stale })
+	return &q, state
 }
 
 func projectView(p collect.ProjectTotals, now time.Time) Project {

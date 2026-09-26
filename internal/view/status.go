@@ -253,11 +253,7 @@ var appHomes = []struct {
 func (c *card) homeName(p string) string {
 	for _, a := range appHomes {
 		if m := a.re.FindStringSubmatch(p); m != nil {
-			id := m[1]
-			if uuidRe.MatchString(id) {
-				id = id[:8]
-			}
-			return a.app + " " + id
+			return a.app + " " + shortID(m[1])
 		}
 	}
 	return c.path(p)

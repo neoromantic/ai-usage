@@ -346,6 +346,16 @@ func shortID(label string) string {
 	return label
 }
 
+// shownLabel is how a line that names an account by its label shows it: by
+// its alias when the account goes by it, else by its label, with shortID.
+func shownLabel(a *TeamAccount) string {
+	label := a.Label
+	if a.Alias != nil && a.Name == *a.Alias {
+		label = *a.Alias
+	}
+	return shortID(label)
+}
+
 // account is the team account of provider with label, or nil.
 func (p *page) account(provider, label string) *TeamAccount {
 	for i := range p.r.Team.Providers {

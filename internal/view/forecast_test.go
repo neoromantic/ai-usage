@@ -194,7 +194,7 @@ func TestMainWindow(t *testing.T) {
 		for _, n := range c.names {
 			ws = append(ws, win(n, 10, reset))
 		}
-		if got := mainIndex(ws); got != c.want {
+		if got := mainIndex(readings(ws, now)); got != c.want {
 			t.Errorf("%v: main %d, want %d", c.names, got, c.want)
 		}
 	}

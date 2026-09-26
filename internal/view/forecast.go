@@ -94,23 +94,15 @@ func forecastState(pct float64) string {
 	}
 }
 
-// stateRank orders states from the worst: out, over, tight, ok, under, then
-// unknown.
+// stateOrder is the states from the worst. Unknown ranks after them.
+var stateOrder = []string{StateOut, StateOver, StateTight, StateOK, StateUnder}
+
+// stateRank is a state's place in stateOrder.
 func stateRank(s string) int {
-	switch s {
-	case StateOut:
-		return 0
-	case StateOver:
-		return 1
-	case StateTight:
-		return 2
-	case StateOK:
-		return 3
-	case StateUnder:
-		return 4
-	default:
-		return 5
+	if i := slices.Index(stateOrder, s); i >= 0 {
+		return i
 	}
+	return len(stateOrder)
 }
 
 // worse is the worse of two states.
@@ -126,23 +118,23 @@ const week = 7 * 24 * time.Hour
 // mainIndex is the index of a quota's main window, the weekly one: the one
 // named 7d, else the first a week long, else the longest, else the first.
 // It is -1 with no windows.
-func mainIndex(ws []snapshot.Window) int {
-	if len(ws) == 0 {
+func mainIndex(rs []reading) int {
+	if len(rs) == 0 {
 		return -1
 	}
-	for i, w := range ws {
-		if w.Name == "7d" {
+	for i, r := range rs {
+		if r.Name == "7d" {
 			return i
 		}
 	}
-	for i, w := range ws {
-		if w.Length() == week {
+	for i, r := range rs {
+		if r.Length() == week {
 			return i
 		}
 	}
 	best := 0
-	for i, w := range ws {
-		if w.Length() > ws[best].Length() {
+	for i, r := range rs {
+		if r.Length() > rs[best].Length() {
 			best = i
 		}
 	}
@@ -219,12 +211,8 @@ func readings(ws []snapshot.Window, at time.Time) []reading {
 // the account: the worst state of the main window and of every window that
 // limits more.
 func readQuota(rs []reading, now time.Time) ([]Window, string) {
-	ws := make([]snapshot.Window, len(rs))
-	for i, r := range rs {
-		ws[i] = r.Window
-	}
 	out := make([]Window, 0, len(rs))
-	m := mainIndex(ws)
+	m := mainIndex(rs)
 	for i, r := range rs {
 		win := readWindow(r.Window, r.At, now)
 		if r.Unread {
@@ -245,16 +233,6 @@ func readQuota(rs []reading, now time.Time) ([]Window, string) {
 	return out, state
 }
 
-// anyStale says a window's reading is stale.
-func anyStale(ws []Window) bool {
-	for _, w := range ws {
-		if w.Stale {
-			return true
-		}
-	}
-	return false
-}
-
 // mainWindow is the main window of a read quota, or nil.
 func mainWindow(ws []Window) *Window {
 	for i := range ws {
@@ -264,3 +242,19 @@ func mainWindow(ws []Window) *Window {
 	}
 	return nil
 }
+
+// knownMain is a quota's main window when how full it is now is known, or
+// nil.
+func knownMain(q *Quota) *Window {
+	if q == nil {
+		return nil
+	}
+	if m := mainWindow(q.Windows); known(m) {
+		return m
+	}
+	return nil
+}
+
+// known says how full a window is now is known: it has a reading, the
+// window has not reset since, and it was read since any refusal.
+func known(w *Window) bool { return w != nil && !w.Reset && !unread(w) }

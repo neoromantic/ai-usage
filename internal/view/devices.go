@@ -399,14 +399,11 @@ func (p *page) usage() []chunks {
 		if c.NoQuota {
 			r.group = ""
 		} else {
-			label := c.Label
+			label := shortID(c.Label)
 			if a := p.account(c.Provider, c.Label); a != nil {
-				r.here = a.Current
-				if a.Alias != nil && a.Name == *a.Alias {
-					label = *a.Alias
-				}
+				r.here, label = a.Current, shownLabel(a)
 			}
-			r.name = p.txt(shortID(label))
+			r.name = p.txt(label)
 		}
 		rows = append(rows, r)
 		sum = sum.add(c.Usage)

@@ -204,11 +204,10 @@ func (p *page) attention() []chunks {
 func (p *page) subject(a Attention) chunks {
 	switch a.Kind {
 	case AttentionOut, AttentionOver, AttentionUnder:
-		label := a.Account
-		if acct := p.account(a.Provider, a.Account); acct != nil && acct.Alias != nil && acct.Name == *acct.Alias {
-			label = *acct.Alias
+		label := shortID(a.Account)
+		if acct := p.account(a.Provider, a.Account); acct != nil {
+			label = shownLabel(acct)
 		}
-		label = shortID(label)
 		if a.Window != "" && a.Name != "" {
 			// The short name leaves room for the window.
 			label = a.Name
