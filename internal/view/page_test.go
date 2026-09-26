@@ -30,9 +30,25 @@ func pageSection(p Page, title string) []string {
 	return out
 }
 
-// moreAttention is the team fixture with a silent device and an unused
-// window as well, 8 lines of ATTENTION.
-func moreAttention(t *testing.T) Report {
+// bodyLine is the first line of p's body, as drawn, from the one whose
+// text starts with from on, whose text matches.
+func bodyLine(t *testing.T, p Page, from string, match func(text string) bool) string {
+	t.Helper()
+	in := false
+	for _, l := range p.Body {
+		text := sgr.ReplaceAllString(l, "")
+		in = in || strings.HasPrefix(text, from)
+		if in && match(text) {
+			return l
+		}
+	}
+	t.Fatalf("no line from %q on matches", from)
+	return ""
+}
+
+func TestPageAttentionIsCut(t *testing.T) {
+	// The team fixture with a silent device and an unused window as well,
+	// 8 lines of ATTENTION.
 	r := loadReport(t, "team")
 	since := time.Date(2026, 9, 21, 11, 2, 0, 0, time.UTC)
 	resets := time.Date(2026, 9, 29, 13, 30, 0, 0, time.UTC)
@@ -40,11 +56,6 @@ func moreAttention(t *testing.T) Report {
 	r.Attention = append(r.Attention,
 		Attention{Kind: AttentionSilent, Devices: []string{"bot-e"}, At: &since},
 		Attention{Kind: AttentionUnder, Provider: "codex", Account: "lee@corp.test", Name: "lee", ResetsAt: &resets, Percent: &pct})
-	return r
-}
-
-func TestPageAttentionIsCut(t *testing.T) {
-	r := moreAttention(t)
 	static := pageSection(Render(r, Options{Width: 160, Loc: sampleZone}), "ATTENTION")
 	if len(static) != 1+attentionLines+1 || strings.TrimSpace(static[len(static)-1]) != "+2 more" {
 		t.Errorf("static ATTENTION is not cut at %d lines:\n%s", attentionLines, strings.Join(static, "\n"))
@@ -283,16 +294,9 @@ func TestPageDevicesHead(t *testing.T) {
 func TestPageHeat(t *testing.T) {
 	r := loadReport(t, "team")
 	row := func(p Page, device string) string {
-		matrix := false
-		for _, l := range p.Body {
-			plain := sgr.ReplaceAllString(l, "")
-			matrix = matrix || strings.HasPrefix(plain, "DEVICES")
-			if matrix && strings.Contains(plain[:min(len(plain), 24)], " "+device+" ") {
-				return l
-			}
-		}
-		t.Fatalf("no row of %s", device)
-		return ""
+		return bodyLine(t, p, "DEVICES", func(text string) bool {
+			return strings.Contains(text[:min(len(text), 24)], " "+device+" ")
+		})
 	}
 	// In color the top step is bold: the largest cell on the page.
 	color := Render(r, Options{Width: 120, Loc: sampleZone, Color: true})
@@ -325,21 +329,6 @@ func TestPageHeadersDim(t *testing.T) {
 	team, single := loadReport(t, "team"), loadReport(t, "single")
 	dim := sgr.FindString(lipglossFg(NewTheme(true).Muted))
 	dimRuns := regexp.MustCompile(regexp.QuoteMeta(dim) + `[^\x1b]*\x1b\[m`)
-	// line is the first body line from the one that starts with from on
-	// whose text starts with prefix, as it is drawn.
-	line := func(p Page, from, prefix string) string {
-		t.Helper()
-		in := false
-		for _, l := range p.Body {
-			text := sgr.ReplaceAllString(l, "")
-			in = in || strings.HasPrefix(text, from)
-			if in && strings.HasPrefix(text, prefix) {
-				return l
-			}
-		}
-		t.Fatalf("no line %q after %q", prefix, from)
-		return ""
-	}
 	for _, per := range Periods {
 		o := Options{Width: 120, Loc: sampleZone, Color: true, Dark: true, Period: per}
 		bold := (&page{o: o}).bold("CLAUDE").st.Render("CLAUDE")
@@ -352,7 +341,7 @@ func TestPageHeadersDim(t *testing.T) {
 			{"status", "  DEVICE ", "DEVICES  13 · 1 error · 2 old · by " + per.String() + " · ", Render(team, devices(o))},
 			{"USAGE", "  CLAUDE ", "USAGE  sam-air · M tokens in+out", Render(single, o)},
 		} {
-			l := line(c.p, c.title, c.prefix)
+			l := bodyLine(t, c.p, c.title, func(text string) bool { return strings.HasPrefix(text, c.prefix) })
 			if !strings.Contains(l, dim+head+"\x1b[m") {
 				t.Errorf("%s by %s: %s is not dim: %q", c.table, per, head, l)
 			}
