@@ -25,6 +25,7 @@ func openPTY(t *testing.T) (master, slave *os.File) {
 		if err := unix.IoctlSetInt(fd, unix.TIOCPTYUNLK, 0); err != nil {
 			return err
 		}
+		//lint:ignore SA1019 no libSystem wrapper for TIOCPTYGNAME
 		if _, _, e := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), unix.TIOCPTYGNAME, uintptr(unsafe.Pointer(&name[0]))); e != 0 {
 			return e
 		}

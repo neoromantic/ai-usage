@@ -265,8 +265,7 @@ func TestPanicInProbeIsItsSourceError(t *testing.T) {
 	ask := o.Ask
 	o.Ask = func(ctx context.Context, p, home string) (probe.Reading, error) {
 		if p == "claude" {
-			var m map[string]int
-			m["boom"]++
+			panic("boom")
 		}
 		return ask(ctx, p, home)
 	}

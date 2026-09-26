@@ -190,13 +190,11 @@ func teamReport() view.Report {
 
 // device is one made-up machine and the ledger its collector keeps.
 type device struct {
-	rng                *rand.Rand
-	id, host, user     string
-	home, version      string
-	at                 time.Time
-	st                 *state.State
-	key                *team.Key
-	sessions, projects int
+	rng            *rand.Rand
+	id, host, user string
+	home, version  string
+	at             time.Time
+	st             *state.State
 }
 
 func newDevice(rng *rand.Rand, id, host, user, home, version string, at time.Time, providers ...string) *device {

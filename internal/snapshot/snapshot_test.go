@@ -467,7 +467,7 @@ func FuzzDecode(f *testing.F) {
 func TestPrintable(t *testing.T) {
 	for in, want := range map[string]string{
 		"evil\nFAKE LINE\x1b[2J": "evil FAKE LINE [2J",
-		"a​b‮c":                  "abc",
+		"a\u200bb\u202ec":        "abc",
 		"Build bot · ℹ":          "Build bot · ℹ",
 		// Joiners are part of names and emoji.
 		"\u0644\u067e\u200c\u062a\u0627\u067e":    "\u0644\u067e\u200c\u062a\u0627\u067e",

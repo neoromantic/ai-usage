@@ -986,8 +986,7 @@ func TestPanicInOneSourceDoesNotStopOthers(t *testing.T) {
 	read := o.ReadLogs
 	o.ReadLogs = func(p string, homes []string, since time.Time) logs.Result {
 		if p == "claude" {
-			var m map[string]int
-			m["boom"]++ // a nil map write, as a parser bug would
+			panic("boom") // as a parser bug would
 		}
 		return read(p, homes, since)
 	}
