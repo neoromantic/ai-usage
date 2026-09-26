@@ -190,6 +190,7 @@ The state folder is `~/Library/Application Support/ai-usage` on macOS, `$XDG_CON
 | --- | --- |
 | `config.json` | this device's id, the relay, remembered and added homes, the `CLAUDE_CONFIG_DIR` value seen for them, which login each added Hermes home bills through, whether the schedule is off |
 | `team.key` | the team's private key; this is the secret |
+| `team.key.previous` | the key from before the last `team join` to another team; also a secret |
 | `state.json` | the last good readings, sessions, and health, and whether the guide is still to be printed |
 | `state.json.bad` | a `state.json` that did not parse, kept when a run started again from an empty state |
 | `team-cache.json` | the team's snapshots from the last read |
