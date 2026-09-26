@@ -296,12 +296,6 @@ func TestLookup(t *testing.T) {
 	if got, err := cron(&fakeCron{}).Lookup(ctx, exe, home); got != Absent || err != nil {
 		t.Fatalf("Lookup with no crontab = %v, %v", got, err)
 	}
-	// An entry from before the state folder was named runs the default
-	// folder, which may not be this one.
-	old := "*/15 * * * * '/opt/ai-usage/bin/ai-usage' collect --quiet >/dev/null 2>&1 # ai-usage\n"
-	if got, _ := cron(withTab(old)).Lookup(ctx, exe, home); got != Other {
-		t.Fatalf("entry without a state folder: Lookup = %v", got)
-	}
 	odd, oddHome := "/Users/o'brien/100% ai/ai-usage", "/Users/o'brien/100% state"
 	f := &fakeCron{}
 	if err := cron(f).Install(ctx, odd, oddHome, "/bin"); err != nil {

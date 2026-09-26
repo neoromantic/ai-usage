@@ -161,11 +161,7 @@ func shCommand(exe, home string) string { return shq(exe) + " " + args(home, shq
 // named because the scheduler does not see AI_USAGE_HOME or XDG_CONFIG_HOME,
 // and another folder would mean another device, team key, and ledger.
 func args(home string, quote func(string) string) string {
-	a := "collect --quiet"
-	if home != "" {
-		a += " --home " + quote(home)
-	}
-	return a
+	return "collect --quiet --home " + quote(home)
 }
 
 // pathDirs drops empty and relative PATH entries, which would resolve against

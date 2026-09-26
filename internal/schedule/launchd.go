@@ -72,10 +72,7 @@ func quarterHours() string {
 // programArguments is the plist's command. Lookup matches it to tell this
 // binary and state folder from another.
 func programArguments(exe, home string) string {
-	argv := []string{exe, "collect", "--quiet"}
-	if home != "" {
-		argv = append(argv, "--home", home)
-	}
+	argv := []string{exe, "collect", "--quiet", "--home", home}
 	var b strings.Builder
 	b.WriteString("  <key>ProgramArguments</key>\n  <array>\n")
 	for _, a := range argv {
