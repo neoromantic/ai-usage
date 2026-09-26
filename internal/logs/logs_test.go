@@ -462,7 +462,7 @@ func TestDeniedFile(t *testing.T) {
 func TestForEachReader(t *testing.T) {
 	read := func(in string) (string, int, error) {
 		var got []string
-		long, err := forEachReader(strings.NewReader(in), func(line []byte) {
+		long, err := forEachReader(strings.NewReader(in), maxLineBytes, func(line []byte) {
 			got = append(got, string(line))
 		})
 		return strings.Join(got, "|"), long, err
@@ -488,7 +488,7 @@ func TestForEachReader(t *testing.T) {
 func TestForEachReaderReadError(t *testing.T) {
 	broken := io.MultiReader(strings.NewReader("a\nb"), iotest.ErrReader(errors.New("input/output error")))
 	var got []string
-	_, err := forEachReader(broken, func(line []byte) { got = append(got, string(line)) })
+	_, err := forEachReader(broken, maxLineBytes, func(line []byte) { got = append(got, string(line)) })
 	if err == nil || strings.Join(got, "|") != "a|b" {
 		t.Fatalf("lines %q err %v", got, err)
 	}

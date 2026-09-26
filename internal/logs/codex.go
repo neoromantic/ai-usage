@@ -241,7 +241,7 @@ func countCodex(files []*codexFile) []Session {
 		if !f.fresh {
 			continue
 		}
-		s := Session{ID: f.id, ParentID: f.parent, Project: f.project, Tokens: own[i], Hours: hours[i], Updated: f.updated, Home: f.home, Limits: f.limits[codexMainLimit]}
+		s := Session{ID: f.id, ParentID: f.parent, Project: f.project, Tokens: own[i], Hours: hours[i], Updated: f.updated, Home: f.home, Limits: f.limits[CodexMainLimit]}
 		if len(f.mirrors) > 0 {
 			s.Homes = append([]string{f.home}, f.mirrors...)
 		}
@@ -266,7 +266,7 @@ func codexLimits(files []*codexFile) *Limits {
 		}
 	}
 	buckets := slices.Sorted(maps.Keys(newest))
-	anchor := newest[codexMainLimit]
+	anchor := newest[CodexMainLimit]
 	if anchor == nil {
 		for _, b := range buckets {
 			anchor = later(anchor, newest[b])
@@ -323,7 +323,7 @@ func parseCodex(path string) (*codexFile, int, error) {
 	f := &codexFile{path: path}
 	haveMeta := false
 	var malformed int
-	long, err := forEachLine(path, func(line []byte) {
+	long, err := ForEachLine(path, maxLineBytes, func(line []byte) {
 		// One marker finds token_count and token_usage_record lines alike.
 		// Rollouts run to gigabytes, and each marker is a pass over them.
 		if !bytes.Contains(line, []byte(`"session_meta"`)) && !bytes.Contains(line, []byte(`"token_`)) {
@@ -543,8 +543,8 @@ type codexLine struct {
 	} `json:"payload"`
 }
 
-// codexMainLimit is the limit id of the main Codex bucket. Older logs leave it unset.
-const codexMainLimit = "codex"
+// CodexMainLimit is the limit id of the main Codex bucket. Older logs leave it unset.
+const CodexMainLimit = "codex"
 
 type codexLogLimits struct {
 	LimitID   string          `json:"limit_id"`
@@ -565,7 +565,7 @@ func (l *codexLogLimits) reading(at time.Time) (string, *Limits) {
 	if l == nil || at.IsZero() || (l.Primary == nil && l.Secondary == nil) {
 		return "", nil
 	}
-	bucket := cmp.Or(l.LimitID, codexMainLimit)
+	bucket := cmp.Or(l.LimitID, CodexMainLimit)
 	out := &Limits{ObservedAt: at.UTC(), Plan: l.PlanType}
 	for _, w := range []*codexLogWindow{l.Primary, l.Secondary} {
 		if w == nil {
@@ -589,7 +589,7 @@ func (l *codexLogLimits) reading(at time.Time) (string, *Limits) {
 // when it is not the main codex bucket.
 func CodexWindowName(limitID string, minutes int) string {
 	name := snapshot.DurationName(minutes)
-	if limitID != "" && limitID != codexMainLimit {
+	if limitID != "" && limitID != CodexMainLimit {
 		name = snapshot.PlainLabel(limitID + " " + name)
 	}
 	return name

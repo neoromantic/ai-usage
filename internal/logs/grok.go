@@ -120,7 +120,7 @@ func parseGrokUpdates(path string) (Tokens, map[int64]int64, int, error) {
 	var order []string
 	var anon int
 	var malformed int
-	long, err := forEachLine(path, func(line []byte) {
+	long, err := ForEachLine(path, maxLineBytes, func(line []byte) {
 		if !bytes.Contains(line, []byte(`"turn_completed"`)) {
 			return
 		}

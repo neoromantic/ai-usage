@@ -205,7 +205,7 @@ func parseClaude(path, id, parent string) (*claudeFile, int, error) {
 	sawSession := false
 	// Sub-agent lines carry their parent's session id.
 	own := cmp.Or(parent, id)
-	long, err := forEachLine(path, func(line []byte) {
+	long, err := ForEachLine(path, maxLineBytes, func(line []byte) {
 		if !bytes.Contains(line, []byte(`"usage"`)) && !bytes.Contains(line, []byte(`"cwd"`)) && !bytes.Contains(line, []byte(`"cost-state"`)) {
 			return
 		}

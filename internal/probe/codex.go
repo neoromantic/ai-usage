@@ -317,8 +317,8 @@ func codexLimits(raw json.RawMessage, now time.Time) (*Quota, string, error) {
 			ids = append(ids, id)
 		}
 		sort.Slice(ids, func(i, j int) bool {
-			if (ids[i] == "codex") != (ids[j] == "codex") {
-				return ids[i] == "codex"
+			if (ids[i] == logs.CodexMainLimit) != (ids[j] == logs.CodexMainLimit) {
+				return ids[i] == logs.CodexMainLimit
 			}
 			return ids[i] < ids[j]
 		})

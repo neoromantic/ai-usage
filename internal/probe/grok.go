@@ -1,17 +1,15 @@
 package probe
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/logs"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
@@ -80,36 +78,8 @@ type grokLogLine struct {
 const maxGrokLine = 1 << 20
 
 func (s *grokScan) scan(path string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	br := bufio.NewReaderSize(f, 64<<10)
-	var line []byte
-	skip := false
-	for {
-		chunk, err := br.ReadSlice('\n')
-		if !skip && len(line)+len(chunk) > maxGrokLine {
-			skip, line = true, line[:0]
-		}
-		if !skip {
-			line = append(line, chunk...)
-		}
-		if errors.Is(err, bufio.ErrBufferFull) {
-			continue
-		}
-		if !skip {
-			s.add(line)
-		}
-		line, skip = line[:0], false
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-	}
+	_, err := logs.ForEachLine(path, maxGrokLine, s.add)
+	return err
 }
 
 func (s *grokScan) add(line []byte) {

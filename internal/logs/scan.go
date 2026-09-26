@@ -59,20 +59,20 @@ func walkLogs(root string, unreadable *int, keep func(rel string) bool, visit fu
 
 func isJSONL(rel string) bool { return strings.HasSuffix(rel, ".jsonl") }
 
-// forEachLine calls visit for each non-blank line of path. It returns how
-// many lines it skipped for being longer than maxLineBytes.
-func forEachLine(path string, visit func(line []byte)) (long int, err error) {
+// ForEachLine calls visit for each non-blank line of path. It returns how
+// many lines it skipped for being longer than max bytes.
+func ForEachLine(path string, max int, visit func(line []byte)) (long int, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return 0, err
 	}
 	defer f.Close()
-	return forEachReader(f, visit)
+	return forEachReader(f, max, visit)
 }
 
-// forEachReader skips a line longer than maxLineBytes and reads on, so one
-// huge tool output does not hide the usage lines after it. Those are small.
-func forEachReader(r io.Reader, visit func(line []byte)) (long int, err error) {
+// forEachReader skips a line longer than max and reads on, so one huge tool
+// output does not hide the lines after it. The lines callers decode are small.
+func forEachReader(r io.Reader, max int, visit func(line []byte)) (long int, err error) {
 	br := bufio.NewReaderSize(r, 64*1024)
 	var buf []byte
 	over := false
@@ -81,7 +81,7 @@ func forEachReader(r io.Reader, visit func(line []byte)) (long int, err error) {
 		line := chunk
 		switch {
 		case over:
-		case len(buf)+len(chunk) > maxLineBytes:
+		case len(buf)+len(chunk) > max:
 			over, buf = true, buf[:0]
 		case len(buf) > 0 || errors.Is(err, bufio.ErrBufferFull):
 			// A line longer than the reader's buffer comes in pieces.
