@@ -2,31 +2,19 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"testing"
 
 	"golang.org/x/sys/unix"
 )
 
-// openPTY is a new pseudo-terminal: master is the terminal's end, and slave
-// the program's.
-func openPTY(t *testing.T) (master, slave *os.File) {
-	t.Helper()
-	m, err := os.OpenFile("/dev/ptmx", os.O_RDWR|unix.O_NOCTTY, 0)
-	if err != nil {
-		t.Fatal(err)
+// ptsName unlocks the program's end of the pseudo-terminal whose master is
+// fd, and returns its name.
+func ptsName(fd int) (string, error) {
+	if err := unix.IoctlSetPointerInt(fd, unix.TIOCSPTLCK, 0); err != nil {
+		return "", err
 	}
-	var n uint32
-	err = control(m, func(fd int) (err error) {
-		if err = unix.IoctlSetPointerInt(fd, unix.TIOCSPTLCK, 0); err != nil {
-			return err
-		}
-		n, err = unix.IoctlGetUint32(fd, unix.TIOCGPTN)
-		return err
-	})
+	n, err := unix.IoctlGetUint32(fd, unix.TIOCGPTN)
 	if err != nil {
-		m.Close()
-		t.Fatal(err)
+		return "", err
 	}
-	return m, ptySlave(t, m, fmt.Sprintf("/dev/pts/%d", n))
+	return fmt.Sprintf("/dev/pts/%d", n), nil
 }

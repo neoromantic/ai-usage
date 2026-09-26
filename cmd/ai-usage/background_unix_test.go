@@ -4,82 +4,14 @@ package main
 
 import (
 	"bytes"
-	"os"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
-	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
-
-// control runs do on the descriptor of f without making it blocking, as Fd
-// would, so that closing f still ends a read of it.
-func control(f *os.File, do func(fd int) error) error {
-	rc, err := f.SyscallConn()
-	if err != nil {
-		return err
-	}
-	var derr error
-	if err := rc.Control(func(fd uintptr) { derr = do(int(fd)) }); err != nil {
-		return err
-	}
-	return derr
-}
-
-// ptySlave opens the program's end of master, 120 by 40, and closes both
-// ends when the test ends.
-func ptySlave(t *testing.T, master *os.File, name string) *os.File {
-	t.Helper()
-	s, err := os.OpenFile(name, os.O_RDWR|unix.O_NOCTTY, 0)
-	if err == nil {
-		err = control(s, func(fd int) error {
-			return unix.IoctlSetWinsize(fd, unix.TIOCSWINSZ, &unix.Winsize{Row: 40, Col: 120})
-		})
-	}
-	if err != nil {
-		master.Close()
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		s.Close()
-		master.Close()
-	})
-	return s
-}
-
-// answering is the terminal of master: it answers DA1, the last question
-// the program asks, with answer, and sent is what it has been sent so far.
-func answering(master *os.File, answer string) (sent func() string) {
-	var mu sync.Mutex
-	var got []byte
-	go func() {
-		buf := make([]byte, 4096)
-		asked := false
-		for {
-			n, err := master.Read(buf)
-			if err != nil {
-				return
-			}
-			mu.Lock()
-			got = append(got, buf[:n]...)
-			ask := !asked && answer != "" && bytes.Contains(got, []byte(ansi.RequestPrimaryDeviceAttributes))
-			mu.Unlock()
-			if ask {
-				asked = true
-				_, _ = master.WriteString(answer)
-			}
-		}
-	}()
-	return func() string {
-		mu.Lock()
-		defer mu.Unlock()
-		return string(got)
-	}
-}
 
 // TestQueryBackground asks a pseudo-terminal as the static report asks the
 // terminal it prints on.
