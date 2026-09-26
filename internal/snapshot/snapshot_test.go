@@ -128,6 +128,8 @@ func TestDecodeRejectsUnknownFields(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
+	al := Alias{Provider: "claude", Label: sealed(40), Name: sealed(12), At: t0}
+	rc := Recent{Window: "5h", Start: t0.Add(-time.Hour), Tokens: 900}
 	cases := []struct {
 		name string
 		edit func(*Doc)
@@ -179,6 +181,16 @@ func TestValidate(t *testing.T) {
 		}, true},
 		{"source error plain text", func(d *Doc) { d.Sources[1].Error = "open /Users/me: denied" }, false},
 
+		{"aliases", func(d *Doc) { d.Aliases = []Alias{al} }, true},
+		{"alias cleared", func(d *Doc) { d.Aliases = []Alias{al}; d.Aliases[0].Name = "" }, true},
+		{"most aliases", func(d *Doc) { d.Aliases = repeat(al, MaxAliases) }, true},
+		{"too many aliases", func(d *Doc) { d.Aliases = repeat(al, MaxAliases+1) }, false},
+		{"alias unknown provider", func(d *Doc) { d.Aliases = []Alias{al}; d.Aliases[0].Provider = "gemini" }, false},
+		{"alias plain label", func(d *Doc) { d.Aliases = []Alias{al}; d.Aliases[0].Label = "ann@acme.dev" }, false},
+		// A plain name of only letters, digits, - and _ would pass the sealed charset.
+		{"alias plain name", func(d *Doc) { d.Aliases = []Alias{al}; d.Aliases[0].Name = "Ann B" }, false},
+		{"alias at missing", func(d *Doc) { d.Aliases = []Alias{al}; d.Aliases[0].At = time.Time{} }, false},
+
 		{"account unknown provider", func(d *Doc) { d.Accounts[0].Provider = "Claude" }, false},
 		{"account label missing", func(d *Doc) { d.Accounts[0].Label = "" }, false},
 		{"account label plain email", func(d *Doc) { d.Accounts[0].Label = "me@example.com" }, false},
@@ -216,6 +228,17 @@ func TestValidate(t *testing.T) {
 		{"project path plain", func(d *Doc) { d.Accounts[0].Projects[0].Path = "/Users/me/src" }, false},
 		{"project sessions negative", func(d *Doc) { d.Accounts[0].Projects[0].Sessions = -1 }, false},
 		{"project tokens negative", func(d *Doc) { d.Accounts[0].Projects[0].Tokens.Input = -5 }, false},
+
+		{"most days", func(d *Doc) { d.Accounts[0].Days = repeat(int64(1), MaxDays) }, true},
+		{"too many days", func(d *Doc) { d.Accounts[0].Days = repeat(int64(1), MaxDays+1) }, false},
+		{"day max", func(d *Doc) { d.Accounts[0].Days = []int64{MaxTokenCount, 0} }, true},
+		{"day negative", func(d *Doc) { d.Accounts[0].Days = []int64{-1} }, false},
+		{"day over", func(d *Doc) { d.Accounts[0].Days = []int64{MaxTokenCount + 1} }, false},
+		{"recent", func(d *Doc) { d.Accounts[0].Recent = []Recent{rc} }, true},
+		{"too many recent", func(d *Doc) { d.Accounts[0].Recent = repeat(rc, MaxWindows+1) }, false},
+		{"recent window missing", func(d *Doc) { d.Accounts[0].Recent = []Recent{rc}; d.Accounts[0].Recent[0].Window = "" }, false},
+		{"recent start missing", func(d *Doc) { d.Accounts[0].Recent = []Recent{rc}; d.Accounts[0].Recent[0].Start = time.Time{} }, false},
+		{"recent negative tokens", func(d *Doc) { d.Accounts[0].Recent = []Recent{rc}; d.Accounts[0].Recent[0].Tokens = -1 }, false},
 
 		{"quota_from another provider", func(d *Doc) { d.Accounts[0].Provider, d.Accounts[0].QuotaFrom = "hermes", "codex" }, true},
 		{"quota_from grok", func(d *Doc) { d.Accounts[0].Provider, d.Accounts[0].QuotaFrom = "hermes", "grok" }, true},
