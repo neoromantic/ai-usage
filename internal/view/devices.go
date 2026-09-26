@@ -181,13 +181,11 @@ func (p *page) grid() []chunks {
 	title = append(title, p.muted(strconv.Itoa(len(rows))+g.sep+per.String()+g.sep+unit))
 	// The views go before the matrix's modes, and are the first to go
 	// where both do not fit.
-	pills := chunks{p.pill("tokens", !share), p.plain(" "), p.pill("share", share)}
-	if views := append(p.viewPills(), p.plain("  ")); max(edge, title.width()+2+views.width()+pills.width()) <= p.w {
-		pills = append(views, pills...)
-	}
-	if at := max(edge, title.width()+2+pills.width()); at <= p.w {
-		p.mark("chosen")
-		title = append(title.padTo(at-pills.width()), pills...)
+	modes := chunks{p.pill("tokens", !share), p.plain(" "), p.pill("share", share)}
+	if t, ok := p.pillsAt(title, append(append(p.viewPills(), p.plain("  ")), modes...), edge); ok {
+		title = t
+	} else {
+		title, _ = p.pillsAt(title, modes, edge)
 	}
 	out := []chunks{title}
 
@@ -201,14 +199,8 @@ func (p *page) grid() []chunks {
 			j++
 		}
 		last := cols[shown[j]]
-		name := groupName(first.group)
-		span := last.x + last.w - first.x
 		heads = append(heads, p.space(first.x-cur))
-		if span >= width(name)+2 {
-			heads = append(heads, p.muted(name), p.plain(" "), p.faint(strings.Repeat(g.rule, span-width(name)-1)))
-		} else {
-			heads = append(heads, p.muted(truncEnd(name, span, g.ell)))
-		}
+		heads = append(heads, p.groupHead(groupName(first.group), last.x+last.w-first.x)...)
 		cur = last.x + last.w
 		i = j + 1
 	}
@@ -235,8 +227,7 @@ func (p *page) grid() []chunks {
 	out = append(out, names)
 
 	for _, r := range rows {
-		line := chunks{p.rowMark(r), p.space(1)}
-		line = append(line, p.left(p.plain(truncEnd(p.txt(r.Device), nameW, g.ell)), nameW)...)
+		line := p.deviceLead(r, nameW)
 		cur := lead
 		for _, k := range shown {
 			c := cols[k]
@@ -253,8 +244,7 @@ func (p *page) grid() []chunks {
 		out = append(out, line)
 	}
 
-	total := chunks{p.space(2)}
-	total = append(total, p.left(p.muted("TOTAL"), nameW)...)
+	total := p.totalLead(nameW)
 	cur = lead
 	for _, k := range shown {
 		c := cols[k]
@@ -274,6 +264,39 @@ func groupName(grp string) string {
 		return "NO QUOTA"
 	}
 	return strings.ToUpper(grp)
+}
+
+// groupHead is a group's heading over span columns: its name and a thin
+// rule to the end, or only the name, cut, where the rule does not fit.
+func (p *page) groupHead(name string, span int) chunks {
+	if span >= width(name)+2 {
+		return chunks{p.muted(name), p.plain(" "), p.faint(strings.Repeat(p.g.rule, span-width(name)-1))}
+	}
+	return chunks{p.muted(truncEnd(name, span, p.g.ell))}
+}
+
+// deviceLead is the start of a device's row: its mark, and its name in
+// nameW columns.
+func (p *page) deviceLead(r Row, nameW int) chunks {
+	return append(chunks{p.rowMark(r), p.space(1)}, p.left(p.plain(truncEnd(p.txt(r.Device), nameW, p.g.ell)), nameW)...)
+}
+
+// totalLead is the start of the TOTAL line: TOTAL in w columns, after the
+// two of the marks.
+func (p *page) totalLead(w int) chunks {
+	return append(chunks{p.space(2)}, p.left(p.muted("TOTAL"), w)...)
+}
+
+// pillsAt is title t with pills on its right, ending at edge, or further
+// right where t is longer, and notes the chosen one for the legend. Where
+// they do not fit on the page, it is t as it is, and false.
+func (p *page) pillsAt(t, pills chunks, edge int) (chunks, bool) {
+	at := max(edge, t.width()+2+pills.width())
+	if at > p.w {
+		return t, false
+	}
+	p.mark("chosen")
+	return append(t.padTo(at-pills.width()), pills...), true
 }
 
 // pill is one choice of a mode: the chosen one between ‹ ›, in reverse
@@ -423,7 +446,5 @@ func (p *page) usage() []chunks {
 		line = append(line, p.left(p.plain(truncMid(r.name, acct, g.ell)), acct)...)
 		out = append(out, numbers(line, r.u))
 	}
-	total := chunks{p.space(2)}
-	total = append(total, p.left(p.muted("TOTAL"), acct)...)
-	return append(out, nil, numbers(total, sum))
+	return append(out, nil, numbers(p.totalLead(acct), sum))
 }

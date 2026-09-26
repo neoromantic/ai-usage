@@ -37,20 +37,8 @@ const (
 // first, then USER goes, then VIA, then the periods: today, 30d, and 7d,
 // but never the chosen one or 90d.
 func (p *page) deviceStatus() []chunks {
-	g := p.g
-	per := p.o.Period
 	rows := append([]Row(nil), p.r.Team.Matrix.Rows...)
-	// A device with no row in the matrix still has one here.
-	has := map[*TeamDevice]bool{}
-	for _, r := range rows {
-		has[p.device(r.DeviceID, r.Device)] = true
-	}
-	for i := range p.r.Team.Devices {
-		if d := &p.r.Team.Devices[i]; !has[d] {
-			rows = append(rows, Row{Device: d.Label, DeviceID: d.Device, Usage: d.Usage})
-		}
-	}
-	sortRows(rows, per)
+	sortRows(rows, p.o.Period)
 	n := len(rows)
 	devs := make([]*TeamDevice, n+1)
 	var grand Usage
@@ -58,7 +46,74 @@ func (p *page) deviceStatus() []chunks {
 		devs[i] = p.device(r.DeviceID, r.Device)
 		grand = grand.add(r.Usage)
 	}
+	cols, note := p.statusColumns(rows, devs, grand)
 
+	nameW := width("DEVICE")
+	for _, r := range rows {
+		nameW = max(nameW, min(width(p.txt(r.Device)), deviceName))
+	}
+	lead := 2 + nameW
+	shown, edge := p.fitStatus(cols, note, devs, lead)
+	for _, c := range shown {
+		for k := range c.marks {
+			p.mark(k)
+		}
+	}
+
+	title := p.statusTitle(devs[:n], edge)
+
+	// The groups over their columns, each with a thin rule, as the matrix
+	// has its providers.
+	heads := chunks{p.space(lead)}
+	cur := lead
+	for i := 0; i < len(shown); i++ {
+		first := shown[i]
+		if first.group == "" {
+			continue
+		}
+		for i+1 < len(shown) && shown[i+1].group == first.group {
+			i++
+		}
+		last := shown[i]
+		heads = append(heads, p.space(first.x-cur))
+		heads = append(heads, p.groupHead(first.group, last.x+last.w-first.x)...)
+		cur = last.x + last.w
+	}
+
+	// line is a line of the table after its start: the column headers for
+	// i below 0, else the cells of row i, or of TOTAL for i n.
+	line := func(l chunks, i int) chunks {
+		cur := lead
+		for _, c := range shown {
+			cell := chunks{c.head}
+			if i >= 0 {
+				cell = c.cells[i].cut(c.w, p.g.ell)
+			}
+			pad := p.space(c.w - cell.width())
+			l = append(l, p.space(c.x-cur))
+			if c.right {
+				l = append(append(l, pad), cell...)
+			} else {
+				l = append(append(l, cell...), pad)
+			}
+			cur = c.x + c.w
+		}
+		return l
+	}
+	head := chunks{p.space(2), p.muted("DEVICE"), p.space(nameW - width("DEVICE"))}
+	out := []chunks{title, heads, line(head, -1)}
+	for i, r := range rows {
+		out = append(out, line(p.deviceLead(r, nameW), i))
+	}
+	return append(out, line(p.totalLead(nameW), n))
+}
+
+// statusColumns are the status view's columns, with a cell for each of
+// rows, whose devices devs are, and one for TOTAL, whose tokens grand are.
+// note is NOTE, which is among the columns only where a device has one.
+func (p *page) statusColumns(rows []Row, devs []*TeamDevice, grand Usage) (cols []*statusCol, note *statusCol) {
+	g := p.g
+	n := len(rows)
 	col := func(key, head, group string, right bool, cell func(i int, d *TeamDevice) chunks) *statusCol {
 		c := &statusCol{key: key, head: p.muted(head), group: group, right: right, w: width(head), cells: make([]chunks, n+1)}
 		saved := p.seen
@@ -108,7 +163,7 @@ func (p *page) deviceStatus() []chunks {
 		}
 		return p.harnesses(*d)
 	})
-	cols := []*statusCol{user, version, seen, via}
+	cols = []*statusCol{user, version, seen, via}
 	for _, q := range Periods {
 		c := col(q.String(), strings.ToUpper(q.String()), "TOKENS", true, func(i int, _ *TeamDevice) chunks {
 			u := grand
@@ -122,7 +177,7 @@ func (p *page) deviceStatus() []chunks {
 		c.w = max(c.w, 4)
 		cols = append(cols, c)
 	}
-	note := col("note", "NOTE", "", false, func(_ int, d *TeamDevice) chunks {
+	note = col("note", "NOTE", "", false, func(_ int, d *TeamDevice) chunks {
 		if d == nil {
 			return nil
 		}
@@ -134,12 +189,13 @@ func (p *page) deviceStatus() []chunks {
 			break
 		}
 	}
+	return cols, note
+}
 
-	nameW := width("DEVICE")
-	for _, r := range rows {
-		nameW = max(nameW, min(width(p.txt(r.Device)), deviceName))
-	}
-	lead := 2 + nameW
+// fitStatus places the columns that fit on the page after lead columns of
+// names, as deviceStatus says, and cuts NOTE, with the notes of devs, to
+// the room left. edge is where the last one shown ends.
+func (p *page) fitStatus(cols []*statusCol, note *statusCol, devs []*TeamDevice, lead int) (shown []*statusCol, edge int) {
 	gone := map[string]bool{}
 	// fixed is how wide the table is but for NOTE.
 	fixed := func() int {
@@ -157,7 +213,7 @@ func (p *page) deviceStatus() []chunks {
 	}
 	drops := []string{"user", "via"}
 	for _, q := range []Period{Today, Month, Week} {
-		if q != per {
+		if q != p.o.Period {
 			drops = append(drops, q.String())
 		}
 	}
@@ -178,7 +234,6 @@ func (p *page) deviceStatus() []chunks {
 			}
 		}
 	}
-	var shown []*statusCol
 	x := lead
 	for _, c := range cols {
 		if gone[c.key] {
@@ -187,73 +242,8 @@ func (p *page) deviceStatus() []chunks {
 		c.x = x + 2
 		x = c.x + c.w
 		shown = append(shown, c)
-		for k := range c.marks {
-			p.mark(k)
-		}
 	}
-	edge := x
-
-	title := p.statusTitle(devs[:n], edge)
-
-	// The groups over their columns, each with a thin rule, as the matrix
-	// has its providers.
-	heads := chunks{p.space(lead)}
-	cur := lead
-	for i := 0; i < len(shown); i++ {
-		first := shown[i]
-		if first.group == "" {
-			continue
-		}
-		for i+1 < len(shown) && shown[i+1].group == first.group {
-			i++
-		}
-		last := shown[i]
-		span := last.x + last.w - first.x
-		heads = append(heads, p.space(first.x-cur))
-		if span >= width(first.group)+2 {
-			heads = append(heads, p.muted(first.group), p.plain(" "), p.faint(strings.Repeat(g.rule, span-width(first.group)-1)))
-		} else {
-			heads = append(heads, p.muted(truncEnd(first.group, span, g.ell)))
-		}
-		cur = last.x + last.w
-	}
-
-	cells := func(line chunks, i int) chunks {
-		cur := lead
-		for _, c := range shown {
-			cell := c.cells[i].cut(c.w, g.ell)
-			pad := p.space(c.w - cell.width())
-			line = append(line, p.space(c.x-cur))
-			if c.right {
-				line = append(append(line, pad), cell...)
-			} else {
-				line = append(append(line, cell...), pad)
-			}
-			cur = c.x + c.w
-		}
-		return line
-	}
-	head := chunks{p.space(2), p.muted("DEVICE"), p.space(nameW - width("DEVICE"))}
-	cur = lead
-	for _, c := range shown {
-		pad := p.space(c.w - width(c.head.text))
-		head = append(head, p.space(c.x-cur))
-		if c.right {
-			head = append(head, pad, c.head)
-		} else {
-			head = append(head, c.head, pad)
-		}
-		cur = c.x + c.w
-	}
-	out := []chunks{title, heads, head}
-	for i, r := range rows {
-		line := chunks{p.rowMark(r), p.space(1)}
-		line = append(line, p.left(p.plain(truncEnd(p.txt(r.Device), nameW, g.ell)), nameW)...)
-		out = append(out, cells(line, i))
-	}
-	total := chunks{p.space(2)}
-	total = append(total, p.left(p.muted("TOTAL"), nameW)...)
-	return append(out, cells(total, n))
+	return shown, x
 }
 
 // statusTitle is the status view's title: how many devices there are, how
@@ -297,9 +287,8 @@ func (p *page) statusTitle(devs []*TeamDevice, edge int) chunks {
 
 	pills := p.viewPills()
 	for _, t := range []chunks{unit, title} {
-		if at := max(edge, t.width()+2+pills.width()); at <= p.w {
-			p.mark("chosen")
-			return append(t.padTo(at-pills.width()), pills...)
+		if line, ok := p.pillsAt(t, pills, edge); ok {
+			return line
 		}
 	}
 	if unit.width() <= p.w {
