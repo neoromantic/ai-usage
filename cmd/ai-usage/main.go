@@ -586,7 +586,7 @@ func loadResult(d state.Dir) (*collect.Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	key, _, err := collect.LoadKey(d)
+	key, err := collect.LoadKey(d)
 	if err != nil {
 		return nil, err
 	}
@@ -739,7 +739,7 @@ func cmdTeam(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 		if len(args) > 0 {
 			return usageError("team key takes no arguments")
 		}
-		key, _, err := collect.LoadKey(d)
+		key, err := collect.LoadKey(d)
 		if err != nil {
 			return err
 		}
@@ -775,7 +775,7 @@ func cmdTeam(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 		if endpoint == "" {
 			return errors.New("no relay configured; set one with `ai-usage relay set URL`")
 		}
-		key, _, err := collect.LoadKey(d)
+		key, err := collect.LoadKey(d)
 		if err != nil {
 			return err
 		}

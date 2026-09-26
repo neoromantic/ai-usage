@@ -135,22 +135,22 @@ func claudeEnv(env probe.Env, home, remembered string) probe.Env {
 }
 
 // LoadKey reads the team key, generating one on the first run.
-func LoadKey(dir state.Dir) (*team.Key, bool, error) {
+func LoadKey(dir state.Dir) (*team.Key, error) {
 	k, err := team.Load(dir.KeyFile())
 	if err == nil {
-		return k, false, nil
+		return k, nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
-		return nil, false, fmt.Errorf("team key: %w", err)
+		return nil, fmt.Errorf("team key: %w", err)
 	}
 	k, err = team.Generate()
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	if err := fsutil.WriteFile(dir.KeyFile(), []byte(k.Export()+"\n"), 0o600); err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	return k, true, nil
+	return k, nil
 }
 
 // Run takes one sample. It returns an error only when the collector's own
@@ -177,7 +177,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	key, _, err := LoadKey(o.Dir)
+	key, err := LoadKey(o.Dir)
 	if err != nil {
 		return nil, err
 	}

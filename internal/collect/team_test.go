@@ -76,7 +76,7 @@ func TestRelayPushAndPull(t *testing.T) {
 	w.sessions("claude", h, sess("s1", "/p", 100, t0))
 	r := newRelay(t, w)
 
-	key, _, err := LoadKey(o.Dir)
+	key, err := LoadKey(o.Dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestBehindSinceCarriesOverReads(t *testing.T) {
 	w.sessions("claude", h, sess("s1", "/p", 100, t0))
 	r := newRelay(t, w)
 	o.Relay = r.client(w)
-	key, _, err := LoadKey(o.Dir)
+	key, err := LoadKey(o.Dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +311,7 @@ func TestStoppedExchange(t *testing.T) {
 	// stands, as when a run skips the read.
 	w, o := newWorld(t)
 	r := newRelay(t, w)
-	key, _, _ := LoadKey(o.Dir)
+	key, _ := LoadKey(o.Dir)
 	body, _ := json.Marshal(BuildDoc(ledger(), key, state.Config{Device: "d-forged-device"}, "x", "y", "v1", t0))
 	_ = r.store.Put(context.Background(), key.Fingerprint(), "d-forged-device", relay.Record{Body: body, Sig: []byte("not a signature")}, time.Hour)
 	o.Relay = r.client(w)
@@ -347,7 +347,7 @@ func TestRelayConflictIsReported(t *testing.T) {
 
 	// The relay already holds a newer snapshot for this device id, from a
 	// machine whose clock runs ahead.
-	key, _, _ := LoadKey(o.Dir)
+	key, _ := LoadKey(o.Dir)
 	w.now = t0.Add(time.Hour)
 	publishOther(t, r, w, key, res.Config.Device, ledger(), w.now)
 
@@ -379,7 +379,7 @@ func TestRelayConflictIsReported(t *testing.T) {
 func TestRelayDocsThatDoNotVerifyAreReported(t *testing.T) {
 	w, o := newWorld(t)
 	r := newRelay(t, w)
-	key, _, _ := LoadKey(o.Dir)
+	key, _ := LoadKey(o.Dir)
 	body, _ := json.Marshal(BuildDoc(ledger(), key, state.Config{Device: "d-forged-device"}, "x", "y", "v1", t0))
 	_ = r.store.Put(context.Background(), key.Fingerprint(), "d-forged-device", relay.Record{Body: body, Sig: []byte("not a signature")}, time.Hour)
 
