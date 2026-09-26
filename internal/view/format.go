@@ -259,7 +259,7 @@ func age(d time.Duration) string {
 	}
 }
 
-// ago is the long form for the header, status and notes: "2h 5m ago".
+// ago is the long form for status: "2h 5m ago".
 func ago(d time.Duration) string {
 	if d < time.Minute {
 		return "just now"
