@@ -317,24 +317,7 @@ On a server, run the collector as a user that can read those folders. On macOS a
 
 ## In a container
 
-The collector runs in a container as on any Linux machine: install it inside, as the user whose tools it should read, and each container, such as each bot, is a machine in the team. Three things differ.
-
-- The state folder holds the device id and the team key, so it must outlive the container. Keep that user's home, or `AI_USAGE_HOME`, on a volume or a bind mount. A binary installed there, in `~/.local/bin`, keeps its updates too. As root, a new install goes into `/usr/local/bin` instead, which the container does not keep, so add `AI_USAGE_BIN_DIR="$HOME/.local/bin"` to the install command.
-- A container's host name is random. Name the machine when installing with `AI_USAGE_NAME`, later with `ai-usage name set`, or with `AI_USAGE_NAME` in the container's environment.
-- Containers rarely have cron. `ai-usage schedule run` is the scheduler there: it collects at once and then every 15 minutes, until it is stopped. Run it beside the container's main process, under its service manager if it has one, or from its entrypoint.
-
-To install into a running container, with the team key on standard input rather than in the command:
-
-```sh
-ai-usage team key | docker exec -i -u app mybot sh -c 'key=$(cat)
-  url=https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.sh
-  script=$(curl -fsSL "$url" || wget -qO- "$url") &&
-    printf "%s\n" "$script" | AI_USAGE_NAME=mybot AI_USAGE_TEAM_KEY="$key" sh'
-```
-
-Add `AI_USAGE_RELAY` if the team uses its own relay.
-
-Then start `ai-usage schedule run` in it as that user. The first run's report and guide say the schedule is not registered, since there is no crontab; after `schedule run` starts, `ai-usage status` says it collects every 15 minutes. [docs/containers.md](docs/containers.md) has an entrypoint, a Dockerfile, and a service for s6-overlay.
+The collector runs in a container as on any Linux machine: install it inside, as the user whose tools it should read, and each container is a machine in the team. Keep that user's home on a volume, name the machine with `AI_USAGE_NAME`, and run `ai-usage schedule run` beside the main process, since containers rarely have cron. [docs/containers.md](docs/containers.md) has the install command, an entrypoint, a Dockerfile, and an s6-overlay service.
 
 ## JSON for agents
 
