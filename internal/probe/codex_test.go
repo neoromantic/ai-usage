@@ -451,7 +451,7 @@ func pipeServer(t *testing.T, answer func(id int, method string) string) (*codex
 }
 
 // A call that gave up must not leave a reader behind that takes the next
-// call's answer. The old reader-per-call design raced here and lost it.
+// call's answer.
 func TestCodexRPCAbandonedCall(t *testing.T) {
 	rpc, stop := pipeServer(t, func(id int, method string) string {
 		if id == 2 {

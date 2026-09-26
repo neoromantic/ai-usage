@@ -104,7 +104,6 @@ var errExited = errors.New("app-server exited without answering")
 // a Codex older than that request does.
 var errUnsupported = errors.New("request not supported")
 
-// unsupported is an error answer that is errUnsupported.
 type unsupported struct{ error }
 
 func (unsupported) Is(target error) bool { return target == errUnsupported }
