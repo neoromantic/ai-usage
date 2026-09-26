@@ -90,11 +90,11 @@ These PitStop behaviors are out, even though the project does them:
 
 ## Next: usage over time
 
-Decided on 2026-09-23 with the owner. The day buckets, the 64 KB snapshot, the 50-device cap, and the periods came with the report redesign below; the day and week tables and the utilization history are still to do.
+Decided on 2026-09-23 with the owner. The periods and day buckets are built; the day and week tables and the utilization history are still to do.
 
 - A consumer is a host: a person and their machine are the same thing here. A bot in its own container runs its own collector, so it is a host too. There is no separate "person".
 - 90 days of history is enough.
-- The report needs periods: today, 7 days, and 30 days. It also needs a breakdown by day and by quota week.
+- The report needs a breakdown by day and by quota week beside its periods.
 - Utilization is how much of the quota the team uses: for each account and window cycle, the fullest reading before the window reset. For example, "the weekly window was used 100%, 100%, and 60% in the last three weeks".
 - Subscriptions are the accounts the collectors see. A subscription registry is later (see above).
 - The console is enough for now. The web report is a later version.
@@ -102,22 +102,9 @@ Decided on 2026-09-23 with the owner. The day buckets, the 64 KB snapshot, the 5
 
 Sketch:
 
-- The snapshot gains day buckets: tokens per day per account, for up to 90 days. The team view adds them up per device and per account. The snapshot cap grows from 32 KB to 64 KB to hold them, and the device cap falls from 100 to 50, so that a team read still fits in one response. Sessions already keep when each account's share last grew; per-day growth needs the samples, which are already written every run and kept 90 days.
 - The snapshot gains quota cycles per account: each window's reset time and the fullest percentage seen before it. Readings come from every device, so the team view takes the fullest per cycle.
 - New views: `--days` and `--weeks` tables, and a utilization view per account. JSON carries the same data.
 - An account switch is placed at the run that first saw the new login, which is within 15 minutes. Placing it more exactly, from the quota jump in Codex's rollout, is not worth it.
-
-## Report redesign (done)
-
-Decided on 2026-09-23 with the owner, and built on 2026-09-24 for v0.2.0. The design is in [design.md](design.md): what the report shows and in which order, the forecast of each quota window, the device matrix, the interactive view, and the visual rules. It takes the periods from "Next: usage over time" and two items that were later: the matrix of who uses what, and an interactive view. The day tables, the week tables, and the utilization history stay in "Next: usage over time".
-
-What the collector and the relay added for it:
-
-- The collector splits tokens by day, per account and per project, using the timestamps in the harness logs. The 90 days are there from the first run of the new release, as far back as the logs go.
-- The snapshot carries each account's tokens per day, and its tokens since the start of each of its quota windows. The snapshot cap grows to 64 KB, and the device cap falls to 50 so that a team read still fits in one response.
-- A short name for an account, set with `ai-usage alias`, travels sealed in the snapshot of the device that set it.
-- JSON gets the same data, and the forecast of each window, under a new schema version.
-- `--tokens` goes, because the matrix replaces it. `--projects` stays and lists every project. `--devices` went too, and came back on 2026-09-24 at the owner's request: it shows DEVICES as each device's status, the view `s` switches to.
 
 ## Backlog
 
@@ -130,12 +117,7 @@ Recorded on 2026-09-23 with the owner, and brought up to date on 2026-09-24. Not
   - A name set by hand, with `name set` or `AI_USAGE_NAME`, always wins and is never replaced.
   - Open: the model, the prompt, the 64-character limit, and how to avoid two devices in a team getting one name, since the relay cannot see the others' names.
 - **A refactoring review for short, expressive code.** In progress; [refactoring.md](refactoring.md) lists every change, its order, and how it is checked. It cuts repeated logic, long functions, files that grew too large, layers, options, and branches nothing needs, dead code, comments that restate the code, and tests that repeat others or guard what goes. It drops everything that exists only for collectors, snapshots, relay records, state files, schedules, or installs from before v0.2.3, since every device runs v0.2.3 or later before it ships. It keeps what deployed releases still need: the release file names, `checksums.txt`, and the `releases/latest` lookup they update through; the relay's acceptance of v0.2.3 snapshots and requests, since the relay deploys before a release; the key, signature, and sealing formats; and the snapshot, the relay protocol, and the JSON (`schema_version` 4) as they are. The current release's behavior does not change, except where refactoring.md says so and the owner agreed.
-- **Find why an account has no reading.** It began with one Mac in the team (then `Mac.localdomain`, on v0.1.1) that showed an account with no name and one with no reading. The cause comes first; the fix follows from it.
-  - Done: its Codex usage was filed under `unknown` (2,875 sessions and 1.2G input tokens) while `codex initialize` got no answer from the app server. Once the device ran the current release on 2026-09-24, the harness named its account, and that history went to it.
-  - Done: its Claude Max account had 90 days of usage but never a quota reading, and a second Mac in the team, on v0.2.0, showed the same. The reading was lost in the harness. Claude Code writes its usage cache only when it reads the usage, as its /usage dialog does, so an account whose person never opens /usage never had a reading, and one who opened it days ago had a reading that old, which could be far off. The probe now has Claude Code read the usage when its cache is missing or at least 10 minutes old and the home was used in the last hour and since its last reading (see "Probes"). Check both Macs once they run the release with it.
-  - Done: a teammate's Mac on that release said only `claude /usage: no new reading`, and its Claude Max account still had no reading. Claude Code exits 0 whether or not it read the usage, and only 2.1.208 and later cache it. Now the error says why, with Claude Code's version and the cache there is, so the team view's NOTE and the device's `error` in the JSON diagnose it: `claude /usage: Claude Code 2.1.150 does not cache the usage; update it to 2.1.208 or later (no cache)`, `claude /usage: nonessential traffic is off in Claude Code's settings (Claude Code 2.1.281, no cache)`, or `claude /usage: no new reading: could not read the usage (Claude Code 2.1.281, cache 3h old)`, among others (see "Probes"). An old Claude Code and one whose settings turn nonessential traffic off are no longer run at each run. Check what the Mac says once it runs the release with it.
-  - Open: a third Mac, on v0.1.4, names its Codex account, but `account/rateLimits/read` gets no answer in time, so its reading ages. Check again once it runs the current release.
-  - The report shows only `?` for a missing reading. For Claude, the device's NOTE and its `error` in the JSON now say why while the home is in use; saying it next to the account's `?`, and for Codex and Grok, is still open.
+- **Say why an account has no reading.** The report shows only `?`. For Claude, the device's NOTE and its `error` in the JSON say why while the home is in use. Saying why next to the account's `?`, and for Codex and Grok, would let a teammate's device be diagnosed from the team view.
 
 ## Implementation status
 
@@ -210,7 +192,7 @@ Done, in short:
   - Counts, percents, timestamps, and provider and window names are plain.
   - Device label, OS user, account label, project paths, and error text are sealed with the team key.
   - Every write is signed.
-- **Relay**: `ai-usage relay serve`, or the Vercel function in `api/`, backed by Vercel KV (Upstash for Redis from the Vercel Marketplace, through the `KV_REST_API_*` variables).
+- **Relay**: `ai-usage relay serve`, or the Vercel function in `api/`, backed by Vercel KV (Upstash for Redis from the Vercel Marketplace, through the `KV_REST_API_*` variables). The official relay runs at https://ai-usage-relay.vercel.app and deploys on every push to `main`. The repository variable `AI_USAGE_RELAY_URL` builds its URL into release builds as the default relay.
   - It checks the signature and the exact shape, and rejects stale writes.
   - Rate limits apply per IP, and per day to new teams and new devices from one IP (IPv6 per /48). A forwarding header is trusted only when the operator names it and the request comes through their proxy.
   - Snapshots expire 7 to 90 days after their last update.
@@ -227,7 +209,6 @@ Done, in short:
 
 Deferred or not done. These are cumbersome, or they need an action outside this repository:
 
-- **Relay deployment (done).** The relay runs at https://ai-usage-relay.vercel.app. It is a Vercel project with Vercel KV (Upstash for Redis from the Vercel Marketplace) on Pay-As-You-Go. The project deploys on every push to `main`. The repository variable `AI_USAGE_RELAY_URL` bakes this URL into release builds as the default relay.
 - **CI runs on GitHub.** Tests run on Linux and macOS. Windows only cross-compiles and runs the installer smoke test: Windows is not a supported collector host for now.
 - **Windows is not supported yet. Nothing has run on real Windows.** Task Scheduler registration from XML (the task has no explicit user, so it relies on `schtasks /Create /XML` using the caller), the `.old` rename during self-update, and `install.ps1` are covered only by unit tests and the CI definitions.
   - `schtasks` starts a console program, so a console window can flash every 15 minutes. Fixing that needs a GUI-subsystem launcher, or `conhost --headless`, which only newer Windows builds have.
