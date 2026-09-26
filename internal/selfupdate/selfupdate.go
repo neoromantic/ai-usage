@@ -27,7 +27,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
-	"unicode/utf8"
+
+	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
 // Repo is where releases are published.
@@ -463,13 +464,7 @@ func reason(body io.Reader) string {
 	s = WithoutAddresses(strings.Join(strings.FieldsFunc(strings.ToValidUTF8(s, ""), func(r rune) bool {
 		return unicode.IsSpace(r) || unicode.IsControl(r)
 	}), " "))
-	if len(s) > maxReason {
-		cut := maxReason - len("…")
-		for cut > 0 && !utf8.RuneStart(s[cut]) {
-			cut--
-		}
-		s = s[:cut] + "…"
-	}
+	s = snapshot.Truncate(s, maxReason)
 	if s == "" {
 		return ""
 	}

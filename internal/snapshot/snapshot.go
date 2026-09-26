@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Version is the wire format. The relay rejects any other value.
@@ -505,6 +506,19 @@ func hidden(r rune) bool {
 		return true
 	}
 	return false
+}
+
+// Truncate keeps the start of s in at most n bytes, cut on a rune boundary,
+// ending in … when cut.
+func Truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	cut := n - len("…")
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "…"
 }
 
 // DurationName is the short window name for a length in minutes: 5h, 7d, 90m.

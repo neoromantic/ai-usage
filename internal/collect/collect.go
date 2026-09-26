@@ -20,7 +20,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/neoromantic/ai-usage/internal/logs"
 	"github.com/neoromantic/ai-usage/internal/probe"
@@ -292,7 +291,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	}
 	noteProblems := func() {
 		if len(problems) > 0 {
-			st.LastError = truncate(strings.Join(problems, "; "), 600)
+			st.LastError = snapshot.Truncate(strings.Join(problems, "; "), 600)
 			st.LastErrorAt = now
 		}
 	}
@@ -393,7 +392,7 @@ type readSession struct {
 func collectSource(ctx context.Context, o Options, st *state.State, p string, homes []string, now, since, prevRun time.Time, growth map[string]snapshot.Tokens) (src state.Source) {
 	defer func() {
 		if v := recover(); v != nil {
-			src = state.Source{Status: "error", Homes: homes, Error: truncate(fmt.Sprintf("stopped by a bug: %v", v), 300)}
+			src = state.Source{Status: "error", Homes: homes, Error: snapshot.Truncate(fmt.Sprintf("stopped by a bug: %v", v), 300)}
 		}
 	}()
 	return collectProvider(ctx, o, st, p, homes, now, since, prevRun, growth)
@@ -542,7 +541,7 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 	default:
 		src.Status = "partial"
 	}
-	src.Error = truncate(strings.Join(dedupe(errs), "; "), 300)
+	src.Error = snapshot.Truncate(strings.Join(dedupe(errs), "; "), 300)
 	return src
 }
 
@@ -1504,19 +1503,7 @@ func IsCurrent(st *state.State, provider, label string) bool {
 // shortErr is an error on one line, cut short. Errors can quote a server's
 // reply, line breaks and all.
 func shortErr(err error) string {
-	return truncate(strings.Join(strings.Fields(snapshot.Printable(err.Error())), " "), 200)
-}
-
-// truncate keeps the start of s in at most n bytes, cut on a rune boundary.
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	cut := n - len("…")
-	for cut > 0 && !utf8.RuneStart(s[cut]) {
-		cut--
-	}
-	return s[:cut] + "…"
+	return snapshot.Truncate(strings.Join(strings.Fields(snapshot.Printable(err.Error())), " "), 200)
 }
 
 func dedupe(in []string) []string {

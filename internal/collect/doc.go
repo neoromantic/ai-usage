@@ -353,7 +353,7 @@ func lastError(st *state.State, version string) string {
 	s := strings.ReplaceAll(st.LastError, "\n", " ")
 	if e := st.Update.Error; e != "" && !selfupdate.Dev(version) && !selfupdate.Newer(st.Update.Installed, version) {
 		e = strings.Join(strings.Fields(selfupdate.WithoutAddresses(snapshot.Printable(e))), " ")
-		s += snapshot.UpdateLine + truncate(e, maxUpdateError)
+		s += snapshot.UpdateLine + snapshot.Truncate(e, maxUpdateError)
 	}
 	return s
 }
