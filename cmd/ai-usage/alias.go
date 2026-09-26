@@ -116,23 +116,6 @@ func cmdAlias(args []string, stdout io.Writer) error {
 	return nil
 }
 
-// sameLabel matches labels as the harnesses spell them, emails in any case.
-func sameLabel(a, b string) bool {
-	if strings.Contains(a, "@") {
-		return strings.EqualFold(a, b)
-	}
-	return a == b
-}
-
-// person keys a label so that the same label on several providers, which is
-// one person, is one key.
-func person(label string) string {
-	if strings.Contains(label, "@") {
-		return strings.ToLower(label)
-	}
-	return label
-}
-
 // account is one account this device knows of.
 type account struct{ provider, label string }
 
@@ -166,7 +149,7 @@ func loadAliasBook(d state.Dir, cfg state.Config, st *state.State) *aliasBook {
 	note := func(p, l string, a aliasSet) {
 		k := state.Key(p, l)
 		cur, ok := b.names[k]
-		if !ok || a.at.After(cur.at) || (a.at.Equal(cur.at) && a.device < cur.device) {
+		if !ok || snapshot.AliasWins(a.at, a.device, cur.at, cur.device) {
 			b.names[k] = a
 		}
 	}
@@ -266,7 +249,7 @@ func (b *aliasBook) match(q string) ([]account, error) {
 	}
 	var found []account
 	for _, a := range pool {
-		if sameLabel(a.label, q) {
+		if snapshot.LabelKey(a.label) == snapshot.LabelKey(q) {
 			found = append(found, a)
 		}
 	}
@@ -289,7 +272,7 @@ func (b *aliasBook) match(q string) ([]account, error) {
 	}
 	people := map[string]bool{}
 	for _, a := range found {
-		people[person(a.label)] = true
+		people[snapshot.LabelKey(a.label)] = true
 	}
 	if len(people) > 1 {
 		return nil, argError(fmt.Sprintf("%q names more than one account; give its whole label, or PROVIDER:LABEL for one provider alone\n%s", what, b.table(found)))
@@ -302,7 +285,7 @@ func (b *aliasBook) match(q string) ([]account, error) {
 func (b *aliasBook) free(targets []account, name string) error {
 	for _, t := range targets {
 		for _, o := range b.accounts {
-			if o.provider == t.provider && person(o.label) != person(t.label) && strings.EqualFold(b.current(o), name) {
+			if o.provider == t.provider && snapshot.LabelKey(o.label) != snapshot.LabelKey(t.label) && strings.EqualFold(b.current(o), name) {
 				return argError(fmt.Sprintf("%s %s already goes by %s; choose another name", o.provider, snapshot.Printable(o.label), b.current(o)))
 			}
 		}

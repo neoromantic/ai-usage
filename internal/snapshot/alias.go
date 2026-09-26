@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -46,4 +47,21 @@ func AliasWidth(n string) int {
 		}
 	}
 	return w
+}
+
+// LabelKey keys an account's label so that one person is one key: an email
+// in lower case, since the harnesses spell emails in any case, and any other
+// label as it is.
+func LabelKey(label string) string {
+	if strings.Contains(label, "@") {
+		return strings.ToLower(label)
+	}
+	return label
+}
+
+// AliasWins says whether a name set at at on device replaces one set at cur
+// on curDevice. The newest wins, and of two set at once, the one from the
+// smaller device id, so the alias command and the report pick the same name.
+func AliasWins(at time.Time, device string, cur time.Time, curDevice string) bool {
+	return at.After(cur) || (at.Equal(cur) && device < curDevice)
 }

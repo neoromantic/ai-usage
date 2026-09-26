@@ -141,9 +141,7 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 				}
 			}
 			k := aliasKey(a.Provider, open(a.Label))
-			// The newest wins, and of two set at once, the one from the
-			// smaller device id, as the alias command picks.
-			if cur, ok := aliases[k]; !ok || a.At.After(cur.At) || (a.At.Equal(cur.At) && d.Device < aliasBy[k]) {
+			if cur, ok := aliases[k]; !ok || snapshot.AliasWins(a.At, d.Device, cur.At, aliasBy[k]) {
 				aliases[k], aliasBy[k] = a, d.Device
 			}
 		}
@@ -548,10 +546,7 @@ func names(provider string, m map[string]*teamAccount, aliases map[string]snapsh
 
 // aliasKey keys an alias by provider and label, with an email in any case.
 func aliasKey(provider, label string) string {
-	if strings.Contains(label, "@") {
-		label = strings.ToLower(label)
-	}
-	return state.Key(provider, label)
+	return state.Key(provider, snapshot.LabelKey(label))
 }
 
 // ShortName is a label's short name when the team gave it none, before
