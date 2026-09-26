@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +26,38 @@ func deniedFile(name string) bool {
 	}
 	return false
 }
+
+// walkLogs visits each file under root that keep accepts, by its
+// slash-separated path relative to root. Credential files are never visited.
+// A missing root holds nothing; any other error counts as unreadable.
+func walkLogs(root string, unreadable *int, keep func(rel string) bool, visit func(file, rel string, info fs.FileInfo)) {
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			// d is nil only when root itself cannot be read.
+			if d != nil || !errors.Is(err, fs.ErrNotExist) {
+				*unreadable++
+			}
+			return nil
+		}
+		if d.IsDir() || deniedFile(d.Name()) {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		rel = filepath.ToSlash(rel)
+		if err != nil || !keep(rel) {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			*unreadable++
+			return nil
+		}
+		visit(path, rel, info)
+		return nil
+	})
+}
+
+func isJSONL(rel string) bool { return strings.HasSuffix(rel, ".jsonl") }
 
 // forEachLine calls visit for each non-blank line of path. It returns how
 // many lines it skipped for being longer than maxLineBytes.

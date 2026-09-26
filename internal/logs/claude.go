@@ -40,10 +40,7 @@ func claudeFiles(home string, since time.Time) ([]*claudeFile, HomeRead) {
 		f, bad, err := parseClaude(path, id, parent)
 		f.sess.Updated = mod.UTC()
 		f.sess.Home = home
-		out.Malformed += bad
-		if err != nil {
-			out.Unreadable++
-		}
+		out.add(bad, err)
 		files = append(files, f)
 	}
 	for _, proj := range projEntries {
@@ -71,32 +68,8 @@ func claudeFiles(home string, since time.Time) ([]*claudeFile, HomeRead) {
 			}
 			id := strings.TrimSuffix(name, ".jsonl")
 			read(filepath.Join(dir, name), id, "", info.ModTime())
-
-			subDir := filepath.Join(dir, id, "subagents")
-			if _, err := os.Stat(subDir); err != nil {
-				if !errors.Is(err, os.ErrNotExist) {
-					out.Unreadable++
-				}
-				continue
-			}
-			_ = filepath.WalkDir(subDir, func(path string, d fs.DirEntry, err error) error {
-				if err != nil {
-					out.Unreadable++
-					return nil
-				}
-				if d.IsDir() || !strings.HasSuffix(d.Name(), ".jsonl") || deniedFile(d.Name()) {
-					return nil
-				}
-				rel, err := filepath.Rel(subDir, path)
-				if err != nil {
-					return nil
-				}
-				var mod time.Time
-				if info, err := d.Info(); err == nil {
-					mod = info.ModTime()
-				}
-				read(path, id+"/"+filepath.ToSlash(rel), id, mod)
-				return nil
+			walkLogs(filepath.Join(dir, id, "subagents"), &out.Unreadable, isJSONL, func(file, rel string, info fs.FileInfo) {
+				read(file, id+"/"+rel, id, info.ModTime())
 			})
 		}
 	}

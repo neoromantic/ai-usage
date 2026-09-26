@@ -135,6 +135,15 @@ type HomeRead struct {
 	Limits *Limits
 }
 
+// add counts one file's read: its malformed lines, and the file as
+// unreadable when err is set.
+func (r *HomeRead) add(malformed int, err error) {
+	r.Malformed += malformed
+	if err != nil {
+		r.Unreadable++
+	}
+}
+
 // Limits is a quota reading found in a log.
 type Limits struct {
 	ObservedAt time.Time

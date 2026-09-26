@@ -96,44 +96,29 @@ func codexFiles(home string, since time.Time, stale map[string]string, linked sa
 // ones by the thread id in their name.
 func walkCodex(root, home string, since time.Time, stale map[string]string, linked sameFiles, out *HomeRead) []*codexFile {
 	var files []*codexFile
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			out.Unreadable++
-			return nil
-		}
-		if d.IsDir() || !strings.HasSuffix(d.Name(), ".jsonl") || deniedFile(d.Name()) {
-			return nil
-		}
-		info, err := d.Info()
-		if err != nil {
-			out.Unreadable++
-			return nil
-		}
-		if first, ok := linked.find(d.Name(), info); ok {
+	walkLogs(root, &out.Unreadable, isJSONL, func(file, _ string, info fs.FileInfo) {
+		name := info.Name()
+		if first, ok := linked.find(name, info); ok {
 			if first != nil && first.home != home && !slices.Contains(first.mirrors, home) {
 				first.mirrors = append(first.mirrors, home)
 			}
-			return nil
+			return
 		}
 		if !freshEnough(info.ModTime(), since) {
-			linked.add(d.Name(), info, nil)
-			if id := codexNameID(d.Name()); id != "" {
-				stale[id] = path
+			linked.add(name, info, nil)
+			if id := codexNameID(name); id != "" {
+				stale[id] = file
 			}
-			return nil
+			return
 		}
-		f, bad, err := parseCodex(path)
-		out.Malformed += bad
-		if err != nil {
-			out.Unreadable++
-		}
-		f.id = cmp.Or(f.id, strings.TrimSuffix(d.Name(), ".jsonl"))
+		f, bad, err := parseCodex(file)
+		out.add(bad, err)
+		f.id = cmp.Or(f.id, strings.TrimSuffix(name, ".jsonl"))
 		f.home = home
 		f.updated = info.ModTime().UTC()
 		f.fresh = true
-		linked.add(d.Name(), info, f)
+		linked.add(name, info, f)
 		files = append(files, f)
-		return nil
 	})
 	return files
 }

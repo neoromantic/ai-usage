@@ -11,6 +11,7 @@ import (
 	"math"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -41,32 +42,12 @@ func readGrok(home string, since time.Time) ([]Session, HomeRead) {
 	found := map[string]*files{}
 	var out []Session
 	var hr HomeRead
-	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			hr.Unreadable++
-			return nil
-		}
-		if d.IsDir() {
-			return nil
-		}
-		name := d.Name()
-		if deniedFile(name) || (name != "summary.json" && name != "updates.jsonl") {
-			return nil
-		}
-		rel, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			return nil
-		}
-		parts := strings.Split(rel, string(filepath.Separator))
-		if len(parts) != 3 {
-			return nil
-		}
-		info, err := d.Info()
-		if err != nil {
-			hr.Unreadable++
-			return nil
-		}
-		dir := filepath.Dir(path)
+	keep := func(rel string) bool {
+		name := path.Base(rel)
+		return strings.Count(rel, "/") == 2 && (name == "summary.json" || name == "updates.jsonl")
+	}
+	walkLogs(root, &hr.Unreadable, keep, func(file, _ string, info fs.FileInfo) {
+		dir := filepath.Dir(file)
 		slot := found[dir]
 		if slot == nil {
 			slot = &files{}
@@ -75,18 +56,13 @@ func readGrok(home string, since time.Time) ([]Session, HomeRead) {
 		if info.ModTime().After(slot.mod) {
 			slot.mod = info.ModTime()
 		}
-		switch name {
+		switch info.Name() {
 		case "summary.json":
-			slot.summary = path
+			slot.summary = file
 		case "updates.jsonl":
-			slot.updates = path
+			slot.updates = file
 		}
-		return nil
 	})
-	if err != nil {
-		hr.Err = err
-		return out, hr
-	}
 
 	for _, dir := range slices.Sorted(maps.Keys(found)) {
 		slot := found[dir]
@@ -100,20 +76,15 @@ func readGrok(home string, since time.Time) ([]Session, HomeRead) {
 		}
 		if slot.summary != "" {
 			id, project, bad, err := parseGrokSummary(slot.summary)
-			hr.Malformed += bad
-			if err != nil {
-				hr.Unreadable++
-			} else {
+			hr.add(bad, err)
+			if err == nil {
 				sess.ID = cmp.Or(id, sess.ID)
 				sess.Project = cmp.Or(project, sess.Project)
 			}
 		}
 		if slot.updates != "" {
 			tok, hours, bad, err := parseGrokUpdates(slot.updates)
-			hr.Malformed += bad
-			if err != nil {
-				hr.Unreadable++
-			}
+			hr.add(bad, err)
 			sess.Tokens, sess.Hours = tok, hours
 		}
 		out = append(out, sess)
