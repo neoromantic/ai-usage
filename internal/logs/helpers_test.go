@@ -47,6 +47,16 @@ func ageFile(t *testing.T, path string, when time.Time) {
 	}
 }
 
+// mustTime reads s, a time in RFC 3339 with or without fractional seconds.
+func mustTime(t *testing.T, s string) time.Time {
+	t.Helper()
+	ts, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ts
+}
+
 // deny makes path unreadable, so a reader that opened it would count it as
 // unreadable. Root and Windows ignore the mode; tests that depend on the
 // error call needDeny first.
@@ -131,11 +141,7 @@ func checkHours(t *testing.T, s Session, want map[string]int64) {
 	t.Helper()
 	w := map[int64]int64{}
 	for at, n := range want {
-		ts, err := time.Parse(time.RFC3339, at)
-		if err != nil {
-			t.Fatal(err)
-		}
-		w[HourOf(ts)] += n
+		w[HourOf(mustTime(t, at))] += n
 	}
 	var sum int64
 	for _, n := range s.Hours {

@@ -201,15 +201,8 @@ func turnAt(at, prompt string, usage [4]int64) string {
 func TestGrokHours(t *testing.T) {
 	home := t.TempDir()
 	dir := filepath.Join(home, "sessions", "%2Fwork%2Fapp", "sid")
-	parse := func(at string) time.Time {
-		ts, err := time.Parse(time.RFC3339Nano, at)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return ts
-	}
-	sec := func(at string) string { return fmt.Sprint(parse(at).Unix()) }
-	ms := func(at string) string { return fmt.Sprint(parse(at).UnixMilli()) }
+	sec := func(at string) string { return fmt.Sprint(mustTime(t, at).Unix()) }
+	ms := func(at string) string { return fmt.Sprint(mustTime(t, at).UnixMilli()) }
 	updates := filepath.Join(dir, "updates.jsonl")
 	mustWrite(t, updates,
 		turnAt(sec("2026-09-20T23:59:59Z"), "p1", [4]int64{10, 1, 2, 0}),

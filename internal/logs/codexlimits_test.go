@@ -13,13 +13,6 @@ func TestCodexLimits(t *testing.T) {
 	}
 	spark := `{"limit_id":"codex_bengalfox","limit_name":"GPT-5.3-Codex-Spark","primary":{"used_percent":64.0,"window_minutes":300,"resets_at":1790001000},"secondary":null,"plan_type":"plus"}`
 	premium := `{"limit_id":"premium","primary":null,"secondary":null,"plan_type":"plus"}`
-	at := func(s string) time.Time {
-		v, err := time.Parse(time.RFC3339, s)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return v
-	}
 	reset := func(sec int64) time.Time { return time.Unix(sec, 0).UTC() }
 	type window struct {
 		name  string
@@ -38,8 +31,8 @@ func TestCodexLimits(t *testing.T) {
 			files: map[string][]string{"sessions/20": {
 				cxLimits("2026-09-20T10:00:00Z", `{"primary":{"used_percent":55.5,"window_minutes":300,"resets_in_seconds":3600},"secondary":{"used_percent":1,"window_minutes":10080}}`),
 			}},
-			observed: at("2026-09-20T10:00:00Z"),
-			want:     []window{{"5h", 55.5, at("2026-09-20T11:00:00Z")}, {"7d", 1, time.Time{}}},
+			observed: mustTime(t, "2026-09-20T10:00:00Z"),
+			want:     []window{{"5h", 55.5, mustTime(t, "2026-09-20T11:00:00Z")}, {"7d", 1, time.Time{}}},
 		},
 		{
 			// The archived file is walked last but read earlier.
@@ -48,7 +41,7 @@ func TestCodexLimits(t *testing.T) {
 				"sessions/20":          {cxLimits("2026-09-20T12:00:00Z", main(60))},
 				"archived_sessions/20": {cxLimits("2026-09-20T09:00:00Z", main(30))},
 			},
-			observed: at("2026-09-20T12:00:00Z"),
+			observed: mustTime(t, "2026-09-20T12:00:00Z"),
 			plan:     "plus",
 			want:     []window{{"5h", 60, reset(1790000000)}, {"7d", 7.5, reset(1790500000)}},
 		},
@@ -58,7 +51,7 @@ func TestCodexLimits(t *testing.T) {
 				cxLimits("2026-09-20T10:00:00Z", main(10)),
 				cxLimits("2026-09-20T10:05:00Z", main(20)),
 			}},
-			observed: at("2026-09-20T10:05:00Z"),
+			observed: mustTime(t, "2026-09-20T10:05:00Z"),
 			plan:     "plus",
 			want:     []window{{"5h", 20, reset(1790000000)}, {"7d", 7.5, reset(1790500000)}},
 		},
@@ -69,7 +62,7 @@ func TestCodexLimits(t *testing.T) {
 				cxLimits("2026-09-20T12:00:00Z", spark),
 				cxLimits("2026-09-20T13:00:00Z", premium),
 			}},
-			observed: at("2026-09-20T10:00:00Z"),
+			observed: mustTime(t, "2026-09-20T10:00:00Z"),
 			plan:     "plus",
 			want:     []window{{"5h", 40, reset(1790000000)}, {"7d", 7.5, reset(1790500000)}, {"codex_bengalfox 5h", 64, reset(1790001000)}},
 		},
@@ -79,7 +72,7 @@ func TestCodexLimits(t *testing.T) {
 				cxLimits("2026-09-20T08:00:00Z", spark),
 				cxLimits("2026-09-20T10:00:00Z", main(40)),
 			}},
-			observed: at("2026-09-20T10:00:00Z"),
+			observed: mustTime(t, "2026-09-20T10:00:00Z"),
 			plan:     "plus",
 			want:     []window{{"5h", 40, reset(1790000000)}, {"7d", 7.5, reset(1790500000)}},
 		},
@@ -88,7 +81,7 @@ func TestCodexLimits(t *testing.T) {
 			files: map[string][]string{"sessions/20": {
 				cxLimits("2026-09-20T08:00:00Z", spark),
 			}},
-			observed: at("2026-09-20T08:00:00Z"),
+			observed: mustTime(t, "2026-09-20T08:00:00Z"),
 			plan:     "plus",
 			want:     []window{{"codex_bengalfox 5h", 64, reset(1790001000)}},
 		},

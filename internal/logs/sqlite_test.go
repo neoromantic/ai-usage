@@ -15,14 +15,8 @@ import (
 // checkpointed live only in state.db-wal, and must still count.
 func TestHermesReadsUncheckpointedWAL(t *testing.T) {
 	home := t.TempDir()
-	db := hermesDB(t, home, hermesColumns)
+	db := liveHermesDB(t, home)
 	defer db.Close()
-	var mode string
-	if err := db.QueryRow(`PRAGMA journal_mode=WAL`).Scan(&mode); err != nil || mode != "wal" {
-		t.Fatalf("journal mode %q: %v", mode, err)
-	}
-	exec(t, db, `PRAGMA wal_autocheckpoint=0`)
-	hermesRow{id: "live", cwd: "/work/live", in: 6, out: 2, started: now}.insert(t, db)
 	if info, err := os.Stat(filepath.Join(home, "state.db-wal")); err != nil || info.Size() == 0 {
 		t.Fatalf("no wal to read: %v", err)
 	}
