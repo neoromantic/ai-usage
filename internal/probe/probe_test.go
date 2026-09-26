@@ -42,7 +42,7 @@ func fakeEnv(t *testing.T, mode string, environ ...string) (Env, string) {
 func helperEnviron(mode, record string) []string {
 	// The race runtime otherwise sleeps a second before a clean exit.
 	env := []string{"PROBE_HELPER=" + mode, "PROBE_RECORD=" + record, "GORACE=atexit_sleep_ms=0"}
-	for _, k := range []string{"PATH", "SYSTEMROOT", "TMPDIR", "TEMP", "TMP"} {
+	for _, k := range []string{"PATH", "SYSTEMROOT", "TMPDIR", "TEMP", "TMP", "GOCOVERDIR"} {
 		if v, ok := os.LookupEnv(k); ok {
 			env = append(env, k+"="+v)
 		}
