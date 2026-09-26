@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,8 +31,7 @@ type Device struct {
 	Doc  snapshot.Doc
 }
 
-// ErrNoRelay is returned when no relay URL is configured.
-var ErrNoRelay = errNoRelay
+var errNoRelay = errors.New("relay is not configured")
 
 func (c *Client) http() *http.Client {
 	if c.HTTP != nil {
@@ -50,7 +50,7 @@ func (c *Client) now() time.Time {
 func (c *Client) url(path string) (string, error) {
 	base := strings.TrimRight(strings.TrimSpace(c.BaseURL), "/")
 	if base == "" {
-		return "", ErrNoRelay
+		return "", errNoRelay
 	}
 	return base + path, nil
 }

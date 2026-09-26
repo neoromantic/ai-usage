@@ -170,6 +170,7 @@ func (m *Memory) sweep(now time.Time) {
 }
 
 // KV is Vercel KV, spoken over its REST API: one POST of commands per call.
+// HTTP is required.
 //
 // Keys:
 //
@@ -325,11 +326,7 @@ func (kv *KV) pipeline(ctx context.Context, cmds ...[]any) ([]json.RawMessage, e
 	}
 	req.Header.Set("Authorization", "Bearer "+kv.Token)
 	req.Header.Set("Content-Type", "application/json")
-	hc := kv.HTTP
-	if hc == nil {
-		hc = &http.Client{Timeout: 10 * time.Second}
-	}
-	resp, err := hc.Do(req)
+	resp, err := kv.HTTP.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("kv: %w", err)
 	}

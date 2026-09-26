@@ -1353,13 +1353,13 @@ func TestClientErrors(t *testing.T) {
 	ctx := context.Background()
 	for _, base := range []string{"", "  ", "/"} {
 		c := &Client{BaseURL: base, Key: k}
-		if err := c.Publish(ctx, "work-laptop", []byte("{}")); !errors.Is(err, ErrNoRelay) {
+		if err := c.Publish(ctx, "work-laptop", []byte("{}")); !errors.Is(err, errNoRelay) {
 			t.Fatalf("Publish with base %q: %v", base, err)
 		}
-		if _, _, err := c.Pull(ctx); !errors.Is(err, ErrNoRelay) {
+		if _, _, err := c.Pull(ctx); !errors.Is(err, errNoRelay) {
 			t.Fatalf("Pull with base %q: %v", base, err)
 		}
-		if err := c.Remove(ctx, "work-laptop"); !errors.Is(err, ErrNoRelay) {
+		if err := c.Remove(ctx, "work-laptop"); !errors.Is(err, errNoRelay) {
 			t.Fatalf("Remove with base %q: %v", base, err)
 		}
 	}

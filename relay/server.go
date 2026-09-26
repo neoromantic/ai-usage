@@ -562,5 +562,3 @@ func (e *ErrStatus) Error() string {
 	}
 	return "relay: " + e.Msg + " (HTTP " + strconv.Itoa(e.Code) + ")"
 }
-
-var errNoRelay = errors.New("relay is not configured")
