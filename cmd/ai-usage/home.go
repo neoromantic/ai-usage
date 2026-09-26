@@ -14,6 +14,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
@@ -287,7 +288,7 @@ func listHomes(cfg state.Config, userHome string, stdout io.Writer) error {
 			if p == "hermes" {
 				notes = append(notes, quotaNotes(collect.QuotaHomesOf(cfg.QuotaFrom, h), userHome)...)
 			}
-			fmt.Fprintf(tw, "%s\t%s\t%s\n", name, tilde(h, userHome), strings.Join(notes, " · "))
+			fmt.Fprintf(tw, "%s\t%s\t%s\n", name, fsutil.Tilde(h, userHome), strings.Join(notes, " · "))
 		}
 	}
 	// A home added or named that is gone is not read; say so rather than
@@ -312,7 +313,7 @@ func listHomes(cfg state.Config, userHome string, stdout io.Writer) error {
 			if p == "hermes" {
 				notes = append(notes, quotaNotes(cfg.QuotaFrom[h], userHome)...)
 			}
-			missing = append(missing, tilde(h, userHome)+"\t"+strings.Join(notes, " · "))
+			missing = append(missing, fsutil.Tilde(h, userHome)+"\t"+strings.Join(notes, " · "))
 		}
 		sort.Strings(missing)
 		for _, m := range missing {
@@ -335,17 +336,10 @@ func quotaNotes(refs map[string]string, userHome string) []string {
 	var out []string
 	for _, p := range snapshot.Providers {
 		if at := refs[p]; at != "" {
-			out = append(out, "quota from "+p+" "+tilde(at, userHome))
+			out = append(out, "quota from "+p+" "+fsutil.Tilde(at, userHome))
 		}
 	}
 	return out
-}
-
-func tilde(p, userHome string) string {
-	if userHome != "" && (p == userHome || strings.HasPrefix(p, userHome+string(filepath.Separator))) {
-		return "~" + p[len(userHome):]
-	}
-	return p
 }
 
 // samePath reports whether a and b are one folder, links resolved.

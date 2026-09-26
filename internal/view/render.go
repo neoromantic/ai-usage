@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 )
 
 // Period is the span of tokens the matrix, USAGE, and PROJECTS show.
@@ -323,17 +325,7 @@ func (p *page) clock(t time.Time) string {
 
 // path prints a path under the user's home with ~.
 func (p *page) path(s string) string {
-	if p.home != "" {
-		if s == p.home {
-			return "~"
-		}
-		for _, sep := range []string{"/", `\`} {
-			if strings.HasPrefix(s, p.home+sep) {
-				return "~" + strings.TrimPrefix(s, p.home)
-			}
-		}
-	}
-	return s
+	return fsutil.Tilde(s, p.home)
 }
 
 // dur prints a duration in at most two units: 34m, 7h 5m, 1d 23h, 12d.

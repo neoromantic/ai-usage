@@ -549,10 +549,7 @@ func executable() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if r, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = r
-	}
-	return exe, nil
+	return fsutil.RealPath(exe), nil
 }
 
 func printReport(stdout io.Writer, d state.Dir, res *collect.Result, endpoint string, jsonOut, guide bool, disp *display) error {

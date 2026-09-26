@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
@@ -346,10 +347,10 @@ func (e Env) bins(name string) []string {
 	sort.SliceStable(found, func(i, j int) bool { return found[i].mod.After(found[j].mod) })
 	seen := map[string]bool{}
 	for _, p := range out {
-		seen[realPath(p)] = true
+		seen[fsutil.RealPath(p)] = true
 	}
 	for _, b := range found {
-		if r := realPath(b.path); !seen[r] {
+		if r := fsutil.RealPath(b.path); !seen[r] {
 			seen[r] = true
 			out = append(out, b.path)
 		}
@@ -383,14 +384,6 @@ func (e Env) bundled(name string) []string {
 		}
 	}
 	return out
-}
-
-// realPath is path with its links resolved, or path itself when that fails.
-func realPath(path string) string {
-	if r, err := filepath.EvalSymlinks(path); err == nil {
-		return r
-	}
-	return path
 }
 
 // Find reports whether a harness binary is installed.

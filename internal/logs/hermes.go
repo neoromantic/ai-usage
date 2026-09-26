@@ -15,6 +15,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 )
 
 // readHermes reads token columns from <home>/state.db.
@@ -37,9 +39,7 @@ func readHermes(home string, since time.Time) (Result, error) {
 		return Result{}, err
 	}
 	// SQLite keeps the -wal and -shm beside the file a link points to.
-	if real, err := filepath.EvalSymlinks(dbPath); err == nil {
-		dbPath = real
-	}
+	dbPath = fsutil.RealPath(dbPath)
 	for attempt := 1; ; attempt++ {
 		before, err := statDB(dbPath)
 		if err != nil {

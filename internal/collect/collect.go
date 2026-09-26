@@ -771,11 +771,7 @@ func homeErrors(errs [][2]string, homes int, userHome string) []string {
 			out = append(out, e[1])
 			continue
 		}
-		home := e[0]
-		if userHome != "" && strings.HasPrefix(home, userHome+string(filepath.Separator)) {
-			home = "~" + home[len(userHome):]
-		}
-		out = append(out, home+": "+e[1])
+		out = append(out, fsutil.Tilde(e[0], userHome)+": "+e[1])
 	}
 	return out
 }
@@ -1215,10 +1211,7 @@ func (r paths) resolve(p string) string {
 	if v, ok := r[p]; ok {
 		return v
 	}
-	v := filepath.Clean(p)
-	if e, err := filepath.EvalSymlinks(v); err == nil {
-		v = e
-	}
+	v := fsutil.RealPath(filepath.Clean(p))
 	r[p] = v
 	return v
 }

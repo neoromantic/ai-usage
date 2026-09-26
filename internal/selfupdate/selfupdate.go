@@ -28,6 +28,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
@@ -129,10 +130,7 @@ func (u *Updater) fill() error {
 		if err != nil {
 			return err
 		}
-		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-			exe = resolved
-		}
-		u.Exe = exe
+		u.Exe = fsutil.RealPath(exe)
 	}
 	return nil
 }

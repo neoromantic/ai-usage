@@ -4,7 +4,26 @@ package fsutil
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
+
+// RealPath is p with its links resolved, or p itself when that fails.
+func RealPath(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return p
+}
+
+// Tilde is p with the home folder at its start written as ~, or p itself
+// when p is not under home. Both / and \ end the home on every OS, since a
+// report can hold paths written on another OS.
+func Tilde(p, home string) string {
+	if home != "" && (p == home || strings.HasPrefix(p, home+"/") || strings.HasPrefix(p, home+`\`)) {
+		return "~" + p[len(home):]
+	}
+	return p
+}
 
 // WriteFile replaces path in one step, through a temporary file and a rename,
 // so a reader never sees half of it. Missing folders are made 0700.

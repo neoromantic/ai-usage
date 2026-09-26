@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/logs"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
@@ -430,7 +431,7 @@ var claudeVersionName = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 // manager's shim resolves to the manager's own binary in its own version's
 // folder.
 func claudeVersion(bin string) string {
-	path := realPath(bin)
+	path := fsutil.RealPath(bin)
 	for range 4 {
 		if name := filepath.Base(path); claudeVersionName.MatchString(name) && claudeVersionsFolder(filepath.Dir(path)) {
 			return name
