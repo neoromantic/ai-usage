@@ -405,7 +405,7 @@ func TestDurationName(t *testing.T) {
 		if got := DurationName(minutes); got != want {
 			t.Errorf("DurationName(%d) = %q, want %q", minutes, got, want)
 		}
-		if err := checkPlain("name", DurationName(minutes), true); err != nil {
+		if err := plainText.check("name", DurationName(minutes), true); err != nil {
 			t.Errorf("DurationName(%d) is not a plain label: %v", minutes, err)
 		}
 	}
@@ -428,7 +428,7 @@ func TestPlainLabel(t *testing.T) {
 		if got != c.want {
 			t.Errorf("PlainLabel(%q) = %q, want %q", c.in, got, c.want)
 		}
-		if err := checkPlain("label", got, false); err != nil {
+		if err := plainText.check("label", got, false); err != nil {
 			t.Errorf("PlainLabel(%q) = %q, which Validate rejects: %v", c.in, got, err)
 		}
 	}
@@ -439,7 +439,7 @@ func FuzzPlainLabel(f *testing.F) {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
-		if err := checkPlain("label", PlainLabel(s), false); err != nil {
+		if err := plainText.check("label", PlainLabel(s), false); err != nil {
 			t.Fatalf("PlainLabel(%q) = %q: %v", s, PlainLabel(s), err)
 		}
 	})

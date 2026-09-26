@@ -8,6 +8,7 @@ package snapshot
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -283,80 +284,43 @@ func (d Doc) Validate() error {
 	if !ValidDevice(d.Device) {
 		return errors.New("device id has the wrong shape")
 	}
-	for name, s := range map[string]string{"device_label": d.DeviceLabel, "os_user": d.OSUser} {
-		if err := checkSealed(name, s, true); err != nil {
-			return err
-		}
-	}
-	if err := checkSealed("last_error", d.LastError, false); err != nil {
+	if err := sealedText.check("device_label", d.DeviceLabel, true); err != nil {
 		return err
 	}
-	if err := checkPlain("collector_version", d.CollectorVersion, true); err != nil {
+	if err := sealedText.check("os_user", d.OSUser, true); err != nil {
+		return err
+	}
+	if err := sealedText.check("last_error", d.LastError, false); err != nil {
+		return err
+	}
+	if err := plainText.check("collector_version", d.CollectorVersion, true); err != nil {
 		return err
 	}
 	if d.CollectedAt.IsZero() {
 		return errors.New("collected_at is missing")
 	}
-	if len(d.Accounts) > MaxAccounts {
-		return fmt.Errorf("%d accounts, limit %d", len(d.Accounts), MaxAccounts)
-	}
 	if d.Accounts == nil || d.Sources == nil {
 		return errors.New("accounts and sources must be arrays")
 	}
-	for i, a := range d.Accounts {
-		if err := a.validate(); err != nil {
-			return fmt.Errorf("accounts[%d]: %w", i, err)
-		}
-	}
-	if len(d.Aliases) > MaxAliases {
-		return fmt.Errorf("%d aliases, limit %d", len(d.Aliases), MaxAliases)
-	}
-	for i, a := range d.Aliases {
-		if !KnownProvider(a.Provider) {
-			return fmt.Errorf("aliases[%d]: unknown provider", i)
-		}
-		if err := checkSealed("label", a.Label, true); err != nil {
-			return fmt.Errorf("aliases[%d]: %w", i, err)
-		}
-		if err := checkSealed("name", a.Name, false); err != nil {
-			return fmt.Errorf("aliases[%d]: %w", i, err)
-		}
-		if a.At.IsZero() {
-			return fmt.Errorf("aliases[%d]: at is missing", i)
-		}
-	}
-	if len(d.Sources) > MaxSources {
-		return fmt.Errorf("%d sources, limit %d", len(d.Sources), MaxSources)
-	}
-	for i, s := range d.Sources {
-		if !KnownProvider(s.Provider) {
-			return fmt.Errorf("sources[%d]: unknown provider", i)
-		}
-		if !statuses[s.Status] {
-			return fmt.Errorf("sources[%d]: unknown status", i)
-		}
-		if err := checkSealed("error", s.Error, false); err != nil {
-			return fmt.Errorf("sources[%d]: %w", i, err)
-		}
-	}
-	return nil
+	return cmp.Or(
+		checkList("accounts", d.Accounts, MaxAccounts, Account.validate),
+		checkList("aliases", d.Aliases, MaxAliases, Alias.validate),
+		checkList("sources", d.Sources, MaxSources, Source.validate),
+	)
 }
 
 func (a Account) validate() error {
 	if !KnownProvider(a.Provider) {
 		return errors.New("unknown provider")
 	}
-	if err := checkSealed("label", a.Label, true); err != nil {
+	if err := sealedText.check("label", a.Label, true); err != nil {
 		return err
 	}
-	if err := checkPlain("plan", a.Plan, false); err != nil {
+	if err := plainText.check("plan", a.Plan, false); err != nil {
 		return err
 	}
 	if a.Windows == nil || a.Projects == nil {
 		return errors.New("windows and projects must be arrays")
-	}
-	if len(a.Windows) > MaxWindows {
-		return fmt.Errorf("%d windows, limit %d", len(a.Windows), MaxWindows)
 	}
 	if len(a.Windows) > 0 && a.QuotaAt == nil {
 		return errors.New("windows without quota_at")
@@ -364,65 +328,102 @@ func (a Account) validate() error {
 	if a.QuotaFrom != "" && (!KnownProvider(a.QuotaFrom) || a.QuotaFrom == a.Provider || len(a.Windows) == 0) {
 		return errors.New("quota_from must name another provider and come with its windows")
 	}
-	for i, w := range a.Windows {
-		if err := checkPlain("window name", w.Name, true); err != nil {
-			return fmt.Errorf("windows[%d]: %w", i, err)
-		}
-		if w.Percent < 0 || w.Percent > 1000 || w.Percent != w.Percent {
-			return fmt.Errorf("windows[%d]: percent out of range", i)
-		}
-		if w.Minutes < 0 || w.Minutes > MaxWindowMinutes {
-			return fmt.Errorf("windows[%d]: minutes out of range", i)
-		}
-	}
-	if err := checkCounts(a.Sessions, a.Tokens); err != nil {
+	return cmp.Or(
+		checkCounts(a.Sessions, a.Tokens),
+		checkList("windows", a.Windows, MaxWindows, Window.validate),
+		checkList("projects", a.Projects, MaxProjects, Project.validate),
+		checkList("days", a.Days, MaxDays, checkDay),
+		checkList("recent", a.Recent, MaxWindows, Recent.validate),
+		checkList("linked", a.Linked, MaxLinked, func(l Linked) error { return l.validate(a.Provider) }),
+	)
+}
+
+func (w Window) validate() error {
+	if err := plainText.check("window name", w.Name, true); err != nil {
 		return err
 	}
-	if len(a.Projects) > MaxProjects {
-		return fmt.Errorf("%d projects, limit %d", len(a.Projects), MaxProjects)
+	if w.Percent < 0 || w.Percent > 1000 || w.Percent != w.Percent {
+		return errors.New("percent out of range")
 	}
-	for i, p := range a.Projects {
-		if err := checkSealed("path", p.Path, true); err != nil {
-			return fmt.Errorf("projects[%d]: %w", i, err)
-		}
-		if err := checkCounts(p.Sessions, p.Tokens); err != nil {
-			return fmt.Errorf("projects[%d]: %w", i, err)
-		}
+	if w.Minutes < 0 || w.Minutes > MaxWindowMinutes {
+		return errors.New("minutes out of range")
 	}
-	if len(a.Days) > MaxDays {
-		return fmt.Errorf("%d days, limit %d", len(a.Days), MaxDays)
+	return nil
+}
+
+func (p Project) validate() error {
+	if err := sealedText.check("path", p.Path, true); err != nil {
+		return err
 	}
-	for _, n := range a.Days {
-		if n < 0 || n > MaxTokenCount {
-			return errors.New("day count out of range")
-		}
+	return checkCounts(p.Sessions, p.Tokens)
+}
+
+func (r Recent) validate() error {
+	if err := plainText.check("window name", r.Window, true); err != nil {
+		return err
 	}
-	if len(a.Recent) > MaxWindows {
-		return fmt.Errorf("%d recent, limit %d", len(a.Recent), MaxWindows)
+	if r.Start.IsZero() {
+		return errors.New("start is missing")
 	}
-	for i, r := range a.Recent {
-		if err := checkPlain("window name", r.Window, true); err != nil {
-			return fmt.Errorf("recent[%d]: %w", i, err)
-		}
-		if r.Start.IsZero() {
-			return fmt.Errorf("recent[%d]: start is missing", i)
-		}
-		if r.Tokens < 0 || r.Tokens > MaxTokenCount {
-			return fmt.Errorf("recent[%d]: token count out of range", i)
-		}
+	if r.Tokens < 0 || r.Tokens > MaxTokenCount {
+		return errors.New("token count out of range")
 	}
-	if len(a.Linked) > MaxLinked {
-		return fmt.Errorf("%d linked, limit %d", len(a.Linked), MaxLinked)
+	return nil
+}
+
+// validate checks l as spent through an account of provider owner.
+func (l Linked) validate(owner string) error {
+	if !KnownProvider(l.Provider) || l.Provider == owner {
+		return errors.New("must name another provider")
 	}
-	for i, l := range a.Linked {
-		if !KnownProvider(l.Provider) || l.Provider == a.Provider {
-			return fmt.Errorf("linked[%d]: must name another provider", i)
-		}
-		if err := checkSealed("label", l.Label, true); err != nil {
-			return fmt.Errorf("linked[%d]: %w", i, err)
-		}
-		if err := checkCounts(l.Sessions, l.Tokens); err != nil {
-			return fmt.Errorf("linked[%d]: %w", i, err)
+	if err := sealedText.check("label", l.Label, true); err != nil {
+		return err
+	}
+	return checkCounts(l.Sessions, l.Tokens)
+}
+
+func (a Alias) validate() error {
+	if !KnownProvider(a.Provider) {
+		return errors.New("unknown provider")
+	}
+	if err := sealedText.check("label", a.Label, true); err != nil {
+		return err
+	}
+	if err := sealedText.check("name", a.Name, false); err != nil {
+		return err
+	}
+	if a.At.IsZero() {
+		return errors.New("at is missing")
+	}
+	return nil
+}
+
+func (s Source) validate() error {
+	if !KnownProvider(s.Provider) {
+		return errors.New("unknown provider")
+	}
+	if !statuses[s.Status] {
+		return errors.New("unknown status")
+	}
+	return sealedText.check("error", s.Error, false)
+}
+
+func checkDay(n int64) error {
+	if n < 0 || n > MaxTokenCount {
+		return errors.New("day count out of range")
+	}
+	return nil
+}
+
+// checkList checks how many items there are, then each one, and names the
+// first that fails by its index.
+func checkList[T any](name string, items []T, limit int, check func(T) error) error {
+	if len(items) > limit {
+		return fmt.Errorf("%d %s, limit %d", len(items), name, limit)
+	}
+	for i, item := range items {
+		if err := check(item); err != nil {
+			return fmt.Errorf("%s[%d]: %w", name, i, err)
 		}
 	}
 	return nil
@@ -440,28 +441,28 @@ func checkCounts(sessions int, t Tokens) error {
 	return nil
 }
 
-func checkSealed(name, s string, required bool) error {
-	if s == "" {
-		if required {
-			return fmt.Errorf("%s is missing", name)
-		}
-		return nil
-	}
-	if len(s) > MaxSealed || !sealedRe.MatchString(s) {
-		return fmt.Errorf("%s is not a sealed label", name)
-	}
-	return nil
+// textRule is what a string field may hold: at most max bytes that re
+// matches. what names that kind of text in errors.
+type textRule struct {
+	re   *regexp.Regexp
+	max  int
+	what string
 }
 
-func checkPlain(name, s string, required bool) error {
+var (
+	sealedText = textRule{sealedRe, MaxSealed, "sealed label"}
+	plainText  = textRule{plainRe, MaxPlain, "short label"}
+)
+
+func (t textRule) check(name, s string, required bool) error {
 	if s == "" {
 		if required {
 			return fmt.Errorf("%s is missing", name)
 		}
 		return nil
 	}
-	if len(s) > MaxPlain || !plainRe.MatchString(s) {
-		return fmt.Errorf("%s is not a short label", name)
+	if len(s) > t.max || !t.re.MatchString(s) {
+		return fmt.Errorf("%s is not a %s", name, t.what)
 	}
 	return nil
 }
