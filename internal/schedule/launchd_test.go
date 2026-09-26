@@ -3,15 +3,12 @@ package schedule
 import (
 	"context"
 	"encoding/json"
-	"encoding/xml"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -95,99 +92,27 @@ func agent(t *testing.T, f *fakeLaunchd) (Scheduler, string) {
 	return Scheduler{GOOS: "darwin", Run: f.run, AgentDir: dir, UID: 501}, filepath.Join(dir, AgentLabel+".plist")
 }
 
-// plistValues reads the launch agent's keys the way launchd does, with
-// plutil on macOS, and with a small plist reader elsewhere.
+// plistValues reads the launch agent's keys the way launchd does, with plutil.
 func plistValues(t *testing.T, file string) map[string]any {
 	t.Helper()
-	if runtime.GOOS == "darwin" {
-		if out, err := exec.Command("plutil", "-lint", file).CombinedOutput(); err != nil {
-			t.Fatalf("plutil -lint: %v %s", err, out)
-		}
-		out, err := exec.Command("plutil", "-convert", "json", "-o", "-", file).Output()
-		if err != nil {
-			t.Fatalf("plutil -convert: %v", err)
-		}
-		var m map[string]any
-		if err := json.Unmarshal(out, &m); err != nil {
-			t.Fatal(err)
-		}
-		return m
+	if out, err := exec.Command("plutil", "-lint", file).CombinedOutput(); err != nil {
+		t.Fatalf("plutil -lint: %v %s", err, out)
 	}
-	b, err := os.ReadFile(file)
+	out, err := exec.Command("plutil", "-convert", "json", "-o", "-", file).Output()
 	if err != nil {
+		t.Fatalf("plutil -convert: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
 		t.Fatal(err)
 	}
-	return readPlist(t, b)
-}
-
-// readPlist decodes the dict, string, integer, and array values the launch
-// agent uses.
-func readPlist(t *testing.T, b []byte) map[string]any {
-	t.Helper()
-	d := xml.NewDecoder(strings.NewReader(string(b)))
-	d.Strict = true
-	var value func(start xml.StartElement) any
-	value = func(start xml.StartElement) any {
-		switch start.Name.Local {
-		case "string", "integer", "key":
-			var s string
-			if err := d.DecodeElement(&s, &start); err != nil {
-				t.Fatal(err)
-			}
-			if start.Name.Local == "integer" {
-				var n float64
-				if _, err := fmt.Sscan(s, &n); err != nil {
-					t.Fatal(err)
-				}
-				return n
-			}
-			return s
-		case "array", "dict":
-			var list []any
-			m := map[string]any{}
-			key := ""
-			for {
-				tok, err := d.Token()
-				if err != nil {
-					t.Fatal(err)
-				}
-				switch tok := tok.(type) {
-				case xml.StartElement:
-					v := value(tok)
-					switch {
-					case start.Name.Local == "array":
-						list = append(list, v)
-					case tok.Name.Local == "key":
-						key = v.(string)
-					default:
-						m[key] = v
-					}
-				case xml.EndElement:
-					if start.Name.Local == "array" {
-						return list
-					}
-					return m
-				}
-			}
-		}
-		t.Fatalf("unexpected plist element %s", start.Name.Local)
-		return nil
-	}
-	for {
-		tok, err := d.Token()
-		if err == io.EOF {
-			t.Fatal("plist has no dict")
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		if se, ok := tok.(xml.StartElement); ok && se.Name.Local == "dict" {
-			return value(se).(map[string]any)
-		}
-	}
+	return m
 }
 
 func TestAgentPlist(t *testing.T) {
+	if _, err := exec.LookPath("plutil"); err != nil {
+		t.Skip("plutil reads the plist as launchd does; CI runs this on macOS")
+	}
 	odd := "/Users/o'brien/AI & <Tools> 100%/ai-usage"
 	state := "/Users/o'brien/state \"x\""
 	file := filepath.Join(t.TempDir(), "agent.plist")
