@@ -11,6 +11,7 @@ import (
 
 	"github.com/neoromantic/ai-usage/internal/probe"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
+	"github.com/neoromantic/ai-usage/internal/state"
 )
 
 var homeEnv = map[string]string{
@@ -202,6 +203,30 @@ func isProfile(p, h string, homes []string) bool {
 		}
 	}
 	return false
+}
+
+// rememberHomes saves the env-named homes among homes, and the variable
+// values that named them, into the config, and returns the config with them.
+func rememberHomes(o Options, cfg state.Config, homes map[string][]string) (state.Config, error) {
+	// Only the folders this run found beyond the remembered ones are
+	// recorded, into the config as it is now, so a folder a person added or
+	// removed since it was read stays that way.
+	found := unremembered(homes, o.UserHome, cfg.Homes)
+	remember := func(c *state.Config) bool {
+		remembered, changed := Remember(c.Homes, o.UserHome, found)
+		c.Homes = remembered
+		if homeEnv, envChanged := RememberEnv(c.HomeEnv, o.Getenv, homes); envChanged {
+			c.HomeEnv, changed = homeEnv, true
+		}
+		return changed
+	}
+	if !remember(&cfg) {
+		return cfg, nil
+	}
+	return o.Dir.EditConfig(func(c *state.Config) error {
+		remember(c)
+		return nil
+	})
 }
 
 // Remember adds env-named homes to the remembered set and reports a change.

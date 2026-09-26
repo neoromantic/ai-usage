@@ -139,15 +139,7 @@ func LoadKey(dir state.Dir) (*team.Key, error) {
 // stop the run.
 func Run(ctx context.Context, o Options) (*Result, error) {
 	o.fill()
-	unlock, err := o.Dir.Lock()
-	waited := errors.Is(err, state.ErrBusy) && o.Wait > 0
-	var lastRun time.Time
-	if waited {
-		if st, err := o.Dir.LoadState(); err == nil {
-			lastRun = st.LastRunAt
-		}
-		unlock, err = o.Dir.LockWait(ctx, o.Wait, o.Waiting)
-	}
+	unlock, waited, lastRun, err := o.lock(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -168,88 +160,18 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	now := o.Now().UTC().Truncate(time.Second)
 
 	homes := Discover(o.UserHome, o.Getenv, cfg.Homes)
-	// Only the folders this run found beyond the remembered ones are
-	// recorded, into the config as it is now, so a folder a person added or
-	// removed since it was read stays that way.
-	found := unremembered(homes, o.UserHome, cfg.Homes)
-	remember := func(c *state.Config) bool {
-		remembered, changed := Remember(c.Homes, o.UserHome, found)
-		c.Homes = remembered
-		if homeEnv, envChanged := RememberEnv(c.HomeEnv, o.Getenv, homes); envChanged {
-			c.HomeEnv, changed = homeEnv, true
-		}
-		return changed
-	}
-	if remember(&cfg) {
-		cfg, err = o.Dir.EditConfig(func(c *state.Config) error {
-			remember(c)
-			return nil
-		})
-		if err != nil {
-			return nil, err
-		}
+	if cfg, err = rememberHomes(o, cfg, homes); err != nil {
+		return nil, err
 	}
 	inputs := runInputs(o, cfg, homes)
-	if waited && st.LastRunAt.After(lastRun) && st.LastRunInputs == inputs {
-		// The run waited for has just collected what this one would: the
-		// same release, relay, and homes. A scheduled run may have skipped
-		// the team read this one would make.
-		cache, _ := LoadTeamCache(o.Dir)
-		read := !cache.PulledAt.Before(st.LastRunAt) || (o.PullEvery > 0 && st.LastRunAt.Sub(cache.PulledAt) < o.PullEvery)
-		if o.Relay == nil || read {
-			doc := BuildDoc(st, key, cfg, o.Hostname, o.OSUser, o.Version, st.LastRunAt)
-			return &Result{Config: cfg, State: st, Key: key, Doc: doc, Team: cache, Waited: true}, nil
+	if waited {
+		if res := reuseWaited(o, cfg, key, st, inputs, lastRun); res != nil {
+			return res, nil
 		}
 	}
-	if o.Ask == nil {
-		o.Ask = askHarness(o.Probe, cfg.HomeEnv)
-	}
-	s := &sampler{
-		Options: o,
-		st:      st,
-		now:     now,
-		since:   now.Add(-state.Retention),
-		prevRun: st.LastRunAt,
-		growth:  map[string]snapshot.Tokens{},
-		paths:   paths{},
-	}
-	s.quotaFrom = quotaLinks(cfg.QuotaFrom, s.paths)
-
-	sample := state.Sample{At: now}
-	var problems []string
-	if st.Damage != "" {
-		problems = append(problems, st.Damage)
-	}
-	failed := false
-	for _, p := range snapshot.Providers {
-		src := s.source(ctx, p, homes[p])
-		st.Sources[p] = src
-		if src.Error != "" {
-			problems = append(problems, p+": "+src.Error)
-		}
-		if src.Status == "error" {
-			failed = true
-		}
-	}
-	prune(st, now)
-
-	for k, acct := range st.Accounts {
-		g := s.growth[k]
-		quotaNow := acct.Quota != nil && !acct.Quota.At.Before(now.Add(-24*time.Hour))
-		if g.Zero() && !quotaNow {
-			continue
-		}
-		sa := state.SampleAccount{Provider: acct.Provider, Label: acct.Label, Growth: g}
-		if acct.Quota != nil {
-			at := acct.Quota.At
-			sa.QuotaAt = &at
-			sa.Windows = acct.Quota.Windows
-		}
-		sample.Accounts = append(sample.Accounts, sa)
-	}
-	slices.SortFunc(sample.Accounts, func(a, b state.SampleAccount) int {
-		return cmp.Or(cmp.Compare(a.Provider, b.Provider), cmp.Compare(a.Label, b.Label))
-	})
+	s := newSampler(o, cfg, st, now)
+	problems, failed := s.collect(ctx, homes)
+	sample := sampleOf(st, s.growth, now)
 	// A run stopped before it writes, as when the view that started it
 	// closes, saves nothing: what failed in it failed because it stopped,
 	// and the next run collects what it would have.
@@ -270,32 +192,86 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	if !failed {
 		st.LastSuccessAt = now
 	}
-	noteProblems := func() {
-		if len(problems) > 0 {
-			st.LastError = snapshot.Truncate(strings.Join(problems, "; "), 600)
-			st.LastErrorAt = now
-		}
-	}
 	// Record this run's problems before the snapshot is built, so the team
 	// sees them now rather than one run late.
-	noteProblems()
+	noteProblems(st, problems, now)
 	res := &Result{Config: cfg, State: st, Key: key}
 	res.Doc = BuildDoc(st, key, cfg, o.Hostname, o.OSUser, o.Version, now)
-
-	cache, _ := LoadTeamCache(o.Dir)
-	res.Team = cache
+	res.Team, _ = LoadTeamCache(o.Dir)
 	if problem := s.publish(ctx, key, cfg.Device, res); problem != "" {
 		problems = append(problems, problem)
-		noteProblems()
+		noteProblems(st, problems, now)
 	}
 	// A stopped run leaves its housekeeping to the next one.
 	if o.After != nil && ctx.Err() == nil {
 		o.After(ctx, &res.Config, st)
 	}
-	if err := o.Dir.SaveState(st); err != nil {
-		return res, err
+	return res, o.Dir.SaveState(st)
+}
+
+// lock takes the run lock. When another run holds it and o.Wait is set, it
+// waits up to o.Wait for that run to finish, and lastRun is the state's
+// LastRunAt from before the wait.
+func (o *Options) lock(ctx context.Context) (unlock func(), waited bool, lastRun time.Time, err error) {
+	unlock, err = o.Dir.Lock()
+	waited = errors.Is(err, state.ErrBusy) && o.Wait > 0
+	if waited {
+		if st, err := o.Dir.LoadState(); err == nil {
+			lastRun = st.LastRunAt
+		}
+		unlock, err = o.Dir.LockWait(ctx, o.Wait, o.Waiting)
 	}
-	return res, nil
+	return unlock, waited, lastRun, err
+}
+
+// reuseWaited is the result of the run this one waited for, when that run
+// has just collected what this one would: the same release, relay, and
+// homes. It is nil when this run must collect.
+func reuseWaited(o Options, cfg state.Config, key *team.Key, st *state.State, inputs string, lastRun time.Time) *Result {
+	if !st.LastRunAt.After(lastRun) || st.LastRunInputs != inputs {
+		return nil
+	}
+	// A scheduled run may have skipped the team read this one would make.
+	cache, _ := LoadTeamCache(o.Dir)
+	read := !cache.PulledAt.Before(st.LastRunAt) || (o.PullEvery > 0 && st.LastRunAt.Sub(cache.PulledAt) < o.PullEvery)
+	if o.Relay != nil && !read {
+		return nil
+	}
+	doc := BuildDoc(st, key, cfg, o.Hostname, o.OSUser, o.Version, st.LastRunAt)
+	return &Result{Config: cfg, State: st, Key: key, Doc: doc, Team: cache, Waited: true}
+}
+
+// sampleOf is the run's sample: the accounts that grew this run or whose
+// quota was read in the last day, with their growth and their last quota.
+func sampleOf(st *state.State, growth map[string]snapshot.Tokens, now time.Time) state.Sample {
+	sample := state.Sample{At: now}
+	for k, acct := range st.Accounts {
+		g := growth[k]
+		quotaNow := acct.Quota != nil && !acct.Quota.At.Before(now.Add(-24*time.Hour))
+		if g.Zero() && !quotaNow {
+			continue
+		}
+		sa := state.SampleAccount{Provider: acct.Provider, Label: acct.Label, Growth: g}
+		if acct.Quota != nil {
+			at := acct.Quota.At
+			sa.QuotaAt = &at
+			sa.Windows = acct.Quota.Windows
+		}
+		sample.Accounts = append(sample.Accounts, sa)
+	}
+	slices.SortFunc(sample.Accounts, func(a, b state.SampleAccount) int {
+		return cmp.Or(strings.Compare(a.Provider, b.Provider), strings.Compare(a.Label, b.Label))
+	})
+	return sample
+}
+
+// noteProblems records the run's problems, when it has any, as the state's
+// last error.
+func noteProblems(st *state.State, problems []string, now time.Time) {
+	if len(problems) > 0 {
+		st.LastError = snapshot.Truncate(strings.Join(problems, "; "), 600)
+		st.LastErrorAt = now
+	}
 }
 
 // publish publishes res.Doc and reads the team back into res.Team, as
@@ -387,6 +363,45 @@ type sampler struct {
 	paths               paths
 	// quotaFrom is Config.QuotaFrom keyed by resolved home.
 	quotaFrom map[string]map[string]string
+}
+
+// newSampler starts a run's reading of the sources at now. Unless o.Ask is
+// set, it asks the harnesses with the variable values cfg remembers.
+func newSampler(o Options, cfg state.Config, st *state.State, now time.Time) *sampler {
+	if o.Ask == nil {
+		o.Ask = askHarness(o.Probe, cfg.HomeEnv)
+	}
+	s := &sampler{
+		Options: o,
+		st:      st,
+		now:     now,
+		since:   now.Add(-state.Retention),
+		prevRun: st.LastRunAt,
+		growth:  map[string]snapshot.Tokens{},
+		paths:   paths{},
+	}
+	s.quotaFrom = quotaLinks(cfg.QuotaFrom, s.paths)
+	return s
+}
+
+// collect reads every provider into the state and prunes it. It returns the
+// run's problems so far, and whether an installed source failed.
+func (s *sampler) collect(ctx context.Context, homes map[string][]string) (problems []string, failed bool) {
+	if s.st.Damage != "" {
+		problems = append(problems, s.st.Damage)
+	}
+	for _, p := range snapshot.Providers {
+		src := s.source(ctx, p, homes[p])
+		s.st.Sources[p] = src
+		if src.Error != "" {
+			problems = append(problems, p+": "+src.Error)
+		}
+		if src.Status == "error" {
+			failed = true
+		}
+	}
+	prune(s.st, s.now)
+	return problems, failed
 }
 
 // source collects one provider. A bug that panics while reading or probing
