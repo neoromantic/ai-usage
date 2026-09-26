@@ -69,41 +69,13 @@ func cmdHome(ctx context.Context, args []string, stdout, stderr io.Writer) error
 			rest = append(rest, a)
 		}
 	}
-	if len(rest) < 2 {
-		return usageError("home " + sub + " takes a provider and at least one directory")
+	p, homes, err := homeTargets(sub, rest)
+	if err != nil {
+		return err
 	}
-	p := rest[0]
-	if !snapshot.KnownProvider(p) {
-		return usageError("unknown provider " + p + "; one of " + strings.Join(snapshot.Providers, ", "))
-	}
-	var homes []string
-	for _, h := range rest[1:] {
-		abs, err := homePath(h, sub == "add")
-		if err != nil {
-			return err
-		}
-		homes = append(homes, abs)
-	}
-	// One --quota-from per harness: codex:DIR, grok:DIR, or both.
-	var refs []homeRef
-	for _, q := range quotaFrom {
-		if sub != "add" || p != "hermes" {
-			return usageError("--quota-from is for home add hermes")
-		}
-		qp, qdir, ok := strings.Cut(q, ":")
-		if !ok || !collect.BillsThrough(qp) || strings.TrimSpace(qdir) == "" {
-			return usageError("--quota-from takes codex:DIR or grok:DIR")
-		}
-		for _, r := range refs {
-			if r.provider == qp {
-				return usageError("--quota-from names " + qp + " twice")
-			}
-		}
-		abs, err := homePath(qdir, true)
-		if err != nil {
-			return err
-		}
-		refs = append(refs, homeRef{provider: qp, home: abs})
+	refs, err := quotaRefs(sub, p, quotaFrom)
+	if err != nil {
+		return err
 	}
 
 	// A home whose sessions cannot be read changes nothing. They are read
@@ -142,22 +114,73 @@ func cmdHome(ctx context.Context, args []string, stdout, stderr io.Writer) error
 		return err
 	}
 	if forget {
-		n, err := collect.Forget(ctx, d, p, homes, kept, clock(), func() (func(), error) {
-			return waitLock(ctx, d, stderr)
-		})
-		if err != nil {
-			return fmt.Errorf("the homes were removed, but their sessions were not forgotten, which the same command can try again: %w", err)
+		if err := forgetSessions(ctx, d, p, homes, kept, stdout, stderr); err != nil {
+			return err
 		}
-		word := "sessions"
-		if n == 1 {
-			word = "session"
-		}
-		fmt.Fprintf(stdout, "forgot %d %s counted from these homes; the team sees the change after the next collection\n\n", n, word)
 	}
 	return listHomes(cfg, userHome, stdout)
 }
 
+func homeTargets(sub string, rest []string) (p string, homes []string, err error) {
+	if len(rest) < 2 {
+		return "", nil, usageError("home " + sub + " takes a provider and at least one directory")
+	}
+	p = rest[0]
+	if !snapshot.KnownProvider(p) {
+		return "", nil, usageError("unknown provider " + p + "; one of " + strings.Join(snapshot.Providers, ", "))
+	}
+	for _, h := range rest[1:] {
+		abs, err := homePath(h, sub == "add")
+		if err != nil {
+			return "", nil, err
+		}
+		homes = append(homes, abs)
+	}
+	return p, homes, nil
+}
+
 type homeRef struct{ provider, home string }
+
+// quotaRefs reads the --quota-from values, one per harness: codex:DIR,
+// grok:DIR, or both.
+func quotaRefs(sub, p string, qs []string) ([]homeRef, error) {
+	var refs []homeRef
+	for _, q := range qs {
+		if sub != "add" || p != "hermes" {
+			return nil, usageError("--quota-from is for home add hermes")
+		}
+		qp, qdir, ok := strings.Cut(q, ":")
+		if !ok || !collect.BillsThrough(qp) || strings.TrimSpace(qdir) == "" {
+			return nil, usageError("--quota-from takes codex:DIR or grok:DIR")
+		}
+		for _, r := range refs {
+			if r.provider == qp {
+				return nil, usageError("--quota-from names " + qp + " twice")
+			}
+		}
+		abs, err := homePath(qdir, true)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, homeRef{provider: qp, home: abs})
+	}
+	return refs, nil
+}
+
+func forgetSessions(ctx context.Context, d state.Dir, p string, homes, kept []string, stdout, stderr io.Writer) error {
+	n, err := collect.Forget(ctx, d, p, homes, kept, clock(), func() (func(), error) {
+		return waitLock(ctx, d, stderr)
+	})
+	if err != nil {
+		return fmt.Errorf("the homes were removed, but their sessions were not forgotten, which the same command can try again: %w", err)
+	}
+	word := "sessions"
+	if n == 1 {
+		word = "session"
+	}
+	fmt.Fprintf(stdout, "forgot %d %s counted from these homes; the team sees the change after the next collection\n\n", n, word)
+	return nil
+}
 
 // homePath makes h absolute. A home being added must be a directory.
 func homePath(h string, mustExist bool) (string, error) {
@@ -266,6 +289,12 @@ func quotaUsers(cfg *state.Config, p, h string) []string {
 // listHomes prints every home a run would read, and what each bills through.
 func listHomes(cfg state.Config, userHome string, stdout io.Writer) error {
 	found := collect.Discover(userHome, os.Getenv, cfg.Homes)
+	rows := append(homeRows(cfg, found, userHome), missingRows(cfg, found, userHome)...)
+	_, err := fmt.Fprint(stdout, tabulate(rows))
+	return err
+}
+
+func homeRows(cfg state.Config, found map[string][]string, userHome string) [][]string {
 	var rows [][]string
 	for _, p := range snapshot.Providers {
 		if len(found[p]) == 0 {
@@ -287,8 +316,13 @@ func listHomes(cfg state.Config, userHome string, stdout io.Writer) error {
 			rows = append(rows, []string{name, fsutil.Tilde(h, userHome), strings.Join(notes, " · ")})
 		}
 	}
-	// A home added or named that is gone is not read; say so rather than
-	// drop it.
+	return rows
+}
+
+// missingRows lists each home added or named that is gone: it is not read,
+// and the list says so rather than drop it.
+func missingRows(cfg state.Config, found map[string][]string, userHome string) [][]string {
+	var rows [][]string
 	for _, p := range snapshot.Providers {
 		var missing [][]string
 		gone := map[string]bool{}
@@ -314,8 +348,7 @@ func listHomes(cfg state.Config, userHome string, stdout io.Writer) error {
 		slices.SortFunc(missing, slices.Compare)
 		rows = append(rows, missing...)
 	}
-	_, err := fmt.Fprint(stdout, tabulate(rows))
-	return err
+	return rows
 }
 
 // tabulate lines rows up in columns two spaces apart, one row a line. The
