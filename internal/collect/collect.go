@@ -66,10 +66,6 @@ type Options struct {
 	// when the wait starts.
 	Wait    time.Duration
 	Waiting func()
-
-	// quotaFrom is Config.QuotaFrom keyed by resolved home, set by Run.
-	quotaFrom map[string]map[string]string
-	paths     paths
 }
 
 // Result is what a run leaves behind for the views.
@@ -170,8 +166,6 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 		return nil, err
 	}
 	now := o.Now().UTC().Truncate(time.Second)
-	since := now.Add(-state.Retention)
-	prevRun := st.LastRunAt
 
 	homes := Discover(o.UserHome, o.Getenv, cfg.Homes)
 	// Only the folders this run found beyond the remembered ones are
@@ -210,18 +204,25 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	if o.Ask == nil {
 		o.Ask = askHarness(o.Probe, cfg.HomeEnv)
 	}
-	o.paths = paths{}
-	o.quotaFrom = quotaLinks(cfg.QuotaFrom, o.paths)
+	s := &sampler{
+		Options: o,
+		st:      st,
+		now:     now,
+		since:   now.Add(-state.Retention),
+		prevRun: st.LastRunAt,
+		growth:  map[string]snapshot.Tokens{},
+		paths:   paths{},
+	}
+	s.quotaFrom = quotaLinks(cfg.QuotaFrom, s.paths)
 
 	sample := state.Sample{At: now}
-	growth := map[string]snapshot.Tokens{}
 	var problems []string
 	if st.Damage != "" {
 		problems = append(problems, st.Damage)
 	}
 	failed := false
 	for _, p := range snapshot.Providers {
-		src := collectSource(ctx, o, st, p, homes[p], now, since, prevRun, growth)
+		src := s.source(ctx, p, homes[p])
 		st.Sources[p] = src
 		if src.Error != "" {
 			problems = append(problems, p+": "+src.Error)
@@ -233,7 +234,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	prune(st, now)
 
 	for k, acct := range st.Accounts {
-		g := growth[k]
+		g := s.growth[k]
 		quotaNow := acct.Quota != nil && !acct.Quota.At.Before(now.Add(-24*time.Hour))
 		if g.Zero() && !quotaNow {
 			continue
@@ -283,13 +284,13 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 
 	cache, _ := LoadTeamCache(o.Dir)
 	res.Team = cache
-	if o.Relay != nil {
+	if s.Relay != nil {
 		// Publish with the key this run sealed and signed the snapshot for.
-		client := *o.Relay
+		client := *s.Relay
 		client.Key = key
-		o.Relay = &client
+		s.Relay = &client
 		last := st.Relay
-		syncTeam(ctx, o, st, cfg.Device, &res.Doc, &res.Team, now)
+		syncTeam(ctx, s.Options, st, cfg.Device, &res.Doc, &res.Team, now)
 		if ctx.Err() != nil && st.Relay.LastErrorAt.Equal(now) && !st.Relay.LastPullAt.Equal(now) {
 			// A stop that cuts the exchange short before its read is no
 			// failure of the relay's. A snapshot it did not push stays
@@ -367,20 +368,32 @@ type readSession struct {
 	label string
 }
 
-// collectSource collects one provider. A bug that panics while reading or
-// probing it becomes that source's error, and the other sources still run.
-func collectSource(ctx context.Context, o Options, st *state.State, p string, homes []string, now, since, prevRun time.Time, growth map[string]snapshot.Tokens) (src state.Source) {
+// sampler is one run's reading of the sources: the run's options, the state
+// it updates, its times, and the growth by account it has found so far.
+type sampler struct {
+	Options
+	st                  *state.State
+	now, since, prevRun time.Time
+	growth              map[string]snapshot.Tokens
+	paths               paths
+	// quotaFrom is Config.QuotaFrom keyed by resolved home.
+	quotaFrom map[string]map[string]string
+}
+
+// source collects one provider. A bug that panics while reading or probing
+// it becomes that source's error, and the other sources still run.
+func (s *sampler) source(ctx context.Context, p string, homes []string) (src state.Source) {
 	defer func() {
 		if v := recover(); v != nil {
 			src = state.Source{Status: "error", Homes: homes, Error: snapshot.Truncate(fmt.Sprintf("stopped by a bug: %v", v), 300)}
 		}
 	}()
-	return collectProvider(ctx, o, st, p, homes, now, since, prevRun, growth)
+	return s.provider(ctx, p, homes)
 }
 
-func collectProvider(ctx context.Context, o Options, st *state.State, p string, homes []string, now, since, prevRun time.Time, growth map[string]snapshot.Tokens) state.Source {
-	if len(homes) == 0 && !o.Probe.Find(p) {
-		keepCurrent(st, p, nil)
+func (s *sampler) provider(ctx context.Context, p string, homes []string) state.Source {
+	if len(homes) == 0 && !s.Probe.Find(p) {
+		keepCurrent(s.st, p, nil)
 		return state.Source{Status: "skipped"}
 	}
 	src := state.Source{Homes: homes}
@@ -390,7 +403,7 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 	// sub-agent or fork in one home of a session in another, counts once.
 	var res logs.Result
 	if len(homes) > 0 {
-		res = o.ReadLogs(p, homes, since)
+		res = s.ReadLogs(p, homes, s.since)
 	}
 	// The Claude app's session homes have no login to ask about: the app
 	// recorded the account each session ran under.
@@ -404,11 +417,11 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 	// show.
 	used := map[string]bool{}
 	lastUse := map[string]time.Time{}
-	for _, s := range res.Sessions {
-		for _, h := range append([]string{s.Home}, s.Homes...) {
+	for _, rs := range res.Sessions {
+		for _, h := range append([]string{rs.Home}, rs.Homes...) {
 			used[h] = true
-			if s.Updated.After(lastUse[h]) {
-				lastUse[h] = s.Updated
+			if rs.Updated.After(lastUse[h]) {
+				lastUse[h] = rs.Updated
 			}
 		}
 	}
@@ -424,7 +437,7 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 			if _, ok := apps[home]; ok {
 				return probe.Reading{}, nil
 			}
-			return o.Ask(ctx, p, home, lastUse[home])
+			return s.Ask(ctx, p, home, lastUse[home])
 		}, p, homes)
 	}
 	// partial means some home's read was incomplete, so a lower count than
@@ -447,7 +460,7 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 			partial = true
 		}
 		if app, ok := apps[home]; ok {
-			labels[home] = touchAccount(st, p, app.account()).Label
+			labels[home] = touchAccount(s.st, p, app.account()).Label
 		} else if p != "hermes" {
 			a := answers[i]
 			// An app's per-account home with nobody logged in is an account
@@ -458,21 +471,21 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 			if a.err != nil && !(errors.Is(a.err, probe.ErrNotLoggedIn) && (isManaged(p, home) || !used[home])) {
 				probeErrs = append(probeErrs, [2]string{home, shortErr(a.err)})
 			}
-			labels[home] = applyReading(st, p, home, a.reading, errors.Is(a.err, probe.ErrNotLoggedIn), hr.Limits, now, prevRun)
+			labels[home] = applyReading(s.st, p, home, a.reading, errors.Is(a.err, probe.ErrNotLoggedIn), hr.Limits, s.now, s.prevRun)
 		}
 	}
-	errs = append(errs, homeErrors(probeErrs, len(homes), o.UserHome)...)
+	errs = append(errs, homeErrors(probeErrs, len(homes), s.UserHome)...)
 	if p != "hermes" {
-		claimUnknown(st, p, homes, answers, res, labels)
+		claimUnknown(s.st, p, homes, answers, res, labels)
 	}
 	var read []readSession
-	for _, s := range res.Sessions {
-		label, ok := labels[s.Home]
-		if l := servedBy(st, p, s, labels); l != "" {
+	for _, rs := range res.Sessions {
+		label, ok := labels[rs.Home]
+		if l := servedBy(s.st, p, rs, labels); l != "" {
 			label, ok = l, true
 		}
 		if p == "hermes" {
-			label = s.Account
+			label = rs.Account
 		} else if !ok {
 			// A session from a home that was not probed has no account.
 			label = UnknownAccount
@@ -480,28 +493,28 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 		if label == "" {
 			label = UnknownAccount
 		}
-		if app, ok := apps[s.Home]; ok {
-			s.Project = app.project()
+		if app, ok := apps[rs.Home]; ok {
+			rs.Project = app.project()
 		}
-		read = append(read, readSession{s: s, label: label})
+		read = append(read, readSession{s: rs, label: label})
 	}
 	for _, r := range read {
 		if p == "hermes" {
-			touchAccount(st, p, r.label)
+			touchAccount(s.st, p, r.label)
 		}
-		grown := attribute(st, p, r.s, r.label, partial, now, growth)
+		grown := attribute(s.st, p, r.s, r.label, partial, s.now, s.growth)
 		if p == "hermes" {
 			for l := range grown {
-				touchAccount(st, p, l)
+				touchAccount(s.st, p, l)
 			}
-			linkGrowth(st, o, r.s, grown)
+			s.linkGrowth(r.s, grown)
 		}
 	}
-	applyRejected(st, p, read, now, prevRun)
+	applyRejected(s.st, p, read, s.now, s.prevRun)
 	probed := homes
 	if p == "hermes" {
-		markHermesCurrent(st, read)
-		linkHermes(st, o, read, partial)
+		markHermesCurrent(s.st, read)
+		s.linkHermes(read, partial)
 		probed = nil
 		if len(homes) > 0 {
 			probed = []string{""}
@@ -511,7 +524,7 @@ func collectProvider(ctx context.Context, o Options, st *state.State, p string, 
 	// nobody is logged in to it: logging in makes the directory. It is not
 	// asked, since asking would start it and it would make the directory
 	// itself, in the home of someone who may only have the app that bundles it.
-	keepCurrent(st, p, probed)
+	keepCurrent(s.st, p, probed)
 	switch {
 	case len(errs) == 0:
 		src.Status = "ok"
@@ -1158,21 +1171,21 @@ func QuotaHomesOf(named map[string]map[string]string, hermesHome string) map[str
 // linkedAccount is the account a Hermes billing provider in the Hermes home
 // is assumed to bill through: the one logged in now to the home the person
 // named for it, or to the linked harness's default home.
-func linkedAccount(st *state.State, o Options, hermesHome, billing string) *state.Link {
+func (s *sampler) linkedAccount(hermesHome, billing string) *state.Link {
 	p, ok := hermesLinks[billing]
 	if !ok {
 		return nil
 	}
-	at := cmp.Or(quotaHome(o.quotaFrom, o.paths, hermesHome, p), probe.DefaultHome(o.UserHome, p))
+	at := cmp.Or(quotaHome(s.quotaFrom, s.paths, hermesHome, p), probe.DefaultHome(s.UserHome, p))
 	if at == "" {
 		return nil
 	}
-	label := st.Current[state.Key(p, at)]
+	label := s.st.Current[state.Key(p, at)]
 	if label == "" {
 		// The home may be found under another path than it was named by.
-		want := o.paths.resolve(at)
-		for k, l := range st.Current {
-			if parts := state.SplitKey(k); len(parts) == 2 && parts[0] == p && o.paths.resolve(parts[1]) == want {
+		want := s.paths.resolve(at)
+		for k, l := range s.st.Current {
+			if parts := state.SplitKey(k); len(parts) == 2 && parts[0] == p && s.paths.resolve(parts[1]) == want {
 				label = l
 				break
 			}
@@ -1191,7 +1204,7 @@ func linkedAccount(st *state.State, o Options, hermesHome, billing string) *stat
 // account shows the quota of the login it uses most, which holds from run to
 // run. An account with no session read this run keeps its link, and so does
 // one whose homes were not all read: the rest would not be the majority.
-func linkHermes(st *state.State, o Options, read []readSession, partial bool) {
+func (s *sampler) linkHermes(read []readSession, partial bool) {
 	type use struct {
 		tokens int64
 		last   time.Time
@@ -1201,7 +1214,7 @@ func linkHermes(st *state.State, o Options, read []readSession, partial bool) {
 	for _, r := range read {
 		for billing, t := range hermesParts(r.s) {
 			seen[billing] = true
-			link := linkedAccount(st, o, r.s.Home, billing)
+			link := s.linkedAccount(r.s.Home, billing)
 			if link == nil {
 				continue
 			}
@@ -1219,7 +1232,7 @@ func linkHermes(st *state.State, o Options, read []readSession, partial bool) {
 			}
 		}
 	}
-	for _, acct := range st.Accounts {
+	for _, acct := range s.st.Accounts {
 		if acct.Provider != "hermes" {
 			continue
 		}
@@ -1265,13 +1278,13 @@ func hermesParts(s logs.Session) map[string]snapshot.Tokens {
 // linkGrowth records a Hermes session's growth on each subscription against
 // the account it is assumed to have used, so that account can show what
 // Hermes spent on it.
-func linkGrowth(st *state.State, o Options, s logs.Session, grown map[string]snapshot.Tokens) {
+func (s *sampler) linkGrowth(rs logs.Session, grown map[string]snapshot.Tokens) {
 	for billing, g := range grown {
-		link := linkedAccount(st, o, s.Home, billing)
+		link := s.linkedAccount(rs.Home, billing)
 		if link == nil {
 			continue
 		}
-		e := st.Sessions[state.Key("hermes", s.ID)]
+		e := s.st.Sessions[state.Key("hermes", rs.ID)]
 		if e.Via == nil {
 			e.Via = map[string]snapshot.Tokens{}
 		}
