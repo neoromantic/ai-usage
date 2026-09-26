@@ -108,22 +108,6 @@ func accountView(st *state.State, provider string, homes []string, a collect.Acc
 	return acct
 }
 
-// teamName is an account's short name in the team, or its default name
-// when the team view does not hold it.
-func teamName(t Team, provider, label string) string {
-	for _, p := range t.Providers {
-		if p.Provider != provider {
-			continue
-		}
-		for _, a := range p.Accounts {
-			if a.Label == label {
-				return a.Name
-			}
-		}
-	}
-	return ShortName(label)
-}
-
 // currentHome is the first of the provider's homes whose login is label.
 func currentHome(st *state.State, provider string, homes []string, label string) string {
 	for _, h := range homes {
@@ -223,6 +207,13 @@ func timePtr(t time.Time) *time.Time {
 	}
 	u := t.UTC()
 	return &u
+}
+
+func sameTime(a, b *time.Time) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Equal(*b)
 }
 
 func strPtr(s string) *string {
