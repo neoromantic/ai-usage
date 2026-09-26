@@ -170,22 +170,7 @@ func (p *page) legend() string {
 	if len(items) == 0 {
 		return ""
 	}
-	wrap := func(limit int) []string {
-		var lines []string
-		cur := ""
-		for _, it := range items {
-			switch {
-			case cur == "":
-				cur = it
-			case width(cur)+2+width(it) <= limit:
-				cur += "  " + it
-			default:
-				lines = append(lines, cur)
-				cur = it
-			}
-		}
-		return append(lines, cur)
-	}
+	wrap := func(limit int) []string { return wrapItems(items, "  ", limit, limit) }
 	widest := 0
 	for _, it := range items {
 		widest = max(widest, width(it))

@@ -13,6 +13,7 @@ type marks struct {
 	here, fail, silent, old          string // ● × ~ ↓
 	none, sep, dash, ell, rule       string // · " · " — … ─
 	open, shut, times                string // ‹ › ×
+	ok, warn, partial, staged        string // ✓ ! ◐ ↑, on the card
 }
 
 var utf8Marks = marks{
@@ -20,6 +21,7 @@ var utf8Marks = marks{
 	here: "●", fail: "×", silent: "~", old: "↓",
 	none: "·", sep: " · ", dash: "—", ell: "…", rule: "─",
 	open: "‹", shut: "›", times: "×",
+	ok: "✓", warn: "!", partial: "◐", staged: "↑",
 }
 
 var asciiMarks = marks{
@@ -27,6 +29,7 @@ var asciiMarks = marks{
 	here: "*", fail: "x", silent: "~", old: "v",
 	none: ".", sep: " . ", dash: "-", ell: "...", rule: "-",
 	open: "[", shut: "]", times: "x",
+	ok: "+", warn: "!", partial: "/", staged: "^",
 }
 
 // chunk is a run of text in one style. A chunk with no style is written as
@@ -148,6 +151,16 @@ func (p *page) bold(s string) chunk   { return p.paint(s, nil, true, false) }
 func (p *page) muted(s string) chunk  { return p.paint(s, p.th.Muted, false, false) }
 func (p *page) faint(s string) chunk  { return p.paint(s, p.th.Faint, false, false) }
 func (p *page) accent(s string) chunk { return p.paint(s, p.th.Accent, false, false) }
+
+// ink is s as the card draws it: in fg, one of the 16 base colors, which
+// follow the terminal's light or dark theme, and bold where bold is set.
+// Without color the card is plain text, with no bold either.
+func (p *page) ink(s string, fg color.Color, bold bool) chunk {
+	if !p.o.Color {
+		return p.plain(s)
+	}
+	return p.paint(s, fg, bold, false)
+}
 
 // inState is text in the color of a forecast state.
 func (p *page) inState(s, state string) chunk { return p.paint(s, p.th.State(state), false, false) }

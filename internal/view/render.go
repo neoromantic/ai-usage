@@ -2,11 +2,13 @@ package view
 
 import (
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/fsutil"
+	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
 // Period is the span of tokens the matrix, USAGE, and PROJECTS show.
@@ -210,6 +212,9 @@ func Text(r Report, o Options) string {
 }
 
 const (
+	// minWidth and maxWidth are the widths the page is laid out for.
+	minWidth = 80
+	maxWidth = 160
 	// attentionLines is how many ATTENTION lines the static page shows.
 	attentionLines = 6
 	// topProjects is how many projects PROJECTS shows without AllProjects.
@@ -247,6 +252,32 @@ func newPage(r *Report, o Options) *page {
 	}
 	return p
 }
+
+// homeOf is the user's home folder, taken from a default harness home, so
+// paths print with ~ without the renderer asking the OS.
+func homeOf(r *Report) string {
+	for _, p := range r.Providers {
+		for _, h := range p.Homes {
+			// A home the Claude app keeps for a session ends in .claude too.
+			if claudeAppHome.MatchString(h) {
+				continue
+			}
+			for _, name := range snapshot.Providers {
+				d := "." + name
+				for _, sep := range []string{"/", `\`} {
+					if strings.HasSuffix(h, sep+d) {
+						return strings.TrimSuffix(h, sep+d)
+					}
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// claudeAppHome is a home the Claude app keeps for one of its sessions. No
+// one logs in to it: the app records the account each session ran under.
+var claudeAppHome = regexp.MustCompile(`[/\\]local-agent-mode-sessions[/\\].+[/\\]local_(?:[^/\\]*_)?([^/\\_]+)[/\\]\.claude$`)
 
 // txt is text from the data. In ASCII mode, a rune past ASCII is "?".
 func (p *page) txt(s string) string {

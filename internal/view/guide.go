@@ -1,7 +1,9 @@
 package view
 
 import (
-	"strings"
+	"image/color"
+
+	"charm.land/lipgloss/v2"
 
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 )
@@ -13,28 +15,28 @@ const guideCmd = 26
 // person sees: how it collects from now on, what the team sees, and the
 // commands worth knowing. scheduler names the system scheduler, such as cron.
 func Guide(r Report, scheduler string, o Options) string {
-	u := newUI(&r, o)
-	g := u.g
-	c := r.Collector
-	u.emit(line{{"HOW IT WORKS", bold}, {"  shown once" + g.sep + "every command: ai-usage help", gray}})
-	if c.Schedule.Foreground {
+	c := newCard(&r, o)
+	g := c.g
+	col := r.Collector
+	c.emit(chunks{c.ink("HOW IT WORKS", nil, true), c.ink("  shown once"+g.sep+"every command: ai-usage help", lipgloss.BrightBlack, false)})
+	if col.Schedule.Foreground {
 		scheduler = "`ai-usage schedule run`"
 	}
-	if c.Schedule.Registered {
-		u.para(line{{g.ok + " ", green}}, "collects by itself every 15 minutes, started by "+scheduler, plain)
+	if col.Schedule.Registered {
+		c.para(chunks{c.ink(g.ok+" ", lipgloss.Green, false)}, "collects by itself every 15 minutes, started by "+scheduler, nil)
 	} else {
-		u.para(line{{g.fail + " ", red}}, scheduleFix(c, g.sep), red)
+		c.para(chunks{c.ink(g.fail+" ", lipgloss.Red, false)}, scheduleFix(col, g.sep), lipgloss.Red)
 	}
 	team := []string{"no relay, so no team sees this device yet: ai-usage relay set URL"}
-	if c.Relay.URL != nil {
+	if col.Relay.URL != nil {
 		// Sealing hides these from the relay, not from the team.
 		team = []string{
-			"the team sees this device as " + c.DeviceLabel + ", with accounts, emails, and projects",
+			"the team sees this device as " + col.DeviceLabel + ", with accounts, emails, and projects",
 			"the relay sees tools, plans, and counts; the team key seals names and paths",
 		}
 	}
 	for _, s := range team {
-		u.para(line{{"  ", plain}}, s, plain)
+		c.para(chunks{c.plain("  ")}, s, nil)
 	}
 	cmds := [][2]string{
 		{"ai-usage", "collect now and show this report"},
@@ -45,14 +47,14 @@ func Guide(r Report, scheduler string, o Options) string {
 	// Only a system scheduler's entry is paused this way. `schedule run`
 	// keeps collecting until it is stopped, and where nothing is registered
 	// nothing collects by itself.
-	if c.Schedule.Registered && !c.Schedule.Foreground {
+	if col.Schedule.Registered && !col.Schedule.Foreground {
 		cmds = append(cmds, [2]string{"ai-usage schedule remove", "pause collecting; ai-usage schedule install resumes"})
 	}
 	for _, cmd := range cmds {
-		u.para(line{{"  " + padRight(cmd[0], guideCmd), plain}}, cmd[1], gray)
+		c.para(chunks{c.plain("  " + padRight(cmd[0], guideCmd))}, cmd[1], lipgloss.BrightBlack)
 	}
-	u.emit(line{{"  uninstall: https://github.com/" + selfupdate.Repo + "#uninstall", gray}})
-	return u.String()
+	c.emit(chunks{c.ink("  uninstall: https://github.com/"+selfupdate.Repo+"#uninstall", lipgloss.BrightBlack, false)})
+	return c.String()
 }
 
 // scheduleFix says why nothing is registered, in the same words as status:
@@ -69,12 +71,6 @@ func scheduleFix(c Collector, sep string) string {
 }
 
 // para prints text after lead, wrapping it at spaces under itself.
-func (u *ui) para(lead line, text string, st style) {
-	pad := line{{strings.Repeat(" ", lead.width()), plain}}
-	for i, part := range wrapWords(text, u.w-lead.width()) {
-		if i > 0 {
-			lead = pad
-		}
-		u.emit(append(lead, seg{part, st}))
-	}
+func (c *card) para(lead chunks, text string, ink color.Color) {
+	c.hang(lead, wrapWords(text, c.w-lead.width()), ink)
 }

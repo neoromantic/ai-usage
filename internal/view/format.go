@@ -10,71 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// style is an SGR parameter string. Only the 16 base colors are used, so the
-// palette follows the terminal's light or dark theme.
-type style string
-
-const (
-	plain  style = ""
-	bold   style = "1"
-	red    style = "31"
-	yellow style = "33"
-	green  style = "32"
-	cyan   style = "36"
-	gray   style = "90"
-)
-
-type seg struct {
-	text string
-	st   style
-}
-
-type line []seg
-
-func (l line) width() int {
-	n := 0
-	for _, s := range l {
-		n += width(s.text)
-	}
-	return n
-}
-
-// cut keeps the start of l within w columns.
-func (l line) cut(w int, ell string) line {
-	if l.width() <= w {
-		return l
-	}
-	var out line
-	left := w - width(ell)
-	for _, s := range l {
-		if width(s.text) <= left {
-			out = append(out, s)
-			left -= width(s.text)
-			continue
-		}
-		return append(out, seg{prefix(s.text, max(left, 0)) + ell, s.st})
-	}
-	return out
-}
-
-type glyphs struct {
-	ell, sep                string
-	ok, partial, fail, skip string
-	warn, staged            string
-}
-
-var utf8Glyphs = glyphs{
-	ell: "…", sep: " · ",
-	ok: "✓", partial: "◐", fail: "✕", skip: "·",
-	warn: "!", staged: "↑",
-}
-
-var asciiGlyphs = glyphs{
-	ell: "...", sep: " - ",
-	ok: "+", partial: "/", fail: "x", skip: ".",
-	warn: "!", staged: "^",
-}
-
 // width is the display width, as a terminal draws s. Everything the console
 // draws itself is one column wide; labels and paths may carry wide East Asian
 // runes and emoji, which take two.
@@ -218,6 +153,26 @@ func nameList(names []string, w int, ell string) string {
 	}
 	tail := more(len(names) - 1)
 	return truncEnd(names[0], w-width(tail), ell) + tail
+}
+
+// wrapItems joins items with sep into lines, the first line first columns
+// wide and the rest rest wide. An item that does not fit starts the next
+// line, and every line holds at least one item.
+func wrapItems(items []string, sep string, first, rest int) []string {
+	var out []string
+	cur, limit := "", first
+	for _, it := range items {
+		switch {
+		case cur == "":
+			cur = it
+		case width(cur)+width(sep)+width(it) <= limit:
+			cur += sep + it
+		default:
+			out = append(out, cur)
+			cur, limit = it, rest
+		}
+	}
+	return append(out, cur)
 }
 
 // span prints a duration in at most five columns: 3d22h, 12d, 14h, 5h53m, 53m.

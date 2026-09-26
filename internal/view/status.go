@@ -1,9 +1,13 @@
 package view
 
 import (
+	"image/color"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"charm.land/lipgloss/v2"
 
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 )
@@ -14,76 +18,84 @@ const statusKey = 14
 // collector's directory. Nothing is cut: long values wrap under their
 // column, since this is where full errors live.
 func StatusText(r Report, dir string, o Options) string {
-	u := newUI(&r, o)
-	u.status(dir)
-	return u.String()
+	c := newCard(&r, o)
+	c.status(dir)
+	return c.String()
 }
 
-func (u *ui) status(dir string) {
-	g := u.g
-	c := u.r.Collector
-	u.emit(u.spread(line{{"ai-usage status", bold}}, line{{u.clock(u.now, "Mon 2 Jan 15:04"), gray}}))
+func (c *card) status(dir string) {
+	g := c.g
+	col := c.r.Collector
+	// The clock ends at the card's right edge.
+	title, clock := c.ink("ai-usage status", nil, true), c.ink(c.clockAt(c.now, "Mon 2 Jan 15:04"), lipgloss.BrightBlack, false)
+	c.emit(chunks{title, c.space(c.w - width(title.text) - width(clock.text)), clock})
 
-	var items []line
-	for _, s := range problems(c) {
-		items = append(items, line{{s, plain}})
-	}
-	for _, p := range u.r.Providers {
+	items := problems(col)
+	for _, p := range c.r.Providers {
 		if p.Status == "error" || p.Status == "partial" {
-			items = append(items, line{{p.Provider + " " + p.Status, plain}})
+			items = append(items, p.Provider+" "+p.Status)
 		}
 	}
 	if len(items) == 0 {
-		u.emit(line{{g.ok + " ", green}, {"healthy", plain}})
+		c.emit(chunks{c.ink(g.ok+" ", lipgloss.Green, false), c.plain("healthy")})
 	} else {
 		word := "problems"
 		if len(items) == 1 {
 			word = "problem"
 		}
-		u.flow(line{{g.fail + " ", red}, {strconv.Itoa(len(items)) + " " + word + ": ", plain}}, items, ", ", 2)
+		// The problems wrap at the card's width, and the lines after the
+		// first are indented.
+		lead := chunks{c.ink(g.fail+" ", lipgloss.Red, false), c.plain(strconv.Itoa(len(items)) + " " + word + ": ")}
+		for i, l := range wrapItems(items, ", ", c.w-lead.width(), c.w-2) {
+			if i > 0 {
+				lead = chunks{c.space(2)}
+			}
+			c.emit(append(lead, c.plain(l)).cut(c.w, g.ell))
+		}
 	}
-	u.blank()
+	c.blank()
 
-	ok, fail, warn, info := seg{g.ok, green}, seg{g.fail, red}, seg{g.warn, yellow}, seg{" ", plain}
-	u.kv("version", info, c.Version, plain)
-	u.kv("device", info, c.DeviceLabel+" ("+c.OSUser+")"+g.sep+c.Device, plain)
-	team := c.Team
-	if n := len(u.r.Team.Devices); n > 0 && u.r.Team.PulledAt != nil {
+	ok, fail, warn, info := c.ink(g.ok, lipgloss.Green, false), c.ink(g.fail, lipgloss.Red, false), c.ink(g.warn, lipgloss.Yellow, false), c.plain(" ")
+	c.kv("version", info, col.Version, nil)
+	c.kv("device", info, col.DeviceLabel+" ("+col.OSUser+")"+g.sep+col.Device, nil)
+	team := col.Team
+	if n := len(c.r.Team.Devices); n > 0 && c.r.Team.PulledAt != nil {
 		team += g.sep + strconv.Itoa(n) + " devices"
 	}
-	u.kv("team", info, team, plain)
+	c.kv("team", info, team, nil)
 	if dir != "" {
-		u.kvPath("directory", info, u.path(dir))
+		// A long path wraps after a slash, so it can still be copied whole.
+		c.hang(c.kvLead("directory", info), wrapAfter(c.path(dir), "/", c.w-statusKey-2), nil)
 	}
-	u.blank()
+	c.blank()
 
 	switch {
-	case c.LastRunAt == nil:
-		u.kv("last run", fail, "never", red)
-	case failed(c):
-		u.kv("last run", fail, u.stamp(c.LastRunAt)+", failed", red)
+	case col.LastRunAt == nil:
+		c.kv("last run", fail, "never", lipgloss.Red)
+	case failed(col):
+		c.kv("last run", fail, c.stamp(col.LastRunAt)+", failed", lipgloss.Red)
 	default:
-		u.kv("last run", ok, u.stamp(c.LastRunAt), plain)
+		c.kv("last run", ok, c.stamp(col.LastRunAt), nil)
 	}
-	if c.LastSuccessAt == nil {
-		u.kv("last success", fail, "never", red)
+	if col.LastSuccessAt == nil {
+		c.kv("last success", fail, "never", lipgloss.Red)
 	} else {
-		u.kv("last success", ok, u.stamp(c.LastSuccessAt), plain)
+		c.kv("last success", ok, c.stamp(col.LastSuccessAt), nil)
 	}
 	switch {
-	case c.LastError == nil:
-		u.kv("last error", info, "none", gray)
-	case failed(c):
-		u.kv("last error", fail, u.stamp(c.LastErrorAt)+": "+*c.LastError, red)
+	case col.LastError == nil:
+		c.kv("last error", info, "none", lipgloss.BrightBlack)
+	case failed(col):
+		c.kv("last error", fail, c.stamp(col.LastErrorAt)+": "+*col.LastError, lipgloss.Red)
 	default:
-		u.kv("last error", info, u.stamp(c.LastErrorAt)+": "+*c.LastError, gray)
+		c.kv("last error", info, c.stamp(col.LastErrorAt)+": "+*col.LastError, lipgloss.BrightBlack)
 	}
 
-	rl := c.Relay
+	rl := col.Relay
 	switch {
 	case rl.URL == nil:
-		u.kv("relay", seg{g.skip, gray}, "not configured; the team view shows this device only", plain)
-		u.kv("", info, "set one: ai-usage relay set URL", gray)
+		c.kv("relay", c.ink(g.none, lipgloss.BrightBlack, false), "not configured; the team view shows this device only", nil)
+		c.kv("", info, "set one: ai-usage relay set URL", lipgloss.BrightBlack)
 	default:
 		gl := ok
 		if rl.LastError != nil {
@@ -91,55 +103,55 @@ func (u *ui) status(dir string) {
 		} else if rl.Pending {
 			gl = warn
 		}
-		u.kv("relay", gl, *rl.URL, plain)
-		u.kv("", info, "pushed "+u.stamp(rl.LastPushAt)+g.sep+"pulled "+u.stamp(rl.LastPullAt), gray)
+		c.kv("relay", gl, *rl.URL, nil)
+		c.kv("", info, "pushed "+c.stamp(rl.LastPushAt)+g.sep+"pulled "+c.stamp(rl.LastPullAt), lipgloss.BrightBlack)
 		if rl.Pending {
-			u.kv("", info, "the newest snapshot is not sent yet", yellow)
+			c.kv("", info, "the newest snapshot is not sent yet", lipgloss.Yellow)
 		}
 		if rl.LastError != nil {
-			u.kv("", info, *rl.LastError, red)
+			c.kv("", info, *rl.LastError, lipgloss.Red)
 		}
 	}
-	dev := selfupdate.Dev(c.Version)
+	dev := selfupdate.Dev(col.Version)
 	switch {
-	case c.Schedule.Foreground:
-		u.kv("schedule", ok, "every 15 minutes by `ai-usage schedule run`", plain)
-	case c.Schedule.Registered:
-		u.kv("schedule", ok, "registered with the system scheduler, every 15 minutes", plain)
-	case c.Schedule.Error != nil:
-		u.kv("schedule", fail, "not registered: "+*c.Schedule.Error, red)
+	case col.Schedule.Foreground:
+		c.kv("schedule", ok, "every 15 minutes by `ai-usage schedule run`", nil)
+	case col.Schedule.Registered:
+		c.kv("schedule", ok, "registered with the system scheduler, every 15 minutes", nil)
+	case col.Schedule.Error != nil:
+		c.kv("schedule", fail, "not registered: "+*col.Schedule.Error, lipgloss.Red)
 	case dev:
-		u.kv("schedule", fail, "not registered; dev builds do not register themselves", red)
+		c.kv("schedule", fail, "not registered; dev builds do not register themselves", lipgloss.Red)
 	default:
-		u.kv("schedule", fail, "not registered", red)
+		c.kv("schedule", fail, "not registered", lipgloss.Red)
 	}
 	// An error that already says what to run needs no second line.
-	if !c.Schedule.Registered && (c.Schedule.Error == nil || !strings.Contains(*c.Schedule.Error, "ai-usage schedule install") && !strings.Contains(*c.Schedule.Error, "ai-usage schedule run")) {
-		u.kv("", info, "register: ai-usage schedule install", gray)
+	if !col.Schedule.Registered && (col.Schedule.Error == nil || !strings.Contains(*col.Schedule.Error, "ai-usage schedule install") && !strings.Contains(*col.Schedule.Error, "ai-usage schedule run")) {
+		c.kv("", info, "register: ai-usage schedule install", lipgloss.BrightBlack)
 	}
-	up := c.Update
+	up := col.Update
 	switch {
 	case dev:
-		u.kv("update", info, "dev build: no self-update", gray)
+		c.kv("update", info, "dev build: no self-update", lipgloss.BrightBlack)
 	case up.Staged != nil:
-		u.kv("update", seg{g.staged, cyan}, *up.Staged+" is installed and runs next time", plain)
+		c.kv("update", c.ink(g.staged, lipgloss.Cyan, false), *up.Staged+" is installed and runs next time", nil)
 	case up.Error != nil:
-		u.kv("update", warn, *up.Error, yellow)
-	case up.Latest != nil && (*up.Latest == c.Version || selfupdate.Newer(c.Version, *up.Latest)):
+		c.kv("update", warn, *up.Error, lipgloss.Yellow)
+	case up.Latest != nil && (*up.Latest == col.Version || selfupdate.Newer(col.Version, *up.Latest)):
 		// A release installed by hand can be newer than the last check saw.
-		u.kv("update", ok, c.Version+" is the newest release", plain)
+		c.kv("update", ok, col.Version+" is the newest release", nil)
 	default:
 		latest := "unknown"
 		if up.Latest != nil {
 			latest = *up.Latest
 		}
-		u.kv("update", info, "newest release "+latest, plain)
+		c.kv("update", info, "newest release "+latest, nil)
 	}
 	if !dev {
-		u.kv("", info, "checked "+u.stamp(up.CheckedAt), gray)
+		c.kv("", info, "checked "+c.stamp(up.CheckedAt), lipgloss.BrightBlack)
 	}
-	u.blank()
-	u.sources()
+	c.blank()
+	c.sources()
 }
 
 // problems names what is wrong with the collection, the relay, the schedule
@@ -171,21 +183,22 @@ func problems(c Collector) []string {
 	return out
 }
 
-func (u *ui) sources() {
-	g := u.g
-	for i, p := range u.r.Providers {
+func (c *card) sources() {
+	g := c.g
+	for i, p := range c.r.Providers {
 		key := ""
 		if i == 0 {
 			key = "sources"
 		}
-		gl, st := seg{g.ok, green}, plain
+		var fg color.Color
+		gl := c.ink(g.ok, lipgloss.Green, false)
 		switch p.Status {
 		case "skipped":
-			gl, st = seg{g.skip, gray}, gray
+			gl, fg = c.ink(g.none, lipgloss.BrightBlack, false), lipgloss.BrightBlack
 		case "partial":
-			gl, st = seg{g.partial, yellow}, yellow
+			gl, fg = c.ink(g.partial, lipgloss.Yellow, false), lipgloss.Yellow
 		case "error":
-			gl, st = seg{g.fail, red}, red
+			gl, fg = c.ink(g.fail, lipgloss.Red, false), lipgloss.Red
 		}
 		val := padRight(p.Provider, 8)
 		if p.Status == "skipped" {
@@ -193,7 +206,7 @@ func (u *ui) sources() {
 		} else {
 			var hs []string
 			for _, h := range p.Homes {
-				hs = append(hs, u.homeName(h))
+				hs = append(hs, c.homeName(h))
 			}
 			// A server can read dozens of homes; `ai-usage home` lists them.
 			if len(hs) > shownHomes {
@@ -212,9 +225,11 @@ func (u *ui) sources() {
 			}
 			val += n
 		}
-		u.kv(key, gl, val, st)
+		c.kv(key, gl, val, fg)
 		if p.Error != nil {
-			u.kvIndent(8, *p.Error, red)
+			// The error goes under the homes, past the provider's name.
+			pad := statusKey + 2 + 8
+			c.hang(chunks{c.space(pad)}, wrapWords(*p.Error, c.w-pad), lipgloss.Red)
 		}
 	}
 }
@@ -222,90 +237,51 @@ func (u *ui) sources() {
 // shownHomes is how many homes a source line names before it counts the rest.
 const shownHomes = 3
 
+// appHomes are the homes an app keeps per account or per session, and the
+// app's name.
+var appHomes = []struct {
+	re  *regexp.Regexp
+	app string
+}{
+	{regexp.MustCompile(`[/\\]orca[/\\]codex-accounts[/\\]([^/\\]+)[/\\]home$`), "orca"},
+	{claudeAppHome, "claude app"},
+}
+
+// homeName is how a harness home is printed: an app's home by the app and
+// the account or session id, anything else as a path. An id that is a UUID
+// is known by its first 8 hex digits.
+func (c *card) homeName(p string) string {
+	for _, a := range appHomes {
+		if m := a.re.FindStringSubmatch(p); m != nil {
+			id := m[1]
+			if uuidRe.MatchString(id) {
+				id = id[:8]
+			}
+			return a.app + " " + id
+		}
+	}
+	return c.path(p)
+}
+
 // stamp is a time as a clock and how long ago: just the clock on the
 // report's own day.
-func (u *ui) stamp(t *time.Time) string {
+func (c *card) stamp(t *time.Time) string {
 	if t == nil {
 		return "never"
 	}
 	layout := "15:04"
-	if u.clock(u.now, "2006-01-02") != u.clock(*t, "2006-01-02") {
+	if c.clockAt(c.now, "2006-01-02") != c.clockAt(*t, "2006-01-02") {
 		layout = "2006-01-02 15:04"
 	}
-	return u.clock(*t, layout) + " (" + ago(u.now.Sub(*t)) + ")"
+	return c.clockAt(*t, layout) + " (" + ago(c.now.Sub(*t)) + ")"
 }
 
 // kv prints "key  glyph value", wrapping value at spaces under itself.
-func (u *ui) kv(key string, glyph seg, value string, st style) {
-	lead := line{{padRight(key, statusKey), gray}, glyph, {" ", plain}}
-	for i, part := range wrapWords(value, u.w-statusKey-2) {
-		if i > 0 {
-			lead = line{{strings.Repeat(" ", statusKey+2), plain}}
-		}
-		u.emit(append(lead, seg{part, st}))
-	}
+func (c *card) kv(key string, glyph chunk, value string, ink color.Color) {
+	c.hang(c.kvLead(key, glyph), wrapWords(value, c.w-statusKey-2), ink)
 }
 
-// kvIndent prints a sub-line indented under the value column.
-func (u *ui) kvIndent(indent int, value string, st style) {
-	pad := strings.Repeat(" ", statusKey+2+indent)
-	for _, part := range wrapWords(value, u.w-width(pad)) {
-		u.emit(line{{pad, plain}, {part, st}})
-	}
-}
-
-// kvPath wraps a long path after a slash, so it can still be copied whole.
-func (u *ui) kvPath(key string, glyph seg, p string) {
-	room := u.w - statusKey - 2
-	lead := line{{padRight(key, statusKey), gray}, glyph, {" ", plain}}
-	for i, part := range wrapAfter(p, "/", room) {
-		if i > 0 {
-			lead = line{{strings.Repeat(" ", statusKey+2), plain}}
-		}
-		u.emit(append(lead, seg{part, plain}))
-	}
-}
-
-// wrapWords wraps s at spaces within w columns. A word wider than that is
-// broken after a slash, or else where it has to be, and nothing is lost.
-func wrapWords(s string, w int) []string {
-	var out []string
-	cur := ""
-	for _, word := range strings.Split(s, " ") {
-		switch {
-		case cur == "":
-			cur = word
-		case width(cur+" "+word) <= w:
-			cur += " " + word
-		default:
-			out = append(out, cur)
-			cur = word
-		}
-		if width(cur) > w {
-			parts := wrapAfter(cur, "/", w)
-			out = append(out, parts[:len(parts)-1]...)
-			cur = parts[len(parts)-1]
-		}
-	}
-	return append(out, cur)
-}
-
-// wrapAfter splits s after each sep so that every piece fits w columns;
-// a piece still too wide is broken at w.
-func wrapAfter(s, sep string, w int) []string {
-	var out []string
-	cur := ""
-	for _, piece := range strings.SplitAfter(s, sep) {
-		if cur != "" && width(cur+piece) > w {
-			out = append(out, cur)
-			cur = ""
-		}
-		cur += piece
-		for width(cur) > w && w > 0 {
-			head := prefix(cur, w)
-			out = append(out, head)
-			cur = cur[len(head):]
-		}
-	}
-	return append(out, cur)
+// kvLead is the key column and the glyph before a value.
+func (c *card) kvLead(key string, glyph chunk) chunks {
+	return chunks{c.ink(padRight(key, statusKey), lipgloss.BrightBlack, false), glyph, c.plain(" ")}
 }

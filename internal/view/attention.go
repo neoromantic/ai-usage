@@ -147,6 +147,12 @@ func collectorErrors(c Collector, reported time.Time) []string {
 	return out
 }
 
+// failed is whether the last run ended in an error: the error is newer than
+// the last success.
+func failed(c Collector) bool {
+	return c.LastError != nil && c.LastErrorAt != nil && (c.LastSuccessAt == nil || c.LastErrorAt.After(*c.LastSuccessAt))
+}
+
 // when is the time an entry is ordered by within its kind: when an out
 // window resets, when a silent device last reported, and when an over window
 // runs out, which is its reset when it runs out at its reset and has no time
