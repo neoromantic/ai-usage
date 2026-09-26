@@ -11,70 +11,6 @@ import (
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
-// Period is the span of tokens the matrix, USAGE, and PROJECTS show.
-type Period int
-
-const (
-	Week    Period = iota // 7d, the default
-	Today                 // the report's UTC day
-	Month                 // 30d
-	Quarter               // 90d
-)
-
-// Periods are the periods in the order `p` steps through them.
-var Periods = []Period{Today, Week, Month, Quarter}
-
-func (p Period) String() string {
-	switch p {
-	case Today:
-		return "today"
-	case Month:
-		return "30d"
-	case Quarter:
-		return "90d"
-	default:
-		return "7d"
-	}
-}
-
-// Of is the period's tokens in u.
-func (p Period) Of(u Usage) int64 {
-	switch p {
-	case Today:
-		return u.Today
-	case Month:
-		return u.Month
-	case Quarter:
-		return u.Quarter
-	default:
-		return u.Week
-	}
-}
-
-// share is the period's part in s.
-func (p Period) share(s Share) *float64 {
-	switch p {
-	case Today:
-		return s.Today
-	case Month:
-		return s.Month
-	case Quarter:
-		return s.Quarter
-	default:
-		return s.Week
-	}
-}
-
-// Next is the period after p, back to today after 90d.
-func (p Period) Next() Period {
-	for i, q := range Periods {
-		if q == p {
-			return Periods[(i+1)%len(Periods)]
-		}
-	}
-	return Week
-}
-
 // Options say how the console draws the report.
 type Options struct {
 	// Width is the terminal's width. The page is laid out for 80 to 160
@@ -215,8 +151,6 @@ const (
 	// minWidth and maxWidth are the widths the page is laid out for.
 	minWidth = 80
 	maxWidth = 160
-	// topProjects is how many projects PROJECTS shows without AllProjects.
-	topProjects = 10
 )
 
 // page is the report while it is drawn.
@@ -333,25 +267,6 @@ func (p *page) percent(v *float64) string {
 	default:
 		return strconv.Itoa(int(math.Round(*v)))
 	}
-}
-
-// shortID is a label that is a UUID by its first 8 hex digits, as a short
-// git hash is known; any other label as it is.
-func shortID(label string) string {
-	if uuidRe.MatchString(label) {
-		return label[:8]
-	}
-	return label
-}
-
-// shownLabel is how a line that names an account by its label shows it: by
-// its alias when the account goes by it, else by its label, with shortID.
-func shownLabel(a *TeamAccount) string {
-	label := a.Label
-	if a.Alias != nil && a.Name == *a.Alias {
-		label = *a.Alias
-	}
-	return shortID(label)
 }
 
 // account is the team account of provider with label, or nil.

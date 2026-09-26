@@ -130,61 +130,6 @@ const (
 	// widest a long one takes, so it does not push the numbers away.
 	minPath = 16
 	maxPath = 48
+	// topProjects is how many projects PROJECTS shows without AllProjects.
+	topProjects = 10
 )
-
-// legend is one dim line of the marks on screen, a word or two each, so a
-// page 120 wide that shows every mark has it in one line. Where one line
-// does not fit the width, it takes as few lines as it can, of even length.
-// The interactive view's help says more of each mark.
-func (p *page) legend() string {
-	g := p.g
-	var items []string
-	add := func(on bool, s string) {
-		if on {
-			items = append(items, s)
-		}
-	}
-	s := p.seen
-	add(s["used"], g.used+" used")
-	add(s["left"], g.left+" left")
-	switch {
-	case s["tick"] && s["tickIn"]:
-		items = append(items, g.tick+g.tickIn+" even use")
-	case s["tick"]:
-		items = append(items, g.tick+" even use")
-	case s["tickIn"]:
-		items = append(items, g.tickIn+" even use")
-	}
-	add(s["dotted"], g.unread+" no reading")
-	// An old reading and a silent device are both stale.
-	add(s["stale"] || s["silent"], g.silent+" stale")
-	// A window not read since a refusal is not known either.
-	add(s["unknown"] || s["unread"], "? unknown")
-	add(s["dash"], g.dash+" no forecast")
-	// An account logged in here, and this device, are both here.
-	add(s["here"] || s["this"], g.here+" here")
-	add(s["fail"], g.fail+" error")
-	add(s["old"], g.old+" old")
-	add(s["none"], g.none+" none")
-	add(s["chosen"], g.open+g.shut+" chosen")
-	if len(items) == 0 {
-		return ""
-	}
-	wrap := func(limit int) []string { return wrapItems(items, "  ", limit, limit) }
-	widest := 0
-	for _, it := range items {
-		widest = max(widest, width(it))
-	}
-	limit := p.w
-	// The narrowest limit that needs no more lines, so the last line is not
-	// a lone item.
-	n := len(wrap(limit))
-	for limit > widest && len(wrap(limit-1)) == n {
-		limit--
-	}
-	lines := wrap(limit)
-	for i, l := range lines {
-		lines[i] = chunks{p.muted(truncEnd(l, p.w, p.g.ell))}.String()
-	}
-	return strings.Join(lines, "\n")
-}

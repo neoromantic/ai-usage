@@ -273,4 +273,4 @@ func knownMain(q *Quota) *Window {
 
 // known says how full a window is now is known: it has a reading, the
 // window has not reset since, and it was read since any refusal.
-func known(w *Window) bool { return w != nil && !w.Reset && !unread(w) }
+func known(w *Window) bool { return w != nil && !w.Reset && !w.Unread }

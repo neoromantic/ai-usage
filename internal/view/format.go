@@ -88,6 +88,25 @@ func truncMid(s string, w int, ell string) string {
 
 var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
+// shortID is a label that is a UUID by its first 8 hex digits, as a short
+// git hash is known; any other label as it is.
+func shortID(label string) string {
+	if uuidRe.MatchString(label) {
+		return label[:8]
+	}
+	return label
+}
+
+// shownLabel is how a line that names an account by its label shows it: by
+// its alias when the account goes by it, else by its label, with shortID.
+func shownLabel(a *TeamAccount) string {
+	label := a.Label
+	if a.Alias != nil && a.Name == *a.Alias {
+		label = *a.Alias
+	}
+	return shortID(label)
+}
+
 // truncPath keeps the first folder and as many trailing folders as fit, so
 // "~/orca/workspaces/monorepo/fix-x" becomes "~/orca/…/monorepo/fix-x".
 // When the first folder leaves no room, the path keeps just its root: "~/…/x".

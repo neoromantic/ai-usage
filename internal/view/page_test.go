@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
@@ -359,5 +360,32 @@ func TestPageHeaderBusy(t *testing.T) {
 	h := sgr.ReplaceAllString(Render(r, Options{Width: 120, Loc: sampleZone, Busy: "⠋"}).Header, "")
 	if !strings.Contains(h, "⠋ collecting") || strings.Contains(h, "collected 7m") {
 		t.Errorf("busy header %q", h)
+	}
+}
+
+// TestPageWideCharacters draws a page whose device, label, and path carry
+// emoji, and measures each line as a terminal does: none is too wide, and
+// the matrix keeps its columns.
+func TestPageWideCharacters(t *testing.T) {
+	r := loadReport(t, "team")
+	r.Collector.DeviceLabel = "⚡✅✨❌⭐box"
+	r.Projects[0].Path = "/Users/ann/src/⚡✅✨❌⭐-app"
+	for i := range r.Team.Matrix.Rows {
+		if r.Team.Matrix.Rows[i].Device == "srv1" {
+			r.Team.Matrix.Rows[i].Device = "⚡️ci-runner✅"
+		}
+	}
+	p := Render(r, Options{Width: 80, Loc: sampleZone})
+	for i, l := range append([]string{p.Header}, p.Body...) {
+		if w := ansi.StringWidth(l); w > 79 {
+			t.Errorf("line %d is %d wide: %q", i, w, sgr.ReplaceAllString(l, ""))
+		}
+	}
+	m := pageSection(p, "DEVICES")
+	for _, l := range m[2:] {
+		if w, want := ansi.StringWidth(l), ansi.StringWidth(m[2]); w != want {
+			t.Errorf("a matrix row is %d wide, its header %d:\n%s", w, want, strings.Join(m, "\n"))
+			break
+		}
 	}
 }
