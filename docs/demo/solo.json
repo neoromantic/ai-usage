@@ -2,7 +2,7 @@
   "schema_version": 4,
   "generated_at": "2026-09-24T13:40:00Z",
   "collector": {
-    "version": "v0.2.4",
+    "version": "v0.3.3",
     "device": "d-demo-solo",
     "device_label": "mira-mbp",
     "os_user": "mira",
@@ -25,7 +25,7 @@
     },
     "update": {
       "checked_at": "2026-09-24T11:36:00Z",
-      "latest": "v0.2.4",
+      "latest": "v0.3.3",
       "staged": null,
       "error": null
     },
@@ -816,14 +816,14 @@
   ],
   "team": {
     "pulled_at": null,
-    "latest_version": "v0.2.4",
+    "latest_version": "v0.3.3",
     "devices": [
       {
         "device": "d-demo-solo",
         "label": "mira-mbp",
         "os_user": "mira",
         "this_device": true,
-        "collector_version": "v0.2.4",
+        "collector_version": "v0.3.3",
         "collected_at": "2026-09-24T13:36:00Z",
         "age_seconds": 240,
         "last_success_at": "2026-09-24T13:36:00Z",

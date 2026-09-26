@@ -31,7 +31,7 @@ import (
 var now = time.Date(2026, 9, 24, 13, 40, 0, 0, time.UTC)
 
 const (
-	latest = "v0.2.4"
+	latest = "v0.3.3"
 	relay  = "https://relay.example.com"
 	week   = 7 * 24 * time.Hour
 )
@@ -140,7 +140,7 @@ func teamReport() view.Report {
 	mira.workTo(now.Add(-4*24*time.Hour), "claude", "mira@studio.dev", "/Users/mira/dotfiles", 0.3, 90)
 
 	// leo runs an older release, and his Codex app fails to answer.
-	leo := newDevice(rng, "d-demo-leo", "leo-air", "leo", "/Users/leo", "v0.2.2", now.Add(-11*time.Minute), "claude", "codex")
+	leo := newDevice(rng, "d-demo-leo", "leo-air", "leo", "/Users/leo", "v0.3.0", now.Add(-11*time.Minute), "claude", "codex")
 	leo.account("claude", "leo@studio.dev", "max", true, now.Add(-11*time.Minute),
 		window("5h", 18, 5*time.Hour, 3*time.Hour+50*time.Minute),
 		window("7d", 26, week, 4*24*time.Hour+2*time.Hour))
