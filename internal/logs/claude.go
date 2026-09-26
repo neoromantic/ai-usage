@@ -198,85 +198,109 @@ type claudeMsg struct {
 }
 
 func parseClaude(path, id, parent string) (*claudeFile, int, error) {
-	f := &claudeFile{path: path, sess: Session{ID: id, ParentID: parent}}
-	index := map[string]int{}
-	var anon, malformed int
-	sidechainOf := ""
-	sawSession := false
-	// Sub-agent lines carry their parent's session id.
-	own := cmp.Or(parent, id)
-	long, err := ForEachLine(path, maxLineBytes, func(line []byte) {
-		if !bytes.Contains(line, []byte(`"usage"`)) && !bytes.Contains(line, []byte(`"cwd"`)) && !bytes.Contains(line, []byte(`"cost-state"`)) {
-			return
-		}
-		var row claudeLine
-		if json.Unmarshal(line, &row) != nil {
-			malformed++
-			return
-		}
-		if row.Type == "cost-state" {
-			if parent == "" && row.SessionID == id {
-				t := row.tracked()
-				f.tracked = &t
-			}
-			return
-		}
-		if row.Cwd != "" && f.sess.Project == "" {
-			f.sess.Project = strings.TrimSpace(row.Cwd)
-		}
-		if f.start.IsZero() {
-			f.start = parseTime(row.Timestamp)
-		}
-		if !sawSession && row.SessionID != "" {
-			sawSession = true
-			f.native = row.SessionID == own
-		}
-		if row.IsSidechain && row.SessionID != "" && sidechainOf == "" {
-			sidechainOf = row.SessionID
-		}
-		if row.Type != "assistant" || row.Message == nil || row.Message.Usage == nil {
-			return
-		}
-		msgID := cmp.Or(row.Message.ID, row.UUID)
-		named := msgID != ""
-		if !named {
-			anon++
-			msgID = fmt.Sprintf("\x00anon-%d", anon)
-		}
-		u := row.Message.Usage
-		at := parseTime(row.Timestamp)
-		m := claudeMsg{
-			id:      msgID,
-			request: row.RequestID,
-			anon:    !named,
-			tokens: Tokens{
-				Input:      u.InputTokens,
-				Output:     u.OutputTokens,
-				CacheRead:  u.CacheReadInputTokens,
-				CacheWrite: u.CacheCreationInputTokens,
-			},
-			at:       at,
-			rejected: claudeRejected(row.QuotaLimits, at),
-		}
-		i, ok := index[msgID]
-		if !ok {
-			index[msgID] = len(f.msgs)
-			f.msgs = append(f.msgs, m)
-			return
-		}
-		if m.request == "" {
-			m.request = f.msgs[i].request
-		}
-		if m.at.IsZero() {
-			m.at = f.msgs[i].at
-		}
-		f.msgs[i] = m
-	})
-	// Older Claude Code wrote sub-agent transcripts beside the session they belong to.
-	if parent == "" && sidechainOf != "" && sidechainOf != id {
-		f.sess.ParentID = sidechainOf
+	p := &claudeParse{
+		f:      &claudeFile{path: path, sess: Session{ID: id, ParentID: parent}},
+		id:     id,
+		parent: parent,
+		// Sub-agent lines carry their parent's session id.
+		own:   cmp.Or(parent, id),
+		index: map[string]int{},
 	}
-	return f, malformed + long, err
+	long, err := ForEachLine(path, maxLineBytes, p.line)
+	// Older Claude Code wrote sub-agent transcripts beside the session they belong to.
+	if parent == "" && p.sidechainOf != "" && p.sidechainOf != id {
+		p.f.sess.ParentID = p.sidechainOf
+	}
+	return p.f, p.malformed + long, err
+}
+
+type claudeParse struct {
+	f               *claudeFile
+	id, parent, own string
+	index           map[string]int
+	anon, malformed int
+	sidechainOf     string
+	sawSession      bool
+}
+
+func (p *claudeParse) line(line []byte) {
+	if !bytes.Contains(line, []byte(`"usage"`)) && !bytes.Contains(line, []byte(`"cwd"`)) && !bytes.Contains(line, []byte(`"cost-state"`)) {
+		return
+	}
+	var row claudeLine
+	if json.Unmarshal(line, &row) != nil {
+		p.malformed++
+		return
+	}
+	if row.Type == "cost-state" {
+		p.costState(row)
+		return
+	}
+	p.header(row)
+	if row.Type != "assistant" || row.Message == nil || row.Message.Usage == nil {
+		return
+	}
+	p.message(row)
+}
+
+func (p *claudeParse) costState(row claudeLine) {
+	if p.parent == "" && row.SessionID == p.id {
+		t := row.tracked()
+		p.f.tracked = &t
+	}
+}
+
+func (p *claudeParse) header(row claudeLine) {
+	if row.Cwd != "" && p.f.sess.Project == "" {
+		p.f.sess.Project = strings.TrimSpace(row.Cwd)
+	}
+	if p.f.start.IsZero() {
+		p.f.start = parseTime(row.Timestamp)
+	}
+	if !p.sawSession && row.SessionID != "" {
+		p.sawSession = true
+		p.f.native = row.SessionID == p.own
+	}
+	if row.IsSidechain && row.SessionID != "" && p.sidechainOf == "" {
+		p.sidechainOf = row.SessionID
+	}
+}
+
+func (p *claudeParse) message(row claudeLine) {
+	msgID := cmp.Or(row.Message.ID, row.UUID)
+	named := msgID != ""
+	if !named {
+		p.anon++
+		msgID = fmt.Sprintf("\x00anon-%d", p.anon)
+	}
+	u := row.Message.Usage
+	at := parseTime(row.Timestamp)
+	m := claudeMsg{
+		id:      msgID,
+		request: row.RequestID,
+		anon:    !named,
+		tokens: Tokens{
+			Input:      u.InputTokens,
+			Output:     u.OutputTokens,
+			CacheRead:  u.CacheReadInputTokens,
+			CacheWrite: u.CacheCreationInputTokens,
+		},
+		at:       at,
+		rejected: claudeRejected(row.QuotaLimits, at),
+	}
+	i, ok := p.index[msgID]
+	if !ok {
+		p.index[msgID] = len(p.f.msgs)
+		p.f.msgs = append(p.f.msgs, m)
+		return
+	}
+	if m.request == "" {
+		m.request = p.f.msgs[i].request
+	}
+	if m.at.IsZero() {
+		m.at = p.f.msgs[i].at
+	}
+	p.f.msgs[i] = m
 }
 
 type claudeLine struct {
