@@ -148,8 +148,7 @@ private struct TabPicker: View {
 /// itself, which blinks. Tabs of their own heights would do that on every
 /// switch; at one height, the popover keeps its size, and each tab keeps
 /// its scroll position. A tab's top line and total stay put while its list
-/// scrolls, and the scrollers overlay the list, so no column moves when a
-/// list grows past the popover.
+/// scrolls.
 private struct TabStack: View {
     @EnvironmentObject private var store: Store
     let report: Report
@@ -166,8 +165,14 @@ private struct TabStack: View {
                                 .padding(.horizontal, Metrics.inset)
                                 .padding(.bottom, 12)
                                 .measure(tab)
-                                .background(OverlayScrollers())
                         }
+                        // A scroller that takes room of its own, as System
+                        // Settings can ask for, would move every column of
+                        // a list that grows past the popover; SwiftUI keeps
+                        // that room even under an overlay style, so the
+                        // list scrolls without one, and its cut last row
+                        // over the total shows there is more.
+                        .scrollIndicators(.never)
                         .onChange(of: store.scrollTarget) { _, key in
                             guard tab == .limits, let key else { return }
                             proxy.scrollTo(key, anchor: .top)

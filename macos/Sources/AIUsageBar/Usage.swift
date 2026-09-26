@@ -22,7 +22,8 @@ struct UsageView: View {
     }
 
     private func shown(_ mode: UsageMode, _ view: some View) -> some View {
-        let on = store.usageMode == mode || (mode == .devices && store.deviceFilter != nil)
+        // A chip's filter shows the devices whichever list was chosen.
+        let on = store.deviceFilter != nil ? mode == .devices : store.usageMode == mode
         return view
             .opacity(on ? 1 : 0)
             .allowsHitTesting(on)
@@ -171,7 +172,6 @@ private struct DeviceRow: View {
                     TokenBar(value: row.usage[p], top: top)
                         .padding(.horizontal, Metrics.gap)
                     TokensValue(tokens: row.usage[p])
-                    Color.clear.frame(width: Metrics.trailingGap + Metrics.trailing, height: 1)
                 }
                 .frame(height: Metrics.row)
                 if let note {
@@ -344,7 +344,6 @@ private struct ColumnRow: View {
                 TokenBar(value: c.usage[p], top: top)
                     .padding(.horizontal, Metrics.gap)
                 TokensValue(tokens: c.usage[p])
-                Color.clear.frame(width: Metrics.trailingGap + Metrics.trailing, height: 1)
             }
             .frame(height: Metrics.row)
         } details: {
@@ -441,7 +440,6 @@ private struct SoloRow: View {
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, Metrics.gap)
                 TokensValue(tokens: a.usage[p])
-                Color.clear.frame(width: Metrics.trailingGap + Metrics.trailing, height: 1)
             }
             .frame(height: Metrics.row)
         } details: {

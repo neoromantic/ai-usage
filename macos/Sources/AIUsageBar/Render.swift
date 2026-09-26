@@ -40,10 +40,20 @@ enum Renderer {
                 if let d = report.team.devices.first(where: { $0.error != nil && !$0.silent }) ?? report.team.devices.first {
                     states.append(("usage-expanded", { $0.tab = .usage }, { $0.expanded = "dev:\(d.device)" }))
                 }
-                if let chip = Chip.chips(report).first(where: { $0.kind == .errors }) {
-                    states.append(("usage-filtered", { $0.tab = .limits }, {
+                // Usage after a click on each chip that filters it; the
+                // errors chip's is plain usage-filtered.
+                let filters: [(Chip.Kind, String, String)] = [
+                    (.errors, "usage-filtered", "Devices with errors"),
+                    (.silent, "usage-filtered-silent", "Devices not reporting"),
+                    (.notUpdating, "usage-filtered-not-updating", "Devices not updating"),
+                ]
+                for (kind, name, title) in filters {
+                    guard let chip = Chip.chips(report).first(where: { $0.kind == kind }) else { continue }
+                    // From Usage by subscription, so a filter that left that
+                    // list showing under the devices would show here.
+                    states.append((name, { $0.tab = .usage; $0.usageMode = .subscriptions }, {
                         $0.tab = .usage
-                        $0.deviceFilter = DeviceFilter(title: "Devices with errors", devices: Set(chip.devices), chip: chip.kind)
+                        $0.deviceFilter = DeviceFilter(title: title, devices: Set(chip.devices), chip: chip.kind)
                     }))
                 }
             }

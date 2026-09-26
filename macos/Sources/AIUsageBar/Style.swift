@@ -22,9 +22,10 @@ enum Metrics {
     /// the popover's edge, as a menu's highlight does.
     static let bleed: CGFloat = 9
 
-    // The grid every tab's rows share, so that switching tabs moves no
-    // column: a slot for a mark, the name, a bar that takes the rest, the
-    // value, and a trailing column for a countdown or an age.
+    // The grid every tab's rows share: a slot for a mark, the name, a bar
+    // that takes the rest, the value, and on Limits and Projects a trailing
+    // column for a countdown or an age. Usage has none, so its value ends
+    // at the margin rather than before an empty column.
     static let slot: CGFloat = 16
     static let name: CGFloat = 120
     static let gap: CGFloat = 8
@@ -428,7 +429,6 @@ struct TotalRow: View {
                         .font(.callout.weight(.semibold))
                         .monospacedDigit()
                         .frame(width: Metrics.value, alignment: .trailing)
-                    Color.clear.frame(width: Metrics.trailingGap + Metrics.trailing, height: 1)
                 }
             }
             .frame(height: Metrics.row)
@@ -543,42 +543,5 @@ struct MoreButton: View {
         .buttonStyle(.plain)
         .font(.callout)
         .foregroundStyle(.secondary)
-    }
-}
-
-/// Makes the scroll view it is in draw overlay scrollers, as the menu bar's
-/// own windows do, whatever System Settings says: a scroller that takes
-/// room of its own would move every column of a list that grows past the
-/// popover, as when a row opens.
-struct OverlayScrollers: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView { Probe() }
-    func updateNSView(_ view: NSView, context: Context) {
-        (view as? Probe)?.apply()
-    }
-
-    final class Probe: NSView {
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            guard window != nil else { return }
-            apply()
-            NotificationCenter.default.removeObserver(self)
-            NotificationCenter.default.addObserver(self, selector: #selector(styleChanged),
-                                                   name: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil)
-        }
-
-        @objc private func styleChanged() {
-            // After the scroll view has taken the new style itself.
-            DispatchQueue.main.async { [weak self] in
-                MainActor.assumeIsolated { self?.apply() }
-            }
-        }
-
-        func apply() {
-            guard let scroll = enclosingScrollView else { return }
-            if scroll.scrollerStyle != .overlay {
-                scroll.scrollerStyle = .overlay
-            }
-            scroll.autohidesScrollers = true
-        }
     }
 }
