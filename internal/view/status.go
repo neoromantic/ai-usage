@@ -24,6 +24,31 @@ func StatusText(r Report, dir string, o Options) string {
 }
 
 func (c *card) status(dir string) {
+	c.statusVerdict()
+	c.blank()
+	c.statusIdentity(dir)
+	c.blank()
+	c.statusRun()
+	c.statusRelay()
+	c.statusSchedule()
+	c.statusUpdate()
+	c.blank()
+	c.sources()
+}
+
+// The marks before a value: ok for what works, fail for what does not, warn
+// for what waits or could not be checked, and info, a blank, for a value
+// that is neither.
+
+var info = chunk{text: " "}
+
+func (c *card) ok() chunk   { return c.ink(c.g.ok, lipgloss.Green, false) }
+func (c *card) fail() chunk { return c.ink(c.g.fail, lipgloss.Red, false) }
+func (c *card) warn() chunk { return c.ink(c.g.warn, lipgloss.Yellow, false) }
+
+// statusVerdict is the title and whether the collector is healthy or which
+// problems it has.
+func (c *card) statusVerdict() {
 	g := c.g
 	col := c.r.Collector
 	// The clock ends at the card's right edge.
@@ -53,9 +78,12 @@ func (c *card) status(dir string) {
 			c.emit(append(lead, c.plain(l)).cut(c.w, g.ell))
 		}
 	}
-	c.blank()
+}
 
-	ok, fail, warn, info := c.ink(g.ok, lipgloss.Green, false), c.ink(g.fail, lipgloss.Red, false), c.ink(g.warn, lipgloss.Yellow, false), c.plain(" ")
+// statusIdentity is the version, the device, the team and the directory.
+func (c *card) statusIdentity(dir string) {
+	g := c.g
+	col := c.r.Collector
 	c.kv("version", info, col.Version, nil)
 	c.kv("device", info, col.DeviceLabel+" ("+col.OSUser+")"+g.sep+col.Device, nil)
 	team := col.Team
@@ -67,41 +95,47 @@ func (c *card) status(dir string) {
 		// A long path wraps after a slash, so it can still be copied whole.
 		c.hang(c.kvLead("directory", info), wrapAfter(c.path(dir), "/", c.w-statusKey-2), nil)
 	}
-	c.blank()
+}
 
+// statusRun is the last run, the last success and the last error.
+func (c *card) statusRun() {
+	col := c.r.Collector
 	switch {
 	case col.LastRunAt == nil:
-		c.kv("last run", fail, "never", lipgloss.Red)
+		c.kv("last run", c.fail(), "never", lipgloss.Red)
 	case failed(col):
-		c.kv("last run", fail, c.stamp(col.LastRunAt)+", failed", lipgloss.Red)
+		c.kv("last run", c.fail(), c.stamp(col.LastRunAt)+", failed", lipgloss.Red)
 	default:
-		c.kv("last run", ok, c.stamp(col.LastRunAt), nil)
+		c.kv("last run", c.ok(), c.stamp(col.LastRunAt), nil)
 	}
 	if col.LastSuccessAt == nil {
-		c.kv("last success", fail, "never", lipgloss.Red)
+		c.kv("last success", c.fail(), "never", lipgloss.Red)
 	} else {
-		c.kv("last success", ok, c.stamp(col.LastSuccessAt), nil)
+		c.kv("last success", c.ok(), c.stamp(col.LastSuccessAt), nil)
 	}
 	switch {
 	case col.LastError == nil:
 		c.kv("last error", info, "none", lipgloss.BrightBlack)
 	case failed(col):
-		c.kv("last error", fail, c.stamp(col.LastErrorAt)+": "+*col.LastError, lipgloss.Red)
+		c.kv("last error", c.fail(), c.stamp(col.LastErrorAt)+": "+*col.LastError, lipgloss.Red)
 	default:
 		c.kv("last error", info, c.stamp(col.LastErrorAt)+": "+*col.LastError, lipgloss.BrightBlack)
 	}
+}
 
-	rl := col.Relay
+func (c *card) statusRelay() {
+	g := c.g
+	rl := c.r.Collector.Relay
 	switch {
 	case rl.URL == nil:
 		c.kv("relay", c.ink(g.none, lipgloss.BrightBlack, false), "not configured; the team view shows this device only", nil)
 		c.kv("", info, "set one: ai-usage relay set URL", lipgloss.BrightBlack)
 	default:
-		gl := ok
+		gl := c.ok()
 		if rl.LastError != nil {
-			gl = fail
+			gl = c.fail()
 		} else if rl.Pending {
-			gl = warn
+			gl = c.warn()
 		}
 		c.kv("relay", gl, *rl.URL, nil)
 		c.kv("", info, "pushed "+c.stamp(rl.LastPushAt)+g.sep+"pulled "+c.stamp(rl.LastPullAt), lipgloss.BrightBlack)
@@ -112,34 +146,43 @@ func (c *card) status(dir string) {
 			c.kv("", info, *rl.LastError, lipgloss.Red)
 		}
 	}
+}
+
+func (c *card) statusSchedule() {
+	col := c.r.Collector
 	dev := selfupdate.Dev(col.Version)
 	switch {
 	case col.Schedule.Foreground:
-		c.kv("schedule", ok, "every 15 minutes by `ai-usage schedule run`", nil)
+		c.kv("schedule", c.ok(), "every 15 minutes by `ai-usage schedule run`", nil)
 	case col.Schedule.Registered:
-		c.kv("schedule", ok, "registered with the system scheduler, every 15 minutes", nil)
+		c.kv("schedule", c.ok(), "registered with the system scheduler, every 15 minutes", nil)
 	case col.Schedule.Error != nil:
-		c.kv("schedule", fail, "not registered: "+*col.Schedule.Error, lipgloss.Red)
+		c.kv("schedule", c.fail(), "not registered: "+*col.Schedule.Error, lipgloss.Red)
 	case dev:
-		c.kv("schedule", fail, "not registered; dev builds do not register themselves", lipgloss.Red)
+		c.kv("schedule", c.fail(), "not registered; dev builds do not register themselves", lipgloss.Red)
 	default:
-		c.kv("schedule", fail, "not registered", lipgloss.Red)
+		c.kv("schedule", c.fail(), "not registered", lipgloss.Red)
 	}
 	// An error that already says what to run needs no second line.
 	if !col.Schedule.Registered && (col.Schedule.Error == nil || !strings.Contains(*col.Schedule.Error, "ai-usage schedule install") && !strings.Contains(*col.Schedule.Error, "ai-usage schedule run")) {
 		c.kv("", info, "register: ai-usage schedule install", lipgloss.BrightBlack)
 	}
+}
+
+func (c *card) statusUpdate() {
+	col := c.r.Collector
+	dev := selfupdate.Dev(col.Version)
 	up := col.Update
 	switch {
 	case dev:
 		c.kv("update", info, "dev build: no self-update", lipgloss.BrightBlack)
 	case up.Staged != nil:
-		c.kv("update", c.ink(g.staged, lipgloss.Cyan, false), *up.Staged+" is installed and runs next time", nil)
+		c.kv("update", c.ink(c.g.staged, lipgloss.Cyan, false), *up.Staged+" is installed and runs next time", nil)
 	case up.Error != nil:
-		c.kv("update", warn, *up.Error, lipgloss.Yellow)
+		c.kv("update", c.warn(), *up.Error, lipgloss.Yellow)
 	case up.Latest != nil && (*up.Latest == col.Version || selfupdate.Newer(col.Version, *up.Latest)):
 		// A release installed by hand can be newer than the last check saw.
-		c.kv("update", ok, col.Version+" is the newest release", nil)
+		c.kv("update", c.ok(), col.Version+" is the newest release", nil)
 	default:
 		latest := "unknown"
 		if up.Latest != nil {
@@ -150,8 +193,6 @@ func (c *card) status(dir string) {
 	if !dev {
 		c.kv("", info, "checked "+c.stamp(up.CheckedAt), lipgloss.BrightBlack)
 	}
-	c.blank()
-	c.sources()
 }
 
 // problems names what is wrong with the collection, the relay, the schedule
@@ -191,14 +232,14 @@ func (c *card) sources() {
 			key = "sources"
 		}
 		var fg color.Color
-		gl := c.ink(g.ok, lipgloss.Green, false)
+		gl := c.ok()
 		switch p.Status {
 		case "skipped":
 			gl, fg = c.ink(g.none, lipgloss.BrightBlack, false), lipgloss.BrightBlack
 		case "partial":
 			gl, fg = c.ink(g.partial, lipgloss.Yellow, false), lipgloss.Yellow
 		case "error":
-			gl, fg = c.ink(g.fail, lipgloss.Red, false), lipgloss.Red
+			gl, fg = c.fail(), lipgloss.Red
 		}
 		val := padRight(p.Provider, 8)
 		if p.Status == "skipped" {
