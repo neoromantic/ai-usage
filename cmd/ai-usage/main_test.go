@@ -65,6 +65,10 @@ func hermetic(t *testing.T) {
 	for _, k := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "GROK_HOME", "HERMES_HOME"} {
 		t.Setenv(k, "")
 	}
+	// With these set, relay serve would keep its records in a real KV store.
+	for _, k := range []string{"KV_REST_API_URL", "KV_REST_API_TOKEN"} {
+		t.Setenv(k, "")
+	}
 	// Orca's app data folder moves with these.
 	t.Setenv("APPDATA", "")
 	t.Setenv("XDG_CONFIG_HOME", "")
@@ -83,11 +87,14 @@ func hermetic(t *testing.T) {
 		newScheduler          func() schedule.Scheduler
 		newUpdater            func() *selfupdate.Updater
 		hostname, osUser      func() string
-	}{version, defaultRelay, clock, probeEnv, newScheduler, newUpdater, hostname, osUser}
+		collectOnce           func(context.Context, string, string, io.Writer) error
+		sleepCtx              func(context.Context, time.Duration) bool
+	}{version, defaultRelay, clock, probeEnv, newScheduler, newUpdater, hostname, osUser, collectOnce, sleepCtx}
 	t.Cleanup(func() {
 		version, defaultRelay, clock = saved.version, saved.defaultRelay, saved.clock
 		probeEnv, newScheduler, newUpdater = saved.probeEnv, saved.newScheduler, saved.newUpdater
 		hostname, osUser = saved.hostname, saved.osUser
+		collectOnce, sleepCtx = saved.collectOnce, saved.sleepCtx
 	})
 	version, defaultRelay, clock = "dev", "", time.Now
 	// A CI runner's host name can be long enough to change the layout.
@@ -216,12 +223,18 @@ type result struct {
 	stdout, stderr string
 }
 
-// run calls the CLI in-process as this device.
-func (d *device) run(stdin string, args ...string) result {
+// env points the environment at this device.
+func (d *device) env() {
 	d.t.Helper()
 	d.t.Setenv("AI_USAGE_HOME", d.dir)
 	d.t.Setenv("HOME", d.home)
 	d.t.Setenv("USERPROFILE", d.home)
+}
+
+// run calls the CLI in-process as this device.
+func (d *device) run(stdin string, args ...string) result {
+	d.t.Helper()
+	d.env()
 	var out, errb bytes.Buffer
 	code := run(context.Background(), args, strings.NewReader(stdin), &out, &errb)
 	return result{code, out.String(), errb.String()}
@@ -710,7 +723,7 @@ func TestTeamJoinReadsOneLine(t *testing.T) {
 	hermetic(t)
 	key := strings.TrimSpace(newDevice(t).ok("team", "key"))
 	b := newDevice(t)
-	b.run("", "version") // points the environment at b
+	b.env()
 	pr, pw := io.Pipe()
 	go func() { _, _ = io.WriteString(pw, key+"\n") }()
 	done := make(chan int, 1)
@@ -737,9 +750,6 @@ func fingerprint(t *testing.T, d *device) string {
 
 func TestRelayServeClientIPHeader(t *testing.T) {
 	hermetic(t)
-	for _, k := range []string{"KV_REST_API_URL", "KV_REST_API_TOKEN"} {
-		t.Setenv(k, "")
-	}
 	// A stopped context shuts the relay down as soon as it starts.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -766,9 +776,6 @@ func (buggyContext) Done() <-chan struct{} { panic("shutdown bug") }
 // A bug while the relay shuts down closes it and is the command's error.
 func TestRelayShutdownPanicIsItsError(t *testing.T) {
 	hermetic(t)
-	for _, k := range []string{"KV_REST_API_URL", "KV_REST_API_TOKEN"} {
-		t.Setenv(k, "")
-	}
 	var out bytes.Buffer
 	err := cmdRelay(buggyContext{context.Background()}, []string{"serve", "--addr", "127.0.0.1:0"}, &out, &out)
 	if err == nil || !strings.Contains(err.Error(), "shutdown bug") {
@@ -1171,8 +1178,6 @@ func TestScheduleRun(t *testing.T) {
 			return nil, fmt.Errorf("%s: %w", name, exec.ErrNotFound)
 		}}
 	}
-	savedCollect, savedSleep, savedClock := collectOnce, sleepCtx, clock
-	t.Cleanup(func() { collectOnce, sleepCtx, clock = savedCollect, savedSleep, savedClock })
 	clock = func() time.Time { return time.Date(2026, 9, 23, 10, 7, 30, 0, time.UTC) }
 
 	d := newDevice(t)
@@ -1256,8 +1261,7 @@ func TestScheduleRunStartsACollection(t *testing.T) {
 	d := newDevice(t)
 	d.claude("aaaa", "/work/app", 1)
 	t.Setenv("AIU_AS_CLI", "1")
-	t.Setenv("HOME", d.home)
-	t.Setenv("USERPROFILE", d.home)
+	d.env()
 	unlock, err := state.Dir(d.dir).ScheduleLock()
 	if err != nil {
 		t.Fatal(err)
