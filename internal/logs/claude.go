@@ -86,12 +86,20 @@ func claudeFiles(home string, since time.Time) ([]*claudeFile, HomeRead) {
 // Claude Code tracked for it, when that is more; the log gives no time for
 // that part.
 func countClaude(files []*claudeFile) []Session {
-	order := make([]int, len(files))
-	for i := range order {
-		order[i] = i
+	copied := claimMessages(files)
+	rows := make([]Session, len(files))
+	for i, f := range files {
+		rows[i] = f.sess
 	}
-	slices.SortStableFunc(order, func(a, b int) int {
-		x, y := files[a], files[b]
+	return addTracked(mergeByID(rows, addCopy), files, copied)
+}
+
+// claimMessages adds each file's messages to its session, taking the files in
+// the order they start, and skips a message an earlier file already claimed.
+// It returns the sessions whose files repeat another session's messages.
+func claimMessages(files []*claudeFile) (copied map[string]bool) {
+	order := slices.Clone(files)
+	slices.SortStableFunc(order, func(x, y *claudeFile) int {
 		// A copy that kept the original times still names the original
 		// session in its lines; the original keeps the messages.
 		if x.start.Equal(y.start) && x.native != y.native {
@@ -105,18 +113,10 @@ func countClaude(files []*claudeFile) []Session {
 	// claimed names the session each message counts in. A session whose file
 	// repeats another session's messages is a copy of that session.
 	claimed := map[string]string{}
-	copied := map[string]bool{}
-	for _, i := range order {
-		f := files[i]
+	copied = map[string]bool{}
+	for _, f := range order {
 		for _, m := range f.msgs {
-			key := ""
-			switch {
-			case m.request != "":
-				key = "r\x00" + m.id + "\x00" + m.request
-			case !m.anon:
-				key = "s\x00" + f.sess.ID + "\x00" + m.id
-			}
-			if key != "" {
+			if key := m.key(f.sess.ID); key != "" {
 				if owner, ok := claimed[key]; ok {
 					if owner != f.root() {
 						copied[f.root()] = true
@@ -132,11 +132,7 @@ func countClaude(files []*claudeFile) []Session {
 			}
 		}
 	}
-	rows := make([]Session, len(files))
-	for i, f := range files {
-		rows[i] = f.sess
-	}
-	return addTracked(mergeByID(rows, addCopy), files, copied)
+	return copied
 }
 
 // addTracked raises each session, field by field, to the usage Claude Code
@@ -195,6 +191,18 @@ type claudeMsg struct {
 	at time.Time
 	// rejected is set on a request Claude refused because a window was full.
 	rejected *Limits
+}
+
+// key matches the message across files: by its request id when it has one,
+// otherwise by its id within the session. An anon message has no key.
+func (m claudeMsg) key(session string) string {
+	switch {
+	case m.request != "":
+		return "r\x00" + m.id + "\x00" + m.request
+	case !m.anon:
+		return "s\x00" + session + "\x00" + m.id
+	}
+	return ""
 }
 
 func parseClaude(path, id, parent string) (*claudeFile, int, error) {
