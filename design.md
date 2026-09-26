@@ -163,8 +163,6 @@ The cell reads `157% over`, `81% ok`, or `out`. This replaces the 6-hour pace an
 
 USERS counts the devices with tokens on the account since the window began, and names the busiest. A Hermes bot in its own container is a device.
 
-A device on a collector older than v0.2.0 does not send its tokens since the window began, so it counts when it used the account since then. The busiest is the one with the most tokens among the devices whose tokens are known. When the only user is such a device, it is named all the same; when every one of two or more is, none is named.
-
 ## DEVICES × SUBSCRIPTIONS
 
 A matrix. Each device is a row, sorted by total, largest first. Each subscription is a column, grouped under its provider by a heading with a thin rule. The last column, NO QUOTA, holds tokens that have no subscription. Totals are on the right and at the bottom.
@@ -174,9 +172,6 @@ A matrix. Each device is a row, sorted by total, largest first. Each subscriptio
 - A subscription's name in the header takes its state color, so an `out` column is visible from the matrix too.
 - A mark before the device name gives its state: `●` this device, `×` an error, `~` silent, `↓` an old release. A silent device's error is the one it last reported, so it shows `~`.
 - The share mode (`%`) shows each value as a percent of its column's total in the chosen period instead: a device's tokens on a subscription divided by the team's, so a column adds up to 100 and the bottom row shows that. TOTAL on the right is the device's part of all the team's tokens. It is how the tokens split, not how much of a quota the device used: SUBSCRIPTIONS shows how full each window is. The cells round to whole percents, `<1` under one and `>99` over 99 but under 100.
-- A device on a collector older than v0.2.0 sends each account's tokens over 90 days, but no days and no tokens since a window began. Its 90d cell is those tokens, the report's 90 days as nearly as that collector counts them: they end when the device last collected, days before the report's day if it has been silent, and hold a session whole while it was active in them. A shorter period is `·` when the account was last active on the device before the period began, and `?` otherwise: it is not known, not 0. Such a row sorts by what is known, before the rows with none.
-- A total with a `?` in it never reads as exact. It is `≥` before the part that is known, in whole millions rounded down so the bound holds, as `≥68`, or `?` when that part is under a million. The rule is the same for a row's total, a column's, and the grand total, in every period.
-- In the share mode, a column whose tokens in the period are not all known cannot be split. The share of such a device is `?`, and so is the share of every other device that used the subscription in the period; a device that did not is `·`. The bottom row is still 100 when the known part is above 0, and `?` when it is not.
 
 Many devices scroll down, and many subscriptions scroll sideways, with the device column and the headers kept in place: the interactive view keeps the title, the providers' line, and the subscriptions' names at the top of the page while the rows scroll under them. The static report prints the columns that fit and ends the header with `+N more`.
 
@@ -186,7 +181,7 @@ With a single device, a matrix of one row says little. The section becomes USAGE
 
 ### Status
 
-The status view is DEVICES as a table of each device's state, as the DEVICES table before v0.2.0 had it: which devices report, on which release, and what fails on them. `s` in the interactive view switches to it and back; `--devices` prints it and opens the interactive view on it. It came back on 2026-09-24 at the owner's request.
+The status view is DEVICES as a table of each device's state: which devices report, on which release, and what fails on them. `s` in the interactive view switches to it and back; `--devices` prints it and opens the interactive view on it. It came back on 2026-09-24 at the owner's request.
 
 ```
 DEVICES  13 · 1 error · 2 old · by 7d · M tokens in+out                                                 usage  ‹status›
@@ -214,10 +209,10 @@ DEVICES  13 · 1 error · 2 old · by 7d · M tokens in+out                     
 | VERSION | the collector's release; an older one than the team's newest is dim and followed by `↓` |
 | SEEN | how long ago it last reported, dim; a silent device's in the tight color |
 | VIA | the harnesses it reads, dim; one that fails or reads only in part is in the out color and followed by `×`; `·` for none |
-| TODAY 7D 30D 90D | its input plus output tokens, as the matrix's TOTAL column prints them, with `≥` and `?` for a device on a collector older than v0.2.0; their headers are dim, as every header is, and the title names the chosen period, as in `by 7d` |
+| TODAY 7D 30D 90D | its input plus output tokens, as the matrix's TOTAL column prints them; their headers are dim, as every header is, and the title names the chosen period, as in `by 7d` |
 | NOTE | for a silent device, `silent since` when it last reported, then the error it last reported, as ATTENTION says it; else what fails on it, in the out color; else, on an old release, `update failing:` and why its release check failed, in the out color; `not updated for 1d · latest v1.4.2`, in the tight color, once this device's reads of the team have found it reporting on that release for 7 hours, longer than v0.2.0 takes to update itself, counted from its first run they found after a newer release was out, so a machine asleep meanwhile is not counted; else `update: latest v1.4.2`; else, on a current release, `update check failing:` and why; else nothing. Only an error, and an update not made, are in color |
 
-The bottom row is TOTAL for each period, by the matrix's rules for `≥` and `?`. With no note on any device, there is no NOTE column.
+The bottom row is TOTAL for each period. With no note on any device, there is no NOTE column.
 
 A short NOTE cuts an error with `…`, and keeps a silent device's last error, and why a release check failed, only while 12 columns of it fit. The check's note shortens what failed first, to keep why: `update:` for `update failing:`, `check failing:` for `update check failing:`; then it says only `update failing`, or `update check failing`, then `check failing`. It never cuts a time: a silent device's note becomes `since Mon 14:02`, then the day alone, as in `since Mon`, then `silent`. An old release's becomes `latest v1.4.2`, and an update not made `not updated for 1d`, then `not updated 1d`.
 
@@ -233,7 +228,7 @@ The static report ends with a dim legend, listing only the marks on screen, a wo
 ━ used  ─ left  ┃╋ even use  ┈ no reading  ~ stale  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
 ```
 
-With every mark on screen it is one line from 120 columns on. `≥ at least`, which only a device on a collector older than v0.2.0 brings, follows `? unknown`; with it too, the line needs 133 columns. Below that, where one line does not fit, it takes as few lines as it can, of even length: two at 80 columns. The interactive view keeps the legend in `?` help, which says more of each mark.
+With every mark on screen it is one line from 120 columns on. Below that, where one line does not fit, it takes as few lines as it can, of even length: two at 80 columns. The interactive view keeps the legend in `?` help, which says more of each mark.
 
 ## The interactive view
 
@@ -279,7 +274,7 @@ Semantic tokens, never raw colors in the code. Each has a value for dark and for
 | out, over, tight, ok, under | forecast states and their badges |
 | heat 1–5 | the matrix ramp, from faint to bright and bold |
 
-With `--color never`, `NO_COLOR`, or a pipe, the words and marks carry the meaning. In the matrix, the largest value in each column is bold instead of the heat map. A column with a `?` in it has none bold, since its largest is not known.
+With `--color never`, `NO_COLOR`, or a pipe, the words and marks carry the meaning. In the matrix, the largest value in each column is bold instead of the heat map.
 
 ### Glyphs
 
@@ -292,7 +287,6 @@ With `--color never`, `NO_COLOR`, or a pipe, the words and marks carry the meani
 | `●` | this device, or logged in here | `*` |
 | `×` `~` `↓` | error, silent or old reading, old release | `x` `~` `v` |
 | `·` | nothing, and separators | `.` |
-| `≥` | at least: a total with a part that is not known | `>=` |
 | `‹›` | the chosen option | `[]` |
 
 ### Text and numbers
@@ -300,7 +294,7 @@ With `--color never`, `NO_COLOR`, or a pipe, the words and marks carry the meani
 - Section titles are bold capitals, followed by counts, with the alarming counts in their state color.
 - Column headers are dim capitals.
 - Durations: `7m`, `34m`, `5d 22h`, `1d 23h`. Clock times are local and 24-hour, with the weekday: `Fri 17:09`.
-- Tokens: whole millions, `<1`, or `·`. Tokens that are not known are `?`, and a total with a part that is not known is `≥` before the part that is, rounded down: `≥68`.
+- Tokens: whole millions, `<1`, or `·`.
 - Emails show in full in SUBSCRIPTIONS and are cut in the middle when they do not fit. The matrix uses short names.
 
 ### Width

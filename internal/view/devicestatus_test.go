@@ -65,7 +65,7 @@ func troubled(t *testing.T) Report {
 // order, for every period, and as many lines, so a device keeps its line
 // when the view changes.
 func TestStatusOrder(t *testing.T) {
-	for name, r := range map[string]Report{"team": troubled(t), "older": olderTeam(t)} {
+	for name, r := range map[string]Report{"team": troubled(t)} {
 		for _, per := range Periods {
 			for _, share := range []bool{false, true} {
 				o := Options{Width: 120, Loc: sampleZone, Period: per, Share: share}
@@ -78,11 +78,6 @@ func TestStatusOrder(t *testing.T) {
 				}
 			}
 		}
-	}
-	// By 90d the old device leads, the only one whose tokens are known then.
-	r := olderTeam(t)
-	if got := statusRows(t, Render(r, devices(Options{Width: 120, Period: Quarter}))); !slices.Equal(got, []string{"MacBook-Old", "srv1", "annbook"}) {
-		t.Errorf("by 90d: %v", got)
 	}
 }
 
@@ -97,7 +92,6 @@ func TestStatusTitle(t *testing.T) {
 	}{
 		{loadReport(t, "team"), 120, "DEVICES  13 · 1 error · 2 old · by 7d · M tokens in+out"},
 		{troubled(t), 120, "DEVICES  13 · 2 errors · 1 silent · 2 old · by 7d · M tokens in+out"},
-		{olderTeam(t), 120, "DEVICES  3 · 1 old · by 7d · M tokens in+out"},
 	} {
 		got := title(c.r, Options{Width: c.width, Loc: sampleZone})
 		if !strings.HasPrefix(got, c.want+"  ") || !strings.HasSuffix(got, "usage  ‹status›") {
@@ -178,7 +172,7 @@ func TestStatusColumns(t *testing.T) {
 	}
 
 	order := []string{"DEVICE", "USER", "VERSION", "SEEN", "VIA", "TODAY", "7D", "30D", "90D", "NOTE"}
-	for name, r := range map[string]Report{"team": loadReport(t, "team"), "troubled": troubled(t), "long": long, "older": olderTeam(t)} {
+	for name, r := range map[string]Report{"team": loadReport(t, "team"), "troubled": troubled(t), "long": long} {
 		for _, per := range Periods {
 			for _, ascii := range []bool{false, true} {
 				var last []string

@@ -12,7 +12,6 @@ Conventions:
 - Percentages run from 0 to 100, except a forecast, which can pass 100.
 - `tokens` has the four counts the tools record over the last 90 days. `usage`, `days`, and `window_tokens` count input plus output tokens only, cache left out.
 - Days are UTC days. A `usage` object has four periods, each ending with the report's UTC day: `today`, `7d`, `30d`, and `90d`, the last that many UTC days up to and including it.
-- A `usage` object under `team` can also have `unknown`, the names of the periods whose tokens are not all known, in the order above, such as `["today", "7d", "30d"]`. Such a period holds the tokens that are known, so the real count is at least that. `unknown` is absent when every period is known. It is there only for a device on a collector older than v0.2.0; see [team](#team).
 - A `state` is one of `out`, `over`, `tight`, `ok`, `under`, and `unknown`; see [states](#states).
 
 ## Report
@@ -215,8 +214,6 @@ A device:
 | `behind_since` | time | for an `old` device, its first run on the release it runs that this device's reads of the team found while a newer one was out, made since the read before, so that time it did not run, as a laptop asleep, does not count. The device has not updated itself for at least that long; once it has reported for 7 hours since, it had the runs to. `null` otherwise, until a read finds such a run, and once the device has not reported for a day, until it reports again |
 | `usage` | object | its input plus output tokens in each period, over every account. A device's days count from the UTC day it collected on, so one that last reported three days ago adds nothing to `today` |
 
-A device on a collector older than v0.2.0 sends each account's `tokens` over its 90 days, but no days and no tokens since a window began. The report takes another device's account as such when it has input or output tokens but neither of those. Its `usage` in `90d` is the input plus output of its `tokens`: its own 90 days, the report's as nearly as that collector counts them. They end when the device collected, 2 days early for one that last collected 2 days before the report's UTC day, and they hold a session whole while it was active in them. A shorter period is `0` when the account was last active on the device before the period began, and not known otherwise. A period that is not known is `0` and named in `unknown`. The sums over such an account, as its device's `usage`, the team account's, and a matrix column's or row's, add the known part and name the period in `unknown` too.
-
 A team account. Each provider's accounts are in the order the report lists them: the worst `state` first (`out`, `over`, `tight`, `ok`, `under`, then `unknown`), ties to the one with less left of its main window, then by label.
 
 | Field | Type | Meaning |
@@ -231,8 +228,8 @@ A team account. Each provider's accounts are in the order the report lists them:
 | `state`, `quota` | | as for a device's account, from the newest reading of each window any device has; percentages are never added. `quota.from` is set when that reading is the linked account's. Snapshots do not say where a reading came from, so another device's refusal is an ordinary reading here |
 | `link` | object | `{provider, label}`, as for a device's account; `null` when there is none. This device's accounts use their own link. For another device's account, whose snapshot carries no link, it is the one account on that snapshot of the tool in `quota.from` with the same reading: the same observation time and windows. When none or several match, `label` is `""` |
 | `sessions`, `tokens`, `usage` | | summed across devices; the account's own, without what linked accounts spent through it |
-| `users` | number | how many devices have tokens on the account since its main window began, or in the last 7 days when it has none, what linked accounts spent through it included. A device on a collector older than v0.2.0, whose tokens then are not known, counts when the account was last active on it since then |
-| `busiest` | string | the name of the one of those devices with the most tokens, among those whose tokens are known. When there is one device, it is that one, known or not. `null` when there is none, or when none of two or more is known |
+| `users` | number | how many devices have tokens on the account since its main window began, or in the last 7 days when it has none, what linked accounts spent through it included |
+| `busiest` | string | the name of the one of those devices with the most tokens; `null` when there is none |
 | `last_active_at` | time | the newest activity on the account on any device, what Hermes spent through it included. A device whose Hermes spent through several logins gives each one its newest activity, since its snapshot does not say which login that went through |
 | `per_device` | list | `{device, device_id, current, sessions, tokens, usage, last_active_at}` for each device that has the account, `device` as `host (user)`; most tokens first, then by `device` |
 | `linked_usage` | list | `{provider, label, devices, sessions, tokens}` for each account of another tool that spent through this one on any device, as each device counted it session by session, summed across devices, with the devices it ran on; `[]` when none. These tokens are that account's and are not in `tokens` |
@@ -258,7 +255,6 @@ A column:
 | `percent` | number | how full the subscription's main window is, when that is known and it has not reset since; `null` otherwise |
 | `usage` | object | the team's input plus output tokens on it in each period, what Hermes spent through the login included |
 | `window_tokens` | number | the team's input plus output tokens since the main window began, what Hermes spent through the login included |
-| `window_unknown` | bool | `true` when a cell's `window_unknown` is: `window_tokens` holds only the known tokens. Absent otherwise |
 
 A row:
 
@@ -276,8 +272,7 @@ A cell:
 | --- | --- | --- |
 | `usage` | object | the device's input plus output tokens on the column in each period |
 | `window_tokens` | number | the device's input plus output tokens since the column's main window began |
-| `window_unknown` | bool | `true` when those are not known: the device is on a collector older than v0.2.0, and the account's last activity on it is not known to be before the window began. `window_tokens` is then `0`. Absent otherwise |
-| `share` | object | the device's part of the column's tokens, in percent, in each period: `today`, `7d`, `30d`, and `90d`, as in `usage`. It is the cell's `usage` over the column's, so a column's shares add up to 100. A period's is `null` when the team spent nothing on the column in it, and when it is not known: the period is in the column's `usage.unknown`, and the device spent some in it or its own tokens then are not known. A device that spent none has `0`. It says how the tokens split, not how much of the quota the device used |
+| `share` | object | the device's part of the column's tokens, in percent, in each period: `today`, `7d`, `30d`, and `90d`, as in `usage`. It is the cell's `usage` over the column's, so a column's shares add up to 100. A period's is `null` when the team spent nothing on the column in it. A device that spent none has `0`. It says how the tokens split, not how much of the quota the device used |
 
 ## Changes from version 3
 

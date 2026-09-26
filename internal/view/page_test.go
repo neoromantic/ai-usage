@@ -244,7 +244,7 @@ func TestPageMatrixScroll(t *testing.T) {
 // period, at every tier, scrolled sideways or not. USAGE, on a single
 // device, has none.
 func TestPageDevicesHead(t *testing.T) {
-	for name, r := range map[string]Report{"team": loadReport(t, "team"), "older": olderTeam(t)} {
+	for name, r := range map[string]Report{"team": loadReport(t, "team")} {
 		for _, w := range []int{80, 120, 160} {
 			for _, status := range []bool{false, true} {
 				for _, share := range []bool{false, true} {

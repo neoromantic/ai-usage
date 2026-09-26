@@ -132,8 +132,7 @@ const (
 )
 
 // legend is one dim line of the marks on screen, a word or two each, so a
-// page 120 wide that shows every mark has it in one line, and one 133 wide
-// with ≥ too, which only a collector older than v0.2.0 brings. Where one line
+// page 120 wide that shows every mark has it in one line. Where one line
 // does not fit the width, it takes as few lines as it can, of even length.
 // The interactive view's help says more of each mark.
 func (p *page) legend() string {
@@ -160,7 +159,6 @@ func (p *page) legend() string {
 	add(s["stale"] || s["silent"], g.silent+" stale")
 	// A window not read since a refusal is not known either.
 	add(s["unknown"] || s["unread"], "? unknown")
-	add(s["atLeast"], g.atLeast+" at least")
 	add(s["dash"], g.dash+" no forecast")
 	// An account logged in here, and this device, are both here.
 	add(s["here"] || s["this"], g.here+" here")

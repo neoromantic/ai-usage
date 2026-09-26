@@ -115,7 +115,7 @@ func (p *page) deviceStatus() []chunks {
 			if i < n {
 				u = rows[i].Usage
 			}
-			return chunks{p.cell(p.tokens(q, u))}
+			return chunks{p.cell(p.millions(q.Of(u)))}
 		})
 		// Every header is dim, the period the rows are in the order of too:
 		// the title names it.

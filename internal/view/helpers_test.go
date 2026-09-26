@@ -2,6 +2,7 @@ package view
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 	"time"
 
@@ -131,80 +132,19 @@ func withTeam(t *testing.T, f *fixture, docs ...snapshot.Doc) Report {
 	return Build(f.in)
 }
 
-// olderDoc is another device's snapshot as a collector older than v0.2.0
-// sends it: each account's tokens over 90 days, but no days, and no tokens
-// since a window began.
-func olderDoc(t *testing.T, key *team.Key, device, host string, at time.Time, st *state.State) snapshot.Doc {
+// column is the matrix column of the subscription with label.
+func column(t *testing.T, mx Matrix, label string) int {
 	t.Helper()
-	doc := collect.BuildDoc(st, key, state.Config{Device: device}, host, "dana", "v0.1.4", at)
-	for i := range doc.Accounts {
-		doc.Accounts[i].Days, doc.Accounts[i].Recent = nil, nil
-	}
-	body, err := json.Marshal(doc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if doc, err = snapshot.Decode(body); err != nil {
-		t.Fatal(err)
-	}
-	return doc
-}
-
-// testKey is a team key with a fixed seed, so a page that shows the team is
-// the same on every run.
-const testKey = "aiu-team-1:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
-
-// olderTeam is a team with a device on a collector older than v0.2.0:
-// annbook, this device, and srv1 on v0.2.0, and MacBook-Old on v0.1.4. The
-// old device spent on ann 2 hours ago and on kim, which no other device
-// uses, 5 hours ago; on lee, last 40 days ago.
-func olderTeam(t *testing.T) Report {
-	t.Helper()
-	key, err := team.Import(testKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Every window began 3 days ago.
-	start := now.Add(-3 * 24 * time.Hour)
-	q := func(at time.Time, pct float64) *state.Quota {
-		return &state.Quota{At: at, Source: "harness", Windows: []snapshot.Window{week7(pct, start.Add(week))}}
-	}
-	homes := func(st *state.State, home string) {
-		for _, p := range snapshot.Providers {
-			st.Sources[p] = state.Source{Status: "ok", Homes: []string{home + "/." + p}}
+	for i, c := range mx.Columns {
+		if c.Label == label {
+			return i
 		}
 	}
+	t.Fatalf("no column %q", label)
+	return -1
+}
 
-	st := emptyState()
-	homes(st, "/Users/ann")
-	addAccount(st, "claude", "ann@acme.dev", true, q(now, 60), 0)
-	spend(st, "claude", "ann@acme.dev", "/Users/ann/src/app", 4_000_000, now.Add(-time.Hour), now.Add(-2*24*time.Hour), now.Add(-20*24*time.Hour))
-	st.LastRunAt, st.LastSuccessAt = now.Add(-7*time.Minute), now.Add(-7*time.Minute)
-	st.Relay.LastPushAt, st.Relay.LastPullAt = now.Add(-7*time.Minute), now.Add(-7*time.Minute)
-	st.Update.CheckedAt, st.Update.Latest = now.Add(-time.Hour), "v0.2.0"
-	st.Schedule.Registered = true
-	cfg := state.Config{Device: "d-annbook"}
-
-	srv := emptyState()
-	homes(srv, "/root")
-	addAccount(srv, "codex", "lee@corp.test", true, q(now.Add(-10*time.Minute), 40), 0)
-	spend(srv, "codex", "lee@corp.test", "/srv/bots", 30_000_000, now.Add(-2*time.Hour), now.Add(-4*24*time.Hour), now.Add(-50*24*time.Hour))
-	srvDoc := collect.BuildDoc(srv, key, state.Config{Device: "d-srv1"}, "srv1", "root", "v0.2.0", now.Add(-10*time.Minute))
-
-	old := emptyState()
-	homes(old, "/Users/dana")
-	addAccount(old, "claude", "ann@acme.dev", false, nil, 0)
-	spend(old, "claude", "ann@acme.dev", "/Users/dana/src/app", 100_000_000, now.Add(-2*time.Hour), now.Add(-9*24*time.Hour), now.Add(-35*24*time.Hour), now.Add(-80*24*time.Hour))
-	addAccount(old, "claude", "kim@corp.test", true, q(now.Add(-20*time.Minute), 30), 0)
-	spend(old, "claude", "kim@corp.test", "/Users/dana/notes", 50_000_000, now.Add(-5*time.Hour), now.Add(-10*24*time.Hour))
-	addAccount(old, "codex", "lee@corp.test", false, nil, 0)
-	spend(old, "codex", "lee@corp.test", "/Users/dana/src/app", 60_000_000, now.Add(-40*24*time.Hour), now.Add(-60*24*time.Hour))
-	oldDoc := olderDoc(t, key, "d-macbook-old", "MacBook-Old", now.Add(-20*time.Minute), old)
-
-	return Build(Input{
-		Version: "v0.2.0", RelayURL: "https://relay.example", Config: cfg, State: st, Key: key,
-		Doc:      collect.BuildDoc(st, key, cfg, "annbook", "ann", "v0.2.0", now.Add(-7*time.Minute)),
-		Team:     collect.TeamCache{PulledAt: now.Add(-7 * time.Minute), Team: key.Fingerprint(), Docs: []snapshot.Doc{srvDoc, oldDoc}},
-		Hostname: "annbook", OSUser: "ann", Now: now,
-	})
+// near says a share is not nil and about want.
+func near(v *float64, want float64) bool {
+	return v != nil && math.Abs(*v-want) < 1e-9
 }

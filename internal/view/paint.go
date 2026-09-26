@@ -12,21 +12,21 @@ type marks struct {
 	used, left, tick, tickIn, unread string // a bar: ━ ─ ┃ ╋, and ┈ with no reading
 	here, fail, silent, old          string // ● × ~ ↓
 	none, sep, dash, ell, rule       string // · " · " — … ─
-	open, shut, times, atLeast       string // ‹ › × ≥
+	open, shut, times                string // ‹ › ×
 }
 
 var utf8Marks = marks{
 	used: "━", left: "─", tick: "┃", tickIn: "╋", unread: "┈",
 	here: "●", fail: "×", silent: "~", old: "↓",
 	none: "·", sep: " · ", dash: "—", ell: "…", rule: "─",
-	open: "‹", shut: "›", times: "×", atLeast: "≥",
+	open: "‹", shut: "›", times: "×",
 }
 
 var asciiMarks = marks{
 	used: "=", left: "-", tick: "|", tickIn: "+", unread: ".",
 	here: "*", fail: "x", silent: "~", old: "v",
 	none: ".", sep: " . ", dash: "-", ell: "...", rule: "-",
-	open: "[", shut: "]", times: "x", atLeast: ">=",
+	open: "[", shut: "]", times: "x",
 }
 
 // chunk is a run of text in one style. A chunk with no style is written as

@@ -245,10 +245,6 @@ type Usage struct {
 	Week    int64 `json:"7d"`
 	Month   int64 `json:"30d"`
 	Quarter int64 `json:"90d"`
-	// Unknown are the periods whose tokens are not all known, as a device's
-	// on a collector older than v0.2.0, which counts only its 90 days. Such
-	// a period holds the tokens that are known: it is at least that.
-	Unknown PeriodSet `json:"unknown,omitempty"`
 }
 
 // Project is usage in one working directory. On this device's list it is
@@ -346,9 +342,7 @@ type TeamAccount struct {
 	Usage    Usage           `json:"usage"`
 	// Users counts the devices with tokens on the account since its main
 	// window began, or in the last 7 days when it has none, what linked
-	// accounts spent through it included; a device on a collector older than
-	// v0.2.0 counts when it used the account since then. Busiest is the one
-	// with the most of those whose tokens are known, or the only one.
+	// accounts spent through it included. Busiest is the one with the most.
 	Users        int           `json:"users"`
 	Busiest      *string       `json:"busiest"`
 	LastActiveAt *time.Time    `json:"last_active_at"`
@@ -394,9 +388,6 @@ type Column struct {
 	// WindowTokens is the team's tokens since the main window began, what
 	// Hermes spent through the login included.
 	WindowTokens int64 `json:"window_tokens"`
-	// WindowUnknown says a device's tokens since the main window began are
-	// not known, so WindowTokens holds only the known ones.
-	WindowUnknown bool `json:"window_unknown,omitempty"`
 }
 
 type Row struct {
@@ -416,17 +407,13 @@ type Cell struct {
 	// WindowTokens is the device's tokens since the column's main window
 	// began.
 	WindowTokens int64 `json:"window_tokens"`
-	// WindowUnknown says they are not known: the device is on a collector
-	// older than v0.2.0 and used the account since the window began.
-	WindowUnknown bool `json:"window_unknown,omitempty"`
 	// Share is the device's part of the column's tokens: its tokens over
 	// the team's. A column's shares add up to 100.
 	Share Share `json:"share"`
 }
 
 // Share is a part of a whole in each period, in percent. A period's is nil
-// when the whole has no tokens in it, and when it is not known: the part's
-// tokens then are not, or the whole's are not and the part has some.
+// when the whole has no tokens in it.
 type Share struct {
 	Today   *float64 `json:"today"`
 	Week    *float64 `json:"7d"`

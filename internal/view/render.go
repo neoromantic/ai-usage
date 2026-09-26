@@ -1,7 +1,6 @@
 package view
 
 import (
-	"encoding/json"
 	"math"
 	"strconv"
 	"strings"
@@ -64,23 +63,6 @@ func (p Period) share(s Share) *float64 {
 	}
 }
 
-// Known says the period's tokens in u are all known.
-func (p Period) Known(u Usage) bool { return u.Unknown&p.bit() == 0 }
-
-// days is how many UTC days the period spans, the report's own last.
-func (p Period) days() int {
-	switch p {
-	case Today:
-		return 1
-	case Month:
-		return 30
-	case Quarter:
-		return 90
-	default:
-		return 7
-	}
-}
-
 // Next is the period after p, back to today after 90d.
 func (p Period) Next() Period {
 	for i, q := range Periods {
@@ -89,38 +71,6 @@ func (p Period) Next() Period {
 		}
 	}
 	return Week
-}
-
-func (p Period) bit() PeriodSet { return 1 << p }
-
-// PeriodSet is a set of periods. In JSON it is the list of their names, in
-// the order `p` steps through them.
-type PeriodSet uint8
-
-func (s PeriodSet) MarshalJSON() ([]byte, error) {
-	names := []string{}
-	for _, p := range Periods {
-		if s&p.bit() != 0 {
-			names = append(names, p.String())
-		}
-	}
-	return json.Marshal(names)
-}
-
-func (s *PeriodSet) UnmarshalJSON(b []byte) error {
-	var names []string
-	if err := json.Unmarshal(b, &names); err != nil {
-		return err
-	}
-	*s = 0
-	for _, n := range names {
-		for _, p := range Periods {
-			if p.String() == n {
-				*s |= p.bit()
-			}
-		}
-	}
-	return nil
 }
 
 // Options say how the console draws the report.
@@ -360,22 +310,6 @@ func (p *page) millions(n int64) string {
 	default:
 		return strconv.FormatInt(int64(math.Round(float64(n)/1e6)), 10)
 	}
-}
-
-// tokens prints a period's tokens in u as millions does, when they are all
-// known. When some are not, as a device's on a collector older than v0.2.0,
-// it prints ≥ before the whole millions of those that are, rounded down so
-// the bound holds, or ? when they are under a million, so a sum with a part
-// missing never reads as exact.
-func (p *page) tokens(per Period, u Usage) string {
-	n := per.Of(u)
-	switch {
-	case per.Known(u):
-		return p.millions(n)
-	case n < 1_000_000:
-		return "?"
-	}
-	return p.g.atLeast + strconv.FormatInt(n/1_000_000, 10)
 }
 
 // percent prints a share in whole percents, <1 under one, >99 over 99 and

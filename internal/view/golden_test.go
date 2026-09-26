@@ -45,7 +45,7 @@ func devices(o Options) Options {
 }
 
 func TestGolden(t *testing.T) {
-	team, single, older := loadReport(t, "team"), loadReport(t, "single"), olderTeam(t)
+	team, single := loadReport(t, "team"), loadReport(t, "single")
 	page := func(w int) Options { return Options{Width: w, Loc: sampleZone} }
 	for _, c := range []struct {
 		name string
@@ -93,19 +93,6 @@ func TestGolden(t *testing.T) {
 			o.AllProjects = true
 			return plainText(team, o)
 		}},
-		// A device on a collector older than v0.2.0 is known by its tokens
-		// over 90 days alone.
-		{"team-older-7d", func() string { return plainText(older, page(120)) }},
-		{"team-older-90d", func() string {
-			o := page(120)
-			o.Period = Quarter
-			return plainText(older, o)
-		}},
-		{"team-older-share", func() string {
-			o := page(120)
-			o.Share = true
-			return plainText(older, o)
-		}},
 		// The status view of DEVICES, as --devices prints it.
 		{"team-devices-80", func() string { return plainText(team, devices(page(80))) }},
 		{"team-devices-120", func() string { return plainText(team, devices(page(120))) }},
@@ -120,7 +107,6 @@ func TestGolden(t *testing.T) {
 			o.Color, o.Dark = true, true
 			return Text(team, o)
 		}},
-		{"team-older-devices", func() string { return plainText(older, devices(page(120))) }},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			got := c.out()
@@ -148,7 +134,7 @@ var sgr = regexp.MustCompile(`\x1b\[[0-9;:]*m`)
 // each tier and checks the line contract: nothing wider than T-1, no
 // trailing spaces, only ASCII in ASCII mode, and no color without color.
 func TestWidths(t *testing.T) {
-	reports := map[string]Report{"team": loadReport(t, "team"), "single": loadReport(t, "single"), "older": olderTeam(t)}
+	reports := map[string]Report{"team": loadReport(t, "team"), "single": loadReport(t, "single")}
 	for name, r := range reports {
 		for _, w := range []int{80, 81, 99, 100, 119, 120, 159, 160} {
 			for _, ascii := range []bool{false, true} {
@@ -223,7 +209,7 @@ func checkLines(t *testing.T, name string, o Options, out string) {
 // width, in both views of DEVICES, both modes of the matrix, and every
 // period.
 func TestPageFits(t *testing.T) {
-	reports := map[string]Report{"team": loadReport(t, "team"), "single": loadReport(t, "single"), "older": olderTeam(t)}
+	reports := map[string]Report{"team": loadReport(t, "team"), "single": loadReport(t, "single")}
 	for name, r := range reports {
 		for w := 80; w <= 160; w++ {
 			for _, status := range []bool{false, true} {

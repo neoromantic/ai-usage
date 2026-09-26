@@ -30,16 +30,13 @@ func (p *page) viewPills() chunks {
 }
 
 // sortRows puts the matrix's rows in the order it shows them: the most
-// tokens in the period first, tokens not known before none, then by name.
-// The status view shows its rows in the same order.
+// tokens in the period first, then by name. The status view shows its rows
+// in the same order.
 func sortRows(rows []Row, per Period) {
 	sort.SliceStable(rows, func(i, j int) bool {
 		a, b := per.Of(rows[i].Usage), per.Of(rows[j].Usage)
 		if a != b {
 			return a > b
-		}
-		if ka, kb := per.Known(rows[i].Usage), per.Known(rows[j].Usage); ka != kb {
-			return kb
 		}
 		return rows[i].Device < rows[j].Device
 	})
@@ -54,9 +51,6 @@ type gridCol struct {
 	w     int
 	x     int // where its cell starts on the line
 	top   float64
-	// known says every value in the column is known, so the largest of
-	// them, top, is the largest in the column.
-	known bool
 }
 
 const (
@@ -72,12 +66,9 @@ const (
 // the period first, and a column per subscription, grouped under its
 // provider, with totals on the right and at the bottom. The cells are a
 // heat map on a log scale; without color, the largest in each column is
-// bold, unless the column has a value that is not known. The share mode
-// shows each value as a part of its column's total: a subscription's
-// column adds up to 100, and TOTAL is each device's part of the team's
-// tokens. Tokens that are not all known, as a device's on a collector
-// older than v0.2.0, show as tokens prints them, and a share that is not
-// known is ?.
+// bold. The share mode shows each value as a part of its column's total: a
+// subscription's column adds up to 100, and TOTAL is each device's part of
+// the team's tokens.
 func (p *page) grid() []chunks {
 	g := p.g
 	m := p.r.Team.Matrix
@@ -89,9 +80,7 @@ func (p *page) grid() []chunks {
 		if c.NoQuota {
 			grp = ""
 		}
-		// A column in the share mode whose shares are not all known has no
-		// known share above 0 to be bold.
-		cols = append(cols, gridCol{c: c, idx: i, group: grp, known: share || per.Known(c.Usage)})
+		cols = append(cols, gridCol{c: c, idx: i, group: grp})
 	}
 	rows := append([]Row(nil), m.Rows...)
 	sortRows(rows, per)
@@ -108,25 +97,17 @@ func (p *page) grid() []chunks {
 		}
 		return float64(per.Of(cell.Usage))
 	}
-	// part prints a share of whole: ? when it is not known, and the none
-	// mark when whole has no tokens.
-	part := func(s Share, whole Usage) string {
-		v := per.share(s)
-		if v == nil && !per.Known(whole) {
-			return "?"
-		}
-		return p.percent(v)
-	}
+	// part prints a share in the period: the none mark when its whole has
+	// no tokens.
+	part := func(s Share) string { return p.percent(per.share(s)) }
 	// totalOf prints a total: in the share mode, all of it when it has any
 	// tokens.
 	totalOf := func(u Usage) string {
 		switch {
 		case !share:
-			return p.tokens(per, u)
+			return p.millions(per.Of(u))
 		case per.Of(u) > 0:
 			return "100"
-		case !per.Known(u):
-			return "?"
 		}
 		return g.none
 	}
@@ -136,9 +117,9 @@ func (p *page) grid() []chunks {
 		}
 		cell := r.Cells[c.idx]
 		if share {
-			return part(cell.Share, c.c.Usage)
+			return part(cell.Share)
 		}
-		return p.tokens(per, cell.Usage)
+		return p.millions(per.Of(cell.Usage))
 	}
 
 	var top float64
@@ -265,9 +246,9 @@ func (p *page) grid() []chunks {
 		}
 		line = append(line, p.space(2))
 		if share {
-			line = append(line, p.right(p.cell(part(r.Share, grand)), totalW)...)
+			line = append(line, p.right(p.cell(part(r.Share)), totalW)...)
 		} else {
-			line = append(line, p.right(p.cell(p.tokens(per, r.Usage)), totalW)...)
+			line = append(line, p.right(p.cell(p.millions(per.Of(r.Usage))), totalW)...)
 		}
 		out = append(out, line)
 	}
@@ -304,34 +285,24 @@ func (p *page) pill(s string, chosen bool) chunk {
 	return p.muted(strings.Repeat(" ", width(p.g.open)) + s + strings.Repeat(" ", width(p.g.shut)))
 }
 
-// cell is a number in plain text, the none mark faint, or ? muted.
+// cell is a number in plain text, or the none mark faint.
 func (p *page) cell(s string) chunk {
-	switch {
-	case s == p.g.none:
+	if s == p.g.none {
 		p.mark("none")
 		return p.faint(s)
-	case s == "?":
-		p.mark("unknown")
-		return p.muted(s)
-	case strings.HasPrefix(s, p.g.atLeast):
-		p.mark("atLeast")
 	}
 	return p.plain(s)
 }
 
 // heat is a matrix cell in column c. With color it grows brighter with its
 // value, on a log scale against top, the largest cell, and bold at the top
-// step. Without color, the largest in its column is bold, when every value
-// in the column is known.
+// step. Without color, the largest in its column is bold.
 func (p *page) heat(s string, v float64, c gridCol, top float64) chunk {
 	if v <= 0 {
 		return p.cell(s)
 	}
-	if strings.HasPrefix(s, p.g.atLeast) {
-		p.mark("atLeast")
-	}
 	if !p.o.Color {
-		if c.known && v == c.top {
+		if v == c.top {
 			return p.bold(s)
 		}
 		return p.plain(s)
@@ -409,7 +380,7 @@ func (p *page) usage() []chunks {
 	}
 	numW := make([]int, len(Periods))
 	for i, per := range Periods {
-		numW[i] = max(width(strings.ToUpper(per.String())), width(p.tokens(per, sum)), 4)
+		numW[i] = max(width(strings.ToUpper(per.String())), width(p.millions(per.Of(sum))), 4)
 	}
 	acct := width("TOTAL")
 	for _, r := range rows {
@@ -424,7 +395,7 @@ func (p *page) usage() []chunks {
 	numbers := func(line chunks, u Usage) chunks {
 		for i, per := range Periods {
 			line = append(line, p.space(2))
-			line = append(line, p.right(p.cell(p.tokens(per, u)), numW[i])...)
+			line = append(line, p.right(p.cell(p.millions(per.Of(u))), numW[i])...)
 		}
 		return line
 	}

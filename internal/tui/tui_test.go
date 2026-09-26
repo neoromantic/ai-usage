@@ -665,89 +665,12 @@ func TestPinnedHeadSideways(t *testing.T) {
 // TestDeviceViewsDrawn: s draws the status view of a real report, with the
 // device's release, and the page keeps its lines.
 func TestDeviceViewsDrawn(t *testing.T) {
-	var r view.Report
-	if err := json.Unmarshal([]byte(olderReport), &r); err != nil {
-		t.Fatal(err)
-	}
-	m := model(t, 120, 40, Config{Report: r, Render: view.Render})
+	m := model(t, 120, 40, Config{Report: teamReport(t), Render: view.Render})
 	lines := len(m.page.Body)
 	m = keys(t, m, "s")
 	text := strings.Join(screen(m), "\n")
-	if !strings.Contains(text, "DEVICES  2 · 1 old · by 7d") || !strings.Contains(text, "v0.1.4 ↓") || len(m.page.Body) != lines {
+	if !strings.Contains(text, "DEVICES  13 · 1 error · 2 old · by 7d") || !strings.Contains(text, "v1.4.0 ↓") || len(m.page.Body) != lines {
 		t.Fatalf("status view, %d lines, was %d:\n%s", len(m.page.Body), lines, text)
-	}
-}
-
-// olderReport is a team with a device on a collector older than v0.2.0,
-// whose tokens over 90 days alone are known, as the report's JSON has it.
-const olderReport = `{"generated_at": "2026-09-23T17:38:00Z", "collector": {"device_label": "annbook"}, "team": {
-  "devices": [
-    {"device": "d-annbook", "label": "annbook", "this_device": true, "collector_version": "v0.2.0", "collected_at": "2026-09-23T17:30:00Z",
-      "usage": {"today": 4000000, "7d": 8000000, "30d": 12000000, "90d": 12000000}},
-    {"device": "d-macbook-old", "label": "MacBook-Old", "collector_version": "v0.1.4", "collected_at": "2026-09-23T17:20:00Z", "old": true,
-      "usage": {"today": 0, "7d": 0, "30d": 0, "90d": 400000000, "unknown": ["today", "7d", "30d"]}}],
-  "matrix": {
-    "columns": [{"provider": "claude", "label": "ann@acme.dev", "name": "ann", "state": "over", "percent": 60,
-      "usage": {"today": 4000000, "7d": 8000000, "30d": 12000000, "90d": 412000000, "unknown": ["today", "7d", "30d"]},
-      "window_tokens": 8000000, "window_unknown": true}],
-    "rows": [
-      {"device": "annbook", "device_id": "d-annbook", "usage": {"today": 4000000, "7d": 8000000, "30d": 12000000, "90d": 12000000},
-        "cells": [{"usage": {"today": 4000000, "7d": 8000000, "30d": 12000000, "90d": 12000000}, "window_tokens": 8000000,
-          "share": {"today": null, "7d": null, "30d": null, "90d": 2.912621359223301}}],
-        "share": {"today": null, "7d": null, "30d": null, "90d": 2.912621359223301}},
-      {"device": "MacBook-Old", "device_id": "d-macbook-old", "usage": {"today": 0, "7d": 0, "30d": 0, "90d": 400000000, "unknown": ["today", "7d", "30d"]},
-        "cells": [{"usage": {"today": 0, "7d": 0, "30d": 0, "90d": 400000000, "unknown": ["today", "7d", "30d"]}, "window_tokens": 0,
-          "window_unknown": true, "share": {"today": null, "7d": null, "30d": null, "90d": 97.0873786407767}}],
-        "share": {"today": null, "7d": null, "30d": null, "90d": 97.0873786407767}}]}}}`
-
-// The period and share keys redraw a device on an older collector: its
-// tokens over 90 days, and ? for every shorter period and for its share of
-// it, with the totals that miss it at least what they show.
-func TestOlderDevice(t *testing.T) {
-	var r view.Report
-	if err := json.Unmarshal([]byte(olderReport), &r); err != nil {
-		t.Fatal(err)
-	}
-	// The tail of the first line that starts with the device's name: its
-	// cell and its total.
-	cells := func(m Model, device string) string {
-		for _, l := range screen(m) {
-			if f := strings.Fields(strings.TrimLeft(l, "●↓ ")); len(f) > 0 && f[0] == device {
-				return strings.Join(f[1:], " ")
-			}
-		}
-		t.Fatalf("no %s row:\n%s", device, strings.Join(screen(m), "\n"))
-		return ""
-	}
-	m := model(t, 120, 40, Config{Report: r, Render: view.Render})
-	check := func(what, old, total string) {
-		t.Helper()
-		if got := cells(m, "MacBook-Old"); got != old {
-			t.Errorf("%s: MacBook-Old %q, want %q", what, got, old)
-		}
-		if got := cells(m, "TOTAL"); got != total {
-			t.Errorf("%s: TOTAL %q, want %q", what, got, total)
-		}
-	}
-	check("7d", "? ?", "≥8 ≥8")
-	for _, c := range []struct{ key, old, total string }{
-		{"p", "? ?", "≥12 ≥12"}, {"p", "400 400", "412 412"}, {"p", "? ?", "≥4 ≥4"}, {"p", "? ?", "≥8 ≥8"},
-		{"9", "400 400", "412 412"}, {"1", "? ?", "≥4 ≥4"}, {"3", "? ?", "≥12 ≥12"}, {"7", "? ?", "≥8 ≥8"},
-	} {
-		m = keys(t, m, c.key)
-		check(c.key+" "+m.opts.Period.String(), c.old, c.total)
-	}
-	// Its share of 7 days is not known, nor is annbook's, though each
-	// column is all of its own; of 90 days, both are known.
-	m = keys(t, m, "%")
-	check("share", "? ?", "100 100")
-	if got := cells(m, "annbook"); got != "? ?" {
-		t.Errorf("share: annbook %q", got)
-	}
-	m = keys(t, m, "9")
-	check("share 90d", "97 97", "100 100")
-	if got := cells(m, "annbook"); got != "3 3" {
-		t.Errorf("share 90d: annbook %q", got)
 	}
 }
 
@@ -857,7 +780,7 @@ func TestHelp(t *testing.T) {
 		t.Fatalf("help key bar %q", got)
 	}
 	all := strings.Join(ansiStrip(m.helpLines()), "\n")
-	for _, want := range []string{"MARKS", "━ ─", "┈", "not known", "≥", "—", "no forecast", "●", "×", "↓", "‹ ›", "STATES", "over", "under", "collect now"} {
+	for _, want := range []string{"MARKS", "━ ─", "┈", "not known", "—", "no forecast", "●", "×", "↓", "‹ ›", "STATES", "over", "under", "collect now"} {
 		if !strings.Contains(all, want) {
 			t.Fatalf("help lacks %q:\n%s", want, all)
 		}
