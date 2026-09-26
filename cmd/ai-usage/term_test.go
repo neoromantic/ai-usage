@@ -100,7 +100,7 @@ func TestDisplayFlags(t *testing.T) {
 
 	// --json ignores the display flags.
 	var r view.Report
-	if err := json.Unmarshal([]byte(d.ok("report", "--json", "--color=always", "--projects", "--devices", "--width", "120")), &r); err != nil || r.SchemaVersion != 4 {
+	if err := json.Unmarshal([]byte(d.ok("report", "--json", "--color=always", "--projects", "--devices", "--width", "120")), &r); err != nil || r.SchemaVersion != view.SchemaVersion {
 		t.Fatalf("--json with display flags: %v", err)
 	}
 	// A team of one device has USAGE, not the two views of DEVICES, so
