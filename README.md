@@ -163,7 +163,7 @@ The first run:
 - collects and prints the report
 - prints a short guide under the report: which scheduler now collects every 15 minutes, or what to do when none could be registered; what the team and the relay see; and the commands worth knowing, with how to invite a colleague, how to pause the system scheduler's runs, and how to uninstall
 
-The guide is printed once. When the scheduler collected first, or the first run you started used `--json`, the guide comes with the next `ai-usage` that prints text; `ai-usage report` never prints it. A machine that collected with a version before the guide never prints it.
+The guide is printed once. When the scheduler collected first, or the first run you started used `--json`, the guide comes with the next `ai-usage` that prints text; `ai-usage report` never prints it.
 
 The crontab line looks like this. It keeps the `PATH` of the shell that installed it, so that scheduled runs find the tools, and it names the state folder, so that scheduled runs use the same device, team key, and history as your own runs:
 

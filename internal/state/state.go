@@ -166,9 +166,8 @@ type State struct {
 	Schedule Schedule `json:"schedule"`
 
 	// GuideDue says the short guide a new device prints once, under the
-	// first report a person sees, is still to come. Only a state that did
-	// not exist loads with it set, so a device that ran before the guide
-	// existed never prints it.
+	// first report a person sees, is still to come. LoadState sets it only
+	// when state.json does not exist.
 	GuideDue bool `json:"guide_due,omitempty"`
 
 	// Damage says why LoadState started from an empty state. It is not saved.

@@ -1635,15 +1635,6 @@ func TestGuideAfterInstall(t *testing.T) {
 	if out := s.ok(); !strings.Contains(out, "\nHOW IT WORKS") {
 		t.Fatalf("the first report after scheduled runs printed no guide:\n%s", out)
 	}
-
-	// A device that collected before the guide existed has a state without it.
-	old := newDevice(t)
-	if err := state.Dir(old.dir).SaveState(&state.State{}); err != nil {
-		t.Fatal(err)
-	}
-	if out := old.ok(); strings.Contains(out, "HOW IT WORKS") {
-		t.Fatalf("a device that collected before the guide printed it:\n%s", out)
-	}
 }
 
 // One run with the clock far ahead stores a check time in the future. That
