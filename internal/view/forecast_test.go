@@ -4,7 +4,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/collect"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
+	"github.com/neoromantic/ai-usage/internal/state"
 )
 
 // week7 is a 7-day window that resets at reset.
@@ -237,5 +239,102 @@ func TestAccountStateIsTheWorstWindowThatLimits(t *testing.T) {
 		if (m == nil) != (len(c.ws) == 0) {
 			t.Errorf("%s: main window %+v", c.name, m)
 		}
+	}
+}
+
+func TestWindowThatHasResetIsUnknown(t *testing.T) {
+	st := emptyState()
+	addAccount(st, "claude", "ann", true, &state.Quota{At: now.Add(-8 * time.Hour), Source: "cache", Windows: []snapshot.Window{
+		win("5h", 96, now.Add(-3*time.Hour)),
+		win("7d", 20, now.Add(72*time.Hour)),
+	}}, 0)
+	addAccount(st, "codex", "bob", false, &state.Quota{At: now.Add(-3 * time.Hour), Source: "harness", Windows: []snapshot.Window{
+		win("5h", 100, now.Add(-time.Hour)),
+		win("7d", 95, now),
+	}}, 0)
+	r := Build(newFixture(t, st).in)
+
+	ann := findAccount(t, r, "claude", "ann")
+	if ann.State != StateUnder || !ann.Quota.Stale {
+		t.Fatalf("ann = %s %+v", ann.State, ann.Quota)
+	}
+	if w := ann.Quota.Windows[0]; !w.Reset || w.State != StateUnknown || w.Percent != 96 || w.ResetsAt == nil || w.Forecast != nil {
+		t.Fatalf("reset window = %+v", w)
+	}
+	// Every window has reset: nothing is known, nothing is invented.
+	bob := findAccount(t, r, "codex", "bob")
+	if bob.State != StateUnknown || len(bob.Quota.Windows) != 2 {
+		t.Fatalf("bob = %s %+v", bob.State, bob.Quota)
+	}
+	// Past half of its week, ann will leave most of it unused.
+	if len(r.Attention) != 1 || r.Attention[0].Kind != AttentionUnder || r.Attention[0].Account != "ann" || r.Attention[0].ReadingAge != 8*3600 {
+		t.Fatalf("attention = %+v", r.Attention)
+	}
+}
+
+// A request refused for a full window reads that window alone. The window
+// stays full until it resets, however old the reading, and the 5-hour and
+// weekly windows the refusal says nothing of are not known.
+func TestRefusalReading(t *testing.T) {
+	st := emptyState()
+	addAccount(st, "claude", "ann", true, &state.Quota{At: now.Add(-10 * time.Hour), Source: collect.RejectionSource, Windows: []snapshot.Window{
+		{Name: "7d Opus", Percent: 100, Minutes: 10080, ResetsAt: tp(now.Add(72 * time.Hour))},
+	}}, 0)
+	addAccount(st, "claude", "kim", false, &state.Quota{At: now.Add(-10 * time.Hour), Source: collect.RejectionSource, Windows: []snapshot.Window{
+		{Name: "7d", Percent: 100, Minutes: 10080, ResetsAt: tp(now.Add(48 * time.Hour))},
+	}}, 0)
+	addAccount(st, "codex", "bob", false, &state.Quota{At: now.Add(-time.Hour), Source: "harness", Windows: []snapshot.Window{
+		{Name: "5h", Percent: 30, Minutes: 300, ResetsAt: tp(now.Add(2 * time.Hour))},
+	}}, 0)
+	r := Build(newFixture(t, st).in)
+
+	unread := func(w Window, name string, main bool) bool {
+		return w.Name == name && w.Unread && w.Main == main && w.State == StateUnknown && w.Forecast == nil && w.Percent == 0
+	}
+	for _, q := range []*Quota{findAccount(t, r, "claude", "ann").Quota, findTeamAccount(t, r, "claude", "ann").Quota} {
+		if q.Stale || len(q.Windows) != 3 {
+			t.Fatalf("ann's quota = %+v", q)
+		}
+		if w := q.Windows[0]; !unread(w, "5h", false) {
+			t.Fatalf("5-hour window = %+v", w)
+		}
+		if w := q.Windows[1]; !unread(w, "7d", true) {
+			t.Fatalf("weekly window = %+v", w)
+		}
+		if w := q.Windows[2]; w.Name != "7d Opus" || w.Stale || w.State != StateOut || w.Main {
+			t.Fatalf("refused window = %+v", w)
+		}
+	}
+	if a := findTeamAccount(t, r, "claude", "ann"); a.State != StateOut {
+		t.Fatalf("ann = %s", a.State)
+	}
+	// A refused weekly window is the main one, full and not stale, and the
+	// 5-hour window beside it is not known.
+	for _, q := range []*Quota{findAccount(t, r, "claude", "kim").Quota, findTeamAccount(t, r, "claude", "kim").Quota} {
+		if q.Stale || len(q.Windows) != 2 || !unread(q.Windows[0], "5h", false) {
+			t.Fatalf("kim's quota = %+v", q)
+		}
+		if w := q.Windows[1]; w.Name != "7d" || w.Unread || !w.Main || w.Stale || w.State != StateOut {
+			t.Fatalf("kim's weekly window = %+v", w)
+		}
+	}
+	out := map[string]string{}
+	for _, a := range r.Attention {
+		if a.Kind != AttentionOut || a.ReadingAge != 0 {
+			t.Fatalf("attention = %+v", r.Attention)
+		}
+		out[a.Account] = a.Window
+	}
+	// Nobody knows how full ann's weekly window is, so the matrix does not
+	// say it is empty.
+	if c := r.Team.Matrix.Columns[column(t, r.Team.Matrix, "ann")]; c.Percent != nil {
+		t.Fatalf("ann's column = %+v", c)
+	}
+	if len(r.Attention) != 2 || out["ann"] != "7d Opus" || out["kim"] != "" {
+		t.Fatalf("attention = %+v", r.Attention)
+	}
+	// Only Claude always has a 5-hour and a weekly window.
+	if ws := findAccount(t, r, "codex", "bob").Quota.Windows; len(ws) != 1 || !ws[0].Main {
+		t.Fatalf("bob's windows = %+v", ws)
 	}
 }
