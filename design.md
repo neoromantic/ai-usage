@@ -1,6 +1,6 @@
 # Report design
 
-The design of the console report, static and interactive. Decided on 2026-09-23 with the owner. [ai-report.md](ai-report.md) has the product requirements. Its section "Next: report redesign" lists what the collector and the relay must add for this design.
+The design of the console report, static and interactive. Decided on 2026-09-23 with the owner. [ai-report.md](ai-report.md) has the product requirements.
 
 Built on 2026-09-24 for v0.2.0. Where the build decides what this text leaves open, the golden files in `internal/view/testdata/` show the result: the matrix rows go by total, and OVER lines by when they run out.
 
@@ -157,7 +157,7 @@ States:
 | ok | 50% to 84% | green |
 | under | below 50% | blue |
 
-The cell reads `157% over`, `81% ok`, or `out`. This replaces the 6-hour pace and its `▲` mark, the 75% and 90% marks, and `!!`.
+The cell reads `157% over`, `81% ok`, or `out`.
 
 ### Users
 
@@ -181,7 +181,7 @@ With a single device, a matrix of one row says little. The section becomes USAGE
 
 ### Status
 
-The status view is DEVICES as a table of each device's state: which devices report, on which release, and what fails on them. `s` in the interactive view switches to it and back; `--devices` prints it and opens the interactive view on it. It came back on 2026-09-24 at the owner's request.
+The status view is DEVICES as a table of each device's state: which devices report, on which release, and what fails on them. `s` in the interactive view switches to it and back; `--devices` prints it and opens the interactive view on it.
 
 ```
 DEVICES  13 · 1 error · 2 old · by 7d · M tokens in+out                                                 usage  ‹status›
@@ -307,22 +307,3 @@ The matrix's title drops the view pills before its modes, and the status view's 
 
 - The matrix needs short account names. By default a name is the part of an email before the `@`, or the first 8 characters of an id. When two names collide within a provider, both show the full label.
 - `ai-usage alias <account> <name>` names an account for the whole team, and `ai-usage alias <account> --clear` removes the name. The name travels sealed in the snapshot of the device that set it. If two devices set a name, the newer one wins.
-
-## What goes
-
-- The READ column; the reading's age shows only as `~`.
-- USED BY as a list of names; the matrix shows who uses what.
-- Every note line under a row: extra windows, pace, why a reading is old, "no reading yet", and the links between Hermes and Codex.
-- The HERMES section.
-- The `!!` and `▲` marks and the 6-hour pace in the console.
-- THIS DEVICE's list of accounts; the matrix row and PROJECTS replace it.
-- In DEVICES: IN+OUT and the `cl cx gk hm` grid. The status view has the tokens of each period and VIA instead. What was wrong with a device goes to ATTENTION too.
-- `--tokens`, which the matrix replaces.
-
-## Build order
-
-1. **Data.** Day buckets per account and project from the log timestamps. Tokens since each window began, per account and device. The larger snapshot and relay caps. JSON with the forecast of each window (percent, state, when it runs out) under a new schema version. The details are in [ai-report.md](ai-report.md).
-2. **Forecast.** One function from a reading to its state, with tests for each state, stale readings, reset windows, and the first tenth of a window.
-3. **Static report.** The page above on Lip Gloss, with golden files at 80, 120, and 160 columns, in color, and in ASCII.
-4. **Interactive view.** On Bubble Tea, with the same renderer.
-5. **Short names and `alias`.**
