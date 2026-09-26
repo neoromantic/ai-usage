@@ -265,8 +265,8 @@ func homeOf(r *Report) string {
 			for _, name := range snapshot.Providers {
 				d := "." + name
 				for _, sep := range []string{"/", `\`} {
-					if strings.HasSuffix(h, sep+d) {
-						return strings.TrimSuffix(h, sep+d)
+					if rest, ok := strings.CutSuffix(h, sep+d); ok {
+						return rest
 					}
 				}
 			}

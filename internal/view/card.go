@@ -57,7 +57,7 @@ func (c *card) hang(lead chunks, parts []string, ink color.Color) {
 func wrapWords(s string, w int) []string {
 	var out []string
 	cur := ""
-	for _, word := range strings.Split(s, " ") {
+	for word := range strings.SplitSeq(s, " ") {
 		switch {
 		case cur == "":
 			cur = word
