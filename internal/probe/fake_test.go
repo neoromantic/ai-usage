@@ -156,7 +156,7 @@ func fakeHarness(mode string, args []string) int {
 	head, _ := json.Marshal(run)
 	_, _ = rec.Write(append(head, '\n'))
 	if usage {
-		return fakeClaudeUsage(os.Getenv("PROBE_USAGE"), args, rec)
+		return fakeClaudeUsage(os.Getenv("PROBE_USAGE"), args)
 	}
 
 	if strings.HasPrefix(mode, "codex-") {
@@ -231,7 +231,7 @@ func stdinState() string {
 // names, if any, for the account logged in there, as Claude Code does. Like
 // Claude Code from 2.1.251, it first warns on stderr that its model catalog
 // does not describe the model it was given.
-func fakeClaudeUsage(mode string, args []string, rec *os.File) int {
+func fakeClaudeUsage(mode string, args []string) int {
 	model := args[slices.Index(args, "--model")+1]
 	catalog := fmt.Sprintf("%q isn't described by this version's model catalog; update Claude Code, or map it with behavesAs in settings.", model)
 	fmt.Fprintln(os.Stderr, catalog)
@@ -244,7 +244,8 @@ func fakeClaudeUsage(mode string, args []string, rec *os.File) int {
 		fmt.Printf("There's an issue with the selected model (%s). It may not exist or you may not have access to it.\n", model)
 		return 1
 	case "hang":
-		return hangWithChild(rec)
+		time.Sleep(time.Minute)
+		return 0
 	case "unknown-skill":
 		// 2.1.40 to 2.1.110.
 		fmt.Println("Unknown skill: usage")

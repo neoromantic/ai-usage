@@ -133,7 +133,7 @@ func TestCodexAnswers(t *testing.T) {
 			wantCalls: []string{"initialize", "initialized", "account/read"},
 		},
 		{
-			// TestCodexNoneServes has one that says why on its way out.
+			// TestCodexTriesEachBinary has one that says why on its way out.
 			mode:      "codex-exit",
 			wantErr:   "exited without answering",
 			wantCalls: []string{"initialize"},
@@ -245,82 +245,58 @@ var (
 	vscodeExt  = filepath.Join(".vscode", "extensions", "openai.chatgpt-26.5.1-darwin-arm64", "bin", "macos-aarch64", exeName("codex"))
 )
 
-func TestCodexFallsBackToBundled(t *testing.T) {
-	// A codex installed long ago cannot serve; the one the user's apps
-	// bundle, the newest first, answers for the same home.
-	env, _ := fakeEnv(t, "codex-old-on-path")
-	ran := withRan(&env)
-	bundle(t, env.HomeDir, chatGPTApp, testNow.Add(-48*time.Hour))
-	ext := bundle(t, env.HomeDir, vscodeExt, testNow.Add(-time.Hour))
-	r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
-	if err != nil || r.Account != "dev@example.com" || r.Plan != "pro" || r.Quota == nil {
-		t.Errorf("reading = %+v, %v", r, err)
+func TestCodexTriesEachBinary(t *testing.T) {
+	tests := []struct {
+		name, mode string
+		// bundles are under HomeDir, the newest first.
+		bundles []string
+		// ran is how many of the codex on PATH and the bundles, in that
+		// order, were started.
+		ran              int
+		account, wantErr string
+		loggedOut        bool
+	}{
+		// A codex installed long ago cannot serve; the one the user's apps
+		// bundle, the newest first, answers for the same home.
+		{name: "old on PATH", mode: "codex-old-on-path", bundles: []string{vscodeExt, chatGPTApp}, ran: 2, account: "dev@example.com"},
+		// A codex with app-server but older than account/read turns it down
+		// as unknown; a bundled copy that has it answers.
+		{name: "no account read on PATH", mode: "codex-no-account-read-on-path", bundles: []string{chatGPTApp}, ran: 2, account: "dev@example.com"},
+		// A codex that named the account and then died has served: the account
+		// stands, with the reason its quota is missing.
+		{name: "exits after the account", mode: "codex-exit-after-account", ran: 1, account: "dev@example.com", wantErr: "exited without answering: no backend"},
+		{name: "exits after the account, with a bundle", mode: "codex-exit-after-account", bundles: []string{chatGPTApp}, ran: 1, account: "dev@example.com", wantErr: "exited without answering: no backend"},
+		// When none can, the one on PATH says why.
+		{name: "none serves", mode: "codex-exit-says", bundles: []string{chatGPTApp}, ran: 2, wantErr: "exited without answering: error: unrecognized subcommand 'app-server'"},
+		// A codex that answered, even that nobody is logged in, is the answer:
+		// another binary reads the same home.
+		{name: "logged out", mode: "codex-logged-out", bundles: []string{chatGPTApp}, ran: 1, wantErr: "not logged in", loggedOut: true},
 	}
-	if want := []string{filepath.Join("fake", "bin", "codex"), ext}; !slices.Equal(*ran, want) {
-		t.Errorf("ran %q, want %q", *ran, want)
-	}
-}
-
-func TestCodexWithoutAccountReadGivesWay(t *testing.T) {
-	// A codex with app-server but older than account/read turns it down
-	// as unknown; a bundled copy that has it answers.
-	env, _ := fakeEnv(t, "codex-no-account-read-on-path")
-	ran := withRan(&env)
-	app := bundle(t, env.HomeDir, chatGPTApp, testNow)
-	r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
-	if err != nil || r.Account != "dev@example.com" {
-		t.Errorf("reading = %+v, %v", r, err)
-	}
-	if want := []string{filepath.Join("fake", "bin", "codex"), app}; !slices.Equal(*ran, want) {
-		t.Errorf("ran %q, want %q", *ran, want)
-	}
-}
-
-func TestCodexKeepsTheAccountWhenItExitsAfter(t *testing.T) {
-	// A codex that named the account and then died has served: the account
-	// stands, with the reason its quota is missing.
-	for _, bundled := range []bool{false, true} {
-		env, _ := fakeEnv(t, "codex-exit-after-account")
-		ran := withRan(&env)
-		if bundled {
-			bundle(t, env.HomeDir, chatGPTApp, testNow)
-		}
-		r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
-		if r.Account != "dev@example.com" || r.Plan != "pro" || r.Quota != nil {
-			t.Errorf("bundled %v: reading = %+v", bundled, r)
-		}
-		if !errors.Is(err, errExited) || !strings.Contains(errText(err), "no backend") {
-			t.Errorf("bundled %v: error %q", bundled, errText(err))
-		}
-		if len(*ran) != 1 {
-			t.Errorf("bundled %v: ran %q", bundled, *ran)
-		}
-	}
-}
-
-func TestCodexNoneServes(t *testing.T) {
-	// When none can, the one on PATH says why.
-	env, _ := fakeEnv(t, "codex-exit-says")
-	ran := withRan(&env)
-	app := bundle(t, env.HomeDir, chatGPTApp, testNow)
-	r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
-	if !errors.Is(err, errExited) || !strings.Contains(errText(err), "unrecognized subcommand 'app-server'") || r != (Reading{}) {
-		t.Errorf("reading = %+v, %v", r, err)
-	}
-	if want := []string{filepath.Join("fake", "bin", "codex"), app}; !slices.Equal(*ran, want) {
-		t.Errorf("ran %q, want %q", *ran, want)
-	}
-}
-
-func TestCodexAnswerEndsTheSearch(t *testing.T) {
-	// A codex that answered, even that nobody is logged in, is the answer:
-	// another binary reads the same home.
-	env, _ := fakeEnv(t, "codex-logged-out")
-	ran := withRan(&env)
-	bundle(t, env.HomeDir, chatGPTApp, testNow)
-	_, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
-	if !errors.Is(err, ErrNotLoggedIn) || len(*ran) != 1 {
-		t.Errorf("ran %q, error %v", *ran, err)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			env, _ := fakeEnv(t, tc.mode)
+			ran := withRan(&env)
+			bins := []string{filepath.Join("fake", "bin", "codex")}
+			for i, rel := range tc.bundles {
+				bins = append(bins, bundle(t, env.HomeDir, rel, testNow.Add(-time.Duration(i)*time.Hour)))
+			}
+			r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
+			if want := bins[:tc.ran]; !slices.Equal(*ran, want) {
+				t.Errorf("ran %q, want %q", *ran, want)
+			}
+			if r.Account != tc.account {
+				t.Errorf("account = %q, want %q", r.Account, tc.account)
+			}
+			if (err == nil) != (tc.wantErr == "") || !strings.Contains(errText(err), tc.wantErr) {
+				t.Errorf("error = %q, want one with %q", errText(err), tc.wantErr)
+			}
+			if got := errors.Is(err, ErrNotLoggedIn); got != tc.loggedOut {
+				t.Errorf("logged out = %v, want %v", got, tc.loggedOut)
+			}
+			if (r.Quota != nil) != (tc.wantErr == "") {
+				t.Errorf("quota = %v", describe(r.Quota))
+			}
+		})
 	}
 }
 

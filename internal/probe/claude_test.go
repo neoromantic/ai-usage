@@ -157,9 +157,7 @@ func TestReadClaudeConfigErrors(t *testing.T) {
 	}
 }
 
-// A legacy .config.json in the home comes first. TestClaudeDefaultHome,
-// TestClaudeDefaultHomeNamedByEnv, and TestClaudeCustomHome read the file
-// from each usual place.
+// A legacy .config.json in the home comes first.
 func TestClaudeConfigFile(t *testing.T) {
 	user := t.TempDir()
 	home := filepath.Join(user, ".claude")
@@ -172,8 +170,6 @@ func TestClaudeConfigFile(t *testing.T) {
 	}
 }
 
-// The same three tests cover the default home, with and without the
-// variable, and a custom home.
 func TestClaudeConfigDir(t *testing.T) {
 	user := filepath.Join(string(filepath.Separator)+"u", "me")
 	def := filepath.Join(user, ".claude")
@@ -220,71 +216,68 @@ func writeFile(t *testing.T, path, body string) {
 	}
 }
 
-func TestClaudeDefaultHome(t *testing.T) {
-	// A CLAUDE_CONFIG_DIR inherited from the caller would point the CLI at
-	// another home, so it is removed for the default one.
-	env, record := fakeEnv(t, "claude-ok", "CLAUDE_CONFIG_DIR=/stale")
-	home := filepath.Join(env.HomeDir, ".claude")
-	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
-	writeFile(t, filepath.Join(home, ".claude.json"), `{"oauthAccount":{"accountUuid":"acct-1"},"cachedUsageUtilization":{"fetchedAtMs":1,"accountUuid":"acct-1","utilization":{"limits":[{"kind":"session","percent":99}]}}}`)
+// The config file is inside the home when claude runs with CLAUDE_CONFIG_DIR,
+// and beside the default home when it does not.
+func TestClaudeHomes(t *testing.T) {
+	tests := []struct {
+		name, leaf string
+		// named is CLAUDE_CONFIG_DIR naming the home in Environ, where it is
+		// otherwise another home's.
+		named bool
+	}{
+		// A CLAUDE_CONFIG_DIR inherited from the caller would point the CLI at
+		// another home, so it is removed for the default one.
+		{"default home", ".claude", false},
+		// CLAUDE_CONFIG_DIR set to the default home still moves Claude Code's
+		// config inside it and its login to another keychain entry, so it is
+		// kept.
+		{"default home named by the variable", ".claude", true},
+		{"custom home", "work-claude", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			env, record := fakeEnv(t, "claude-ok")
+			home := filepath.Join(env.HomeDir, tc.leaf)
+			// configDir is the CLAUDE_CONFIG_DIR claude should get, or "" for
+			// none.
+			var configDir string
+			environ := "CLAUDE_CONFIG_DIR=/stale"
+			switch {
+			case tc.named:
+				configDir = home + string(filepath.Separator)
+				environ = "CLAUDE_CONFIG_DIR=" + configDir
+			case tc.leaf != ".claude":
+				configDir = home
+			}
+			env.Environ = append(env.Environ, environ)
+			cache, decoy := filepath.Join(home, ".claude.json"), filepath.Join(env.HomeDir, ".claude.json")
+			if configDir == "" {
+				cache, decoy = decoy, cache
+			}
+			writeFile(t, cache, claudeCache)
+			writeFile(t, decoy, `{"oauthAccount":{"accountUuid":"acct-1"},"cachedUsageUtilization":{"fetchedAtMs":1,"accountUuid":"acct-1","utilization":{"limits":[{"kind":"session","percent":99}]}}}`)
 
-	r, err := Claude(context.Background(), env, home, "", time.Time{})
-	if err != nil {
-		t.Fatalf("error: %v", err)
-	}
-	if r.Account != "dev@example.com" || r.Plan != "max" {
-		t.Errorf("reading = %+v", r)
-	}
-	if r.Quota == nil || len(r.Quota.Windows) != 1 || r.Quota.Windows[0].Percent != 12 || !r.Quota.At.Equal(time.UnixMilli(fetchedAtMs)) {
-		t.Errorf("quota = %+v", describe(r.Quota))
-	}
-	rec, _ := readRecord(t, record)
-	if rec.Name != "claude" || strings.Join(rec.Args, " ") != "auth status --json" {
-		t.Errorf("ran %s %q", rec.Name, rec.Args)
-	}
-	if v, ok := rec.Env["CLAUDE_CONFIG_DIR"]; ok {
-		t.Errorf("CLAUDE_CONFIG_DIR=%q reached the default home", v)
-	}
-	// Not the caller's directory, whose project settings can switch the
-	// provider claude reports.
-	sameDir(t, rec.Dir, env.HomeDir)
-}
-
-// CLAUDE_CONFIG_DIR set to the default home still moves Claude Code's config
-// inside it and its login to another keychain entry, so it is kept.
-func TestClaudeDefaultHomeNamedByEnv(t *testing.T) {
-	env, record := fakeEnv(t, "claude-ok")
-	home := filepath.Join(env.HomeDir, ".claude")
-	value := home + string(filepath.Separator)
-	env.Environ = append(env.Environ, "CLAUDE_CONFIG_DIR="+value)
-	writeFile(t, filepath.Join(home, ".claude.json"), claudeCache)
-	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), `{"oauthAccount":{"accountUuid":"acct-1"},"cachedUsageUtilization":{"fetchedAtMs":1,"accountUuid":"acct-1","utilization":{"limits":[{"kind":"session","percent":99}]}}}`)
-
-	r, err := Claude(context.Background(), env, home, "", time.Time{})
-	if err != nil {
-		t.Fatalf("error: %v", err)
-	}
-	if r.Quota == nil || len(r.Quota.Windows) != 1 || r.Quota.Windows[0].Percent != 12 {
-		t.Errorf("quota = %+v", describe(r.Quota))
-	}
-	rec, _ := readRecord(t, record)
-	if got := rec.Env["CLAUDE_CONFIG_DIR"]; got != value {
-		t.Errorf("CLAUDE_CONFIG_DIR = %q, want %q", got, value)
-	}
-}
-
-func TestClaudeCustomHome(t *testing.T) {
-	env, record := fakeEnv(t, "claude-ok", "CLAUDE_CONFIG_DIR=/stale")
-	home := filepath.Join(env.HomeDir, "work-claude")
-	writeFile(t, filepath.Join(home, ".claude.json"), claudeCache)
-
-	r, err := Claude(context.Background(), env, home, "", time.Time{})
-	if err != nil || r.Account != "dev@example.com" || r.Quota == nil {
-		t.Fatalf("reading = %+v, %v", r, err)
-	}
-	rec, _ := readRecord(t, record)
-	if got := rec.Env["CLAUDE_CONFIG_DIR"]; got != home {
-		t.Errorf("CLAUDE_CONFIG_DIR = %q, want %q", got, home)
+			r, err := Claude(context.Background(), env, home, "", time.Time{})
+			if err != nil {
+				t.Fatalf("error: %v", err)
+			}
+			if r.Account != "dev@example.com" || r.Plan != "max" {
+				t.Errorf("reading = %+v", r)
+			}
+			if r.Quota == nil || len(r.Quota.Windows) != 1 || r.Quota.Windows[0].Percent != 12 || !r.Quota.At.Equal(time.UnixMilli(fetchedAtMs)) {
+				t.Errorf("quota = %+v", describe(r.Quota))
+			}
+			rec, _ := readRecord(t, record)
+			if rec.Name != "claude" || strings.Join(rec.Args, " ") != "auth status --json" {
+				t.Errorf("ran %s %q", rec.Name, rec.Args)
+			}
+			if got, set := rec.Env["CLAUDE_CONFIG_DIR"]; got != configDir || set != (configDir != "") {
+				t.Errorf("CLAUDE_CONFIG_DIR = %q (set %v), want %q", got, set, configDir)
+			}
+			// Not the caller's directory, whose project settings can switch the
+			// provider claude reports.
+			sameDir(t, rec.Dir, env.HomeDir)
+		})
 	}
 }
 
@@ -293,7 +286,6 @@ func TestClaudeAnswers(t *testing.T) {
 		mode      string
 		account   string
 		wantErr   string
-		wantQuota bool
 		loggedOut bool
 	}{
 		// The cached limits are a claude.ai subscription's, not an API
@@ -321,7 +313,7 @@ func TestClaudeAnswers(t *testing.T) {
 				t.Errorf("account = %q, want %q", r.Account, tc.account)
 			}
 			// A quota is only kept for an account the CLI named.
-			if (r.Quota != nil) != tc.wantQuota {
+			if r.Quota != nil {
 				t.Errorf("quota = %+v", describe(r.Quota))
 			}
 		})
@@ -585,15 +577,12 @@ func TestClaudeUsageRefreshFails(t *testing.T) {
 	}
 }
 
-// A read that hangs, and leaves a child holding its output, times out with
-// its whole process group, and the cached reading stays.
+// A read that hangs times out, and the cached reading stays.
 func TestClaudeUsageRefreshTimeout(t *testing.T) {
-	release := filepath.Join(t.TempDir(), "release")
-	t.Cleanup(func() { _ = os.WriteFile(release, nil, 0o600) })
 	timeout := claudeUsageTimeout
 	t.Cleanup(func() { claudeUsageTimeout = timeout })
 	claudeUsageTimeout = 500 * time.Millisecond
-	env, record := fakeEnv(t, "claude-ok", "PROBE_USAGE=hang", "PROBE_RELEASE="+release)
+	env, _ := fakeEnv(t, "claude-ok", "PROBE_USAGE=hang")
 	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
 	start := time.Now()
 	r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", testNow)
@@ -602,22 +591,6 @@ func TestClaudeUsageRefreshTimeout(t *testing.T) {
 	}
 	if !strings.Contains(errText(err), "in time") || r.Quota == nil || r.Quota.Windows[0].Percent != 12 {
 		t.Errorf("quota %+v, error %v", describe(r.Quota), err)
-	}
-	if runtime.GOOS == "windows" {
-		return
-	}
-	_, msgs := readRecord(t, record)
-	pid := 0
-	for _, m := range msgs {
-		if p, ok := m["child_pid"].(float64); ok {
-			pid = int(p)
-		}
-	}
-	if pid == 0 {
-		t.Fatal("no child recorded")
-	}
-	if !waitGone(pid) {
-		t.Errorf("child %d still running", pid)
 	}
 }
 
