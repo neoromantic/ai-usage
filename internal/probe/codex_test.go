@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -217,18 +216,6 @@ func TestCodexScriptFindsItsInterpreter(t *testing.T) {
 	}
 }
 
-// withRan makes env's harness commands pass their whole path to the fake,
-// and lists the paths run.
-func withRan(env *Env) *[]string {
-	var ran []string
-	env.Command = func(ctx context.Context, name string, args ...string) *exec.Cmd {
-		ran = append(ran, name)
-		argv := append([]string{"-test.run=^TestHelperProcess$", "--", name}, args...)
-		return exec.CommandContext(ctx, os.Args[0], argv...)
-	}
-	return &ran
-}
-
 // bundle puts an executable at home/rel, modified at mod.
 func bundle(t *testing.T, home, rel string, mod time.Time) string {
 	t.Helper()
@@ -241,8 +228,8 @@ func bundle(t *testing.T, home, rel string, mod time.Time) string {
 }
 
 var (
-	chatGPTApp = filepath.Join("Applications", "ChatGPT.app", "Contents", "Resources", exeName("codex"))
-	vscodeExt  = filepath.Join(".vscode", "extensions", "openai.chatgpt-26.5.1-darwin-arm64", "bin", "macos-aarch64", exeName("codex"))
+	chatGPTApp = filepath.Join("Applications", "ChatGPT.app", "Contents", "Resources", binNames("codex")[0])
+	vscodeExt  = filepath.Join(".vscode", "extensions", "openai.chatgpt-26.5.1-darwin-arm64", "bin", "macos-aarch64", binNames("codex")[0])
 )
 
 func TestCodexTriesEachBinary(t *testing.T) {
@@ -274,15 +261,18 @@ func TestCodexTriesEachBinary(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			env, _ := fakeEnv(t, tc.mode)
-			ran := withRan(&env)
+			env, record := fakeEnv(t, tc.mode)
 			bins := []string{filepath.Join("fake", "bin", "codex")}
 			for i, rel := range tc.bundles {
 				bins = append(bins, bundle(t, env.HomeDir, rel, testNow.Add(-time.Duration(i)*time.Hour)))
 			}
 			r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
-			if want := bins[:tc.ran]; !slices.Equal(*ran, want) {
-				t.Errorf("ran %q, want %q", *ran, want)
+			var ran []string
+			for _, run := range readRuns(t, record) {
+				ran = append(ran, run.Path)
+			}
+			if want := bins[:tc.ran]; !slices.Equal(ran, want) {
+				t.Errorf("ran %q, want %q", ran, want)
 			}
 			if r.Account != tc.account {
 				t.Errorf("account = %q, want %q", r.Account, tc.account)
@@ -302,18 +292,21 @@ func TestCodexTriesEachBinary(t *testing.T) {
 
 func TestCodexOnlyBundled(t *testing.T) {
 	// Someone who uses only the app has no codex on PATH.
-	env, _ := fakeEnv(t, "codex-ok")
+	env, record := fakeEnv(t, "codex-ok")
 	env.LookPath = notOnPath
-	ran := withRan(&env)
 	apps := t.TempDir()
 	env.AppDirs = []string{filepath.Join(apps, "missing"), apps}
-	app := bundle(t, apps, filepath.Join("ChatGPT.app", "Contents", "Resources", exeName("codex")), testNow)
+	app := bundle(t, apps, filepath.Join("ChatGPT.app", "Contents", "Resources", binNames("codex")[0]), testNow)
 	if !env.Find("codex") || env.Find("claude") {
 		t.Error("Find disagrees with the bundled codex")
 	}
 	r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
-	if err != nil || r.Account != "dev@example.com" || !slices.Equal(*ran, []string{app}) {
-		t.Errorf("ran %q: %+v, %v", *ran, r, err)
+	var ran []string
+	for _, run := range readRuns(t, record) {
+		ran = append(ran, run.Path)
+	}
+	if err != nil || r.Account != "dev@example.com" || !slices.Equal(ran, []string{app}) {
+		t.Errorf("ran %q: %+v, %v", ran, r, err)
 	}
 }
 

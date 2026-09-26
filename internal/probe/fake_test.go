@@ -26,7 +26,7 @@ func fakeEnv(t *testing.T, mode string, environ ...string) (Env, string) {
 	record := filepath.Join(t.TempDir(), "record.jsonl")
 	env := Env{
 		Command: func(ctx context.Context, name string, args ...string) *exec.Cmd {
-			argv := append([]string{"-test.run=^TestHelperProcess$", "--", filepath.Base(name)}, args...)
+			argv := append([]string{"-test.run=^TestHelperProcess$", "--", name}, args...)
 			return exec.CommandContext(ctx, os.Args[0], argv...)
 		},
 		LookPath: func(name string) (string, error) { return filepath.Join("fake", "bin", name), nil },
@@ -53,6 +53,7 @@ func helperEnviron(mode, record string) []string {
 // line it reads from stdin follows.
 type helperRecord struct {
 	Name string            `json:"name"`
+	Path string            `json:"path"`
 	Args []string          `json:"args"`
 	Env  map[string]string `json:"env"`
 	PID  int               `json:"pid"`
@@ -62,13 +63,19 @@ type helperRecord struct {
 	Stdin string `json:"stdin,omitempty"`
 }
 
-func readRecord(t *testing.T, path string) (helperRecord, []map[string]any) {
+// recordLines is each line a fake harness wrote to the record at path.
+func recordLines(t *testing.T, path string) []string {
 	t.Helper()
 	body, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("fake harness left no record: %v", err)
 	}
-	lines := strings.Split(strings.TrimSpace(string(body)), "\n")
+	return strings.Split(strings.TrimSpace(string(body)), "\n")
+}
+
+func readRecord(t *testing.T, path string) (helperRecord, []map[string]any) {
+	t.Helper()
+	lines := recordLines(t, path)
 	var rec helperRecord
 	if err := json.Unmarshal([]byte(lines[0]), &rec); err != nil {
 		t.Fatalf("record: %v", err)
@@ -87,12 +94,8 @@ func readRecord(t *testing.T, path string) (helperRecord, []map[string]any) {
 // readRuns is the record of each run of a fake harness, in order.
 func readRuns(t *testing.T, path string) []helperRecord {
 	t.Helper()
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("fake harness left no record: %v", err)
-	}
 	var out []helperRecord
-	for l := range strings.SplitSeq(strings.TrimSpace(string(body)), "\n") {
+	for _, l := range recordLines(t, path) {
 		var r helperRecord
 		if json.Unmarshal([]byte(l), &r) == nil && r.Name != "" {
 			out = append(out, r)
@@ -148,7 +151,7 @@ func fakeHarness(mode string, args []string) int {
 		}
 	}
 	dir, _ := os.Getwd()
-	run := helperRecord{Name: args[0], Args: args[1:], Env: seen, PID: os.Getpid(), Dir: dir}
+	run := helperRecord{Name: filepath.Base(args[0]), Path: args[0], Args: args[1:], Env: seen, PID: os.Getpid(), Dir: dir}
 	usage := strings.HasPrefix(mode, "claude-") && slices.Contains(args, "-p")
 	if usage {
 		run.Stdin = stdinState()

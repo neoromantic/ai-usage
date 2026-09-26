@@ -10,19 +10,10 @@ import (
 	"time"
 )
 
-func exeName(name string) string {
-	if runtime.GOOS == "windows" {
-		return name + ".exe"
-	}
-	return name
-}
-
 func writeExe(t *testing.T, path string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
+	writeFile(t, path, "#!/bin/sh\n")
+	if err := os.Chmod(path, 0o755); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -31,7 +22,7 @@ func notOnPath(string) (string, error) { return "", exec.ErrNotFound }
 
 func TestFindUsesPathFirst(t *testing.T) {
 	home := t.TempDir()
-	writeExe(t, filepath.Join(home, ".local", "bin", exeName("claude")))
+	writeExe(t, filepath.Join(home, ".local", "bin", binNames("claude")[0]))
 	env := Env{HomeDir: home, LookPath: func(n string) (string, error) { return "/on/path/" + n, nil }}
 	if p, ok := env.find("claude"); !ok || p != "/on/path/claude" {
 		t.Errorf("find = %q, %v", p, ok)
@@ -42,7 +33,7 @@ func TestFindUsesPathFirst(t *testing.T) {
 // covers ~/.local/bin.
 func TestFindFallbackDirs(t *testing.T) {
 	home := t.TempDir()
-	want := filepath.Join(home, ".codex", "bin", exeName("codex"))
+	want := filepath.Join(home, ".codex", "bin", binNames("codex")[0])
 	writeExe(t, want)
 	if p, ok := (Env{HomeDir: home, LookPath: notOnPath}).find("codex"); !ok || p != want {
 		t.Errorf("find = %q, %v; want %q", p, ok, want)
@@ -63,7 +54,7 @@ func TestFindWindowsShim(t *testing.T) {
 
 func TestFindSkipsDirsAndNonExecutables(t *testing.T) {
 	home := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(home, ".local", "bin", exeName("claude")), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(home, ".local", "bin", binNames("claude")[0]), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if runtime.GOOS != "windows" {
@@ -93,11 +84,11 @@ func TestFindSystemDirsWithoutHome(t *testing.T) {
 
 func TestBins(t *testing.T) {
 	home := t.TempDir()
-	onPath := filepath.Join(home, ".local", "bin", exeName("codex"))
+	onPath := filepath.Join(home, ".local", "bin", binNames("codex")[0])
 	writeExe(t, onPath)
 	env := Env{HomeDir: home, LookPath: notOnPath}
-	old := bundle(t, home, filepath.Join(".cursor", "extensions", "openai.chatgpt-0.4.1", "bin", "linux-x86_64", exeName("codex")), testNow.Add(-72*time.Hour))
-	newer := bundle(t, home, filepath.Join(".cursor", "extensions", "openai.chatgpt-0.5.0", "bin", "linux-x86_64", exeName("codex")), testNow)
+	old := bundle(t, home, filepath.Join(".cursor", "extensions", "openai.chatgpt-0.4.1", "bin", "linux-x86_64", binNames("codex")[0]), testNow.Add(-72*time.Hour))
+	newer := bundle(t, home, filepath.Join(".cursor", "extensions", "openai.chatgpt-0.5.0", "bin", "linux-x86_64", binNames("codex")[0]), testNow)
 	app := bundle(t, home, chatGPTApp, testNow.Add(-24*time.Hour))
 	want := []string{onPath, newer, app, old}
 	if runtime.GOOS != "windows" {
@@ -117,7 +108,7 @@ func TestBins(t *testing.T) {
 	if got := env.bins("codex"); !slices.Equal(got, want) {
 		t.Errorf("bins = %q, want %q", got, want)
 	}
-	writeExe(t, filepath.Join(home, ".vscode", "extensions", "openai.chatgpt-26.5.1", "bin", "x", exeName("claude")))
+	writeExe(t, filepath.Join(home, ".vscode", "extensions", "openai.chatgpt-26.5.1", "bin", "x", binNames("claude")[0]))
 	if got := env.bins("claude"); got != nil {
 		t.Errorf("claude bins = %q", got)
 	}
