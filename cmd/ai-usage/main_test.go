@@ -1362,13 +1362,25 @@ func TestDeviceName(t *testing.T) {
 	}
 }
 
-// fakeRelease serves a v1.3.0 release for this platform, laid out as on
-// github.com. Its binary is this test binary, which starts and reports v1.3.0
-// as a release would.
-func fakeRelease(t *testing.T) (*httptest.Server, *int, []byte) {
+// fakeGitHub serves the release tag for this platform, laid out as on
+// github.com. Its binary is this test binary, which starts and reports the
+// version in AIU_FAKE_RELEASE as a release would; newFakeGitHub sets that
+// to tag. While busy, the lookup of the latest release fails. The release
+// tagged badSum was uploaded broken: its binary does not match its
+// checksum. Tests change these with set.
+type fakeGitHub struct {
+	*httptest.Server
+	mu                 sync.Mutex
+	tag, badSum        string
+	busy               bool
+	lookups, downloads int
+	bin                []byte
+}
+
+func newFakeGitHub(t *testing.T, tag string) *fakeGitHub {
 	t.Helper()
 	asset := selfupdate.AssetName(runtime.GOOS, runtime.GOARCH)
-	t.Setenv("AIU_FAKE_RELEASE", "v1.3.0")
+	t.Setenv("AIU_FAKE_RELEASE", tag)
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -1378,26 +1390,49 @@ func fakeRelease(t *testing.T) (*httptest.Server, *int, []byte) {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256(bin)
-	downloads := new(int)
-	var mu sync.Mutex
+	g := &fakeGitHub{tag: tag, bin: bin}
 	releases := "/" + selfupdate.Repo + "/releases"
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	g.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		g.mu.Lock()
+		defer g.mu.Unlock()
 		switch r.URL.Path {
 		case releases + "/latest":
-			http.Redirect(w, r, releases+"/tag/v1.3.0", http.StatusFound)
-		case releases + "/download/v1.3.0/" + asset:
-			mu.Lock()
-			*downloads++
-			mu.Unlock()
-			_, _ = w.Write(bin)
-		case releases + "/download/v1.3.0/checksums.txt":
+			g.lookups++
+			if g.busy {
+				http.Error(w, "busy", http.StatusServiceUnavailable)
+				return
+			}
+			http.Redirect(w, r, releases+"/tag/"+g.tag, http.StatusFound)
+		case releases + "/download/" + g.tag + "/" + asset:
+			g.downloads++
+			_, _ = w.Write(g.bin)
+		case releases + "/download/" + g.tag + "/checksums.txt":
+			if g.tag == g.badSum {
+				fmt.Fprintf(w, "%s  %s\n", strings.Repeat("0", 64), asset)
+				return
+			}
 			fmt.Fprintf(w, "%s  %s\n", hex.EncodeToString(sum[:]), asset)
 		default:
 			http.NotFound(w, r)
 		}
 	}))
-	t.Cleanup(srv.Close)
-	return srv, downloads, bin
+	t.Cleanup(g.Close)
+	return g
+}
+
+// set changes what g serves.
+func (g *fakeGitHub) set(change func(*fakeGitHub)) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	change(g)
+}
+
+// counts is how many times g was asked for the latest release and for the
+// binary.
+func (g *fakeGitHub) counts() (lookups, downloads int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.lookups, g.downloads
 }
 
 func TestHousekeepingOnReleaseBuild(t *testing.T) {
@@ -1405,7 +1440,7 @@ func TestHousekeepingOnReleaseBuild(t *testing.T) {
 	t.Setenv("AI_USAGE_NO_SCHEDULE", "")
 	cron := &fakeCrontab{tab: "0 3 * * * /usr/local/bin/backup\n"}
 	newScheduler = cron.scheduler
-	exe, downloads, bin := releaseBuild(t, "v1.2.0")
+	exe, g := releaseBuild(t, "v1.2.0")
 	binDir := filepath.Dir(exe)
 	t0 := time.Now().UTC().Truncate(time.Second)
 	at := func(d time.Duration) { clock = func() time.Time { return t0.Add(d) } }
@@ -1425,7 +1460,7 @@ func TestHousekeepingOnReleaseBuild(t *testing.T) {
 		if !st.Schedule.Registered || st.Update.Latest != "v1.3.0" || !strings.Contains(st.Update.Error, "cannot write beside") || st.Update.Installed != "" {
 			t.Fatalf("schedule %+v update %+v", st.Schedule, st.Update)
 		}
-		if *downloads != 0 {
+		if _, downloads := g.counts(); downloads != 0 {
 			t.Fatal("downloaded a binary it cannot install")
 		}
 		if out := d.ok("status"); !strings.Contains(out, "cannot write beside") {
@@ -1443,7 +1478,7 @@ func TestHousekeepingOnReleaseBuild(t *testing.T) {
 	if st.Update.Installed != "v1.3.0" || st.Update.Error != "" {
 		t.Fatalf("update = %+v", st.Update)
 	}
-	if b, _ := os.ReadFile(exe); !bytes.Equal(b, bin) {
+	if b, _ := os.ReadFile(exe); !bytes.Equal(b, g.bin) {
 		t.Fatal("binary was not replaced")
 	}
 	if out := d.ok("status"); !strings.Contains(out, "v1.3.0 is installed") {
@@ -1481,7 +1516,7 @@ func TestUpdateCommandRecordsResult(t *testing.T) {
 		t.Fatalf("dev update = %+v", r)
 	}
 
-	exe, _, _ := releaseBuild(t, "v1.2.0")
+	exe, _ := releaseBuild(t, "v1.2.0")
 	if out := d.ok("update"); !strings.Contains(out, "v1.3.0") {
 		t.Fatalf("update:\n%s", out)
 	}
@@ -1504,18 +1539,18 @@ func TestUpdateCommandRecordsResult(t *testing.T) {
 
 // releaseBuild makes this a release build whose update checks go to a fake
 // v1.3.0 release that installs into exe.
-func releaseBuild(t *testing.T, running string) (exe string, downloads *int, bin []byte) {
+func releaseBuild(t *testing.T, running string) (exe string, g *fakeGitHub) {
 	t.Helper()
 	version = running
-	srv, downloads, bin := fakeRelease(t)
+	g = newFakeGitHub(t, "v1.3.0")
 	exe = filepath.Join(t.TempDir(), "ai-usage")
 	if err := os.WriteFile(exe, []byte("old binary"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	newUpdater = func() *selfupdate.Updater {
-		return &selfupdate.Updater{Current: version, Exe: exe, GitHub: srv.URL, HTTP: srv.Client()}
+		return &selfupdate.Updater{Current: version, Exe: exe, GitHub: g.URL, HTTP: g.Client()}
 	}
-	return exe, downloads, bin
+	return exe, g
 }
 
 // Cron sees neither AI_USAGE_HOME nor the shell's XDG_CONFIG_HOME, so the
@@ -1649,11 +1684,12 @@ func TestUpdateCheckAfterClockRanAhead(t *testing.T) {
 	if err := state.Dir(d.dir).SaveState(st); err != nil {
 		t.Fatal(err)
 	}
-	_, downloads, _ := releaseBuild(t, "v1.2.0")
+	_, g := releaseBuild(t, "v1.2.0")
 	clock = func() time.Time { return t0 }
 	d.ok("collect", "--quiet", "--offline")
-	if st := d.state(); !st.Update.CheckedAt.Equal(t0) || st.Update.Installed != "v1.3.0" || *downloads != 1 {
-		t.Fatalf("update = %+v after %d downloads", st.Update, *downloads)
+	_, downloads := g.counts()
+	if st := d.state(); !st.Update.CheckedAt.Equal(t0) || st.Update.Installed != "v1.3.0" || downloads != 1 {
+		t.Fatalf("update = %+v after %d downloads", st.Update, downloads)
 	}
 }
 
@@ -1664,44 +1700,20 @@ func TestUpdateCheckAfterClockRanAhead(t *testing.T) {
 // shows for one run at most.
 func TestUpdateCheckEveryScheduledRun(t *testing.T) {
 	hermetic(t)
-	version = "v1.3.0"
-	var mu sync.Mutex
-	lookups, busy := 0, false
-	releases := "/" + selfupdate.Repo + "/releases"
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != releases+"/latest" {
-			t.Errorf("update check reached %s", r.URL)
-		}
-		mu.Lock()
-		defer mu.Unlock()
-		lookups++
-		if busy {
-			http.Error(w, "busy", http.StatusServiceUnavailable)
-			return
-		}
-		http.Redirect(w, r, releases+"/tag/v1.3.0", http.StatusFound)
-	}))
-	t.Cleanup(srv.Close)
-	newUpdater = func() *selfupdate.Updater {
-		return &selfupdate.Updater{Current: version, GitHub: srv.URL, HTTP: srv.Client(), Exe: filepath.Join(t.TempDir(), "ai-usage")}
-	}
+	_, g := releaseBuild(t, "v1.3.0")
 	d := newDevice(t)
 	t0 := time.Now().UTC().Truncate(time.Second)
 	const scheduled, byHand = true, false
 	run := func(at time.Duration, scheduled, fail bool, want int) *state.State {
 		t.Helper()
-		mu.Lock()
-		busy = fail
-		mu.Unlock()
+		g.set(func(g *fakeGitHub) { g.busy = fail })
 		clock = func() time.Time { return t0.Add(at) }
 		if scheduled {
 			d.ok("collect", "--quiet", "--offline")
 		} else {
 			d.ok("collect", "--offline")
 		}
-		mu.Lock()
-		defer mu.Unlock()
-		if lookups != want {
+		if lookups, _ := g.counts(); lookups != want {
 			t.Fatalf("after the run at %s: %d lookups, want %d", at, lookups, want)
 		}
 		return d.state()
@@ -1726,6 +1738,9 @@ func TestUpdateCheckEveryScheduledRun(t *testing.T) {
 		t.Fatalf("update after the check was tried again = %+v", st.Update)
 	}
 	run(62*time.Minute, byHand, false, 6)
+	if _, downloads := g.counts(); downloads != 0 {
+		t.Fatalf("the release it runs was downloaded %d times", downloads)
+	}
 }
 
 // A release that was downloaded and did not install is not downloaded again
@@ -1734,66 +1749,18 @@ func TestUpdateCheckEveryScheduledRun(t *testing.T) {
 // newer release is installed at the next run.
 func TestFailedReleaseIsNotDownloadedAgain(t *testing.T) {
 	hermetic(t)
-	version = "v1.2.0"
-	asset := selfupdate.AssetName(runtime.GOOS, runtime.GOARCH)
-	self, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	bin, err := os.ReadFile(self)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sum := sha256.Sum256(bin)
-	var mu sync.Mutex
-	tag, busy, lookups, downloads := "v1.3.0", false, 0, 0
-	releases := "/" + selfupdate.Repo + "/releases"
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		defer mu.Unlock()
-		switch r.URL.Path {
-		case releases + "/latest":
-			lookups++
-			if busy {
-				http.Error(w, "busy", http.StatusServiceUnavailable)
-				return
-			}
-			http.Redirect(w, r, releases+"/tag/"+tag, http.StatusFound)
-		case releases + "/download/" + tag + "/" + asset:
-			downloads++
-			_, _ = w.Write(bin)
-		case releases + "/download/" + tag + "/checksums.txt":
-			// v1.3.0 was uploaded broken: its binary does not match.
-			if tag == "v1.3.0" {
-				fmt.Fprintf(w, "%s  %s\n", strings.Repeat("0", 64), asset)
-				return
-			}
-			fmt.Fprintf(w, "%s  %s\n", hex.EncodeToString(sum[:]), asset)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	t.Cleanup(srv.Close)
-	exe := filepath.Join(t.TempDir(), "ai-usage")
-	if err := os.WriteFile(exe, []byte("old binary"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	newUpdater = func() *selfupdate.Updater {
-		return &selfupdate.Updater{Current: version, Exe: exe, GitHub: srv.URL, HTTP: srv.Client()}
-	}
+	exe, g := releaseBuild(t, "v1.2.0")
+	// v1.3.0 was uploaded broken: its binary does not match.
+	g.set(func(g *fakeGitHub) { g.badSum = "v1.3.0" })
 	d := newDevice(t)
 	t0 := time.Now().UTC().Truncate(time.Second)
 	at := func(d time.Duration) { clock = func() time.Time { return t0.Add(d) } }
 	run := func(when time.Duration, fail bool, wantLookups, wantDownloads int) *state.State {
 		t.Helper()
-		mu.Lock()
-		busy = fail
-		mu.Unlock()
+		g.set(func(g *fakeGitHub) { g.busy = fail })
 		at(when)
 		d.ok("collect", "--quiet", "--offline")
-		mu.Lock()
-		defer mu.Unlock()
-		if lookups != wantLookups || downloads != wantDownloads {
+		if lookups, downloads := g.counts(); lookups != wantLookups || downloads != wantDownloads {
 			t.Fatalf("after the run at %s: %d lookups and %d downloads, want %d and %d", when, lookups, downloads, wantLookups, wantDownloads)
 		}
 		return d.state()
@@ -1824,21 +1791,17 @@ func TestFailedReleaseIsNotDownloadedAgain(t *testing.T) {
 	if r := d.run("", "update"); r.code != 1 || !strings.Contains(r.stderr, "checksum") {
 		t.Fatalf("update = %+v", r)
 	}
-	mu.Lock()
-	if downloads != 3 {
+	if _, downloads := g.counts(); downloads != 3 {
 		t.Fatalf("update downloaded %d times in all", downloads)
 	}
-	mu.Unlock()
 
-	mu.Lock()
-	tag = "v1.3.1"
-	mu.Unlock()
+	g.set(func(g *fakeGitHub) { g.tag = "v1.3.1" })
 	t.Setenv("AIU_FAKE_RELEASE", "v1.3.1")
 	st = run(retryFailed+30*time.Minute, false, 8, 4)
 	if st.Update.Installed != "v1.3.1" || st.Update.Error != "" || st.Update.Failed != nil {
 		t.Fatalf("update after a newer release = %+v", st.Update)
 	}
-	if b, _ := os.ReadFile(exe); !bytes.Equal(b, bin) {
+	if b, _ := os.ReadFile(exe); !bytes.Equal(b, g.bin) {
 		t.Fatal("binary was not replaced")
 	}
 }
@@ -1855,7 +1818,7 @@ func TestUpdateWhenCollectionFails(t *testing.T) {
 	} {
 		t.Run(tc.file, func(t *testing.T) {
 			hermetic(t)
-			exe, downloads, bin := releaseBuild(t, "v1.2.0")
+			exe, g := releaseBuild(t, "v1.2.0")
 			d := newDevice(t)
 			// A folder where the file should be cannot be read.
 			path := filepath.Join(d.dir, tc.file)
@@ -1866,8 +1829,9 @@ func TestUpdateWhenCollectionFails(t *testing.T) {
 			if r.code != 1 || !strings.Contains(r.stderr, tc.want) {
 				t.Fatalf("collect: exit %d, stderr %q", r.code, r.stderr)
 			}
-			if b, _ := os.ReadFile(exe); *downloads != 1 || !bytes.Equal(b, bin) {
-				t.Fatalf("release was not installed (%d downloads)", *downloads)
+			_, downloads := g.counts()
+			if b, _ := os.ReadFile(exe); downloads != 1 || !bytes.Equal(b, g.bin) {
+				t.Fatalf("release was not installed (%d downloads)", downloads)
 			}
 			if unlock, err := state.Dir(d.dir).Lock(); err != nil {
 				t.Fatalf("the run lock was left held: %v", err)
@@ -1890,7 +1854,7 @@ func TestPanicIsRecordedAndStillUpdates(t *testing.T) {
 	d := newDevice(t)
 	d.claude("aaaa", "/work/app", 1)
 	d.ok("collect", "--quiet", "--offline")
-	exe, downloads, bin := releaseBuild(t, "v1.2.0")
+	exe, g := releaseBuild(t, "v1.2.0")
 	t0 := time.Now().UTC().Truncate(time.Second)
 	// The run's first read of the clock panics; the rescue after it reads
 	// the clock again.
@@ -1910,8 +1874,9 @@ func TestPanicIsRecordedAndStillUpdates(t *testing.T) {
 	if !strings.Contains(st.LastError, "clock bug") || strings.Contains(st.LastError, "\n") || !st.LastErrorAt.Equal(t0) {
 		t.Fatalf("last error %q at %s", st.LastError, st.LastErrorAt)
 	}
-	if b, _ := os.ReadFile(exe); st.Update.Installed != "v1.3.0" || *downloads != 1 || !bytes.Equal(b, bin) {
-		t.Fatalf("update = %+v after %d downloads", st.Update, *downloads)
+	_, downloads := g.counts()
+	if b, _ := os.ReadFile(exe); st.Update.Installed != "v1.3.0" || downloads != 1 || !bytes.Equal(b, g.bin) {
+		t.Fatalf("update = %+v after %d downloads", st.Update, downloads)
 	}
 	if unlock, err := state.Dir(d.dir).Lock(); err != nil {
 		t.Fatalf("the run lock was left held: %v", err)
