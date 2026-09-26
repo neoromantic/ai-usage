@@ -700,37 +700,47 @@ func (cfg claudeConfig) quota() *Quota {
 	if c == nil {
 		return nil
 	}
-	q := &Quota{At: time.UnixMilli(c.FetchedAtMs).UTC(), Source: "cache"}
-	if raw, ok := c.Utilization["limits"]; ok {
-		var limits []claudeLimit
-		if json.Unmarshal(raw, &limits) == nil {
-			for _, l := range limits {
-				name, minutes := claudeLimitName(l)
-				// A limit without a percent is no reading, not 0%.
-				if name == "" || l.Percent == nil {
-					continue
-				}
-				q.Windows = append(q.Windows, snapshot.Window{Name: name, Percent: *l.Percent, Minutes: minutes, ResetsAt: parseTime(l.ResetsAt)})
-			}
-		}
+	ws := claudeLimitWindows(c.Utilization["limits"])
+	if len(ws) == 0 {
+		ws = claudeKeyWindows(c.Utilization)
 	}
-	if len(q.Windows) == 0 {
-		for _, k := range logs.ClaudeWindows {
-			raw, ok := c.Utilization[k.Key]
-			if !ok {
-				continue
-			}
-			var w claudeWindow
-			if json.Unmarshal(raw, &w) != nil || w.Utilization == nil {
-				continue
-			}
-			q.Windows = append(q.Windows, snapshot.Window{Name: k.Name, Percent: *w.Utilization, Minutes: k.Minutes, ResetsAt: parseTime(w.ResetsAt)})
-		}
-	}
-	if len(q.Windows) == 0 {
+	if len(ws) == 0 {
 		return nil
 	}
-	return q
+	return &Quota{At: time.UnixMilli(c.FetchedAtMs).UTC(), Source: "cache", Windows: ws}
+}
+
+func claudeLimitWindows(raw json.RawMessage) []snapshot.Window {
+	var limits []claudeLimit
+	if json.Unmarshal(raw, &limits) != nil {
+		return nil
+	}
+	var ws []snapshot.Window
+	for _, l := range limits {
+		name, minutes := claudeLimitName(l)
+		// A limit without a percent is no reading, not 0%.
+		if name == "" || l.Percent == nil {
+			continue
+		}
+		ws = append(ws, snapshot.Window{Name: name, Percent: *l.Percent, Minutes: minutes, ResetsAt: parseTime(l.ResetsAt)})
+	}
+	return ws
+}
+
+func claudeKeyWindows(u map[string]json.RawMessage) []snapshot.Window {
+	var ws []snapshot.Window
+	for _, k := range logs.ClaudeWindows {
+		raw, ok := u[k.Key]
+		if !ok {
+			continue
+		}
+		var w claudeWindow
+		if json.Unmarshal(raw, &w) != nil || w.Utilization == nil {
+			continue
+		}
+		ws = append(ws, snapshot.Window{Name: k.Name, Percent: *w.Utilization, Minutes: k.Minutes, ResetsAt: parseTime(w.ResetsAt)})
+	}
+	return ws
 }
 
 func claudeLimitName(l claudeLimit) (string, int) {
