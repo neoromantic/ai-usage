@@ -116,12 +116,13 @@ Recorded on 2026-09-23 with the owner, and brought up to date on 2026-09-24. Not
   - A new device asks at its first run. A device that was never named by hand asks once, at its first run after the update. The answer is saved and is not regenerated when the host name or accounts change later.
   - A name set by hand, with `name set` or `AI_USAGE_NAME`, always wins and is never replaced.
   - Open: the model, the prompt, the 64-character limit, and how to avoid two devices in a team getting one name, since the relay cannot see the others' names.
-- **A refactoring review for short, expressive code.** In progress; [refactoring.md](refactoring.md) lists every change, its order, and how it is checked. It cuts repeated logic, long functions, files that grew too large, layers, options, and branches nothing needs, dead code, comments that restate the code, and tests that repeat others or guard what goes. It drops everything that exists only for collectors, snapshots, relay records, state files, schedules, or installs from before v0.2.3, since every device runs v0.2.3 or later before it ships. It keeps what deployed releases still need: the release file names, `checksums.txt`, and the `releases/latest` lookup they update through; the relay's acceptance of v0.2.3 snapshots and requests, since the relay deploys before a release; the key, signature, and sealing formats; and the snapshot, the relay protocol, and the JSON (`schema_version` 4) as they are. The current release's behavior does not change, except where refactoring.md says so and the owner agreed.
 - **Say why an account has no reading.** The report shows only `?`. For Claude, the device's NOTE and its `error` in the JSON say why while the home is in use. Saying why next to the account's `?`, and for Codex and Grok, would let a teammate's device be diagnosed from the team view.
 
 ## Implementation status
 
 Status as of 2026-09-24. The Go code in this repository implements version 1. See `README.md` for use and `docs/` for the JSON schema, the relay, and releasing. Everything above is covered except the items listed below. After it was built, the code went through an adversarial review against this document, and the confirmed findings were fixed. A real end-to-end run with two devices and a local relay passed: token sums, a quota that is not summed, the offline backlog, and `forget-device`.
+
+On 2026-09-26 the code was refactored as [refactoring.md](refactoring.md) lays out, for shorter code without support for releases before v0.2.3; the snapshot, the relay protocol, and the JSON (`schema_version` 4) stayed as they were.
 
 Done, in short:
 
