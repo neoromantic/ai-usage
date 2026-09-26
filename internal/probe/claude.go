@@ -784,11 +784,3 @@ func parseTime(s string) *time.Time {
 	t = t.UTC()
 	return &t
 }
-
-func shortErr(err error) string {
-	var exit interface{ ExitCode() int }
-	if errors.As(err, &exit) {
-		return fmt.Sprintf("exit status %d", exit.ExitCode())
-	}
-	return truncate(err.Error(), 160)
-}

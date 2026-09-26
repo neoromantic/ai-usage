@@ -168,18 +168,18 @@ func errorOf(lines []string) string {
 		}
 		// A panic since Rust 1.73 says where on one line and why on the next.
 		if strings.Contains(line, "panicked at") && strings.HasSuffix(line, ":") && i+1 < len(lines) && !hint(lines[i+1]) {
-			return truncate(lines[i+1], 160)
+			return truncate(lines[i+1], maxErrLine)
 		}
-		return truncate(line, 160)
+		return truncate(line, maxErrLine)
 	}
 	for i, line := range slices.Backward(lines) {
 		if hint(line) {
 			continue
 		}
 		if i > 0 && strings.HasSuffix(lines[i-1], ",") {
-			return truncate(lines[i-1]+" "+line, 160)
+			return truncate(lines[i-1]+" "+line, maxErrLine)
 		}
-		return truncate(line, 160)
+		return truncate(line, maxErrLine)
 	}
 	return ""
 }
@@ -466,7 +466,7 @@ func (c *codexRPC) call(ctx context.Context, id int, method string, params any) 
 				continue
 			}
 			if r.Error != nil {
-				err := fmt.Errorf("codex %s: %s", method, truncate(r.Error.Message, 160))
+				err := fmt.Errorf("codex %s: %s", method, truncate(r.Error.Message, maxErrLine))
 				// Method not found, or a request type serde does not know.
 				if r.Error.Code == -32601 || strings.Contains(r.Error.Message, "unknown variant") {
 					return nil, unsupported{err}
@@ -476,6 +476,19 @@ func (c *codexRPC) call(ctx context.Context, id int, method string, params any) 
 			return r.Result, nil
 		}
 	}
+}
+
+// maxErrLine is how many bytes of one error line from a harness the probe
+// keeps. The line is cut on a rune boundary and without an ellipsis, so the
+// error text the probe stores stays byte-identical.
+const maxErrLine = 160
+
+func shortErr(err error) string {
+	var exit interface{ ExitCode() int }
+	if errors.As(err, &exit) {
+		return fmt.Sprintf("exit status %d", exit.ExitCode())
+	}
+	return truncate(err.Error(), maxErrLine)
 }
 
 // truncate cuts s to at most n bytes without splitting a character.
