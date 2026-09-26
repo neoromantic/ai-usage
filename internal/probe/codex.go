@@ -226,63 +226,64 @@ func rescue(err *error) {
 }
 
 func codexConversation(ctx context.Context, rpc *codexRPC, now time.Time) (Reading, error) {
-	var r Reading
-	if _, err := rpc.call(ctx, 1, "initialize", map[string]any{
+	if _, err := rpc.call(ctx, "initialize", map[string]any{
 		"clientInfo": map[string]string{"name": "ai-usage", "version": "1"},
 	}); err != nil {
-		return r, err
+		return Reading{}, err
 	}
 	if err := rpc.notify("initialized"); err != nil {
+		return Reading{}, err
+	}
+	raw, err := rpc.call(ctx, "account/read", map[string]any{"refreshToken": false})
+	if err != nil {
+		return Reading{}, err
+	}
+	r, err := codexAccount(raw)
+	if err != nil || r.Account == "" {
 		return r, err
 	}
-
-	var errs []error
-	raw, err := rpc.call(ctx, 2, "account/read", map[string]any{"refreshToken": false})
+	raw, err = rpc.call(ctx, "account/rateLimits/read", nil)
 	if err != nil {
-		errs = append(errs, err)
-	} else {
-		var acct struct {
-			Account *struct {
-				Type     string `json:"type"`
-				Email    string `json:"email"`
-				PlanType string `json:"planType"`
-			} `json:"account"`
-		}
-		if json.Unmarshal(raw, &acct) != nil {
-			errs = append(errs, errors.New("codex account/read: unexpected result"))
-		} else if acct.Account == nil {
-			errs = append(errs, notLoggedIn("codex"))
-		} else {
-			switch acct.Account.Type {
-			case "chatgpt":
-				// email is nullable in the protocol; the type is still a label.
-				r.Account = strings.TrimSpace(acct.Account.Email)
-				if r.Account == "" {
-					r.Account = "chatgpt"
-				}
-				r.Plan = acct.Account.PlanType
-			case "apiKey":
-				r.Account = "api key"
-			default:
-				r.Account = snapshot.PlainLabel(acct.Account.Type)
-			}
-		}
+		return r, err
 	}
+	q, plan, err := codexLimits(raw, now)
+	if err != nil {
+		return r, err
+	}
+	r.Quota, r.Plan = q, cmp.Or(r.Plan, plan)
+	return r, nil
+}
 
-	if r.Account != "" {
-		raw, err = rpc.call(ctx, 3, "account/rateLimits/read", nil)
-		if err != nil {
-			errs = append(errs, err)
-		} else if q, plan, perr := codexLimits(raw, now); perr != nil {
-			errs = append(errs, perr)
-		} else {
-			r.Quota = q
-			if r.Plan == "" {
-				r.Plan = plan
-			}
-		}
+// codexAccount is the account an account/read answer names, with its plan.
+func codexAccount(raw json.RawMessage) (Reading, error) {
+	var acct struct {
+		Account *struct {
+			Type     string `json:"type"`
+			Email    string `json:"email"`
+			PlanType string `json:"planType"`
+		} `json:"account"`
 	}
-	return r, joinErrors(errs)
+	if json.Unmarshal(raw, &acct) != nil {
+		return Reading{}, errors.New("codex account/read: unexpected result")
+	}
+	if acct.Account == nil {
+		return Reading{}, notLoggedIn("codex")
+	}
+	var r Reading
+	switch acct.Account.Type {
+	case "chatgpt":
+		// email is nullable in the protocol; the type is still a label.
+		r.Account = strings.TrimSpace(acct.Account.Email)
+		if r.Account == "" {
+			r.Account = "chatgpt"
+		}
+		r.Plan = acct.Account.PlanType
+	case "apiKey":
+		r.Account = "api key"
+	default:
+		r.Account = snapshot.PlainLabel(acct.Account.Type)
+	}
+	return r, nil
 }
 
 type codexBucket struct {
@@ -372,6 +373,7 @@ func (b *codexBucket) windows() []snapshot.Window {
 // meant for the next one.
 type codexRPC struct {
 	in    io.Writer
+	next  int // the id of the last call
 	lines chan []byte
 	done  chan struct{} // closed once the server's output ends; err says why
 	err   error
@@ -443,7 +445,9 @@ type codexReply struct {
 // call sends a request and waits for its response. Notifications and requests
 // from the server carry a method and are skipped, as are late answers to
 // calls that already gave up.
-func (c *codexRPC) call(ctx context.Context, id int, method string, params any) (json.RawMessage, error) {
+func (c *codexRPC) call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	c.next++
+	id := c.next
 	msg := map[string]any{"id": id, "method": method}
 	if params != nil {
 		msg["params"] = params
@@ -454,11 +458,10 @@ func (c *codexRPC) call(ctx context.Context, id int, method string, params any) 
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, fmt.Errorf("codex %s: no answer in time", method)
 		case <-c.done:
 			// The context also kills the process, so its end is a timeout.
 			if ctx.Err() != nil {
-				return nil, fmt.Errorf("codex %s: no answer in time", method)
+				break
 			}
 			if errors.Is(c.err, io.EOF) {
 				return nil, fmt.Errorf("codex %s: %w", method, errExited)
@@ -479,6 +482,7 @@ func (c *codexRPC) call(ctx context.Context, id int, method string, params any) 
 			}
 			return r.Result, nil
 		}
+		return nil, fmt.Errorf("codex %s: no answer in time", method)
 	}
 }
 

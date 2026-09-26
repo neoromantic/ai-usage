@@ -462,12 +462,12 @@ func TestCodexRPCAbandonedCall(t *testing.T) {
 	defer stop()
 	ctx1, cancel1 := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel1()
-	if _, err := rpc.call(ctx1, 1, "first", nil); err == nil {
+	if _, err := rpc.call(ctx1, "first", nil); err == nil {
 		t.Fatal("first call was answered")
 	}
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel2()
-	res, err := rpc.call(ctx2, 2, "second", nil)
+	res, err := rpc.call(ctx2, "second", nil)
 	if err != nil || string(res) != `{"ok":true}` {
 		t.Fatalf("second call: %s, %v", res, err)
 	}
@@ -482,7 +482,7 @@ func TestCodexRPCErrorAnswer(t *testing.T) {
 		return fmt.Sprintf(`{"id":%d,"error":{"code":-32600,"message":%q}}`+"\n", id, long)
 	})
 	defer stop()
-	_, err := rpc.call(context.Background(), 1, "m", nil)
+	_, err := rpc.call(context.Background(), "m", nil)
 	if msg := errText(err); !strings.Contains(msg, "éééé") || strings.Contains(msg, long) || !utf8.ValidString(msg) {
 		t.Errorf("error = %q", msg)
 	}
@@ -499,11 +499,11 @@ func TestCodexRPCLastLineWithoutNewline(t *testing.T) {
 	}()
 	rpc := newCodexRPC(cw, sr)
 	defer rpc.close()
-	res, err := rpc.call(context.Background(), 1, "m", nil)
+	res, err := rpc.call(context.Background(), "m", nil)
 	if err != nil || string(res) != `{"ok":true}` {
 		t.Fatalf("call: %s, %v", res, err)
 	}
-	if _, err := rpc.call(context.Background(), 2, "next", nil); err == nil {
+	if _, err := rpc.call(context.Background(), "next", nil); err == nil {
 		t.Error("call after the server went away succeeded")
 	}
 	waitNoGoroutine(t, "probe.(*codexRPC)")
@@ -531,7 +531,7 @@ func (buggyReader) Read([]byte) (int, error) { panic("reader bug") }
 func TestCodexRPCReaderPanicIsTheCallError(t *testing.T) {
 	rpc := newCodexRPC(io.Discard, buggyReader{})
 	defer rpc.close()
-	_, err := rpc.call(context.Background(), 1, "initialize", nil)
+	_, err := rpc.call(context.Background(), "initialize", nil)
 	if msg := errText(err); !strings.Contains(msg, "reader bug") || strings.Contains(msg, "\n") {
 		t.Errorf("error = %q", msg)
 	}
