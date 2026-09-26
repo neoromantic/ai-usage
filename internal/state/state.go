@@ -5,16 +5,12 @@
 package state
 
 import (
-	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
@@ -50,89 +46,6 @@ func (d Dir) KeyFile() string         { return d.Path("team.key") }
 func (d Dir) SamplesDir() string      { return d.Path("samples") }
 func (d Dir) StateFile() string       { return d.Path("state.json") }
 func (d Dir) TeamCacheFile() string   { return d.Path("team-cache.json") }
-
-// Config is set once and changed only by the person.
-type Config struct {
-	Device string `json:"device"`
-	// Name is what this device is called in the team instead of its host
-	// name, set with `ai-usage name set`. A container's host name is random.
-	Name  string `json:"name,omitempty"`
-	Relay string `json:"relay,omitempty"`
-	// Homes are harness homes seen through environment variables in an
-	// interactive run. The scheduler's environment does not have them.
-	Homes map[string][]string `json:"homes,omitempty"`
-	// HomeEnv keeps, by provider and home, the exact value of the variable
-	// an interactive run saw naming that home, where the harness depends on
-	// the string itself. Claude Code names its login after the exact
-	// CLAUDE_CONFIG_DIR, even when it names the default ~/.claude.
-	HomeEnv map[string]map[string]string `json:"home_env,omitempty"`
-	// QuotaFrom names, by Hermes home and then by harness, the home of that
-	// harness whose login the Hermes home bills its subscription through. It
-	// is set with `ai-usage home add hermes DIR --quota-from codex:DIR`. A
-	// Hermes home without an entry for a harness is taken to use the login
-	// in that harness's default home. An entry covers the profiles inside
-	// its home too.
-	QuotaFrom map[string]map[string]string `json:"quota_from,omitempty"`
-	// ScheduleOff is set by `ai-usage schedule remove` so a later run does not
-	// register again.
-	ScheduleOff bool `json:"schedule_off,omitempty"`
-	// Aliases are the short names given to accounts with `ai-usage alias`,
-	// keyed by Key(provider, label). They travel in this device's snapshot
-	// and name the account for the whole team. A cleared name stays, with no
-	// name, so that the clearing reaches the team too.
-	Aliases map[string]Alias `json:"aliases,omitempty"`
-}
-
-// Alias is a short name for an account, and when it was set or cleared.
-type Alias struct {
-	Name string    `json:"name,omitempty"`
-	At   time.Time `json:"at"`
-}
-
-// LoadConfig reads config.json, creating a device id on first use.
-func (d Dir) LoadConfig() (Config, error) {
-	var c Config
-	if err := readJSON(d.Path("config.json"), &c); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return c, err
-	}
-	if !snapshot.ValidDevice(c.Device) {
-		b := make([]byte, 12)
-		if _, err := rand.Read(b); err != nil {
-			return c, err
-		}
-		c.Device = "d-" + hex.EncodeToString(b)
-		if err := d.SaveConfig(c); err != nil {
-			return c, err
-		}
-	}
-	return c, nil
-}
-
-func (d Dir) SaveConfig(c Config) error { return writeJSON(d.Path("config.json"), c) }
-
-// EditConfig changes config.json under a lock of its own, held only while the
-// file is read and written. A person's command never waits for a collection,
-// and a run that records a newly found folder does not undo the command's
-// change, or the other way round.
-func (d Dir) EditConfig(edit func(*Config) error) (Config, error) {
-	unlock, err := d.lockWait(context.Background(), "config.lock", 10*time.Second, nil)
-	if errors.Is(err, ErrBusy) {
-		// Not ErrBusy, which means a run is collecting.
-		return Config{}, errors.New("another ai-usage command is changing config.json")
-	}
-	if err != nil {
-		return Config{}, fmt.Errorf("config.json: %w", err)
-	}
-	defer unlock()
-	c, err := d.LoadConfig()
-	if err != nil {
-		return c, err
-	}
-	if err := edit(&c); err != nil {
-		return c, err
-	}
-	return c, d.SaveConfig(c)
-}
 
 // State is rewritten by every run.
 type State struct {
@@ -334,89 +247,6 @@ func (d Dir) LoadState() (*State, error) {
 }
 
 func (d Dir) SaveState(s *State) error { return writeJSON(d.StateFile(), s) }
-
-// ErrBusy is Lock's error while another run holds the lock.
-var ErrBusy = errors.New("another ai-usage run is in progress")
-
-// Lock takes the run lock. A collection holds it from start to end, since it
-// reads and rewrites the state, samples, team cache, and binary. It is the
-// system's lock on run.lock, which ends with the process that holds it
-// however that process ends, so a run that was killed never leaves it behind.
-func (d Dir) Lock() (func(), error) { return d.lock("run.lock") }
-
-// ScheduleLock is held by `ai-usage schedule run` for as long as it runs, so
-// other runs can tell that it schedules this folder. A check holds a shared
-// lock on the same file for a moment, so a second is allowed for that to end.
-func (d Dir) ScheduleLock() (func(), error) {
-	return d.lockWait(context.Background(), "schedule.lock", checkWait, nil)
-}
-
-// Foreground reports whether `ai-usage schedule run` runs for this folder now.
-// It takes a shared lock, which only the exclusive one `schedule run` holds
-// keeps out, so it answers at once, and checks never wait for each other.
-func (d Dir) Foreground() bool {
-	f, err := os.OpenFile(d.Path("schedule.lock"), os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-	return errors.Is(sharedLockFile(f), ErrBusy)
-}
-
-// checkWait is how long ScheduleLock waits for a check's shared lock to end.
-var checkWait = time.Second
-
-func (d Dir) lock(name string) (func(), error) {
-	if err := os.MkdirAll(string(d), 0o700); err != nil {
-		return nil, err
-	}
-	// The file stays in place: removing it would let a later run lock a new
-	// file while an earlier one still holds the old.
-	f, err := os.OpenFile(d.Path(name), os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return nil, err
-	}
-	if err := lockFile(f); err != nil {
-		f.Close()
-		return nil, err
-	}
-	// The holder's process id, for a person who wonders which run it is.
-	if f.Truncate(0) == nil {
-		_, _ = f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
-	}
-	return func() {
-		_ = f.Truncate(0)
-		_ = f.Close()
-	}, nil
-}
-
-// lockPoll is how often LockWait tries the lock again.
-var lockPoll = 250 * time.Millisecond
-
-// LockWait takes the run lock like Lock, waiting up to wait for the run that
-// holds it, such as a scheduled one, to finish. waiting is called once, when
-// the wait starts.
-func (d Dir) LockWait(ctx context.Context, wait time.Duration, waiting func()) (func(), error) {
-	return d.lockWait(ctx, "run.lock", wait, waiting)
-}
-
-func (d Dir) lockWait(ctx context.Context, name string, wait time.Duration, waiting func()) (func(), error) {
-	deadline := time.Now().Add(wait)
-	for first := true; ; first = false {
-		unlock, err := d.lock(name)
-		if !errors.Is(err, ErrBusy) || !time.Now().Before(deadline) {
-			return unlock, err
-		}
-		if first && waiting != nil {
-			waiting()
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ErrBusy
-		case <-time.After(min(lockPoll, time.Until(deadline))):
-		}
-	}
-}
 
 func readJSON(path string, v any) error {
 	b, err := os.ReadFile(path)
