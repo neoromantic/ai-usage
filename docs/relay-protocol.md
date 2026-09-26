@@ -493,7 +493,7 @@ A relay SHOULD limit requests, and SHOULD answer `429` with `Retry-After` in sec
 | new teams per IP address | 5 a day | first writes to a team with no live record; IPv6 per /48 |
 | new devices per IP address | 100 a day | first writes of a device, in any team; IPv6 per /48 |
 
-Windows are fixed and aligned to Unix time: an hour starts on the hour, and a day at 00:00 UTC. The reference collector writes 4 times an hour on schedule and reads the team once an hour, so a team of 50 behind one address makes 250 requests an hour. The device cap follows from the team read: at about 88 KB per device for a full 64 KB snapshot, 50 fill most of the 4.5 MB a Vercel Function may return. [relay.md](relay.md#limits) explains the reasoning for operators.
+Windows are fixed and aligned to Unix time: an hour starts on the hour, and a day at 00:00 UTC. [relay.md](relay.md#limits) explains how these limits were chosen.
 
 ## 10. Readers
 

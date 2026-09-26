@@ -179,22 +179,4 @@ All paths are under `/v1`. Every response has `Cache-Control: no-store`. Errors 
 | `GET /v1/teams/{team}` | `ai-usage request v1\nGET\n{team}\n\n{time}` | `{"devices":[{"device","body","sig"}]}` |
 | `DELETE /v1/teams/{team}/devices/{device}` | `ai-usage request v1\nDELETE\n{team}\n{device}\n{time}` | `{"deleted":true}` |
 
-Headers, with binary values in unpadded base64url:
-
-- `X-Aiu-Key`: the team's Ed25519 public key. Its fingerprint must be `{team}`: the first 20 bytes of its SHA-256, in lowercase unpadded base32.
-- `X-Aiu-Signature`: the Ed25519 signature of the message in the table.
-- `X-Aiu-Time`: for reads and deletes, the Unix time in seconds that the signature covers.
-
 A `PUT` body must be a valid snapshot in exactly the form `encoding/json` writes it, naming the same team and device as the path. The team read returns each stored body and signature as they were written, so every reader verifies them again.
-
-| Status | Meaning |
-| --- | --- |
-| `400` | the `PUT` body could not be read within 30 seconds |
-| `401` | missing or bad signature, or a request time too far from the server's |
-| `403` | the key is missing or does not match the team, or the team already has 50 devices without this one |
-| `404` | not a valid team or device id |
-| `409` | a newer snapshot for this device is already stored |
-| `413` | the body is larger than 64 KB |
-| `422` | the body is not a valid snapshot |
-| `429` | a rate limit; `Retry-After` says in seconds when the window ends |
-| `503` | the store is unavailable or not configured |
