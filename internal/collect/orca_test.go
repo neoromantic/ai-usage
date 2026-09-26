@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -252,28 +251,5 @@ func TestHomesAreAskedTogether(t *testing.T) {
 		if !IsCurrent(res.State, "codex", l) {
 			t.Fatalf("%s not current: %v", l, res.State.Current)
 		}
-	}
-}
-
-// A probe that panics is its source's error, as a parser that panics is.
-func TestPanicInProbeIsItsSourceError(t *testing.T) {
-	w, o := newWorld(t)
-	ch := w.home(t, "claude")
-	xh := w.home(t, "codex")
-	w.login("claude", ch, "ann", nil)
-	w.login("codex", xh, "bob", nil)
-	ask := o.Ask
-	o.Ask = func(ctx context.Context, p, home string, lastUse time.Time) (probe.Reading, error) {
-		if p == "claude" {
-			panic("boom")
-		}
-		return ask(ctx, p, home, lastUse)
-	}
-	res := run(t, o)
-	if src := res.State.Sources["claude"]; src.Status != "error" || !strings.Contains(src.Error, "stopped by a bug") {
-		t.Fatalf("claude source = %+v", src)
-	}
-	if src := res.State.Sources["codex"]; src.Status != "ok" || !IsCurrent(res.State, "codex", "bob") {
-		t.Fatalf("codex source = %+v", src)
 	}
 }

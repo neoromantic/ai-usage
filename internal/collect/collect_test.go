@@ -949,33 +949,47 @@ func TestReadErrorOnOneProviderDoesNotStopOthers(t *testing.T) {
 
 // A bug that panics in one source's parser or probe is that source's error.
 // The other sources are still collected, and the run still saves its state.
-func TestPanicInOneSourceDoesNotStopOthers(t *testing.T) {
-	w, o := newWorld(t)
-	ch := w.home(t, "claude")
-	xh := w.home(t, "codex")
-	w.login("claude", ch, "ann", nil)
-	w.login("codex", xh, "bob", nil)
-	w.sessions("codex", xh, sess("c1", "/p", 10, t0))
-	read := o.ReadLogs
-	o.ReadLogs = func(p string, homes []string, since time.Time) logs.Result {
-		if p == "claude" {
-			panic("boom") // as a parser bug would
-		}
-		return read(p, homes, since)
-	}
-	res := run(t, o)
-	if src := res.State.Sources["claude"]; src.Status != "error" || !strings.Contains(src.Error, "stopped by a bug") {
-		t.Fatalf("claude source = %+v", src)
-	}
-	if src := res.State.Sources["codex"]; src.Status != "ok" || totalsFor(t, res.State, "codex", "bob").Tokens != tok(10) {
-		t.Fatalf("codex source = %+v", src)
-	}
-	if !strings.Contains(res.State.LastError, "stopped by a bug") {
-		t.Fatalf("last error = %q", res.State.LastError)
-	}
-	st, err := o.Dir.LoadState()
-	if err != nil || st.Sources["codex"].Status != "ok" {
-		t.Fatalf("saved state = %+v, %v", st, err)
+func TestPanicIsItsSourceError(t *testing.T) {
+	for _, where := range []string{"read", "probe"} {
+		t.Run(where, func(t *testing.T) {
+			w, o := newWorld(t)
+			ch := w.home(t, "claude")
+			xh := w.home(t, "codex")
+			w.login("claude", ch, "ann", nil)
+			w.login("codex", xh, "bob", nil)
+			w.sessions("codex", xh, sess("c1", "/p", 10, t0))
+			if where == "read" {
+				read := o.ReadLogs
+				o.ReadLogs = func(p string, homes []string, since time.Time) logs.Result {
+					if p == "claude" {
+						panic("a parser bug")
+					}
+					return read(p, homes, since)
+				}
+			} else {
+				ask := o.Ask
+				o.Ask = func(ctx context.Context, p, home string, lastUse time.Time) (probe.Reading, error) {
+					if p == "claude" {
+						panic("a parser bug")
+					}
+					return ask(ctx, p, home, lastUse)
+				}
+			}
+			res := run(t, o)
+			if src := res.State.Sources["claude"]; src.Status != "error" || !strings.Contains(src.Error, "stopped by a bug") {
+				t.Fatalf("claude source = %+v", src)
+			}
+			if src := res.State.Sources["codex"]; src.Status != "ok" || !IsCurrent(res.State, "codex", "bob") || totalsFor(t, res.State, "codex", "bob").Tokens != tok(10) {
+				t.Fatalf("codex source = %+v", src)
+			}
+			if !strings.Contains(res.State.LastError, "stopped by a bug") {
+				t.Fatalf("last error = %q", res.State.LastError)
+			}
+			st, err := o.Dir.LoadState()
+			if err != nil || st.Sources["codex"].Status != "ok" {
+				t.Fatalf("saved state = %+v, %v", st, err)
+			}
+		})
 	}
 }
 
@@ -1097,9 +1111,6 @@ func TestCurrentForgetsRemovedHome(t *testing.T) {
 
 func TestSkippedProviderForgetsCurrent(t *testing.T) {
 	w, o := newWorld(t)
-	if o.Probe.Find("grok") {
-		t.Skip("a grok binary is installed system-wide on this machine")
-	}
 	h := w.home(t, "grok")
 	w.login("grok", h, "gina", nil)
 	res := run(t, o)
@@ -1118,11 +1129,6 @@ func TestSkippedProviderForgetsCurrent(t *testing.T) {
 
 func TestNothingInstalledIsASuccessfulRun(t *testing.T) {
 	_, o := newWorld(t)
-	for _, p := range snapshot.Providers {
-		if o.Probe.Find(p) {
-			t.Skipf("a %s binary is installed system-wide on this machine", p)
-		}
-	}
 	res := run(t, o)
 	for _, p := range snapshot.Providers {
 		if res.State.Sources[p].Status != "skipped" {
@@ -1448,58 +1454,6 @@ func TestPruneDropsAnAccountsOldShareOfALiveSession(t *testing.T) {
 	}
 }
 
-// A run someone started reads the team, so it does not reuse the result of a
-// scheduled run that skipped the read.
-func TestWaitedRunThatSkippedTheTeamRead(t *testing.T) {
-	for _, readToo := range []bool{false, true} {
-		w, o := newWorld(t)
-		h := w.home(t, "claude")
-		w.sessions("claude", h, sess("s1", "/p", 100, t0))
-		r := newRelay(t, w)
-		o.Relay = r.client(w)
-		run(t, o)
-		held, err := o.Dir.Lock()
-		if err != nil {
-			t.Fatal(err)
-		}
-		reads := 0
-		read := o.ReadLogs
-		o.ReadLogs = func(p string, homes []string, since time.Time) logs.Result {
-			reads++
-			return read(p, homes, since)
-		}
-		w.now = t0.Add(30 * time.Minute)
-		o.Wait = 10 * time.Second
-		o.Waiting = func() {
-			go func() {
-				// A scheduled run at t0+15m collected; it read the team only
-				// when readToo.
-				at := t0.Add(15 * time.Minute)
-				st, _ := o.Dir.LoadState()
-				st.LastRunAt = at
-				if err := o.Dir.SaveState(st); err != nil {
-					t.Error(err)
-				}
-				if readToo {
-					c, _ := LoadTeamCache(o.Dir)
-					c.PulledAt = at
-					if err := saveTeamCache(o.Dir, c); err != nil {
-						t.Error(err)
-					}
-				}
-				held()
-			}()
-		}
-		res := run(t, o)
-		if res.Waited != readToo || (reads == 0) != readToo {
-			t.Fatalf("read too %v: waited %v, %d reads", readToo, res.Waited, reads)
-		}
-		if want := map[bool]time.Time{false: w.now, true: t0.Add(15 * time.Minute)}[readToo]; !res.Team.PulledAt.Equal(want) {
-			t.Fatalf("read too %v: team read at %s, want %s", readToo, res.Team.PulledAt, want)
-		}
-	}
-}
-
 func TestRunFailsWhileLocked(t *testing.T) {
 	_, o := newWorld(t)
 	unlock, err := o.Dir.Lock()
@@ -1515,22 +1469,29 @@ func TestRunFailsWhileLocked(t *testing.T) {
 // TestRunWaitsForTheRunItOverlaps: a run that may wait uses the result of
 // the run it waited for, and collects itself when that run collected nothing
 // or collected with other inputs: another release, or homes this run's
-// environment names.
+// environment names. A run someone started reads the team, so it does not
+// reuse the result of a scheduled run that skipped the read.
 func TestRunWaitsForTheRunItOverlaps(t *testing.T) {
 	for _, tc := range []struct {
 		name                         string
 		collects, newEnv, newVersion bool
+		relay, readTeam              bool
 		waited                       bool
 	}{
-		{"collected", true, false, false, true},
-		{"did not collect", false, false, false, false},
-		{"new folder", true, true, false, false},
-		{"other release", true, false, true, false},
+		{name: "collected", collects: true, waited: true},
+		{name: "did not collect"},
+		{name: "new folder", collects: true, newEnv: true},
+		{name: "other release", collects: true, newVersion: true},
+		{name: "skipped the team read", collects: true, relay: true, waited: false},
+		{name: "read the team too", collects: true, relay: true, readTeam: true, waited: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w, o := newWorld(t)
 			h := w.home(t, "claude")
 			w.sessions("claude", h, sess("s1", "/p", 100, t0))
+			if tc.relay {
+				o.Relay = newRelay(t, w).client(w)
+			}
 			run(t, o)
 			held, err := o.Dir.Lock()
 			if err != nil {
@@ -1560,6 +1521,13 @@ func TestRunWaitsForTheRunItOverlaps(t *testing.T) {
 						if err := o.Dir.SaveState(st); err != nil {
 							t.Error(err)
 						}
+						if tc.readTeam {
+							c, _ := LoadTeamCache(o.Dir)
+							c.PulledAt = t0.Add(15 * time.Minute)
+							if err := saveTeamCache(o.Dir, c); err != nil {
+								t.Error(err)
+							}
+						}
 					}
 					held()
 				}()
@@ -1574,6 +1542,15 @@ func TestRunWaitsForTheRunItOverlaps(t *testing.T) {
 			}
 			if !res.State.LastRunAt.Equal(want) || !res.Doc.CollectedAt.Equal(want) {
 				t.Fatalf("result of %s, doc of %s, want %s", res.State.LastRunAt, res.Doc.CollectedAt, want)
+			}
+			if tc.relay {
+				pulled := w.now
+				if tc.readTeam {
+					pulled = t0.Add(15 * time.Minute)
+				}
+				if !res.Team.PulledAt.Equal(pulled) {
+					t.Fatalf("team read at %s, want %s", res.Team.PulledAt, pulled)
+				}
 			}
 		})
 	}
