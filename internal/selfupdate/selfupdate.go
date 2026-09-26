@@ -169,47 +169,55 @@ func (u *Updater) Check(ctx context.Context) (Result, error) {
 	if tag == u.Skip {
 		return res, ErrSkipped
 	}
+	res.Downloaded, err = u.install(ctx, repo, tag)
+	res.Installed = err == nil
+	return res, err
+}
+
+// install downloads release tag from repo, checks it and puts it in place of
+// u.Exe. downloaded says it downloaded the release's binary, whether or not
+// it then installed it.
+func (u *Updater) install(ctx context.Context, repo, tag string) (downloaded bool, err error) {
 	want := AssetName(u.GOOS, u.GOARCH)
 	// A binary in a place this user cannot write, such as a system bin
 	// directory, would download every release and then fail to install it.
 	if err := writable(filepath.Dir(u.Exe)); err != nil {
-		return res, fmt.Errorf("cannot write beside %s: %w", u.Exe, err)
+		return false, fmt.Errorf("cannot write beside %s: %w", u.Exe, err)
 	}
 	sums, err := u.download(ctx, repo, tag, "checksums.txt", 1<<20)
 	if err != nil {
-		return res, err
+		return false, err
 	}
 	wantSum, ok := checksum(sums, want)
 	if !ok {
-		return res, fmt.Errorf("checksums.txt of release %s does not list %s", tag, want)
+		return false, fmt.Errorf("checksums.txt of release %s does not list %s", tag, want)
 	}
 	bin, err := u.download(ctx, repo, tag, want, u.MaxSize)
 	// A binary larger than the limit was downloaded as far as the limit.
-	res.Downloaded = err == nil || errors.Is(err, errTooLarge)
+	downloaded = err == nil || errors.Is(err, errTooLarge)
 	if err != nil {
-		return res, err
+		return downloaded, err
 	}
 	got := sha256.Sum256(bin)
 	if hex.EncodeToString(got[:]) != wantSum {
-		return res, fmt.Errorf("%s does not match its checksum", want)
+		return true, fmt.Errorf("%s does not match its checksum", want)
 	}
 	tmp, err := stage(u.Exe, bin, u.GOOS)
 	if err != nil {
-		return res, err
+		return true, err
 	}
 	// The checksum proves the download is what was uploaded, not that it
 	// starts on this machine. A binary that cannot start would never run the
 	// update that replaces it.
 	if err := starts(ctx, tmp, tag); err != nil {
 		_ = os.Remove(tmp)
-		return res, fmt.Errorf("release %s does not run here: %w", tag, err)
+		return true, fmt.Errorf("release %s does not run here: %w", tag, err)
 	}
 	if err := swap(u.Exe, tmp, u.GOOS); err != nil {
 		_ = os.Remove(tmp)
-		return res, err
+		return true, err
 	}
-	res.Installed = true
-	return res, nil
+	return true, nil
 }
 
 // latest is the latest release's tag, read from where releases/latest
