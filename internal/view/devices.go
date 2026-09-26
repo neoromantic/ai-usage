@@ -220,10 +220,7 @@ func (p *page) grid() []chunks {
 			j++
 		}
 		last := cols[shown[j]]
-		name := "NO QUOTA"
-		if first.group != "" {
-			name = strings.ToUpper(first.group)
-		}
+		name := groupName(first.group)
 		span := last.x + last.w - first.x
 		heads = append(heads, p.space(first.x-cur))
 		if span >= width(name)+2 {
@@ -287,6 +284,15 @@ func (p *page) grid() []chunks {
 	total = append(total, p.space(2))
 	total = append(total, p.right(p.cell(totalOf(grand)), totalW)...)
 	return append(out, total)
+}
+
+// groupName is the heading of a group of subscriptions: its provider, or
+// NO QUOTA for the group of tokens with none.
+func groupName(grp string) string {
+	if grp == "" {
+		return "NO QUOTA"
+	}
+	return strings.ToUpper(grp)
 }
 
 // pill is one choice of a mode: the chosen one between ‹ ›, in reverse
@@ -374,15 +380,6 @@ func (p *page) usage() []chunks {
 	g := p.g
 	cols := p.r.Team.Matrix.Columns
 	if len(cols) == 0 {
-		for _, tp := range p.r.Team.Providers {
-			for _, a := range tp.Accounts {
-				if a.Subscription {
-					cols = append(cols, Column{Provider: tp.Provider, Label: a.Label, Name: a.Name, State: a.State, Usage: a.Usage})
-				}
-			}
-		}
-	}
-	if len(cols) == 0 {
 		return nil
 	}
 	type usageRow struct {
@@ -410,9 +407,8 @@ func (p *page) usage() []chunks {
 		rows = append(rows, r)
 		sum = sum.add(c.Usage)
 	}
-	periods := []Period{Today, Week, Month, Quarter}
-	numW := make([]int, len(periods))
-	for i, per := range periods {
+	numW := make([]int, len(Periods))
+	for i, per := range Periods {
 		numW[i] = max(width(strings.ToUpper(per.String())), width(p.tokens(per, sum)), 4)
 	}
 	acct := width("TOTAL")
@@ -425,14 +421,8 @@ func (p *page) usage() []chunks {
 	}
 	acct = max(min(acct, p.w-2-rest), minAccount)
 
-	groupName := func(grp string) string {
-		if grp == "" {
-			return "NO QUOTA"
-		}
-		return strings.ToUpper(grp)
-	}
 	numbers := func(line chunks, u Usage) chunks {
-		for i, per := range periods {
+		for i, per := range Periods {
 			line = append(line, p.space(2))
 			line = append(line, p.right(p.cell(p.tokens(per, u)), numW[i])...)
 		}
@@ -447,7 +437,7 @@ func (p *page) usage() []chunks {
 			if i == 0 {
 				// Every header is dim. The chosen period orders nothing
 				// here, so none stands out.
-				for k, per := range periods {
+				for k, per := range Periods {
 					head = append(head, p.space(2))
 					head = append(head, p.right(p.muted(strings.ToUpper(per.String())), numW[k])...)
 				}
