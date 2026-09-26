@@ -395,15 +395,13 @@ func TestKVErrors(t *testing.T) {
 
 // The relay runs the same over KV as over memory.
 func TestRelayOverKV(t *testing.T) {
-	kv, f, c := newKV(t)
-	srv := NewServer(kv)
-	srv.Limits.DevicesPerTeam = 2
-	srv.Now = c.Now
-	ts := httptest.NewServer(srv)
-	defer ts.Close()
+	kv, f, _ := newKV(t)
+	e := newRelay(t)
+	e.srv.Store = kv
+	e.srv.Limits.DevicesPerTeam = 2
 	k := newKey(t)
 	ctx := context.Background()
-	client := &Client{BaseURL: ts.URL, Key: k, HTTP: ts.Client(), Now: c.Now}
+	client := e.client(k)
 	for _, dev := range []string{"device-one", "device-two"} {
 		if err := client.Publish(ctx, dev, marshal(t, docFor(k, dev, t0))); err != nil {
 			t.Fatal(err)

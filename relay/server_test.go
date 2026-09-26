@@ -77,6 +77,24 @@ func (e *relayEnv) clientFrom(k *team.Key, ip string) *Client {
 	return c
 }
 
+// publish publishes dev's snapshot as of the relay's clock.
+func (e *relayEnv) publish(t *testing.T, c *Client, k *team.Key, dev string) error {
+	t.Helper()
+	return c.Publish(context.Background(), dev, marshal(t, docFor(k, dev, e.clock.Now())))
+}
+
+// join publishes each device a minute after the one before, and fails the
+// test on any error.
+func (e *relayEnv) join(t *testing.T, c *Client, k *team.Key, devs ...string) {
+	t.Helper()
+	for _, dev := range devs {
+		e.clock.Add(time.Minute)
+		if err := e.publish(t, c, k, dev); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 type headerTransport map[string]string
 
 func (h headerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -568,28 +586,27 @@ func TestDeviceCap(t *testing.T) {
 	k := newKey(t)
 	c := e.client(k)
 	ctx := context.Background()
-	publish := func(dev string) error { return c.Publish(ctx, dev, marshal(t, docFor(k, dev, e.clock.Now()))) }
 	for _, dev := range []string{"device-one", "device-two"} {
-		if err := publish(dev); err != nil {
+		if err := e.publish(t, c, k, dev); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := publish("device-three"); statusOf(err) != http.StatusForbidden {
+	if err := e.publish(t, c, k, "device-three"); statusOf(err) != http.StatusForbidden {
 		t.Fatalf("third device: err = %v, want 403", err)
 	}
 	e.clock.Add(time.Minute)
-	if err := publish("device-one"); err != nil {
+	if err := e.publish(t, c, k, "device-one"); err != nil {
 		t.Fatalf("a known device must still update: %v", err)
 	}
 	if err := c.Remove(ctx, "device-two"); err != nil {
 		t.Fatal(err)
 	}
-	if err := publish("device-three"); err != nil {
+	if err := e.publish(t, c, k, "device-three"); err != nil {
 		t.Fatalf("after removing a device: %v", err)
 	}
 	// Expired documents free their slot.
 	e.clock.Add(25 * time.Hour)
-	if err := publish("device-four"); err != nil {
+	if err := e.publish(t, c, k, "device-four"); err != nil {
 		t.Fatalf("after the others expired: %v", err)
 	}
 }
@@ -602,12 +619,7 @@ func TestTeamReadListsNoMoreThanTheCap(t *testing.T) {
 	k := newKey(t)
 	c := e.client(k)
 	ctx := context.Background()
-	for _, dev := range []string{"device-c", "device-a", "device-b"} {
-		e.clock.Add(time.Minute)
-		if err := c.Publish(ctx, dev, marshal(t, docFor(k, dev, e.clock.Now()))); err != nil {
-			t.Fatal(err)
-		}
-	}
+	e.join(t, c, k, "device-c", "device-a", "device-b")
 	e.srv.Limits.DevicesPerTeam = 2
 	devices, _, err := c.Pull(ctx)
 	if err != nil {
@@ -623,36 +635,16 @@ func TestTeamReadListsNoMoreThanTheCap(t *testing.T) {
 	}
 }
 
-// racing hides the team from the first List, as a first write racing other
-// devices' first writes sees it.
-type racing struct {
-	Store
-	lists int
-}
-
-func (r *racing) List(ctx context.Context, teamFP string) (map[string]Record, error) {
-	r.lists++
-	if r.lists == 1 {
-		return map[string]Record{}, nil
-	}
-	return r.Store.List(ctx, teamFP)
-}
-
 func TestFirstWritePastTheCapGivesWay(t *testing.T) {
 	e := newRelay(t)
 	e.srv.Limits.DevicesPerTeam = 2
 	k := newKey(t)
 	c := e.client(k)
 	ctx := context.Background()
-	for _, dev := range []string{"device-a", "device-b"} {
-		e.clock.Add(time.Minute)
-		if err := c.Publish(ctx, dev, marshal(t, docFor(k, dev, e.clock.Now()))); err != nil {
-			t.Fatal(err)
-		}
-	}
-	e.srv.Store = &racing{Store: e.mem}
+	e.join(t, c, k, "device-a", "device-b")
+	e.srv.Store = &testStore{Store: e.mem, hideFirstList: true}
 	e.clock.Add(time.Minute)
-	err := c.Publish(ctx, "device-z", marshal(t, docFor(k, "device-z", e.clock.Now())))
+	err := e.publish(t, c, k, "device-z")
 	if statusOf(err) != http.StatusForbidden {
 		t.Fatalf("write past the cap: %v", err)
 	}
@@ -660,36 +652,7 @@ func TestFirstWritePastTheCapGivesWay(t *testing.T) {
 		t.Fatal("the device past the cap is still stored")
 	}
 	// The devices already in the team keep writing.
-	e.clock.Add(time.Minute)
-	if err := c.Publish(ctx, "device-a", marshal(t, docFor(k, "device-a", e.clock.Now()))); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// failing hides the team from the first List, as racing does, and then fails
-// the calls fail names, as a store error or a client that hung up would.
-type failing struct {
-	Store
-	lists int
-	fail  map[string]bool
-}
-
-func (f *failing) List(ctx context.Context, teamFP string) (map[string]Record, error) {
-	f.lists++
-	if f.lists == 1 {
-		return map[string]Record{}, nil
-	}
-	if f.fail["list"] {
-		return nil, errBroken
-	}
-	return f.Store.List(ctx, teamFP)
-}
-
-func (f *failing) Delete(ctx context.Context, teamFP, device string) error {
-	if f.fail["delete"] {
-		return errBroken
-	}
-	return f.Store.Delete(ctx, teamFP, device)
+	e.join(t, c, k, "device-a")
 }
 
 // A first write past the cap that cannot tell whether it gave way is not
@@ -702,21 +665,16 @@ func TestFirstWritePastTheCapFailsClosed(t *testing.T) {
 			k := newKey(t)
 			c := e.client(k)
 			ctx := context.Background()
-			for _, dev := range []string{"device-a", "device-b"} {
-				e.clock.Add(time.Minute)
-				if err := c.Publish(ctx, dev, marshal(t, docFor(k, dev, e.clock.Now()))); err != nil {
-					t.Fatal(err)
-				}
-			}
-			e.srv.Store = &failing{Store: e.mem, fail: map[string]bool{broken: true}}
+			e.join(t, c, k, "device-a", "device-b")
+			e.srv.Store = &testStore{Store: e.mem, hideFirstList: true, fail: map[string]bool{broken: true}}
 			e.clock.Add(time.Minute)
-			err := c.Publish(ctx, "device-z", marshal(t, docFor(k, "device-z", e.clock.Now())))
+			err := e.publish(t, c, k, "device-z")
 			if statusOf(err) != http.StatusServiceUnavailable {
 				t.Fatalf("write past the cap: %v", err)
 			}
 			e.srv.Store = e.mem
 			e.clock.Add(time.Minute)
-			err = c.Publish(ctx, "device-z", marshal(t, docFor(k, "device-z", e.clock.Now())))
+			err = e.publish(t, c, k, "device-z")
 			if statusOf(err) != http.StatusForbidden {
 				t.Fatalf("next write past the cap: %v", err)
 			}
@@ -736,15 +694,9 @@ func TestDevicePushedPastTheCapIsTold(t *testing.T) {
 	k := newKey(t)
 	c := e.client(k)
 	ctx := context.Background()
-	e.clock.Add(time.Minute)
-	if err := c.Publish(ctx, "device-a", marshal(t, docFor(k, "device-a", e.clock.Now()))); err != nil {
-		t.Fatal(err)
-	}
+	e.join(t, c, k, "device-a")
 	early := e.clock.Now().Add(30 * time.Second)
-	e.clock.Add(time.Minute)
-	if err := c.Publish(ctx, "device-x", marshal(t, docFor(k, "device-x", e.clock.Now()))); err != nil {
-		t.Fatal(err)
-	}
+	e.join(t, c, k, "device-x")
 	// device-y's first write took its time before x's and lands after it.
 	y := docFor(k, "device-y", e.clock.Now())
 	body := marshal(t, y)
@@ -752,16 +704,14 @@ func TestDevicePushedPastTheCapIsTold(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.clock.Add(time.Minute)
-	err := c.Publish(ctx, "device-x", marshal(t, docFor(k, "device-x", e.clock.Now())))
+	err := e.publish(t, c, k, "device-x")
 	if statusOf(err) != http.StatusForbidden {
 		t.Fatalf("write from the device past the cap: %v", err)
 	}
 	if rec, _ := e.mem.Get(ctx, k.Fingerprint(), "device-x"); rec != nil {
 		t.Fatal("the device past the cap is still stored")
 	}
-	if err := c.Publish(ctx, "device-y", marshal(t, docFor(k, "device-y", e.clock.Now()))); err != nil {
-		t.Fatal(err)
-	}
+	e.join(t, c, k, "device-y")
 }
 
 func TestTeamWriteLimit(t *testing.T) {
@@ -902,13 +852,13 @@ func TestNewDevicesPerIP(t *testing.T) {
 	// Devices already stored keep updating.
 	e.clock.Add(time.Hour)
 	k := keys[0]
-	if err := e.client(k).Publish(ctx, "device-00", marshal(t, docFor(k, "device-00", e.clock.Now()))); err != nil {
+	if err := e.publish(t, e.client(k), k, "device-00"); err != nil {
 		t.Fatalf("a known device: %v", err)
 	}
 	// The last key stored nothing today; the next day it may.
 	e.clock.Add(23 * time.Hour)
 	k = keys[len(keys)-1]
-	if err := e.client(k).Publish(ctx, "device-00", marshal(t, docFor(k, "device-00", e.clock.Now()))); err != nil {
+	if err := e.publish(t, e.client(k), k, "device-00"); err != nil {
 		t.Fatalf("next day: %v", err)
 	}
 }
@@ -941,10 +891,9 @@ func TestRecordLifetimeGrowsWithTheDevice(t *testing.T) {
 	e := newRelay(t)
 	k := newKey(t)
 	c := e.client(k)
-	ctx := context.Background()
 	publish := func(dev string) {
 		t.Helper()
-		if err := c.Publish(ctx, dev, marshal(t, docFor(k, dev, e.clock.Now()))); err != nil {
+		if err := e.publish(t, c, k, dev); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1057,21 +1006,10 @@ func TestForwardingHeadersAreIgnoredByDefault(t *testing.T) {
 	}
 }
 
-// countingStore counts rate-limit commands.
-type countingStore struct {
-	*Memory
-	counts atomic.Int64
-}
-
-func (c *countingStore) Count(ctx context.Context, key string, window time.Duration) (int64, error) {
-	c.counts.Add(1)
-	return c.Memory.Count(ctx, key, window)
-}
-
 // On Vercel KV every counted request is paid for. A path the relay does not
 // serve, and a client that is already over its limit, cost nothing.
 func TestRejectedRequestsSkipTheStore(t *testing.T) {
-	store := &countingStore{Memory: NewMemory()}
+	store := &testStore{Store: NewMemory()}
 	srv := NewServer(store)
 	srv.Limits.RequestsPerIP = 5
 	c := &clock{t: t0}
@@ -1259,54 +1197,65 @@ func TestHealth(t *testing.T) {
 	}
 }
 
-// brokenStore fails the named operations.
-type brokenStore struct {
-	*Memory
-	fail map[string]bool
-}
-
 var errBroken = errors.New("store is down")
 
-func (b brokenStore) Get(ctx context.Context, teamFP, device string) (*Record, error) {
-	if b.fail["get"] {
+// testStore fails the operations fail names, as a store error or a client
+// that hung up would, and counts rate-limit commands. With hideFirstList,
+// its first List finds the team empty, as a first write racing other
+// devices' first writes sees it.
+type testStore struct {
+	Store
+	hideFirstList bool
+	lists         int
+	fail          map[string]bool
+	counts        atomic.Int64
+}
+
+func (s *testStore) Get(ctx context.Context, teamFP, device string) (*Record, error) {
+	if s.fail["get"] {
 		return nil, errBroken
 	}
-	return b.Memory.Get(ctx, teamFP, device)
+	return s.Store.Get(ctx, teamFP, device)
 }
 
-func (b brokenStore) Put(ctx context.Context, teamFP, device string, rec Record, ttl time.Duration) error {
-	if b.fail["put"] {
+func (s *testStore) Put(ctx context.Context, teamFP, device string, rec Record, ttl time.Duration) error {
+	if s.fail["put"] {
 		return errBroken
 	}
-	return b.Memory.Put(ctx, teamFP, device, rec, ttl)
+	return s.Store.Put(ctx, teamFP, device, rec, ttl)
 }
 
-func (b brokenStore) Delete(ctx context.Context, teamFP, device string) error {
-	if b.fail["delete"] {
+func (s *testStore) Delete(ctx context.Context, teamFP, device string) error {
+	if s.fail["delete"] {
 		return errBroken
 	}
-	return b.Memory.Delete(ctx, teamFP, device)
+	return s.Store.Delete(ctx, teamFP, device)
 }
 
-func (b brokenStore) List(ctx context.Context, teamFP string) (map[string]Record, error) {
-	if b.fail["list"] {
+func (s *testStore) List(ctx context.Context, teamFP string) (map[string]Record, error) {
+	s.lists++
+	if s.hideFirstList && s.lists == 1 {
+		return map[string]Record{}, nil
+	}
+	if s.fail["list"] {
 		return nil, errBroken
 	}
-	return b.Memory.List(ctx, teamFP)
+	return s.Store.List(ctx, teamFP)
 }
 
-func (b brokenStore) Size(ctx context.Context, teamFP string) (int, error) {
-	if b.fail["size"] {
+func (s *testStore) Size(ctx context.Context, teamFP string) (int, error) {
+	if s.fail["size"] {
 		return 0, errBroken
 	}
-	return b.Memory.Size(ctx, teamFP)
+	return s.Store.Size(ctx, teamFP)
 }
 
-func (b brokenStore) Count(ctx context.Context, key string, window time.Duration) (int64, error) {
-	if b.fail["count"] {
+func (s *testStore) Count(ctx context.Context, key string, window time.Duration) (int64, error) {
+	s.counts.Add(1)
+	if s.fail["count"] {
 		return 0, errBroken
 	}
-	return b.Memory.Count(ctx, key, window)
+	return s.Store.Count(ctx, key, window)
 }
 
 func TestStoreFailuresAre503(t *testing.T) {
@@ -1315,13 +1264,9 @@ func TestStoreFailuresAre503(t *testing.T) {
 	body := marshal(t, docFor(k, "work-laptop", t0))
 	for _, op := range []string{"count", "get", "list", "put", "delete"} {
 		t.Run(op, func(t *testing.T) {
-			store := brokenStore{Memory: NewMemory(), fail: map[string]bool{}}
-			srv := NewServer(store)
-			srv.Now = func() time.Time { return t0 }
-			ts := httptest.NewServer(srv)
-			defer ts.Close()
-			c := &Client{BaseURL: ts.URL, Key: k, Now: func() time.Time { return t0 }}
-			store.fail[op] = true
+			e := newRelay(t)
+			e.srv.Store = &testStore{Store: e.mem, fail: map[string]bool{op: true}}
+			c := e.client(k)
 			var err error
 			switch op {
 			case "delete":
