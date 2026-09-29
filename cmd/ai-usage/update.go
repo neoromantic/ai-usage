@@ -151,7 +151,9 @@ func cmdUpdate(ctx context.Context, stdout, stderr io.Writer) error {
 	}
 	res, err := newUpdater().Check(ctx)
 	noteUpdate(st, clock().UTC(), res, err)
-	if serr := d.SaveState(st); serr != nil && err == nil {
+	// A state a newer release saved is left as it is, and installing the
+	// latest release is what that refusal asks for.
+	if serr := d.SaveState(st); serr != nil && err == nil && !(res.Installed && errors.Is(serr, state.ErrNewer)) {
 		err = serr
 	}
 	// The menu bar app's error comes with the binary at the latest release,

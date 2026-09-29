@@ -381,7 +381,7 @@ func TestDamagedStateStartsAgain(t *testing.T) {
 	if !strings.Contains(res.State.LastError, "state.json") || !res.State.LastErrorAt.Equal(w.now) {
 		t.Fatalf("last error = %q at %v", res.State.LastError, res.State.LastErrorAt)
 	}
-	// Collection starts again, like a first run.
+	// Collection goes on from the last saved state, state.json.last.
 	if a := totalsFor(t, res.State, "claude", "ann"); !a.Current || a.Tokens != tok(100) || a.Quota == nil {
 		t.Fatalf("totals = %+v", a)
 	}

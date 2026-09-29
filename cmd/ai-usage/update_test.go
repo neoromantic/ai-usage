@@ -196,6 +196,29 @@ func TestUpdateCommandRecordsResult(t *testing.T) {
 	}
 }
 
+// An update run by a release older than the one that saved state.json
+// installs the latest release without an error, and leaves the state as the
+// newer release saved it.
+func TestUpdateUnderANewerLedger(t *testing.T) {
+	hermetic(t)
+	d := newDevice(t)
+	if err := os.MkdirAll(d.dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	newer := []byte(`{"ledger":3}`)
+	path := filepath.Join(d.dir, "state.json")
+	if err := os.WriteFile(path, newer, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	releaseBuild(t, "v1.2.0")
+	if out := d.ok("update"); !strings.Contains(out, "installed v1.3.0") {
+		t.Fatalf("update:\n%s", out)
+	}
+	if b, err := os.ReadFile(path); err != nil || !bytes.Equal(b, newer) {
+		t.Fatalf("state.json = %q, %v", b, err)
+	}
+}
+
 // releaseBuild makes this a release build whose update checks go to a fake
 // v1.3.0 release that installs into exe.
 func releaseBuild(t *testing.T, running string) (exe string, g *fakeGitHub) {

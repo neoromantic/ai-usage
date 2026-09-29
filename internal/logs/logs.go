@@ -49,10 +49,10 @@ type Session struct {
 	// Hours is the session's tokens, of every kind, by the UTC hour they
 	// were spent in, keyed by HourOf. A reader fills it from the times its
 	// log records for each use. ReadHomes then makes each kind add up to
-	// Tokens: what the log does not place in time, such as Claude's side
-	// calls, is spread over the hours it does place, in their proportion. It
-	// stays nil when the log records no times at all, and the ledger then
-	// places growth at the run that saw it.
+	// Tokens: what the log does not place in time is spread over the hours
+	// it does place, in their proportion. It stays nil when the log records
+	// no times at all, and the ledger then places growth at the run that saw
+	// it.
 	Hours meter.Hours
 	// Side is what Claude Code's own count of a session's usage has beyond
 	// its transcript: calls that never become messages, such as compaction
@@ -80,11 +80,11 @@ func HourOf(t time.Time) int64 { return t.Unix() / 3600 }
 func HourStart(h int64) time.Time { return time.Unix(h*3600, 0).UTC() }
 
 // fitHours makes each kind of a session's hours add up to its tokens. What
-// no time was recorded for, such as Claude's side calls, is spread over the
-// timed hours in their proportion: side calls go along with the work that
-// makes them, and a resumed session does not move them all to its newest
-// day. The session's counts do not say which cache writes are kept for an
-// hour, so the hours keep theirs.
+// no time was recorded for is spread over the timed hours in their
+// proportion, so a resumed session does not move it all to its newest day.
+// Claude's side calls are not among it: the reader places them in the hour
+// Claude Code tracked them. The session's counts do not say which cache
+// writes are kept for an hour, so the hours keep theirs.
 func fitHours(s *Session) {
 	if s.Hours == nil {
 		return
