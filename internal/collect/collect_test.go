@@ -3,6 +3,8 @@ package collect
 import (
 	"context"
 	"errors"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,6 +18,7 @@ import (
 	"github.com/neoromantic/ai-usage/internal/probe"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
+	"github.com/neoromantic/ai-usage/relay"
 )
 
 var t0 = time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
@@ -554,6 +557,103 @@ func TestCleanRunClearsTheLastError(t *testing.T) {
 	}
 	if got, _ := res.Key.Open(res.Doc.LastError); got != "" {
 		t.Fatalf("snapshot last error after a clean run = %q", got)
+	}
+}
+
+// deadRelay is a relay client whose every request fails as it does with no
+// network.
+func deadRelay() *relay.Client {
+	return &relay.Client{BaseURL: "http://relay.example.test", HTTP: &http.Client{Transport: roundTrip(func(*http.Request) (*http.Response, error) {
+		return nil, &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "relay.example.test", IsNotFound: true}}
+	})}}
+}
+
+type roundTrip func(*http.Request) (*http.Response, error)
+
+func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// A run without the network has one problem, the network, and the sources
+// whose only trouble was the network are ok.
+func TestOfflineRunIsOneProblem(t *testing.T) {
+	w, o := newWorld(t)
+	ch, xh := w.home(t, "claude"), w.home(t, "codex")
+	w.login("claude", ch, "ann", nil)
+	w.login("codex", xh, "bob", nil)
+	w.sessions("claude", ch, sess("s1", "/p", 10, t0))
+	w.sessions("codex", xh, sess("c1", "/p", 10, t0))
+	w.askErr[state.Key("codex", xh)] = errors.New("codex app-server: dial tcp: lookup example.test: no such host")
+	w.askErr[state.Key("claude", ch)] = errors.New("claude /usage: no new reading: could not read the usage (Claude Code 2.1.210)")
+	o.Relay = deadRelay()
+	res := run(t, o)
+
+	st := res.State
+	if problems := strings.Split(st.LastError, "; "); len(problems) != 1 || !strings.HasPrefix(st.LastError, "offline: codex app-server: dial tcp") || !strings.Contains(st.LastError, "no such host") {
+		t.Fatalf("last error = %q", st.LastError)
+	}
+	for _, p := range []string{"claude", "codex"} {
+		if src := st.Sources[p]; src.Status != "ok" || src.Error != "" {
+			t.Fatalf("%s source = %+v", p, src)
+		}
+	}
+	if st.LastSuccessAt.IsZero() || st.Relay.LastError == "" {
+		t.Fatalf("last success %v, relay error %q", st.LastSuccessAt, st.Relay.LastError)
+	}
+	// This device's own row shows what the state does.
+	for _, s := range res.Doc.Sources {
+		if s.Status != "ok" && s.Status != "skipped" {
+			t.Fatalf("snapshot source = %+v", s)
+		}
+	}
+	if got, _ := res.Key.Open(res.Doc.LastError); got != st.LastError {
+		t.Fatalf("snapshot last error = %q, want %q", got, st.LastError)
+	}
+
+	// The relay down alone is still offline.
+	delete(w.askErr, state.Key("codex", xh))
+	delete(w.askErr, state.Key("claude", ch))
+	w.now = t0.Add(15 * time.Minute)
+	if st := run(t, o).State; !strings.HasPrefix(st.LastError, "offline: relay unreachable: ") || !strings.HasSuffix(st.LastError, "no such host") {
+		t.Fatalf("last error with only the relay down = %q", st.LastError)
+	}
+}
+
+// With no relay to tell, a harness's network failure alone says the run was
+// offline. Claude Code's "could not read the usage" does not: it is also
+// what a login without the profile scope gets.
+func TestOfflineWithoutRelay(t *testing.T) {
+	w, o := newWorld(t)
+	ch, xh := w.home(t, "claude"), w.home(t, "codex")
+	w.login("claude", ch, "ann", nil)
+	w.login("codex", xh, "bob", nil)
+	w.askErr[state.Key("codex", xh)] = errors.New("codex app-server: read tcp 10.0.0.2:5000: connection reset by peer")
+	w.askErr[state.Key("claude", ch)] = errors.New("claude /usage: no new reading: could not read the usage")
+	st := run(t, o).State
+	if want := "offline: codex app-server: read tcp 10.0.0.2:5000: connection reset by peer; claude /usage: no new reading: could not read the usage"; st.LastError != want {
+		t.Fatalf("last error = %q, want %q", st.LastError, want)
+	}
+	if st.Sources["codex"].Status != "ok" || st.Sources["claude"].Status != "partial" {
+		t.Fatalf("sources = %+v", st.Sources)
+	}
+}
+
+// An error that is not the network's stays as it was, offline or not.
+func TestOtherErrorsStayOffline(t *testing.T) {
+	for _, relayDown := range []bool{false, true} {
+		w, o := newWorld(t)
+		xh := w.home(t, "codex")
+		w.login("codex", xh, "bob", nil)
+		w.askErr[state.Key("codex", xh)] = errors.New("codex app-server exited: status 1")
+		if relayDown {
+			o.Relay = deadRelay()
+		}
+		st := run(t, o).State
+		problems := strings.Split(st.LastError, "; ")
+		if problems[len(problems)-1] != "codex app-server exited: status 1" || relayDown != (len(problems) == 2 && strings.HasPrefix(problems[0], "offline: relay unreachable: ")) {
+			t.Fatalf("relay down %v: last error = %q", relayDown, st.LastError)
+		}
+		if src := st.Sources["codex"]; src.Status != "partial" || src.Error != "codex app-server exited: status 1" {
+			t.Fatalf("relay down %v: codex source = %+v", relayDown, src)
+		}
 	}
 }
 

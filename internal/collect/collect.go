@@ -153,8 +153,14 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	res := &Result{Config: cfg, State: st, Key: key}
 	res.Doc = BuildDoc(st, key, cfg, o.Hostname, o.OSUser, o.Version, now)
 	res.Team, _ = LoadTeamCache(o.Dir)
-	if relayErr := s.publish(ctx, key, cfg.Device, res); relayErr != "" {
+	relayErr := s.publish(ctx, key, cfg.Device, res)
+	offline := s.goOffline(relayErr)
+	if offline || relayErr != "" {
 		noteProblems(st, s.problems(saving, relayErr), now)
+	}
+	if offline {
+		// The snapshot no one could be sent is this device's own row.
+		res.Doc = BuildDoc(st, key, cfg, o.Hostname, o.OSUser, o.Version, now)
 	}
 	// A stopped run leaves its housekeeping to the next one.
 	if o.After != nil && ctx.Err() == nil {
@@ -232,9 +238,13 @@ func noteProblems(st *state.State, problems []string, now time.Time) {
 }
 
 // problems are the run's problems: the state's damage, each source's, the
-// ones saving the sample had, and the relay's.
+// ones saving the sample had, and the relay's. A run that was offline says
+// so first, in place of the network failures goOffline folded.
 func (s *sampler) problems(saving []string, relayErr string) []string {
 	var out []string
+	if s.offline != "" {
+		out = append(out, "offline: "+s.offline)
+	}
 	if s.st.Damage != "" {
 		out = append(out, s.st.Damage)
 	}
@@ -244,7 +254,7 @@ func (s *sampler) problems(saving []string, relayErr string) []string {
 		}
 	}
 	out = append(out, saving...)
-	if relayErr != "" {
+	if relayErr != "" && s.offline == "" {
 		out = append(out, relayErr)
 	}
 	return out
@@ -257,6 +267,62 @@ func named(p, msg string) string {
 		return msg
 	}
 	return p + ": " + msg
+}
+
+// networkFailures are the forms of an error that says the network is
+// down, whoever met it: the relay, or a harness asked about its quota.
+var networkFailures = []string{
+	"dial tcp", "no such host", "network is unreachable", "i/o timeout",
+	"TLS handshake timeout", "connection refused", "connection reset",
+}
+
+func networkFailure(msg string) bool {
+	return slices.ContainsFunc(networkFailures, func(f string) bool { return strings.Contains(msg, f) })
+}
+
+// goOffline folds the run's network failures into one problem, the first
+// of them, when the run had no network: the relay could not be reached, or,
+// with no relay to tell, a harness could not reach its server. Claude Code
+// offline says no more than that it could not read the usage, which is
+// taken for the network's once the relay says the network is down. A source
+// keeps its other problems, and is ok without any. It reports whether the
+// run was offline.
+func (s *sampler) goOffline(relayErr string) bool {
+	relayDown := relayErr != "" && networkFailure(relayErr)
+	if s.Relay != nil && !relayDown {
+		return false
+	}
+	first := ""
+	for _, p := range snapshot.Providers {
+		faults := s.faults[p]
+		var keep []string
+		for _, f := range faults {
+			switch {
+			case networkFailure(f):
+				if first == "" {
+					first = named(p, f)
+				}
+			case relayDown && p == "claude" && strings.Contains(f, "could not read the usage"):
+			default:
+				keep = append(keep, f)
+			}
+		}
+		if len(keep) == len(faults) {
+			continue
+		}
+		s.faults[p] = keep
+		src := s.st.Sources[p]
+		src.Error = sourceText(keep, s.notes[p])
+		if len(keep) == 0 {
+			src.Status = "ok"
+		}
+		s.st.Sources[p] = src
+	}
+	if first == "" && relayDown {
+		first = relayErr
+	}
+	s.offline = first
+	return first != ""
 }
 
 // sourceText is a source's error: its problems, then what keeps it from a
@@ -303,6 +369,8 @@ type sampler struct {
 	// faults are each provider's problems of the run, and notes what keeps
 	// its accounts from a quota reading, which is not a problem of the run.
 	faults, notes map[string][]string
+	// offline is the network failure the run had, when it was offline.
+	offline string
 }
 
 // newSampler starts a run's reading of the sources at now. Unless o.Ask is
