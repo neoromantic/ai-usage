@@ -14,11 +14,17 @@ import (
 // TestWireFormat pins the snapshot bytes deployed collectors sign. The relay
 // takes a body only when it is exactly the encoding of what Decode reads from
 // it, so a change that fails this test makes it refuse their snapshots. The
-// golden uses every member and is written by hand: never regenerate it. It
-// sets last_error, aliases and every account's quota_at, so the minimal
-// document beside it, which leaves them out, pins their omitempty.
+// goldens are written by hand: never regenerate them. v1.json uses every
+// member a collector before v0.4.0 knows. It sets last_error, aliases and
+// every account's quota_at, so the minimal document beside it, which leaves
+// them out, pins their omitempty. v1-extended.json adds the members v0.4.0
+// added, which v1.json pins as left out when empty.
 func TestWireFormat(t *testing.T) {
 	golden, err := os.ReadFile(filepath.Join("testdata", "v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	extended, err := os.ReadFile(filepath.Join("testdata", "v1-extended.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +35,7 @@ func TestWireFormat(t *testing.T) {
 		`"tokens":{"input":1,"output":2,"cache_read":3,"cache_write":4},"projects":[]},` +
 		`{"provider":"claude","label":"Ab-_","current":false,"windows":[],"sessions":1,` +
 		`"tokens":{"input":1,"output":2,"cache_read":3,"cache_write":4},"projects":[]}],"sources":[]}`
-	for _, body := range [][]byte{bytes.TrimSpace(golden), []byte(minimal)} {
+	for _, body := range [][]byte{bytes.TrimSpace(golden), []byte(minimal), bytes.TrimSpace(extended)} {
 		d, err := Decode(body)
 		if err != nil {
 			t.Fatalf("Decode: %v", err)
@@ -80,6 +86,9 @@ func TestDecodeRejectsUnknownFields(t *testing.T) {
 		"wrong type":                    strings.Replace(body, `"sessions":3`, `"sessions":"3"`, 1),
 		"float count":                   strings.Replace(body, `"sessions":3`, `"sessions":3.5`, 1),
 		"nested object in string field": strings.Replace(body, `"plan":"max 20x"`, `"plan":{"a":1}`, 1),
+		// A field a release after this one adds, sent before this one knows it.
+		"newer field":           strings.Replace(body, `"projects":[`, `"pace":[1],"projects":[`, 1),
+		"burn_days as a number": strings.Replace(body, `"projects":[`, `"burn_days":5,"projects":[`, 1),
 	}
 	for name, b := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -96,6 +105,8 @@ func TestDecodeRejectsUnknownFields(t *testing.T) {
 func TestValidate(t *testing.T) {
 	al := Alias{Provider: "claude", Label: sealed(40), Name: sealed(12), At: t0}
 	rc := Recent{Window: "5h", Start: t0.Add(-time.Hour), Tokens: 900}
+	at := func(d time.Duration) *time.Time { t := t0.Add(d); return &t }
+	failed := func(d *Doc, when *time.Time) { d.LastError, d.LastErrorAt = sealed(30), when }
 	cases := []struct {
 		name string
 		edit func(*Doc)
@@ -120,6 +131,12 @@ func TestValidate(t *testing.T) {
 		{"last_error optional", func(d *Doc) { d.LastError = "" }, true},
 		{"last_error sealed", func(d *Doc) { d.LastError = sealed(30) }, true},
 		{"last_error plain text", func(d *Doc) { d.LastError = "exit status 1" }, false},
+		{"last_error_at", func(d *Doc) { failed(d, at(-time.Hour)) }, true},
+		{"last_error_at at collected_at", func(d *Doc) { failed(d, at(0)) }, true},
+		{"last_error_at within the skew", func(d *Doc) { failed(d, at(5*time.Minute)) }, true},
+		{"last_error_at past the skew", func(d *Doc) { failed(d, at(5*time.Minute+time.Second)) }, false},
+		{"last_error_at zero", func(d *Doc) { failed(d, &time.Time{}) }, false},
+		{"last_error_at without last_error", func(d *Doc) { failed(d, at(-time.Hour)); d.LastError = "" }, false},
 
 		{"collector_version missing", func(d *Doc) { d.CollectorVersion = "" }, false},
 		{"plain at limit", func(d *Doc) { d.CollectorVersion = strings.Repeat("v", MaxPlain) }, true},
@@ -200,7 +217,15 @@ func TestValidate(t *testing.T) {
 		{"day max", func(d *Doc) { d.Accounts[0].Days = []int64{MaxTokenCount, 0} }, true},
 		{"day negative", func(d *Doc) { d.Accounts[0].Days = []int64{-1} }, false},
 		{"day over", func(d *Doc) { d.Accounts[0].Days = []int64{MaxTokenCount + 1} }, false},
+		{"most burn days", func(d *Doc) { d.Accounts[0].BurnDays = repeat(int64(1), MaxDays) }, true},
+		{"too many burn days", func(d *Doc) { d.Accounts[0].BurnDays = repeat(int64(1), MaxDays+1) }, false},
+		{"burn day max", func(d *Doc) { d.Accounts[0].BurnDays = []int64{MaxTokenCount, 0} }, true},
+		{"burn day negative", func(d *Doc) { d.Accounts[0].BurnDays = []int64{5, -1} }, false},
+		{"burn day over", func(d *Doc) { d.Accounts[0].BurnDays = []int64{MaxTokenCount + 1} }, false},
 		{"recent", func(d *Doc) { d.Accounts[0].Recent = []Recent{rc} }, true},
+		{"recent burn", func(d *Doc) { d.Accounts[0].Recent = []Recent{rc}; d.Accounts[0].Recent[0].Burn = MaxTokenCount }, true},
+		{"recent burn negative", func(d *Doc) { d.Accounts[0].Recent = []Recent{rc}; d.Accounts[0].Recent[0].Burn = -1 }, false},
+		{"recent burn over", func(d *Doc) { d.Accounts[0].Recent = []Recent{rc}; d.Accounts[0].Recent[0].Burn = MaxTokenCount + 1 }, false},
 		{"too many recent", func(d *Doc) { d.Accounts[0].Recent = repeat(rc, MaxWindows+1) }, false},
 		{"recent window missing", func(d *Doc) { d.Accounts[0].Recent = []Recent{rc}; d.Accounts[0].Recent[0].Window = "" }, false},
 		{"recent start missing", func(d *Doc) { d.Accounts[0].Recent = []Recent{rc}; d.Accounts[0].Recent[0].Start = time.Time{} }, false},

@@ -36,6 +36,8 @@ const (
 	MaxSessionCount   = 1 << 24
 	MaxWindowMinutes  = 60 * 24 * 62
 	futureSkewAllowed = 10 * time.Minute
+	// lastErrorSkew is how far last_error_at may be past collected_at.
+	lastErrorSkew = 5 * time.Minute
 )
 
 // Providers the collector knows, in display order. The relay rejects any
@@ -53,12 +55,52 @@ type Doc struct {
 	CollectedAt      time.Time `json:"collected_at"`
 	LastSuccessAt    time.Time `json:"last_success_at"`
 	LastError        string    `json:"last_error,omitempty"`
-	Accounts         []Account `json:"accounts"`
-	Sources          []Source  `json:"sources"`
+	// LastErrorAt is when the device last had last_error, never after
+	// collected_at. A collector before v0.4.0 neither sends nor reads it.
+	LastErrorAt *time.Time `json:"last_error_at,omitempty"`
+	Accounts    []Account  `json:"accounts"`
+	Sources     []Source   `json:"sources"`
 	// Aliases are the short names this device gave accounts with
 	// `ai-usage alias`. The newest one for an account, from any device in
 	// the team, names it everywhere.
 	Aliases []Alias `json:"aliases,omitempty"`
+}
+
+// Extended reports whether d carries any field a collector before v0.4.0
+// does not know, and so would drop d as undecodable.
+func (d Doc) Extended() bool {
+	if d.LastErrorAt != nil {
+		return true
+	}
+	for _, a := range d.Accounts {
+		if len(a.BurnDays) > 0 || slices.ContainsFunc(a.Recent, func(r Recent) bool { return r.Burn != 0 }) {
+			return true
+		}
+	}
+	return false
+}
+
+// Legacy is d without the fields a collector before v0.4.0 does not know:
+// the body such a collector decodes. It shares no slice with d, so either
+// can be changed without the other.
+func (d Doc) Legacy() Doc {
+	d.LastErrorAt = nil
+	d.Sources = slices.Clone(d.Sources)
+	d.Aliases = slices.Clone(d.Aliases)
+	d.Accounts = slices.Clone(d.Accounts)
+	for i := range d.Accounts {
+		a := &d.Accounts[i]
+		a.BurnDays = nil
+		a.Windows = slices.Clone(a.Windows)
+		a.Projects = slices.Clone(a.Projects)
+		a.Linked = slices.Clone(a.Linked)
+		a.Days = slices.Clone(a.Days)
+		a.Recent = slices.Clone(a.Recent)
+		for j := range a.Recent {
+			a.Recent[j].Burn = 0
+		}
+	}
+	return d
 }
 
 // UpdateLine starts the last line of a last_error that says why the device's
@@ -110,6 +152,11 @@ type Account struct {
 	// day, newest first: index 0 is the UTC day of collected_at, index 1 the
 	// day before, and so on. Trailing zeros are left out. Cache is not in it.
 	Days []int64 `json:"days,omitempty"`
+	// BurnDays is the account's weighted tokens on this device per UTC day,
+	// laid out as Days is: index 0 is the UTC day of collected_at, and
+	// trailing zeros are left out. A collector before v0.4.0 neither sends
+	// nor reads it.
+	BurnDays []int64 `json:"burn_days,omitempty"`
 	// Recent is the account's input plus output tokens on this device since
 	// each window of its reading began, for the windows whose start is known
 	// and which had not reset when the snapshot was taken.
@@ -122,6 +169,9 @@ type Recent struct {
 	Window string    `json:"window"`
 	Start  time.Time `json:"start"`
 	Tokens int64     `json:"tokens"`
+	// Burn is the account's weighted tokens on this device over the same
+	// time. A collector before v0.4.0 neither sends nor reads it.
+	Burn int64 `json:"burn,omitempty"`
 }
 
 // Linked is what one account of another provider spent through an account.

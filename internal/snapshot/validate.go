@@ -75,6 +75,9 @@ func (d Doc) Validate() error {
 	if d.CollectedAt.IsZero() {
 		return errors.New("collected_at is missing")
 	}
+	if err := d.checkLastErrorAt(); err != nil {
+		return err
+	}
 	if d.Accounts == nil || d.Sources == nil {
 		return errors.New("accounts and sources must be arrays")
 	}
@@ -83,6 +86,23 @@ func (d Doc) Validate() error {
 		checkList("aliases", d.Aliases, MaxAliases, Alias.validate),
 		checkList("sources", d.Sources, MaxSources, Source.validate),
 	)
+}
+
+// checkLastErrorAt checks that last_error_at, when sent, dates a last_error
+// and is no later than collected_at, give or take the clock skew a write may
+// have.
+func (d Doc) checkLastErrorAt() error {
+	switch {
+	case d.LastErrorAt == nil:
+		return nil
+	case d.LastError == "":
+		return errors.New("last_error_at without last_error")
+	case d.LastErrorAt.IsZero():
+		return errors.New("last_error_at is zero")
+	case d.LastErrorAt.After(d.CollectedAt.Add(lastErrorSkew)):
+		return errors.New("last_error_at is after collected_at")
+	}
+	return nil
 }
 
 func (a Account) validate() error {
@@ -109,6 +129,7 @@ func (a Account) validate() error {
 		checkList("windows", a.Windows, MaxWindows, Window.validate),
 		checkList("projects", a.Projects, MaxProjects, Project.validate),
 		checkList("days", a.Days, MaxDays, checkDay),
+		checkList("burn_days", a.BurnDays, MaxDays, checkDay),
 		checkList("recent", a.Recent, MaxWindows, Recent.validate),
 		checkList("linked", a.Linked, MaxLinked, func(l Linked) error { return l.validate(a.Provider) }),
 	)
@@ -141,7 +162,7 @@ func (r Recent) validate() error {
 	if r.Start.IsZero() {
 		return errors.New("start is missing")
 	}
-	if r.Tokens < 0 || r.Tokens > MaxTokenCount {
+	if r.Tokens < 0 || r.Tokens > MaxTokenCount || r.Burn < 0 || r.Burn > MaxTokenCount {
 		return errors.New("token count out of range")
 	}
 	return nil

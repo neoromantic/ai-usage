@@ -1,7 +1,11 @@
 package snapshot
 
 import (
+	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -141,5 +145,98 @@ func TestWindowLengthAndStart(t *testing.T) {
 	}
 	if _, ok := (Window{Name: "7d"}).Start(); ok {
 		t.Error("a window with no reset time has a start")
+	}
+}
+
+// Legacy of the extended golden is the golden a collector before v0.4.0
+// reads, byte for byte.
+func TestLegacyIsTheOlderWireFormat(t *testing.T) {
+	read := func(name string) []byte {
+		b, err := os.ReadFile(filepath.Join("testdata", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return bytes.TrimSpace(b)
+	}
+	d, err := Decode(read("v1-extended.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.Extended() {
+		t.Fatal("the extended golden is not Extended")
+	}
+	legacy := d.Legacy()
+	if legacy.Extended() {
+		t.Fatal("Legacy is Extended")
+	}
+	if b := encode(t, legacy); !bytes.Equal(b, read("v1.json")) {
+		t.Fatalf("Legacy encodes to\n%s", b)
+	}
+	older, err := Decode(read("v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if older.Extended() || !reflect.DeepEqual(older.Legacy(), older) {
+		t.Fatal("Legacy changed a document without the newer fields")
+	}
+}
+
+func TestExtended(t *testing.T) {
+	at := t0.Add(-time.Hour)
+	for name, c := range map[string]struct {
+		edit func(*Doc)
+		want bool
+	}{
+		"none":            {func(*Doc) {}, false},
+		"days only":       {func(d *Doc) { d.Accounts[0].Days = []int64{5} }, false},
+		"last_error_at":   {func(d *Doc) { d.LastError, d.LastErrorAt = sealed(8), &at }, true},
+		"burn_days":       {func(d *Doc) { d.Accounts[0].BurnDays = []int64{0, 7} }, true},
+		"recent burn":     {func(d *Doc) { d.Accounts[0].Recent = []Recent{{Window: "5h", Start: at, Tokens: 3, Burn: 9}} }, true},
+		"recent, no burn": {func(d *Doc) { d.Accounts[0].Recent = []Recent{{Window: "5h", Start: at, Tokens: 3}} }, false},
+	} {
+		d := validDoc()
+		c.edit(&d)
+		if got := d.Extended(); got != c.want {
+			t.Errorf("%s: Extended = %v, want %v", name, got, c.want)
+		}
+		if l := d.Legacy(); l.Extended() || l.Validate() != nil {
+			t.Errorf("%s: Legacy is extended or invalid", name)
+		}
+	}
+}
+
+// Legacy shares no slice with the document it came from, so fitting or
+// trimming one never changes the other.
+func TestLegacySharesNothing(t *testing.T) {
+	at := t0.Add(-time.Hour)
+	d := validDoc()
+	d.LastError, d.LastErrorAt = sealed(8), &at
+	d.Aliases = []Alias{{Provider: "claude", Label: sealed(8), At: at}}
+	a := &d.Accounts[0]
+	a.Days, a.BurnDays = []int64{1, 2}, []int64{10, 20}
+	a.Recent = []Recent{{Window: "5h", Start: at, Tokens: 3, Burn: 9}}
+	a.Linked = []Linked{{Provider: "hermes", Label: sealed(8)}}
+	before := encode(t, d)
+
+	l := d.Legacy()
+	l.Accounts[0].Days[0] = 99
+	l.Accounts[0].Recent[0].Tokens = 99
+	l.Accounts[0].Windows[0].Percent = 99
+	l.Accounts[0].Projects[0].Sessions = 99
+	l.Accounts[0].Linked[0].Sessions = 99
+	l.Accounts[0].Plan = "changed"
+	l.Accounts = append(l.Accounts, l.Accounts[0])
+	l.Sources[0].Status = "error"
+	l.Aliases[0].Name = sealed(4)
+	if after := encode(t, d); !bytes.Equal(after, before) {
+		t.Fatalf("changing Legacy changed the document:\n%s\n%s", before, after)
+	}
+	if d.Accounts[0].Recent[0].Burn != 9 || d.LastErrorAt == nil || len(d.Accounts[0].BurnDays) != 2 {
+		t.Fatal("Legacy cleared the document's own fields")
+	}
+	// Empty arrays stay arrays, which Validate requires.
+	d.Accounts[0].Projects = []Project{}
+	if l := d.Legacy(); l.Accounts[0].Projects == nil {
+		t.Fatal("Legacy made an empty array null")
 	}
 }
