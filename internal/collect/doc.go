@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,16 +15,17 @@ import (
 	"github.com/neoromantic/ai-usage/internal/team"
 )
 
-// recent is this device's tokens on an account since each window of its
-// reading began, for the windows that had not reset at now.
-func recent(hours map[int64]int64, ws []snapshot.Window, now time.Time) []snapshot.Recent {
+// recent is this device's tokens on an account, and what they burn, since
+// each window of its reading began, for the windows that had not reset at
+// now.
+func recent(hours, burn map[int64]int64, ws []snapshot.Window, now time.Time) []snapshot.Recent {
 	var out []snapshot.Recent
 	for _, w := range ws {
 		start, ok := w.Start()
 		if !ok || !w.ResetsAt.After(now) || len(out) == snapshot.MaxWindows {
 			continue
 		}
-		out = append(out, snapshot.Recent{Window: w.Name, Start: start.UTC(), Tokens: SinceStart(hours, start)})
+		out = append(out, snapshot.Recent{Window: w.Name, Start: start.UTC(), Tokens: SinceStart(hours, start), Burn: SinceStart(burn, start)})
 	}
 	return out
 }
@@ -49,7 +51,9 @@ func lastError(st *state.State, version string) string {
 	return s
 }
 
-// BuildDoc makes this device's snapshot with every name and path sealed.
+// BuildDoc makes this device's snapshot with every name and path sealed. It
+// has the fields ExtSince added; Legacy is the body a release before it
+// reads.
 func BuildDoc(st *state.State, key *team.Key, cfg state.Config, hostname, osUser, version string, now time.Time) snapshot.Doc {
 	seal := func(s string) string { return key.Seal(clip(s, maxSealedPlain)) }
 	doc := snapshot.Doc{
@@ -64,6 +68,16 @@ func BuildDoc(st *state.State, key *team.Key, cfg state.Config, hostname, osUser
 		LastError:        seal(lastError(st, version)),
 		Accounts:         []snapshot.Account{},
 		Sources:          []snapshot.Source{},
+	}
+	// A last_error that no run dated goes without a time, and a time ahead
+	// of this snapshot's, from a clock that went back, is its time.
+	if st.LastError != "" && !st.LastErrorAt.IsZero() {
+		at := st.LastErrorAt
+		if at.After(now) {
+			at = now
+		}
+		at = at.UTC()
+		doc.LastErrorAt = &at
 	}
 	for _, p := range snapshot.Providers {
 		src, ok := st.Sources[p]
@@ -93,9 +107,10 @@ func BuildDoc(st *state.State, key *team.Key, cfg state.Config, hostname, osUser
 			sa.QuotaAt = &at
 			sa.QuotaFrom = a.QuotaFrom
 			sa.Windows = append(sa.Windows, a.Quota.Windows...)
-			sa.Recent = recent(a.Hours.Series(meter.Use.InOut), a.Quota.Windows, now)
+			sa.Recent = recent(a.Hours.Series(meter.Use.InOut), a.Burn, a.Quota.Windows, now)
 		}
 		sa.Days = DaysOf(a.Hours.Series(meter.Use.InOut), now)
+		sa.BurnDays = DaysOf(a.Burn, now)
 		if !a.LastActive.IsZero() {
 			la := a.LastActive
 			sa.LastActiveAt = &la
@@ -145,11 +160,80 @@ func aliases(set map[string]state.Alias, seal func(string) string) []snapshot.Al
 	return out
 }
 
-// fitDoc drops the smallest projects, then the oldest days, then the
+// fitDoc fits the document under the relay's size limit. The body a
+// release before ExtSince reads is fitted first, as such a release fits its
+// own, so the days it shows stay as long as they were: fitLegacy. The burn
+// days are then cut to the days each account kept, and only they are cut
+// further, oldest first, while the whole is too big. Should the fields
+// ExtSince added still not fit, the document goes without them.
+func fitDoc(doc *snapshot.Doc) {
+	full := *doc
+	*doc = full.Legacy()
+	fitLegacy(doc)
+	accts := doc.Accounts
+	for i := range accts {
+		a := &accts[i]
+		// Accounts go from the end, so the kept ones are a prefix.
+		from := full.Accounts[i]
+		for j := range a.Recent {
+			a.Recent[j].Burn = from.Recent[j].Burn
+		}
+		a.BurnDays = slices.Clone(from.BurnDays)
+		if len(a.Days) < len(from.Days) {
+			a.BurnDays = trimDays(a.BurnDays, len(a.Days))
+		}
+	}
+	doc.LastErrorAt = full.LastErrorAt
+	for {
+		b, err := json.Marshal(doc)
+		if err != nil || len(b) <= snapshot.MaxBytes {
+			return
+		}
+		// Marshal once for as many days as the excess takes.
+		for over := len(b) - snapshot.MaxBytes; over > 0; {
+			i := longest(accts, func(a snapshot.Account) int { return len(a.BurnDays) }, 0)
+			if i < 0 {
+				*doc = doc.Legacy()
+				return
+			}
+			was := daysBytes(accts[i].BurnDays)
+			accts[i].BurnDays = trimDays(accts[i].BurnDays, len(accts[i].BurnDays)-1)
+			over -= was - daysBytes(accts[i].BurnDays)
+		}
+	}
+}
+
+// daysBytes is how many bytes days take in an account's JSON, with the key
+// omitempty leaves out when there are none.
+func daysBytes(days []int64) int {
+	if len(days) == 0 {
+		return 0
+	}
+	n := len(`,"burn_days":[]`) + len(days) - 1
+	for _, d := range days {
+		n += len(strconv.FormatInt(d, 10))
+	}
+	return n
+}
+
+// trimDays is the first n of days without the zeros that would end them,
+// and nil when none is left.
+func trimDays(days []int64, n int) []int64 {
+	days = days[:min(n, len(days))]
+	for len(days) > 0 && days[len(days)-1] == 0 {
+		days = days[:len(days)-1]
+	}
+	if len(days) == 0 {
+		return nil
+	}
+	return days
+}
+
+// fitLegacy drops the smallest projects, then the oldest days, then the
 // smallest accounts, until the document is under the relay's size limit.
 // The report shows no other device's projects, and the device matrix needs
-// the days.
-func fitDoc(doc *snapshot.Doc) {
+// the days. It is how v0.3.4 fits a document.
+func fitLegacy(doc *snapshot.Doc) {
 	for {
 		b, err := json.Marshal(doc)
 		if err != nil || len(b) <= snapshot.MaxBytes {

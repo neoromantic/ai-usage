@@ -163,22 +163,41 @@ func (s *sampler) publish(ctx context.Context, key *team.Key, device string, res
 	return ""
 }
 
+// rejectedFor is how long the fields ExtSince added go unsent after the
+// relay refused them.
+const rejectedFor = 24 * time.Hour
+
 // syncTeam publishes this device and reads the team back. The snapshot holds
 // running totals, so publishing the newest one also covers any runs that
-// could not reach the relay.
+// could not reach the relay. It has the fields ExtSince added only while
+// the gate is open, and goes without them for rejectedFor when the relay
+// refuses them.
 func syncTeam(ctx context.Context, o Options, st *state.State, device string, doc *snapshot.Doc, cache *TeamCache, now time.Time) {
 	fail := func(err error) {
 		st.Relay.LastError = shortErr(err)
 		st.Relay.LastErrorAt = now
 	}
-	body, err := json.Marshal(doc)
-	if err != nil {
-		fail(err)
-		return
+	push := func(d snapshot.Doc) error {
+		body, err := json.Marshal(d)
+		if err != nil {
+			return err
+		}
+		pushCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		return o.Relay.Publish(pushCtx, device, body)
 	}
-	pushCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	err = o.Relay.Publish(pushCtx, device, body)
-	cancel()
+	extended := doc.Extended() && ExtendedWire(*cache, o.Relay.Key.Fingerprint(), device, st.Relay.NoExtUntil, now).Open
+	var err error
+	if extended {
+		err = push(*doc)
+	}
+	if !extended || errors.Is(err, relay.ErrRejected) {
+		if extended {
+			// A relay older than this release: the team reads the rest.
+			st.Relay.NoExtUntil = now.Add(rejectedFor)
+		}
+		err = push(doc.Legacy())
+	}
 	var status *relay.ErrStatus
 	var conflict error
 	switch {

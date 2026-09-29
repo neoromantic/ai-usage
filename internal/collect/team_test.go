@@ -11,10 +11,12 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/fsutil"
+	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
@@ -53,6 +55,10 @@ func publishOther(t *testing.T, r *testRelay, w *world, key *team.Key, device st
 func publishRelease(t *testing.T, r *testRelay, w *world, key *team.Key, device, version string, st *state.State, at time.Time) {
 	t.Helper()
 	doc := BuildDoc(st, key, state.Config{Device: device}, "otherbox", "kim", version, at)
+	if selfupdate.Newer(ExtSince, version) {
+		// A release before v0.4.0 sends none of the fields it added.
+		doc = doc.Legacy()
+	}
 	body, err := json.Marshal(doc)
 	if err != nil {
 		t.Fatal(err)
@@ -530,5 +536,126 @@ func TestLoadTeamCache(t *testing.T) {
 	}
 	if _, err := LoadTeamCache(d); err == nil {
 		t.Fatal("a damaged cache loaded without error")
+	}
+}
+
+// putRecorder records the snapshots put to a relay, and refuses those with
+// the fields v0.4.0 added, as an older relay does, while reject is set.
+type putRecorder struct {
+	next   http.Handler
+	reject bool
+	mu     sync.Mutex
+	puts   []snapshot.Doc
+}
+
+func (p *putRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPut {
+		body, _ := io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		doc, err := snapshot.Decode(body)
+		p.mu.Lock()
+		p.puts = append(p.puts, doc)
+		reject := p.reject
+		p.mu.Unlock()
+		if err == nil && reject && doc.Extended() {
+			http.Error(w, "snapshot: unknown field", http.StatusUnprocessableEntity)
+			return
+		}
+	}
+	p.next.ServeHTTP(w, r)
+}
+
+func (p *putRecorder) count() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.puts)
+}
+
+// sent is whether each snapshot device put since from was extended.
+func (p *putRecorder) sent(device string, from int) []bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var out []bool
+	for _, d := range p.puts[from:] {
+		if d.Device == device {
+			out = append(out, d.Extended())
+		}
+	}
+	return out
+}
+
+func newRecordingRelay(t *testing.T, w *world) (*testRelay, *putRecorder) {
+	t.Helper()
+	store := relay.NewMemory()
+	s := relay.NewServer(store)
+	s.Now = func() time.Time { return w.now }
+	rec := &putRecorder{next: s}
+	srv := httptest.NewServer(rec)
+	t.Cleanup(srv.Close)
+	return &testRelay{srv: srv, store: store}, rec
+}
+
+// A device sends the fields v0.4.0 added once a read shows every teammate
+// reads them, and goes without them for a day when the relay refuses them.
+func TestPublishSendsExtendedFieldsBehindTheGate(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		teammate string
+		reject   bool
+		second   []bool // what the second run put, extended or not
+	}{
+		{"a teammate on v0.3.4", "v0.3.4", false, []bool{false}},
+		{"everyone on v0.4.0", "v0.4.0", false, []bool{true}},
+		{"a relay that refuses the fields", "v0.4.0", true, []bool{true, false}},
+	} {
+		w, o := newWorld(t)
+		o.Version = "v0.4.0"
+		h := w.home(t, "claude")
+		w.login("claude", h, "ann@acme.dev", quota(t0, 10))
+		w.sessions("claude", h, sess("a4c2e917", "/p", 100, t0))
+		r, rec := newRecordingRelay(t, w)
+		o.Relay = r.client(w)
+		key, _ := LoadKey(o.Dir)
+		publishRelease(t, r, w, key, "d-srv1-a4c2e917", c.teammate, ledger(), t0)
+		rec.mu.Lock()
+		rec.reject = c.reject
+		rec.mu.Unlock()
+
+		// No read of the team yet: nothing vouches for the teammates.
+		res := run(t, o)
+		self := res.Config.Device
+		if got := rec.sent(self, 0); !slices.Equal(got, []bool{false}) {
+			t.Fatalf("%s: the first run put %v", c.name, got)
+		}
+
+		w.now = t0.Add(15 * time.Minute)
+		from := rec.count()
+		res = run(t, o)
+		if got := rec.sent(self, from); !slices.Equal(got, c.second) {
+			t.Fatalf("%s: the second run put %v, want %v", c.name, got, c.second)
+		}
+		rs := res.State.Relay
+		if rs.LastError != "" || rs.Pending || !rs.LastPushAt.Equal(w.now) {
+			t.Fatalf("%s: relay state = %+v", c.name, rs)
+		}
+		if want := (time.Time{}); c.reject {
+			want = w.now.Add(24 * time.Hour)
+			if !rs.NoExtUntil.Equal(want) {
+				t.Fatalf("%s: no extended fields until %v", c.name, rs.NoExtUntil)
+			}
+		} else if !rs.NoExtUntil.Equal(want) {
+			t.Fatalf("%s: no extended fields until %v", c.name, rs.NoExtUntil)
+		}
+		if !res.Doc.Extended() {
+			t.Fatalf("%s: the report's own snapshot lost its fields", c.name)
+		}
+
+		// A day without them after a refusal.
+		w.now = t0.Add(30 * time.Minute)
+		from = rec.count()
+		run(t, o)
+		if got, want := rec.sent(self, from), []bool{c.second[len(c.second)-1]}; !slices.Equal(got, want) {
+			t.Fatalf("%s: the third run put %v, want %v", c.name, got, want)
+		}
 	}
 }

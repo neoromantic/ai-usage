@@ -294,3 +294,153 @@ func TestDocCarriesDaysRecentAndAliases(t *testing.T) {
 		t.Errorf("a cleared name travels without one: %+v", doc.Aliases[1])
 	}
 }
+
+// extendedLedger is a Codex account with cache reads, a weekly reading, and
+// a run error dated at.
+func extendedLedger(errAt time.Time) *state.State {
+	reset := t0.Add(24 * time.Hour)
+	return &state.State{
+		LastError:   "codex: rate limits: context deadline exceeded",
+		LastErrorAt: errAt,
+		Current:     map[string]string{state.Key("codex", "/h/.codex"): "ann@acme.dev"},
+		Accounts: map[string]*state.Account{state.Key("codex", "ann@acme.dev"): {Provider: "codex", Label: "ann@acme.dev",
+			Quota: &state.Quota{At: t0, Windows: []snapshot.Window{{Name: "7d", Percent: 40, ResetsAt: &reset, Minutes: 10080}}}}},
+		Sessions: map[string]*state.Session{state.Key("codex", "a4c2e917"): {Provider: "codex", Project: "/p", Updated: t0,
+			By: map[string]snapshot.Tokens{"ann@acme.dev": {Input: 70, Output: 30, CacheRead: 1100}},
+			U: meter.Hours{
+				t0.Add(-7*24*time.Hour).Unix() / 3600: {Input: 28, Output: 12, CacheRead: 100},
+				t0.Unix()/3600 - 1:                    {Input: 42, Output: 18, CacheRead: 1000},
+			}}},
+	}
+}
+
+// The snapshot has each account's burn by day and since each window began,
+// and when the last error happened; the body a release before v0.4.0 reads
+// has none of it.
+func TestBuildDocExtended(t *testing.T) {
+	key := mustKey(t)
+	at := t0.Add(-20 * time.Minute).In(time.FixedZone("east", 3*3600))
+	doc, body := encodeDecode(t, BuildDoc(extendedLedger(at), key, state.Config{Device: "d-0123456789"}, "annbook", "ann", "v0.4.0", t0))
+	a := doc.Accounts[0]
+	// Codex weighs output 8 and cache reads 0.1: 28+96+10 and 42+144+100.
+	if want := []int64{286, 0, 0, 0, 0, 0, 0, 134}; !reflect.DeepEqual(a.BurnDays, want) {
+		t.Errorf("burn days = %v, want %v", a.BurnDays, want)
+	}
+	if want := []int64{60, 0, 0, 0, 0, 0, 0, 40}; !reflect.DeepEqual(a.Days, want) {
+		t.Errorf("days = %v, want %v", a.Days, want)
+	}
+	if len(a.Recent) != 1 || a.Recent[0].Tokens != 60 || a.Recent[0].Burn != 286 {
+		t.Errorf("recent = %+v", a.Recent)
+	}
+	if doc.LastErrorAt == nil || !doc.LastErrorAt.Equal(at) || doc.LastErrorAt.Location() != time.UTC {
+		t.Errorf("last error at = %v", doc.LastErrorAt)
+	}
+	if !doc.Extended() || !strings.Contains(string(body), `"last_error_at":"2026-09-01T11:40:00Z"`) {
+		t.Errorf("body = %s", body)
+	}
+
+	legacy, err := json.Marshal(doc.Legacy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"last_error_at", "burn_days", `"burn"`} {
+		if strings.Contains(string(legacy), k) {
+			t.Errorf("the legacy body has %s: %s", k, legacy)
+		}
+	}
+	if _, err := snapshot.Decode(legacy); err != nil {
+		t.Errorf("the legacy body does not decode: %v", err)
+	}
+}
+
+// last_error_at goes only with a dated last_error, and never after the
+// snapshot, so the body always validates.
+func TestBuildDocLastErrorAt(t *testing.T) {
+	key := mustKey(t)
+	build := func(st *state.State) snapshot.Doc {
+		t.Helper()
+		doc, _ := encodeDecode(t, BuildDoc(st, key, state.Config{Device: "d-0123456789"}, "annbook", "ann", "v0.4.0", t0))
+		return doc
+	}
+	if doc := build(ledger()); doc.LastError == "" || doc.LastErrorAt != nil {
+		t.Errorf("an undated last_error: %v", doc.LastErrorAt)
+	}
+	if doc := build(extendedLedger(t0.Add(10 * time.Minute))); doc.LastErrorAt == nil || !doc.LastErrorAt.Equal(t0) {
+		t.Errorf("a last error 10 minutes ahead: %v", doc.LastErrorAt)
+	}
+	st := extendedLedger(t0)
+	st.LastError = ""
+	if doc := build(st); doc.LastErrorAt != nil {
+		t.Errorf("no last error, but a time: %v", doc.LastErrorAt)
+	}
+}
+
+// fitDoc fits the body a release before v0.4.0 reads as that release did,
+// then cuts only the burn days: all of them when the legacy body had to
+// lose days, and the oldest when only the burn days do not fit.
+func TestFitDocKeepsTheLegacyDays(t *testing.T) {
+	sealed := func(c byte) string { return strings.Repeat(string(c), snapshot.MaxSealed) }
+	for _, c := range []struct {
+		aliases   int
+		legacyCut bool
+		burnKept  bool
+	}{
+		{20, true, false},
+		{4, false, true},
+	} {
+		doc := snapshot.Doc{V: snapshot.Version, Accounts: []snapshot.Account{}, Sources: []snapshot.Source{}}
+		for i := range snapshot.MaxAccounts {
+			a := snapshot.Account{Provider: "claude", Label: sealed('A' + byte(i%26)), Windows: []snapshot.Window{},
+				Projects: []snapshot.Project{{Path: sealed('p'), Sessions: 1, Tokens: tok(9)}}}
+			for d := range snapshot.MaxDays {
+				a.Days = append(a.Days, 100_000_000_000_000+int64(d))
+				a.BurnDays = append(a.BurnDays, 700_000_000_000_000+int64(d))
+			}
+			doc.Accounts = append(doc.Accounts, a)
+		}
+		for i := range c.aliases {
+			doc.Aliases = append(doc.Aliases, snapshot.Alias{Provider: "claude", Label: sealed('a' + byte(i%26)), Name: sealed('n'), At: t0})
+		}
+		legacy := doc.Legacy()
+		fitLegacy(&legacy)
+		fitDoc(&doc)
+
+		if !reflect.DeepEqual(doc.Legacy(), legacy) {
+			t.Fatalf("%d aliases: the legacy body differs from the one v0.3.4 fits", c.aliases)
+		}
+		b, _ := json.Marshal(doc)
+		if len(b) > snapshot.MaxBytes || len(doc.Accounts) != snapshot.MaxAccounts {
+			t.Fatalf("%d aliases: %d bytes, %d accounts", c.aliases, len(b), len(doc.Accounts))
+		}
+		kept := 0
+		for _, a := range doc.Accounts {
+			if cut := len(a.Days) < snapshot.MaxDays; cut != c.legacyCut {
+				t.Fatalf("%d aliases: the legacy fit kept %d days", c.aliases, len(a.Days))
+			}
+			if len(a.BurnDays) > len(a.Days) || len(a.BurnDays) == snapshot.MaxDays {
+				t.Fatalf("%d aliases: %d burn days for %d days", c.aliases, len(a.BurnDays), len(a.Days))
+			}
+			kept += len(a.BurnDays)
+		}
+		if (kept > 0) != c.burnKept {
+			t.Fatalf("%d aliases: %d burn days kept", c.aliases, kept)
+		}
+	}
+}
+
+func TestTrimDays(t *testing.T) {
+	for _, c := range []struct {
+		in   []int64
+		n    int
+		want []int64
+	}{
+		{[]int64{1, 2, 3}, 5, []int64{1, 2, 3}},
+		{[]int64{1, 0, 3}, 2, []int64{1}},
+		{[]int64{0, 0, 3}, 2, nil},
+		{nil, 3, nil},
+	} {
+		if got := trimDays(c.in, c.n); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("trimDays(%v, %d) = %v, want %v", c.in, c.n, got, c.want)
+		}
+	}
+}
