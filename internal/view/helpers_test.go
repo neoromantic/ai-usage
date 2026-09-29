@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
-	"github.com/neoromantic/ai-usage/internal/logs"
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
@@ -50,9 +50,9 @@ func addAccount(st *state.State, provider, label string, current bool, q *state.
 // spend adds a session of label's that spent n input tokens in each of the
 // given hours.
 func spend(st *state.State, provider, label, project string, n int64, at ...time.Time) {
-	s := &state.Session{Provider: provider, Project: project, By: map[string]snapshot.Tokens{label: {Input: n * int64(len(at))}}, Hours: map[int64]int64{}}
+	s := &state.Session{Provider: provider, Project: project, By: map[string]snapshot.Tokens{label: {Input: n * int64(len(at))}}}
 	for _, t := range at {
-		s.Hours[logs.HourOf(t)] += n
+		s.U.Add(t, meter.Use{Input: n})
 		if t.After(s.Updated) {
 			s.Updated = t
 		}

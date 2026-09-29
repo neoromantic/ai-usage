@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/logs"
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
@@ -119,10 +120,10 @@ func TestPruneDropsAnAccountsOldShareOfALiveSession(t *testing.T) {
 		},
 		Sessions: map[string]*state.Session{state.Key("claude", "s1"): {
 			Provider: "claude", Seen: tok(150), Updated: now,
-			By:      map[string]snapshot.Tokens{"old": tok(100), "new": tok(50)},
-			Last:    map[string]time.Time{"old": old, "new": now},
-			Hours:   map[int64]int64{logs.HourOf(old): 110, logs.HourOf(now): 55},
-			ByHours: map[string]map[int64]int64{"old": {logs.HourOf(old): 110}, "new": {logs.HourOf(now): 55}},
+			By:   map[string]snapshot.Tokens{"old": tok(100), "new": tok(50)},
+			Last: map[string]time.Time{"old": old, "new": now},
+			U:    meter.Hours{logs.HourOf(old): meter.FromTokens(tok(100)), logs.HourOf(now): meter.FromTokens(tok(50))},
+			UB:   map[string]meter.Hours{"old": {logs.HourOf(old): meter.FromTokens(tok(100))}, "new": {logs.HourOf(now): meter.FromTokens(tok(50))}},
 		}},
 	}
 	prune(st, now)
@@ -130,9 +131,9 @@ func TestPruneDropsAnAccountsOldShareOfALiveSession(t *testing.T) {
 	if s == nil || s.Seen != tok(150) || !reflect.DeepEqual(s.By, map[string]snapshot.Tokens{"new": tok(50)}) {
 		t.Fatalf("session = %+v", s)
 	}
-	want := map[int64]int64{logs.HourOf(now): 55}
-	if !reflect.DeepEqual(s.Hours, want) || !reflect.DeepEqual(s.ByHours, map[string]map[int64]int64{"new": want}) {
-		t.Fatalf("hours = %v, by account %v", s.Hours, s.ByHours)
+	want := meter.Hours{logs.HourOf(now): meter.FromTokens(tok(50))}
+	if !reflect.DeepEqual(s.U, want) || !reflect.DeepEqual(s.UB, map[string]meter.Hours{"new": want}) {
+		t.Fatalf("hours = %v, by account %v", s.U, s.UB)
 	}
 	if _, ok := st.Accounts[state.Key("claude", "old")]; ok {
 		t.Fatal("idle account kept by a session another account continued")

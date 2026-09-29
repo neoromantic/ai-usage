@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/logs"
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
@@ -44,26 +45,78 @@ type ProjectTotals struct {
 	Providers []string
 }
 
-// usage is an account's or a project's sessions and what they spent.
+// usage is an account's or a project's sessions and what they spent, in the
+// hours the ledger keeps.
 type usage struct {
+	// Sessions counts the sessions that spent in those hours.
 	Sessions int
 	Tokens   snapshot.Tokens
-	// Hours is the input plus output tokens by the UTC hour they were spent
-	// in, keyed by logs.HourOf.
-	Hours      map[int64]int64
-	LastActive time.Time
+	// Hours is the tokens by the UTC hour they were spent in, keyed by
+	// logs.HourOf.
+	Hours meter.Hours
+	// Burn is the hours weighed, each part by the weights of the provider
+	// and account that spent it.
+	Burn map[int64]int64
+	// Active is when each of the sessions was last active.
+	Active []time.Time
+	// Nulls counts the sessions' replies that end without a final token
+	// count, and OverTracked the Claude sessions whose own count has over
+	// twice the output of their transcripts.
+	Nulls       int
+	OverTracked int
+	LastActive  time.Time
 }
 
-// add counts one session's share: its tokens, their hours, and when it last
-// grew.
-func (u *usage) add(tok snapshot.Tokens, hours map[int64]int64, last time.Time) {
+// add counts one session's share: its hours, what they burn, and when it
+// last grew. A share with no hours in the window is not counted.
+func (u *usage) add(s *state.Session, hours meter.Hours, burn map[int64]int64, last time.Time) {
+	if len(hours) == 0 {
+		return
+	}
 	u.Sessions++
-	u.Tokens = u.Tokens.Add(tok)
-	u.Hours = logs.AddHours(u.Hours, hours)
+	u.Tokens = u.Tokens.Add(hours.Sum().Tokens())
+	u.Hours = meter.AddHours(u.Hours, hours)
+	for h, n := range burn {
+		if u.Burn == nil {
+			u.Burn = map[int64]int64{}
+		}
+		u.Burn[h] += n
+	}
+	u.Active = append(u.Active, s.Updated)
+	u.Nulls += s.Nulls
+	if overTracked(s) {
+		u.OverTracked++
+	}
 	if last.After(u.LastActive) {
 		u.LastActive = last
 	}
 }
+
+// overTracked reports whether Claude Code's own count of a session has over
+// twice the output of its transcript.
+func overTracked(s *state.Session) bool {
+	if s.Provider != "claude" {
+		return false
+	}
+	var out int64
+	for _, t := range s.By {
+		out += t.Output
+	}
+	return s.Side.Output > out-s.Side.Output
+}
+
+// burnOf is hours weighed by w, hour by hour.
+func burnOf(hours meter.Hours, w meter.Weights) map[int64]int64 {
+	out := make(map[int64]int64, len(hours))
+	for h, u := range hours {
+		out[h] += u.Burn(w)
+	}
+	return out
+}
+
+// windowStart is the key of the first hour the totals count: the first the
+// ledger kept at its last run.
+func windowStart(st *state.State) int64 { return firstKept(st.LastRunAt.Add(-state.Retention)) }
 
 // Totals sums the ledger per account and project, a working folder counting
 // under its project in f.
@@ -87,14 +140,18 @@ func Totals(st *state.State, f Folders) []AccountTotals {
 	for _, acct := range st.Accounts {
 		get(acct.Provider, acct.Label)
 	}
+	first := windowStart(st)
 	for _, s := range st.Sessions {
 		for label, tok := range s.By {
 			if tok.Zero() {
 				continue
 			}
-			last, hours := lastActive(s, label), labelHours(s, label)
-			get(s.Provider, label).add(tok, hours, last)
-			projects[state.Key(s.Provider, label)].add(f.of(s.Project), tok, hours, last)
+			last, hours := lastActive(s, label), labelHours(s, label).Since(first)
+			burn := burnOf(hours, meter.WeightsOf(s.Provider, label))
+			get(s.Provider, label).add(s, hours, burn, last)
+			if len(hours) > 0 {
+				projects[state.Key(s.Provider, label)].add(f.of(s.Project), s, hours, burn, last)
+			}
 		}
 		for k, tok := range s.Via {
 			parts := state.SplitKey(k)
@@ -123,28 +180,32 @@ func Totals(st *state.State, f Folders) []AccountTotals {
 func Projects(st *state.State, f Folders) []ProjectTotals {
 	var ps projectSums
 	byProvider := map[string]map[string]int64{}
+	first := windowStart(st)
 	for _, s := range st.Sessions {
-		var tok snapshot.Tokens
-		var hours map[int64]int64
+		var hours meter.Hours
+		burn := map[int64]int64{}
 		var last time.Time
 		for label, t := range s.By {
 			if t.Zero() {
 				continue
 			}
-			tok = tok.Add(t)
-			hours = logs.AddHours(hours, labelHours(s, label))
+			own := labelHours(s, label).Since(first)
+			hours = meter.AddHours(hours, own)
+			for h, n := range burnOf(own, meter.WeightsOf(s.Provider, label)) {
+				burn[h] += n
+			}
 			if l := lastActive(s, label); l.After(last) {
 				last = l
 			}
 		}
-		if tok.Zero() {
+		if len(hours) == 0 {
 			continue
 		}
-		p := ps.add(f.of(s.Project), tok, hours, last)
+		p := ps.add(f.of(s.Project), s, hours, burn, last)
 		if byProvider[p.Path] == nil {
 			byProvider[p.Path] = map[string]int64{}
 		}
-		byProvider[p.Path][s.Provider] += tok.Total()
+		byProvider[p.Path][s.Provider] += hours.Sum().Total()
 	}
 	out := ps.list()
 	for i := range out {
@@ -160,6 +221,26 @@ func Projects(st *state.State, f Folders) []ProjectTotals {
 	return out
 }
 
+// Coverage is, by provider, the start of the first hour the ledger holds
+// tokens for. Before it, the report knows nothing of that provider's use.
+func Coverage(st *state.State) map[string]time.Time {
+	out := map[string]time.Time{}
+	first := windowStart(st)
+	for _, s := range st.Sessions {
+		for label, t := range s.By {
+			if t.Zero() {
+				continue
+			}
+			for h, u := range labelHours(s, label) {
+				if at := logs.HourStart(h); h >= first && !u.Zero() && (out[s.Provider].IsZero() || at.Before(out[s.Provider])) {
+					out[s.Provider] = at
+				}
+			}
+		}
+	}
+	return out
+}
+
 // projectSums sums sessions per project, counting the working folders of
 // each.
 type projectSums struct {
@@ -169,7 +250,7 @@ type projectSums struct {
 
 // add counts one session's share, spent in the working folder dir, under
 // dir's project.
-func (ps *projectSums) add(dir Folder, tok snapshot.Tokens, hours map[int64]int64, last time.Time) *ProjectTotals {
+func (ps *projectSums) add(dir Folder, s *state.Session, hours meter.Hours, burn map[int64]int64, last time.Time) *ProjectTotals {
 	if ps.byPath == nil {
 		ps.byPath, ps.folders = map[string]*ProjectTotals{}, map[string]map[string]bool{}
 	}
@@ -183,7 +264,7 @@ func (ps *projectSums) add(dir Folder, tok snapshot.Tokens, hours map[int64]int6
 		ps.folders[dir.Project][dir.Path] = true
 		p.Folders++
 	}
-	p.add(tok, hours, last)
+	p.add(s, hours, burn, last)
 	return p
 }
 

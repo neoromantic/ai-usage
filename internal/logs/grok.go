@@ -15,6 +15,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/neoromantic/ai-usage/internal/meter"
 )
 
 // readGrok sums turn_completed usage in ~/.grok/sessions/<cwd>/<id>/updates.jsonl.
@@ -113,7 +115,7 @@ type grokTurn struct {
 	at     time.Time
 }
 
-func parseGrokUpdates(path string) (Tokens, map[int64]int64, int, error) {
+func parseGrokUpdates(path string) (Tokens, meter.Hours, int, error) {
 	latest := map[string]grokTurn{}
 	var order []string
 	var anon int
@@ -151,11 +153,11 @@ func parseGrokUpdates(path string) (Tokens, map[int64]int64, int, error) {
 		}}
 	})
 	var total Tokens
-	var hours map[int64]int64
+	var hours meter.Hours
 	for _, prompt := range order {
 		last := latest[prompt]
 		total = total.Add(last.tokens)
-		AddHour(&hours, last.at, last.tokens.InOut())
+		hours.Add(last.at, meter.FromTokens(last.tokens))
 	}
 	return total, hours, malformed + long, err
 }

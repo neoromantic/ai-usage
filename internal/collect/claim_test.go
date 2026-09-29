@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/logs"
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/probe"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
@@ -205,14 +206,14 @@ func TestClaimTakesTheUnknownHours(t *testing.T) {
 	h := logs.HourOf(t0)
 	st := &state.State{Current: map[string]string{}, Accounts: map[string]*state.Account{}, Sessions: map[string]*state.Session{
 		state.Key("codex", "s1"): {Provider: "codex", Project: "/p", Updated: t0,
-			By:      map[string]snapshot.Tokens{UnknownAccount: tok(100), "bo@acme.dev": tok(50)},
-			Hours:   map[int64]int64{h - 5: 110, h: 55},
-			ByHours: map[string]map[int64]int64{UnknownAccount: {h - 5: 110}, "bo@acme.dev": {h: 55}}},
+			By: map[string]snapshot.Tokens{UnknownAccount: tok(100), "bo@acme.dev": tok(50)},
+			U:  meter.Hours{h - 5: meter.FromTokens(tok(100)), h: meter.FromTokens(tok(50))},
+			UB: map[string]meter.Hours{UnknownAccount: {h - 5: meter.FromTokens(tok(100))}, "bo@acme.dev": {h: meter.FromTokens(tok(50))}}},
 	}}
 	home := "/home/sam/.codex"
 	res := logs.Result{Sessions: []logs.Session{{ID: "s1", Home: home}}, Homes: map[string]logs.HomeRead{home: {}}}
 	claimUnknown(st, "codex", []string{home}, []answer{{reading: probe.Reading{Account: "ann@acme.dev"}}}, res, map[string]string{home: "ann@acme.dev"})
-	if a := totalsFor(t, st, "codex", "ann@acme.dev"); a.Tokens != tok(100) || !reflect.DeepEqual(a.Hours, map[int64]int64{h - 5: 110}) {
+	if a := totalsFor(t, st, "codex", "ann@acme.dev"); a.Tokens != tok(100) || !reflect.DeepEqual(inOut(a.Hours), map[int64]int64{h - 5: 110}) {
 		t.Errorf("ann = %d tokens in %v, want 110 at h-5", a.Tokens.InOut(), a.Hours)
 	}
 	if hasTotals(st, "codex", UnknownAccount) {

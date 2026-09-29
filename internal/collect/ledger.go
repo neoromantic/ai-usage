@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/logs"
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/probe"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
@@ -79,9 +80,9 @@ func moveShare(s *state.Session, from, to string) {
 	}
 	s.By[to] = s.By[to].Add(t)
 	delete(s.By, from)
-	if h, ok := s.ByHours[from]; ok {
-		s.ByHours[to] = logs.AddHours(s.ByHours[to], h)
-		delete(s.ByHours, from)
+	if h, ok := s.UB[from]; ok {
+		s.UB[to] = meter.AddHours(s.UB[to], h)
+		delete(s.UB, from)
 	}
 	if last, ok := s.Last[from]; ok {
 		if last.After(s.Last[to]) {
@@ -134,6 +135,9 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 		}
 	}
 	e.Project = s.Project
+	if !partial {
+		e.Side, e.Nulls = s.Side, s.Nulls
+	}
 	updated := s.Updated
 	if updated.IsZero() || updated.After(now) {
 		updated = now
@@ -249,9 +253,10 @@ func prune(st *state.State, now time.Time) {
 			delete(st.Sessions, k)
 			continue
 		}
-		dropHours(s.Hours, cutoff)
-		for _, hours := range s.ByHours {
-			dropHours(hours, cutoff)
+		first := firstKept(cutoff)
+		s.U = s.U.Since(first)
+		for l, hours := range s.UB {
+			s.UB[l] = keptHours(hours, first)
 		}
 		for l := range s.By {
 			// An account's share of a session another account continued
@@ -274,14 +279,14 @@ func prune(st *state.State, now time.Time) {
 func dropShare(s *state.Session, label string) {
 	delete(s.By, label)
 	delete(s.Last, label)
-	for h, n := range s.ByHours[label] {
-		if s.Hours[h] > n {
-			s.Hours[h] -= n
+	for h, n := range s.UB[label] {
+		if left := s.U[h].Sub(n); left.Zero() {
+			delete(s.U, h)
 		} else {
-			delete(s.Hours, h)
+			s.U[h] = left
 		}
 	}
-	delete(s.ByHours, label)
+	delete(s.UB, label)
 }
 
 // pruneAccounts drops the accounts that no kept session uses and nobody is

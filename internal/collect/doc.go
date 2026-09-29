@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
@@ -92,9 +93,9 @@ func BuildDoc(st *state.State, key *team.Key, cfg state.Config, hostname, osUser
 			sa.QuotaAt = &at
 			sa.QuotaFrom = a.QuotaFrom
 			sa.Windows = append(sa.Windows, a.Quota.Windows...)
-			sa.Recent = recent(a.Hours, a.Quota.Windows, now)
+			sa.Recent = recent(a.Hours.Series(meter.Use.InOut), a.Quota.Windows, now)
 		}
-		sa.Days = DaysOf(a.Hours, now)
+		sa.Days = DaysOf(a.Hours.Series(meter.Use.InOut), now)
 		if !a.LastActive.IsZero() {
 			la := a.LastActive
 			sa.LastActiveAt = &la

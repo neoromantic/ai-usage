@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
@@ -132,7 +133,7 @@ func fillLimits(q *Quota) {
 // accountView is one of this device's accounts of provider, whose homes are
 // homes, without its name, which comes from the team.
 func accountView(st *state.State, provider string, homes []string, a collect.AccountTotals, now time.Time) Account {
-	days := collect.DaysOf(a.Hours, now)
+	days := collect.DaysOf(a.Hours.Series(meter.Use.InOut), now)
 	acct := Account{
 		Label:        a.Label,
 		Current:      a.Current,
@@ -196,7 +197,7 @@ func projectView(p collect.ProjectTotals, now time.Time) Project {
 		Folders:      p.Folders,
 		Sessions:     p.Sessions,
 		Tokens:       p.Tokens,
-		Usage:        usageOf(collect.DaysOf(p.Hours, now), 0),
+		Usage:        usageOf(collect.DaysOf(p.Hours.Series(meter.Use.InOut), now), 0),
 		Providers:    p.Providers,
 		LastActiveAt: timePtr(p.LastActive),
 	}

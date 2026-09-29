@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
@@ -265,8 +266,8 @@ func TestDocCarriesDaysRecentAndAliases(t *testing.T) {
 				{Name: "5h", Percent: 10, ResetsAt: &t0, Minutes: 300},
 			}}}},
 		Sessions: map[string]*state.Session{state.Key("codex", "s1"): {Provider: "codex", Project: "/p", Updated: t0,
-			By:    map[string]snapshot.Tokens{"ann@example.com": {Input: 70, Output: 30}},
-			Hours: map[int64]int64{t0.Add(-7*24*time.Hour).Unix() / 3600: 40, t0.Unix()/3600 - 1: 60}}},
+			By: map[string]snapshot.Tokens{"ann@example.com": {Input: 70, Output: 30}},
+			U:  meter.Hours{t0.Add(-7*24*time.Hour).Unix() / 3600: {Input: 28, Output: 12}, t0.Unix()/3600 - 1: {Input: 42, Output: 18}}}},
 	}
 	cfg := state.Config{Device: "d-0123456789", Aliases: map[string]state.Alias{
 		state.Key("codex", "ann@example.com"): {Name: "ann", At: t0},

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
@@ -45,14 +46,31 @@ type Session struct {
 	// window alone at 100% (Claude). A weekly window refused before a 5h
 	// one stays full after the 5h one resets.
 	Rejected []*Limits
-	// Hours is the session's input plus output tokens by the UTC hour they
+	// Hours is the session's tokens, of every kind, by the UTC hour they
 	// were spent in, keyed by HourOf. A reader fills it from the times its
-	// log records for each use. ReadHomes then makes it add up to Tokens:
-	// what the log does not place in time, such as Claude's side calls, is
-	// spread over the hours it does place, in their proportion. It stays nil
-	// when the log records no times at all, and the ledger then places
-	// growth at the run that saw it.
-	Hours map[int64]int64
+	// log records for each use. ReadHomes then makes each kind add up to
+	// Tokens: what the log does not place in time, such as Claude's side
+	// calls, is spread over the hours it does place, in their proportion. It
+	// stays nil when the log records no times at all, and the ledger then
+	// places growth at the run that saw it.
+	Hours meter.Hours
+	// Side is what Claude Code's own count of a session's usage has beyond
+	// its transcript: calls that never become messages, such as compaction
+	// and titles (Claude).
+	Side Tokens
+	// Nulls is how many of the session's replies end without a final token
+	// count, their usage cut short when the stream stopped (Claude).
+	Nulls int
+	// Version is the harness version the session's newest message recorded
+	// (Claude Code).
+	Version string
+	// CreatorAccount is the account the harness's own thread table says
+	// created the session (Codex's creator_account_id).
+	CreatorAccount string
+	// Folded lists the ids of sessions that an earlier read took as roots of
+	// their own and that this read finds inside this session's family, so
+	// the ledger can move what it kept for them here (Codex).
+	Folded []string
 }
 
 // HourOf is the key of the UTC hour t falls in.
@@ -61,66 +79,19 @@ func HourOf(t time.Time) int64 { return t.Unix() / 3600 }
 // HourStart is when the hour with key h begins.
 func HourStart(h int64) time.Time { return time.Unix(h*3600, 0).UTC() }
 
-// AddHour adds n tokens spent at t to hours, making the map when needed.
-func AddHour(hours *map[int64]int64, t time.Time, n int64) {
-	if n <= 0 || t.IsZero() {
-		return
-	}
-	if *hours == nil {
-		*hours = map[int64]int64{}
-	}
-	(*hours)[HourOf(t)] += n
-}
-
-// AddHours adds b onto a and returns a, made when needed.
-func AddHours(a, b map[int64]int64) map[int64]int64 {
-	for h, n := range b {
-		if a == nil {
-			a = map[int64]int64{}
-		}
-		a[h] += n
-	}
-	return a
-}
-
-// fitHours makes a session's hours add up to its input plus output. What no
-// time was recorded for, such as Claude's side calls, is spread over the
+// fitHours makes each kind of a session's hours add up to its tokens. What
+// no time was recorded for, such as Claude's side calls, is spread over the
 // timed hours in their proportion: side calls go along with the work that
 // makes them, and a resumed session does not move them all to its newest
-// day.
+// day. The session's counts do not say which cache writes are kept for an
+// hour, so the hours keep theirs.
 func fitHours(s *Session) {
-	if s.Hours != nil {
-		ScaleHours(s.Hours, s.Tokens.InOut())
-	}
-}
-
-// ScaleHours scales hours in place so that they add up to total, keeping
-// their shape. What rounding leaves goes to the largest hour.
-func ScaleHours(hours map[int64]int64, total int64) {
-	var sum int64
-	var largest int64
-	first := true
-	for h, n := range hours {
-		sum += n
-		if first || n > hours[largest] || (n == hours[largest] && h > largest) {
-			largest, first = h, false
-		}
-	}
-	if sum == total || sum <= 0 {
+	if s.Hours == nil {
 		return
 	}
-	left := total
-	for h, n := range hours {
-		v := int64(float64(n) * float64(total) / float64(sum))
-		hours[h] = v
-		left -= v
-	}
-	hours[largest] += left
-	for h, n := range hours {
-		if n <= 0 {
-			delete(hours, h)
-		}
-	}
+	total := meter.FromTokens(s.Tokens)
+	total.CacheWrite1h = s.Hours.Sum().CacheWrite1h
+	s.Hours.ScaleTo(total, HourOf(s.Updated))
 }
 
 // Result is a read.
@@ -141,6 +112,9 @@ type HomeRead struct {
 	// Limits is the newest quota this home's logs recorded. A home belongs
 	// to whoever is logged in there, so limits are never mixed across homes.
 	Limits *Limits
+	// AccountID is the account the harness's own thread table says creates
+	// the home's newest sessions (Codex's creator_account_id).
+	AccountID string
 }
 
 // add counts one file's read: its malformed lines, and the file as

@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
-	"github.com/neoromantic/ai-usage/internal/logs"
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
@@ -301,22 +301,20 @@ func (d *device) spend(until time.Time, provider, label, project string, perDay 
 		if all := d.spread[state.Key(provider, project)]; len(all) > 0 {
 			folder = all[i%len(all)]
 		}
-		s := &state.Session{Provider: provider, Project: folder, Hours: map[int64]int64{}}
-		var total int64
+		s := &state.Session{Provider: provider, Project: folder}
 		for h := 7; h < 19; h++ {
 			at := day.Add(time.Duration(h)*time.Hour + 20*time.Minute)
 			if at.After(until) {
 				break
 			}
 			n := int64(perDay * 1e6 / 12 * weight * (0.3 + 1.4*d.rng.Float64()))
-			s.Hours[logs.HourOf(at)] += n
-			total += n
+			s.U.Add(at, meter.Use{Input: n * 93 / 100, Output: n - n*93/100, CacheRead: n * 11, CacheWrite: n / 3})
 			s.Updated = at
 		}
-		if total == 0 {
+		if len(s.U) == 0 {
 			continue
 		}
-		tok := snapshot.Tokens{Input: total * 93 / 100, Output: total * 7 / 100, CacheRead: total * 11, CacheWrite: total / 3}
+		tok := s.U.Sum().Tokens()
 		s.Seen = tok
 		s.By = map[string]snapshot.Tokens{label: tok}
 		if via != nil {

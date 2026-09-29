@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/neoromantic/ai-usage/internal/meter"
 )
 
 // readCodexHomes sums <home>/sessions and <home>/archived_sessions of every
@@ -235,7 +237,7 @@ func countFamily(family []*codexFile) {
 			seen[ev] = true
 			t := delta.tokens()
 			f.own = f.own.Add(t)
-			AddHour(&f.hours, c.at, t.InOut())
+			f.hours.Add(c.at, meter.FromTokens(t))
 		}
 		for _, r := range f.unrepeated {
 			if responses[r.response] {
@@ -244,7 +246,7 @@ func countFamily(family []*codexFile) {
 			responses[r.response] = true
 			t := r.usage.tokens()
 			f.own = f.own.Add(t)
-			AddHour(&f.hours, r.at, t.InOut())
+			f.hours.Add(r.at, meter.FromTokens(t))
 		}
 	}
 }

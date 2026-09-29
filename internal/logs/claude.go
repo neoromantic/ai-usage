@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
@@ -126,7 +127,7 @@ func claimMessages(files []*claudeFile) (copied map[string]bool) {
 				claimed[key] = f.root()
 			}
 			f.sess.Tokens = f.sess.Tokens.Add(m.tokens)
-			AddHour(&f.sess.Hours, m.at, m.tokens.InOut())
+			f.sess.Hours.Add(m.at, meter.FromTokens(m.tokens))
 			if m.rejected != nil {
 				f.sess.Rejected = AddRejected(f.sess.Rejected, m.rejected)
 			}

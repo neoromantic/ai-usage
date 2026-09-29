@@ -15,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/neoromantic/ai-usage/internal/meter"
 )
 
 // now is the fixed clock of every test. File times are set relative to it.
@@ -134,25 +136,22 @@ func total(res sessionSet) Tokens {
 	return sum
 }
 
-// checkHours fails unless s spent its tokens in the hours of want, which maps
-// a time in each hour, in RFC 3339, to that hour's tokens, and unless they add
-// up to its input plus output.
+// checkHours fails unless s spent its input plus output in the hours of
+// want, which maps a time in each hour, in RFC 3339, to that hour's input
+// plus output, and unless each kind of its hours adds up to its tokens.
 func checkHours(t *testing.T, s Session, want map[string]int64) {
 	t.Helper()
 	w := map[int64]int64{}
 	for at, n := range want {
 		w[HourOf(mustTime(t, at))] += n
 	}
-	var sum int64
-	for _, n := range s.Hours {
-		sum += n
-	}
-	if !reflect.DeepEqual(s.Hours, w) || sum != s.Tokens.InOut() {
-		t.Fatalf("%s hours = %s, adding up to %d, want %s, adding up to %d", s.ID, showHours(s.Hours), sum, showHours(w), s.Tokens.InOut())
+	sum := s.Hours.Sum()
+	if got := s.Hours.Series(meter.Use.InOut); !reflect.DeepEqual(got, w) || sum.Tokens() != s.Tokens {
+		t.Fatalf("%s hours = %s, adding up to %+v, want %v, adding up to %+v", s.ID, showHours(s.Hours), sum, w, s.Tokens)
 	}
 }
 
-func showHours(hours map[int64]int64) string {
+func showHours(hours meter.Hours) string {
 	keys := make([]int64, 0, len(hours))
 	for h := range hours {
 		keys = append(keys, h)
@@ -160,7 +159,7 @@ func showHours(hours map[int64]int64) string {
 	slices.Sort(keys)
 	out := make([]string, 0, len(keys))
 	for _, h := range keys {
-		out = append(out, fmt.Sprintf("%s=%d", HourStart(h).Format("2006-01-02T15h"), hours[h]))
+		out = append(out, fmt.Sprintf("%s=%d", HourStart(h).Format("2006-01-02T15h"), hours[h].InOut()))
 	}
 	return "[" + strings.Join(out, " ") + "]"
 }

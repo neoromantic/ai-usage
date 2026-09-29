@@ -3,6 +3,8 @@ package logs
 import (
 	"cmp"
 	"slices"
+
+	"github.com/neoromantic/ai-usage/internal/meter"
 )
 
 // UnknownProject is the project of a session whose log names no directory.
@@ -47,7 +49,7 @@ func dedupeSessions(in []Session) []Session {
 // copy written last.
 func addCopy(have *Session, s Session) {
 	have.Tokens = have.Tokens.Add(s.Tokens)
-	have.Hours = AddHours(have.Hours, s.Hours)
+	have.Hours = meter.AddHours(have.Hours, s.Hours)
 	if s.Updated.After(have.Updated) {
 		have.Home = s.Home
 	}
@@ -151,7 +153,7 @@ func rollup(in []Session) []Session {
 		}
 		dst.Tokens = dst.Tokens.Add(in[i].Tokens)
 		addParts(dst, in[i])
-		dst.Hours = AddHours(dst.Hours, in[i].Hours)
+		dst.Hours = meter.AddHours(dst.Hours, in[i].Hours)
 		if i != r {
 			fillFrom(dst, in[i])
 			dst.ParentID = ""

@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/neoromantic/ai-usage/internal/meter"
 )
 
 // codexFile is what one rollout file says about its own thread.
@@ -32,7 +34,7 @@ type codexFile struct {
 	fresh  bool
 	// own and hours are what this file counts once replays are matched.
 	own   Tokens
-	hours map[int64]int64
+	hours meter.Hours
 }
 
 // codexRecord is one response's usage from a token_usage_record line.
