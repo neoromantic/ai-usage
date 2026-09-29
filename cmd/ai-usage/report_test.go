@@ -6,7 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/view"
 )
 
@@ -96,4 +99,24 @@ func withoutHealthAndLimits(t *testing.T, path string) []byte {
 		t.Fatal(err)
 	}
 	return b
+}
+
+// A report reads this device's samples of the last 48 hours, and counts
+// its days in the local zone.
+func TestReportInputReadsSamples(t *testing.T) {
+	hermetic(t)
+	d := state.Dir(t.TempDir())
+	now := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	for _, at := range []time.Time{now.Add(-time.Hour), now.Add(-50 * time.Hour)} {
+		if err := d.AppendSample(state.Sample{At: at, Accounts: []state.SampleAccount{{Provider: "codex", Label: "ann@acme.dev"}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	in := reportInput(d, &collect.Result{State: state.NewState()}, now)
+	if len(in.Samples) != 1 || !in.Samples[0].At.Equal(now.Add(-time.Hour)) {
+		t.Errorf("samples %+v, want the one of an hour ago", in.Samples)
+	}
+	if in.Loc != time.Local {
+		t.Errorf("zone %v, want the local one", in.Loc)
+	}
 }

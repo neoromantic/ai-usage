@@ -36,7 +36,18 @@ func loadResult(d state.Dir) (*collect.Result, error) {
 
 // reportAt is the report of a run result as of now.
 func reportAt(d state.Dir, res *collect.Result, now time.Time) view.Report {
-	return view.Build(view.Input{
+	return view.Build(reportInput(d, res, now))
+}
+
+// samplesSpan is how far back a report reads this device's samples, for
+// the pace of each window.
+const samplesSpan = 48 * time.Hour
+
+// reportInput is what the report of a run result as of now is built from.
+// Samples that do not read are left out: they only sharpen a forecast.
+func reportInput(d state.Dir, res *collect.Result, now time.Time) view.Input {
+	samples, _ := d.LoadSamples(now.Add(-samplesSpan))
+	return view.Input{
 		Version:  version,
 		RelayURL: relayURL(res.Config),
 		Config:   res.Config,
@@ -48,7 +59,9 @@ func reportAt(d state.Dir, res *collect.Result, now time.Time) view.Report {
 		OSUser:   osUser(),
 		Now:      now,
 		Folders:  collect.FindProjects(d, res.State),
-	})
+		Samples:  samples,
+		Loc:      time.Local,
+	}
 }
 
 func printReport(stdout io.Writer, r view.Report, jsonOut, guide bool, disp *display) error {
