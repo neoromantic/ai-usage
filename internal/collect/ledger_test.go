@@ -210,3 +210,40 @@ func TestAuxShareOfAMigratedLedgerMovesToTheMainRoute(t *testing.T) {
 		t.Fatalf("totals = %+v", Totals(st, nil))
 	}
 }
+
+// An earlier release dated a Claude session by its file's time, which a
+// later write moves. A full read dates it by its last message, even when
+// that is earlier; a partial read, which may have missed the last message,
+// leaves it.
+func TestClaudeSessionIsDatedByItsLastMessage(t *testing.T) {
+	st := state.NewState()
+	k := state.Key("claude", "a4c2e917")
+	mtime := time.Date(2026, 9, 1, 15, 0, 0, 0, time.UTC)
+	last := time.Date(2026, 9, 1, 12, 10, 0, 0, time.UTC)
+	tokens := snapshot.Tokens{Input: 100, Output: 900}
+	st.Sessions[k] = &state.Session{
+		Provider: "claude", Project: "/work/app", Seen: tokens, Updated: mtime,
+		By:   map[string]snapshot.Tokens{"ann@acme.dev": tokens},
+		Last: map[string]time.Time{"ann@acme.dev": mtime},
+		U:    meter.Hours{logs.HourOf(last): meter.FromTokens(tokens)},
+	}
+	s := logs.Session{ID: "a4c2e917", Project: "/work/app", Tokens: tokens, Updated: last}
+	now := mtime.Add(time.Hour)
+	growth := map[string]snapshot.Tokens{}
+	attribute(st, "claude", s, "ann@acme.dev", true, now, growth)
+	if e := st.Sessions[k]; !e.Updated.Equal(mtime) {
+		t.Fatalf("partial read dated it %v", e.Updated)
+	}
+	attribute(st, "claude", s, "ann@acme.dev", false, now, growth)
+	e := st.Sessions[k]
+	if !e.Updated.Equal(last) || !e.Last["ann@acme.dev"].Equal(mtime) || len(growth) != 0 {
+		t.Fatalf("session = %+v, growth %+v", e, growth)
+	}
+	// Other harnesses keep their newest time.
+	gk := state.Key("grok", "b5c6d7e8")
+	st.Sessions[gk] = &state.Session{Provider: "grok", Seen: tokens, Updated: mtime, By: map[string]snapshot.Tokens{"ann@acme.dev": tokens}}
+	attribute(st, "grok", logs.Session{ID: "b5c6d7e8", Tokens: tokens, Updated: last}, "ann@acme.dev", false, now, growth)
+	if got := st.Sessions[gk].Updated; !got.Equal(mtime) {
+		t.Fatalf("grok session dated %v", got)
+	}
+}

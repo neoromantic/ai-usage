@@ -164,7 +164,9 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 		s.Hours = s.Hours.Since(logs.HourOf(e.Updated))
 	}
 	placeHours(e, s, grown, updated, now)
-	if updated.After(e.Updated) {
+	// A full read of a Claude session dates it by its last message, which
+	// can be before the file's time an earlier release dated it by.
+	if updated.After(e.Updated) || (p == "claude" && !partial) {
 		e.Updated = updated.UTC()
 	}
 	for l, g := range grown {
