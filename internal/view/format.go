@@ -107,35 +107,43 @@ func shownLabel(a *TeamAccount) string {
 	return shortID(label)
 }
 
-// truncPath keeps the first folder and as many trailing folders as fit, so
-// "~/orca/workspaces/monorepo/fix-x" becomes "~/orca/…/monorepo/fix-x".
-// When the first folder leaves no room, the path keeps just its root: "~/…/x".
+// truncPath elides the middle of a path, which names it least: it keeps
+// the root with the first folder, and the last folder, then adds folders
+// from the head and the tail in turn while they fit, a side that does not
+// stopping. So "~/Downloads/ChatExport_Ёлочка/work/game/art/tests" becomes
+// "~/Downloads/ChatExport_Ёлочка/…/tests". When the first folder leaves no
+// room, the path keeps just its root: "~/…/x"; then just the last folder,
+// and a last folder too long for that loses its own middle.
 func truncPath(p string, w int, ell string) string {
 	if width(p) <= w {
 		return p
 	}
 	parts := strings.Split(p, "/")
-	if len(parts) >= 3 {
-		first := parts[0] + "/" + parts[1]
-		if parts[0] == "" && len(parts) > 3 {
-			first = "/" + parts[1]
+	// Both the head, parts[:lo], and the tail, parts[hi:], leave a folder
+	// out between them.
+	shown := func(lo, hi int) string {
+		return strings.Join(parts[:lo], "/") + "/" + ell + "/" + strings.Join(parts[hi:], "/")
+	}
+	for _, lo := range []int{2, 1} {
+		hi := len(parts) - 1
+		if hi-lo < 1 || width(shown(lo, hi)) > w {
+			continue
 		}
-		for _, head := range []string{first, parts[0]} {
-			tail := ""
-			for i := len(parts) - 1; i >= 2; i-- {
-				cand := parts[i]
-				if tail != "" {
-					cand += "/" + tail
+		// The root alone gains folders at the tail only.
+		head, tail := lo == 2, true
+		for turn := 0; (head || tail) && hi-lo > 1; turn++ {
+			switch {
+			case turn%2 == 0 && head:
+				if head = width(shown(lo+1, hi)) <= w; head {
+					lo++
 				}
-				if width(head)+1+width(ell)+1+width(cand) > w {
-					break
+			case turn%2 == 1 && tail:
+				if tail = width(shown(lo, hi-1)) <= w; tail {
+					hi--
 				}
-				tail = cand
-			}
-			if tail != "" {
-				return head + "/" + ell + "/" + tail
 			}
 		}
+		return shown(lo, hi)
 	}
 	// The last folder names the project; keep it whole when it fits.
 	if last := parts[len(parts)-1]; len(parts) > 1 && width(ell)+1+width(last) <= w {

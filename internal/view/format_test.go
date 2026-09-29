@@ -38,8 +38,19 @@ func TestTruncPath(t *testing.T) {
 	}{
 		{"~/src/acme/api", 20, "~/src/acme/api"},
 		{"~/orca/workspaces/monorepo/faster-dashboard-queries", 40, "~/orca/…/faster-dashboard-queries"},
-		{"~/orca/workspaces/monorepo/fix-x", 30, "~/orca/…/monorepo/fix-x"},
-		{"/opt/build/agents/workspace/project", 26, "/opt/…/workspace/project"},
+		{"~/orca/workspaces/monorepo/fix-x", 30, "~/orca/workspaces/…/fix-x"},
+		{"/opt/build/agents/workspace/project", 26, "/opt/build/…/project"},
+		{"/opt/build/agents/workspace/project", 30, "/opt/build/…/workspace/project"},
+		// The middle goes, not the folder after the first that names the
+		// project; folders come from the head and the tail in turn.
+		{"~/Downloads/ChatExport_Ёлочка/work/game/art/tests", 37, "~/Downloads/ChatExport_Ёлочка/…/tests"},
+		{"~/Downloads/ChatExport_Ёлочка/work/game/art/tests", 42, "~/Downloads/ChatExport_Ёлочка/…/art/tests"},
+		{"~/Downloads/ChatExport_Ёлочка/work/game/art/tests", 47, "~/Downloads/ChatExport_Ёлочка/work/…/art/tests"},
+		// A side that does not fit stops; the other goes on.
+		{"~/Downloads/ChatExport_Ёлочка/work/game/art/tests", 36, "~/Downloads/…/work/game/art/tests"},
+		// Wide runes count two columns.
+		{"~/src/日本語のプロジェクト/lib/core/main", 33, "~/src/日本語のプロジェクト/…/main"},
+		{"~/src/日本語のプロジェクト/lib/core/main", 32, "~/src/…/lib/core/main"},
 		// Without the first folder, the root and the last one still fit.
 		{"/Users/someone/deep/project-name-that-is-long", 28, "/…/project-name-that-is-long"},
 		{"~/Developer/acme/worktrees/checkout-flow-migration", 36, "~/…/checkout-flow-migration"},
