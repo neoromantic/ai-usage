@@ -1,6 +1,7 @@
 package collect
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/logs"
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
@@ -340,5 +342,95 @@ func TestHermesAttributesByBillingProvider(t *testing.T) {
 	}
 	if src := res.State.Sources["hermes"]; src.Status != "ok" {
 		t.Fatalf("hermes source = %+v", src)
+	}
+}
+
+// A ledger from before v0.4 kept a Hermes session's whole history in the
+// hour a run first saw it. The first read after the upgrade spreads it over
+// the hours the session worked, and the account keeps its tokens.
+func TestHermesMigratedHistorySpreadsOverItsHours(t *testing.T) {
+	w, o := newWorld(t)
+	o.ReadLogs = logs.ReadHomes
+	home := w.home(t, "hermes")
+	const id = "20260801_090000_a4c2e917"
+	start, last := t0.AddDate(0, 0, -20), t0.Add(-time.Hour)
+	tokens := snapshot.Tokens{Input: 90_000, Output: 9_000, CacheRead: 400_000}
+
+	db, err := sql.Open("sqlite", filepath.Join(home, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`CREATE TABLE sessions (id TEXT PRIMARY KEY, parent_session_id TEXT, cwd TEXT, billing_provider TEXT,
+			input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, started_at REAL, last_activity_at REAL)`,
+		`CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT, timestamp REAL NOT NULL)`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO sessions VALUES (?, NULL, '/work/bot', 'openai-codex', ?, ?, ?, ?, ?)`,
+		id, tokens.Input, tokens.Output, tokens.CacheRead, start.Unix(), last.Unix()); err != nil {
+		t.Fatal(err)
+	}
+	for at := start; at.Before(last); at = at.Add(24 * time.Hour) {
+		if _, err := db.Exec(`INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, 'assistant', 'hello', ?)`, id, at.Unix()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// v0.3 had the lot in the hour its first run saw the session.
+	seen := t0.Add(-15 * time.Minute)
+	before := legacyLedger(t, o.Dir, seen, state.Key("hermes", id), map[string]any{
+		"p": "hermes", "proj": "/work/bot", "at": last, "seen": tokens,
+		"by":    map[string]snapshot.Tokens{"openai-codex": tokens},
+		"parts": map[string]snapshot.Tokens{"openai-codex": tokens},
+		"last":  map[string]time.Time{"openai-codex": seen},
+		"h":     map[int64]int64{logs.HourOf(seen): tokens.Input + tokens.Output},
+	})
+	want := totalsFor(t, before, "hermes", "openai-codex").Tokens
+
+	res := run(t, o)
+	e := res.State.Sessions[state.Key("hermes", id)]
+	if e.Rederive || len(e.U) < 19*24 || e.U.Sum().Tokens() != tokens {
+		t.Fatalf("session = rederive %v, %d hours adding up to %+v", e.Rederive, len(e.U), e.U.Sum())
+	}
+	if n := e.U[logs.HourOf(seen)].Total(); n > tokens.Total()/20 {
+		t.Fatalf("the hour v0.3 saw it still holds %d", n)
+	}
+	if got := totalsFor(t, res.State, "hermes", "openai-codex").Tokens; got != want || want != tokens {
+		t.Fatalf("totals = %+v, before %+v", got, want)
+	}
+	if g := growthOf(lastSample(t, o), "hermes", "openai-codex"); !g.Zero() {
+		t.Fatalf("growth = %+v", g)
+	}
+}
+
+// A Hermes session's hours are its running totals spread anew at each read,
+// so a read that finds it grown spreads a little more into every hour of
+// its past. What it grew since the last read was spent since: the ledger
+// places it there, and leaves the hours it placed before.
+func TestHermesGrowthLandsAfterTheLastRead(t *testing.T) {
+	w, o := newWorld(t)
+	h := w.home(t, "hermes")
+	const id = "20260830_120000_a4c2e917"
+	old1, old2 := logs.HourOf(t0.Add(-48*time.Hour)), logs.HourOf(t0.Add(-24*time.Hour))
+	use := func(n int64) meter.Use { return meter.FromTokens(tok(n)) }
+	s := hermesSess(id, "openai-codex", t0.Add(-30*time.Minute), map[string]snapshot.Tokens{"openai-codex": tok(1000)})
+	s.Hours = meter.Hours{old1: use(500), old2: use(500)}
+	w.sessions("hermes", h, s)
+	run(t, o)
+
+	w.now = t0.Add(15 * time.Minute)
+	s = hermesSess(id, "openai-codex", t0.Add(10*time.Minute), map[string]snapshot.Tokens{"openai-codex": tok(2000)})
+	s.Hours = meter.Hours{old1: use(900), old2: use(900), logs.HourOf(t0): use(200)}
+	w.sessions("hermes", h, s)
+	res := run(t, o)
+	want := meter.Hours{old1: use(500), old2: use(500), logs.HourOf(t0): use(1000)}
+	if got := res.State.Sessions[state.Key("hermes", id)].U; !reflect.DeepEqual(got, want) {
+		t.Fatalf("hours = %v, want %v", got, want)
 	}
 }

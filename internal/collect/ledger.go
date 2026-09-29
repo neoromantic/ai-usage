@@ -147,6 +147,12 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 			delete(grown, l)
 		}
 	}
+	if p == "hermes" && len(e.U) > 0 && !e.Rederive {
+		// Hermes' hours spread a session's running totals over its span and
+		// replies. What it grew since the ledger last saw it was spent since,
+		// not in the hours the spread gives each run a little more of.
+		s.Hours = s.Hours.Since(logs.HourOf(e.Updated))
+	}
 	placeHours(e, s, grown, updated, now)
 	if updated.After(e.Updated) {
 		e.Updated = updated.UTC()

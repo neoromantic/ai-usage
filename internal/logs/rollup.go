@@ -111,8 +111,11 @@ func addParts(dst *Session, src Session) {
 	}
 }
 
-// rollup adds each sub-agent's tokens onto its root session.
-// A parent that was not loaded keeps the child as its own session.
+// rollup adds each sub-agent's tokens onto its root session, and its hours
+// as they are: the root takes the newest activity of its chain, but each
+// member's tokens stay in the hours that member spent them.
+// A parent that was not loaded keeps the child as its own session; Hermes
+// reads a chain whole, so its children always find their root.
 // Sessions with no tokens are dropped.
 func rollup(in []Session) []Session {
 	byID := map[string]int{}

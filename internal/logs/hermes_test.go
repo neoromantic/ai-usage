@@ -41,8 +41,8 @@ func hermesDB(t *testing.T, home, columns string) *sql.DB {
 	db.SetMaxOpenConns(1)
 	for _, stmt := range []string{
 		`CREATE TABLE sessions (` + columns + `)`,
-		`CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, content TEXT)`,
-		`INSERT INTO messages (session_id, content) VALUES ('p', '` + secret + `')`,
+		`CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT, timestamp)`,
+		`INSERT INTO messages (session_id, role, content) VALUES ('p', 'assistant', '` + secret + `')`,
 	} {
 		if _, err := db.Exec(stmt); err != nil {
 			db.Close()
@@ -50,6 +50,14 @@ func hermesDB(t *testing.T, home, columns string) *sql.DB {
 		}
 	}
 	return db
+}
+
+// message adds a message of role to a session at a time Hermes may store as
+// REAL seconds, integer milliseconds, or an ISO string. Its text is the
+// secret.
+func message(t *testing.T, db *sql.DB, session, role string, at any) {
+	t.Helper()
+	exec(t, db, `INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)`, session, role, secret, at)
 }
 
 func exec(t *testing.T, db *sql.DB, query string, args ...any) {
@@ -115,7 +123,7 @@ func TestHermesRollsChildIntoParent(t *testing.T) {
 	if res.Malformed != 0 || res.Unreadable != 0 {
 		t.Fatalf("malformed %d unreadable %d", res.Malformed, res.Unreadable)
 	}
-	if got := strings.Join(ids(res), ","); got != "orphan,p,u" {
+	if got := strings.Join(ids(res), ","); got != "old,p,u" {
 		t.Fatalf("sessions = %s", got)
 	}
 	p := byID(t, res, "p")
@@ -129,9 +137,10 @@ func TestHermesRollsChildIntoParent(t *testing.T) {
 	if !p.Updated.Equal(now.Add(-30 * time.Minute)) {
 		t.Fatalf("p updated = %v", p.Updated)
 	}
-	// The parent is older than the window, so the child stands alone.
-	if o := byID(t, res, "orphan"); o.Tokens != (Tokens{Input: 8}) || o.Project != "/work/orphan" {
-		t.Fatalf("orphan = %+v", o)
+	// The parent is older than the window, but its child is not: the chain
+	// counts whole, under its root, as it did while the parent was active.
+	if o := byID(t, res, "old"); o.Tokens != (Tokens{Input: 108, Output: 100}) || o.Project != "/work/old" || !o.Updated.Equal(now.Add(-time.Hour)) {
+		t.Fatalf("old = %+v", o)
 	}
 	// A row with no time is kept: dropping it would hide usage. With no
 	// directory either, its project is the Hermes home it came from.
@@ -551,20 +560,202 @@ func TestHermesAuxWithoutRouteIsUnknown(t *testing.T) {
 	}
 }
 
-// Hermes keeps running totals, per session and per model and route, not a
-// time for each call, so it places no tokens in hours. The ledger places what
-// a session grew at the run that saw it; hours read from the totals would
-// move all of a long session to its last activity at every run.
-func TestHermesPlacesNoHours(t *testing.T) {
+// Hermes keeps running totals, not what each call spent, so a session's
+// history is spread over the hours it worked. A months-long session read for
+// the first time must not land in one hour: each hour takes the larger of its
+// share of the replies and of the session's span, so the last week holds
+// more than an even share, as the replies say, but less than their share.
+func TestHermesSpreadsHistoryOverItsHours(t *testing.T) {
 	home := t.TempDir()
-	hermesWorkDB(t, home)
-	res := mustRead(t, "hermes", home, since)
-	if len(res.Sessions) == 0 {
-		t.Fatal("no sessions")
-	}
-	for _, s := range res.Sessions {
-		if s.Hours != nil {
-			t.Fatalf("%s hours = %s", s.ID, showHours(s.Hours))
+	db := hermesDB(t, home, hermesColumns)
+	start := time.Date(2026, 6, 1, 10, 15, 0, 0, time.UTC)
+	const id = "20260601_101500_a4c2e917"
+	hermesRow{id: id, cwd: "/work/bot", billing: "openai-codex", in: 60_000_000, out: 2_000_000, cacheRead: 18_000_000,
+		started: start, active: now.Add(-time.Hour)}.insert(t, db)
+	week := now.AddDate(0, 0, -7)
+	var all, recent int64
+	exec(t, db, `BEGIN`)
+	for day := start.Truncate(24 * time.Hour); day.Before(now); day = day.AddDate(0, 0, 1) {
+		perHour := 1
+		if !day.Before(week) {
+			perHour = 3
 		}
+		for h := 9; h < 19; h++ {
+			at := day.Add(time.Duration(h)*time.Hour + 20*time.Minute)
+			if at.Before(start) || !at.Before(now) {
+				continue
+			}
+			for range perHour {
+				message(t, db, id, "assistant", unix(at))
+				all++
+				if !at.Before(week) {
+					recent++
+				}
+			}
+			message(t, db, id, "user", unix(at))
+		}
+	}
+	exec(t, db, `COMMIT`)
+	db.Close()
+
+	res := mustRead(t, "hermes", home, since)
+	s := byID(t, res, id)
+	sum := s.Hours.Sum()
+	if sum.Tokens() != s.Tokens || s.Tokens.Total() != 80_000_000 {
+		t.Fatalf("hours add up to %+v, tokens %+v", sum, s.Tokens)
+	}
+	first := HourOf(since)
+	var total, inWeek, before int64
+	for h, u := range s.Hours {
+		n := u.Total()
+		total += n
+		switch {
+		case h < first-1:
+			before += n
+		case n > s.Tokens.Total()/20:
+			t.Fatalf("hour %s holds %d of %d", HourStart(h), n, s.Tokens.Total())
+		}
+		if h >= HourOf(week) {
+			inWeek += n
+		}
+	}
+	// What the session spent before the window is one hour before it, which
+	// the ledger does not keep.
+	if len(s.Hours.Since(first-1)) == len(s.Hours) || before == 0 {
+		t.Fatalf("no hour before the window: %s", showHours(s.Hours))
+	}
+	share := float64(inWeek) / float64(total)
+	msgShare := float64(recent) / float64(all)
+	evenShare := float64(now.Sub(week)) / float64(now.Add(-time.Hour).Sub(start))
+	t.Logf("last week's share %.3f, even %.3f, replies %.3f", share, evenShare, msgShare)
+	if !(share > evenShare && share < msgShare) {
+		t.Fatalf("last week's share %.3f, want between %.3f (even) and %.3f (replies)", share, evenShare, msgShare)
+	}
+	noLeak(t, res)
+}
+
+// Hermes writes REAL seconds, but a message's time can be integer
+// milliseconds or an ISO string. Each counts in the hour it names.
+func TestHermesMessageTimes(t *testing.T) {
+	home := t.TempDir()
+	db := hermesDB(t, home, hermesColumns)
+	const id = "20260922_091500_c3d4e5f6"
+	// No span: the replies alone shape the hours.
+	hermesRow{id: id, in: 400}.insert(t, db)
+	message(t, db, id, "assistant", unix(now.Add(-150*time.Minute)))
+	message(t, db, id, "assistant", now.Add(-90*time.Minute).UnixMilli())
+	message(t, db, id, "assistant", now.Add(-30*time.Minute).Format(time.RFC3339))
+	message(t, db, id, "assistant", "2026-09-22T13:10:00+02:00")
+	message(t, db, id, "assistant", "not a time")
+	message(t, db, id, "tool", unix(now.Add(-150*time.Minute)))
+	db.Close()
+
+	checkHours(t, byID(t, mustRead(t, "hermes", home, since), id), map[string]int64{
+		"2026-09-22T09:30:00Z": 100,
+		"2026-09-22T10:30:00Z": 100,
+		"2026-09-22T11:30:00Z": 200,
+	})
+}
+
+// A call spends within its own span: a route used only at the start of a
+// session does not spread over the session's later replies.
+func TestHermesCallsSpendInTheirSpans(t *testing.T) {
+	home := t.TempDir()
+	db := hermesDB(t, home, hermesColumns)
+	exec(t, db, hermesUsageTable)
+	const id = "20260922_060000_0a1b2c3d"
+	hermesRow{id: id, billing: "xai-oauth", in: 300, started: now.Add(-6 * time.Hour), active: now.Add(-30 * time.Minute)}.insert(t, db)
+	for _, at := range []time.Time{now.Add(-330 * time.Minute), now.Add(-90 * time.Minute), now.Add(-30 * time.Minute)} {
+		message(t, db, id, "assistant", unix(at))
+	}
+	exec(t, db, `INSERT INTO session_model_usage (session_id, model, billing_provider, input_tokens, first_seen, last_seen) VALUES
+		(?, 'gpt', 'openai-codex', 100, ?, ?), (?, 'grok', 'xai-oauth', 200, ?, ?)`,
+		id, unix(now.Add(-6*time.Hour)), unix(now.Add(-5*time.Hour-time.Minute)),
+		id, unix(now.Add(-2*time.Hour)), unix(now.Add(-30*time.Minute)))
+	db.Close()
+
+	s := byID(t, mustRead(t, "hermes", home, since), id)
+	if s.Tokens != (Tokens{Input: 300}) {
+		t.Fatalf("tokens = %+v", s.Tokens)
+	}
+	// Codex's 100 in the first hour, where its span and a reply are; Grok's
+	// 200 over its span from 10:00 to 11:30, the replies at 10:30 and 11:30
+	// weighing the most.
+	early := s.Hours[HourOf(now.Add(-6*time.Hour))]
+	if early.Input != 100 || s.Hours[HourOf(now.Add(-3*time.Hour))].Input != 0 {
+		t.Fatalf("hours = %s", showHours(s.Hours))
+	}
+	if late := s.Hours[HourOf(now.Add(-90*time.Minute))].Input + s.Hours[HourOf(now.Add(-30*time.Minute))].Input; late != 200 {
+		t.Fatalf("hours = %s", showHours(s.Hours))
+	}
+}
+
+// A chain is a root and the sessions it continued into. It counts once,
+// under its root, while any of it is active: a fresh child does not become a
+// root of its own when its root ages out of the window, and each keeps its
+// own hours. A chain all older than the window is not read.
+func TestHermesChainsCountOnceUnderTheirRoot(t *testing.T) {
+	home := t.TempDir()
+	db := hermesDB(t, home, hermesColumns)
+	const root, child, stale, staleKid = "20260601_101500_a4c2e917", "20260921_080000_b5c6d7e8", "20260501_090000_d1e2f3a4", "20260502_090000_e5f6a7b8"
+	for _, r := range []hermesRow{
+		{id: root, cwd: "/work/bot", billing: "openai-codex", in: 1000, started: now.AddDate(0, 0, -120), ended: now.AddDate(0, 0, -100)},
+		{id: child, parent: root, cwd: "/work/bot", billing: "openai-codex", in: 50, started: now.Add(-26 * time.Hour), active: now.Add(-2 * time.Hour)},
+		{id: stale, billing: "openai-codex", in: 70, started: now.AddDate(0, 0, -140), ended: now.AddDate(0, 0, -139)},
+		{id: staleKid, parent: stale, billing: "openai-codex", in: 7, started: now.AddDate(0, 0, -139), ended: now.AddDate(0, 0, -95)},
+	} {
+		r.insert(t, db)
+	}
+	message(t, db, child, "assistant", unix(now.Add(-2*time.Hour)))
+	db.Close()
+
+	res := mustRead(t, "hermes", home, since)
+	if got := strings.Join(ids(res), ","); got != root {
+		t.Fatalf("sessions = %s", got)
+	}
+	s := byID(t, res, root)
+	if s.Tokens != (Tokens{Input: 1050}) || !s.Updated.Equal(now.Add(-2*time.Hour)) {
+		t.Fatalf("root = %+v", s)
+	}
+	// The root's tokens are all before the window; the child's are where it
+	// worked, not where the root's activity moved.
+	if n := s.Hours.Since(HourOf(since)).Sum().Input; n != 50 {
+		t.Fatalf("hours in the window = %d: %s", n, showHours(s.Hours))
+	}
+}
+
+// A state.db from before messages had a role counts every message; one
+// whose messages have no time spreads by the span alone.
+func TestHermesMessagesOlderSchemas(t *testing.T) {
+	for _, tc := range []struct {
+		name, table string
+		want        map[string]int64
+	}{
+		{"no role", `CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, content TEXT, timestamp REAL)`,
+			map[string]int64{"2026-09-22T09:30:00Z": 30, "2026-09-22T11:30:00Z": 30}},
+		{"no time", `CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, content TEXT)`,
+			map[string]int64{"2026-09-22T09:30:00Z": 20, "2026-09-22T10:30:00Z": 20, "2026-09-22T11:30:00Z": 20}},
+		{"no table", ``,
+			map[string]int64{"2026-09-22T09:30:00Z": 20, "2026-09-22T10:30:00Z": 20, "2026-09-22T11:30:00Z": 20}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			db := hermesDB(t, home, hermesColumns)
+			exec(t, db, `DROP TABLE messages`)
+			if tc.table != "" {
+				exec(t, db, tc.table)
+			}
+			if tc.name != "no role" {
+				hermesRow{id: "s", in: 60, started: now.Add(-3 * time.Hour), active: now}.insert(t, db)
+			} else {
+				// No span, so the messages alone shape the hours.
+				hermesRow{id: "s", in: 60}.insert(t, db)
+				for _, at := range []time.Time{now.Add(-150 * time.Minute), now.Add(-30 * time.Minute)} {
+					exec(t, db, `INSERT INTO messages (session_id, content, timestamp) VALUES ('s', ?, ?)`, secret, unix(at))
+				}
+			}
+			db.Close()
+			checkHours(t, byID(t, mustRead(t, "hermes", home, since), "s"), tc.want)
+		})
 	}
 }

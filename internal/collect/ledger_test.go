@@ -1,6 +1,8 @@
 package collect
 
 import (
+	"encoding/json"
+	"os"
 	"reflect"
 	"sort"
 	"testing"
@@ -138,4 +140,25 @@ func TestPruneDropsAnAccountsOldShareOfALiveSession(t *testing.T) {
 	if _, ok := st.Accounts[state.Key("claude", "old")]; ok {
 		t.Fatal("idle account kept by a session another account continued")
 	}
+}
+
+// legacyLedger writes a state.json from before ledger version 2 holding one
+// session, and loads it as every command does.
+func legacyLedger(t *testing.T, dir state.Dir, lastRun time.Time, key string, session map[string]any) *state.State {
+	t.Helper()
+	b, err := json.Marshal(map[string]any{"last_run_at": lastRun, "sessions": map[string]any{key: session}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(string(dir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dir.StateFile(), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, err := dir.LoadState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
 }
