@@ -331,6 +331,7 @@ func fakeCodex(mode string, rec *os.File) int {
 			_, _ = os.Stdout.WriteString(l + "\n")
 		}
 	}
+	rateReads := 0
 	for {
 		line, err := in.ReadBytes('\n')
 		if err != nil {
@@ -412,6 +413,11 @@ func fakeCodex(mode string, rec *os.File) int {
 				_, _ = os.Stdout.WriteString(msg[20:] + "\n" + `{"method":"account/updated","params":{}}` + "\n")
 			}
 		case "account/rateLimits/read":
+			rateReads++
+			// OpenAI does not answer the first read, or any.
+			if mode == "codex-rate-retry" && rateReads == 1 || mode == "codex-rate-hang" {
+				continue
+			}
 			if mode == "codex-exit-after-account" {
 				fmt.Fprint(os.Stderr, "thread 'tokio-runtime-worker' panicked at src/rate_limits.rs:9:5:\nno backend\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n")
 				return 101

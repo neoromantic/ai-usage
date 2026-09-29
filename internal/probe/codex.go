@@ -44,10 +44,12 @@ func Codex(ctx context.Context, env Env, home string) (Reading, error) {
 
 // codexAt asks the codex at bin. served is false when it could not start
 // app-server, or ended or turned a request down as unknown before it named
-// the account.
+// the account. app-server lives as long as the conversation, whose steps
+// each have their own time, and is killed once one runs out.
 func codexAt(ctx context.Context, env Env, bin, home string) (r Reading, served bool, err error) {
-	ctx, cancel := context.WithTimeout(ctx, env.timeout())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	var hung bool
 
 	custom := ""
 	if filepath.Clean(home) != DefaultHome(env.HomeDir, "codex") {
@@ -72,7 +74,11 @@ func codexAt(ctx context.Context, env Env, bin, home string) (r Reading, served 
 	defer func() {
 		rpc.close()
 		// app-server exits by itself at the end of its input, once its own
-		// work is done. Killing it at once could cut a write short.
+		// work is done. Killing it at once could cut a write short. One that
+		// did not answer in time is killed, as it may never.
+		if hung {
+			cancel()
+		}
 		_ = stdin.Close()
 		if werr := waitOrKill(cmd, codexExitGrace); werr != nil && err == nil {
 			err = fmt.Errorf("codex app-server: %w", werr)
@@ -84,7 +90,7 @@ func codexAt(ctx context.Context, env Env, bin, home string) (r Reading, served 
 			}
 		}
 	}()
-	r, err = codexConversation(ctx, rpc, env.now())
+	r, hung, err = codexConversation(ctx, rpc, env)
 	gaveWay := errors.Is(err, errExited) || errors.Is(err, errUnsupported)
 	return r, r.Account != "" || !gaveWay, err
 }
@@ -92,33 +98,55 @@ func codexAt(ctx context.Context, env Env, bin, home string) (r Reading, served 
 // codexExitGrace is how long app-server has to exit after its input ends.
 var codexExitGrace = 3 * time.Second
 
-func codexConversation(ctx context.Context, rpc *codexRPC, now time.Time) (Reading, error) {
-	if _, err := rpc.call(ctx, "initialize", map[string]any{
+// codexConversation has app-server say who is logged in, within env's
+// timeout from its start, then read the rate limits, which asks OpenAI,
+// within a time of its own, once more after a pause when that runs out.
+// hung is true when a request ran out of time.
+func codexConversation(ctx context.Context, rpc *codexRPC, env Env) (r Reading, hung bool, err error) {
+	start, cancel := context.WithTimeout(ctx, env.timeout())
+	defer cancel()
+	timedOut := func(step context.Context, err error) bool {
+		return err != nil && step.Err() != nil && ctx.Err() == nil
+	}
+	if _, err := rpc.call(start, "initialize", map[string]any{
 		"clientInfo": map[string]string{"name": "ai-usage", "version": "1"},
 	}); err != nil {
-		return Reading{}, err
+		return Reading{}, timedOut(start, err), err
 	}
 	if err := rpc.notify("initialized"); err != nil {
-		return Reading{}, err
+		return Reading{}, false, err
 	}
-	raw, err := rpc.call(ctx, "account/read", map[string]any{"refreshToken": false})
+	raw, err := rpc.call(start, "account/read", map[string]any{"refreshToken": false})
 	if err != nil {
-		return Reading{}, err
+		return Reading{}, timedOut(start, err), err
 	}
-	r, err := codexAccount(raw)
+	r, err = codexAccount(raw)
 	if err != nil || r.Account == "" {
-		return r, err
+		return r, false, err
 	}
-	raw, err = rpc.call(ctx, "account/rateLimits/read", nil)
-	if err != nil {
-		return r, err
+	for try := 0; ; try++ {
+		step, cancel := context.WithTimeout(ctx, env.rateLimitTimeout())
+		raw, err = rpc.call(step, "account/rateLimits/read", nil)
+		hung = timedOut(step, err)
+		cancel()
+		if !hung || try > 0 {
+			break
+		}
+		select {
+		case <-time.After(env.rateRetryDelay()):
+		case <-ctx.Done():
+			return r, false, err
+		}
 	}
-	q, plan, err := codexLimits(raw, now)
 	if err != nil {
-		return r, err
+		return r, hung, err
+	}
+	q, plan, err := codexLimits(raw, env.now())
+	if err != nil {
+		return r, false, err
 	}
 	r.Quota, r.Plan = q, cmp.Or(r.Plan, plan)
-	return r, nil
+	return r, false, nil
 }
 
 // codexAccount is the account an account/read answer names, with its plan.

@@ -100,6 +100,10 @@ type Env struct {
 	ClaudeManaged []string
 	Now           func() time.Time
 	Timeout       time.Duration
+	// rateTimeout bounds Codex's rateLimits/read, which asks OpenAI, apart
+	// from Timeout's start of the conversation, and retryDelay is the pause
+	// before its one retry. Zero means 15s and a second. Tests shorten them.
+	rateTimeout, retryDelay time.Duration
 }
 
 // DefaultEnv is the real environment.
@@ -156,6 +160,20 @@ func (e Env) timeout() time.Duration {
 		return 20 * time.Second
 	}
 	return e.Timeout
+}
+
+func (e Env) rateLimitTimeout() time.Duration {
+	if e.rateTimeout <= 0 {
+		return 15 * time.Second
+	}
+	return e.rateTimeout
+}
+
+func (e Env) rateRetryDelay() time.Duration {
+	if e.retryDelay <= 0 {
+		return time.Second
+	}
+	return e.retryDelay
 }
 
 // environ is the environment harness commands start from. A nil Environ

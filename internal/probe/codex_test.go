@@ -375,3 +375,42 @@ func TestCodexLimits(t *testing.T) {
 		})
 	}
 }
+
+// rateLimits/read, which asks OpenAI, has a time of its own apart from the
+// start of the conversation, and is asked once more when that runs out.
+func TestCodexRetriesRateLimits(t *testing.T) {
+	env, record := fakeEnv(t, "codex-rate-retry")
+	env.rateTimeout, env.retryDelay = 300*time.Millisecond, 10*time.Millisecond
+	r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
+	if err != nil || r.Account != "dev@example.com" || r.Quota == nil {
+		t.Fatalf("reading %+v, error %v", r, err)
+	}
+	_, msgs := readRecord(t, record)
+	if got := methods(msgs); !slices.Equal(got, []string{"initialize", "initialized", "account/read", "account/rateLimits/read", "account/rateLimits/read"}) {
+		t.Errorf("conversation = %q", got)
+	}
+	waitNoGoroutine(t, "probe.(*codexRPC)")
+}
+
+// A rateLimits/read that never answers ends after its retry, with the
+// account named, and app-server is killed.
+func TestCodexRateLimitsTimeOut(t *testing.T) {
+	env, record := fakeEnv(t, "codex-rate-hang")
+	env.rateTimeout, env.retryDelay = 200*time.Millisecond, 10*time.Millisecond
+	start := time.Now()
+	r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
+	if took := time.Since(start); took > 2*time.Second {
+		t.Errorf("took %v", took)
+	}
+	if errText(err) != "codex account/rateLimits/read: no answer in time" || r.Account != "dev@example.com" || r.Quota != nil {
+		t.Errorf("reading %+v, error %v", r, err)
+	}
+	rec, msgs := readRecord(t, record)
+	if got := methods(msgs); len(got) != 5 {
+		t.Errorf("conversation = %q", got)
+	}
+	if runtime.GOOS != "windows" && !processGone(rec.PID) {
+		t.Errorf("app-server %d still running", rec.PID)
+	}
+	waitNoGoroutine(t, "probe.(*codexRPC)")
+}
