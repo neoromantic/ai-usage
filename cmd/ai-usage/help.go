@@ -11,7 +11,8 @@ import (
 	"github.com/neoromantic/ai-usage/internal/view"
 )
 
-const helpIntro = "`ai-usage` collects AI harness usage on this device and shares it with a team."
+const helpIntro = "`ai-usage` collects AI harness usage on this device and shares it with a team. " +
+	"It counts weighted tokens: every kind of token weighed by its API price, a proxy for quota."
 
 type helpSection struct {
 	title string

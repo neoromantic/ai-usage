@@ -12,8 +12,8 @@ import (
 // entry is a line of the help: what to press or look for, and what it means.
 type entry struct{ what, means string }
 
-// helpLines are the help panel: every key, and the legend of the marks and
-// the forecast states the static report ends with.
+// helpLines are the help panel: every key, and the legend of the marks, the
+// units, and the forecast states the static report ends with.
 func (m Model) helpLines() []string {
 	g := func(utf8, ascii string) string {
 		if m.opts.ASCII {
@@ -28,7 +28,7 @@ func (m Model) helpLines() []string {
 		{g("← →  h l", "left right  h l"), "scroll the matrix, as Shift and the wheel do"},
 		{"p", "the next period: today, 7d, 30d, 90d"},
 		{"1 7 3 9", "today, 7d, 30d, or 90d"},
-		{"%", "tokens or share in the matrix"},
+		{"%", "weighted tokens or share in the matrix"},
 		{"s", "DEVICES as the matrix, or as each device's status"},
 	}
 	if m.cfg.Refresh != nil {
@@ -48,6 +48,8 @@ func (m Model) helpLines() []string {
 		{g("↓", "v"), "a device on an older release, or that release in VERSION"},
 		{g("·", "."), "nothing"},
 		{g("‹ ›", "[ ]"), "the chosen option"},
+		{"M", "millions of tokens weighed by API price, a proxy for quota"},
+		{"UTC", "team tables count UTC days, PROJECTS and USAGE local ones"},
 	}
 	states := []entry{
 		{view.StateOut, "the window is at 100%"},

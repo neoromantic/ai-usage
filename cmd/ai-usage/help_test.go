@@ -16,6 +16,9 @@ import (
 func TestHelpLayout(t *testing.T) {
 	for _, width := range []int{80, 100, 160} {
 		plain := ansi.Strip(helpText(view.Options{Width: width}))
+		if !strings.Contains(strings.Join(strings.Fields(plain), " "), "It counts weighted tokens: every kind of token weighed by its API price, a proxy for quota.") {
+			t.Errorf("width %d: the help does not say what it counts", width)
+		}
 		colored := helpText(view.Options{Width: width, Color: true})
 		if ansi.Strip(colored) != plain || colored == plain {
 			t.Errorf("width %d: color changes the text, or adds none", width)
