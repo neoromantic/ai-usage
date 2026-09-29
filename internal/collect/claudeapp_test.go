@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/probe"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
 
@@ -115,5 +116,32 @@ func TestClaudeAppUseIsItsLoginsUse(t *testing.T) {
 	run(t, o)
 	if got := w.lastUse[k]; !got.Equal(t0.Add(-10 * time.Minute)) {
 		t.Errorf("last use %v", got)
+	}
+}
+
+// The app's session homes are not asked, so a quota note or an error of the
+// one home that is does not name it, and an app session's version is not
+// that home's.
+func TestClaudeAppHomesAreNotHomesToName(t *testing.T) {
+	w, o := newWorld(t)
+	def := w.home(t, "claude")
+	w.login("claude", def, "ann@x", nil)
+	w.askErr[state.Key("claude", def)] = &probe.NoQuotaError{Msg: "update Claude Code to 2.1.208 or newer (/usr/local/bin/claude is 2.1.42)", Path: "/usr/local/bin/claude", Version: "2.1.42"}
+	a := claudeAppHome(t, w.userHome, "", "a1", `{"emailAddress":"ann@x"}`)
+	app := sess("app-a", "/sessions/brave-owl", 200, t0)
+	app.Version = "2.1.210"
+	w.sessions("claude", a, app)
+	res := run(t, o)
+	if got := res.State.Sources["claude"]; got.Status != "ok" || got.Error != "claude: update Claude Code to 2.1.208 or newer (/usr/local/bin/claude is 2.1.42)" {
+		t.Fatalf("claude source = %+v", got)
+	}
+	if res.State.LastError != "" {
+		t.Fatalf("last error = %q", res.State.LastError)
+	}
+	// Nor does its error.
+	w.askErr[state.Key("claude", def)] = errors.New("claude: auth status: exit status 1")
+	w.now = t0.Add(15 * time.Minute)
+	if st := run(t, o).State; st.LastError != "claude: auth status: exit status 1" {
+		t.Fatalf("last error = %q", st.LastError)
 	}
 }

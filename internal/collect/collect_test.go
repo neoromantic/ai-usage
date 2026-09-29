@@ -535,3 +535,117 @@ func TestAfterHookSeesTheStateBeforeSave(t *testing.T) {
 		t.Fatal("After's change was not saved")
 	}
 }
+
+// A run with no problems clears the last run's: what failed works again.
+func TestCleanRunClearsTheLastError(t *testing.T) {
+	w, o := newWorld(t)
+	h := w.home(t, "codex")
+	w.login("codex", h, "bob", nil)
+	w.sessions("codex", h, sess("c1", "/p", 10, t0))
+	w.askErr[state.Key("codex", h)] = errors.New("codex: app-server exited: status 1")
+	if res := run(t, o); res.State.LastError != "codex: app-server exited: status 1" || !res.State.LastErrorAt.Equal(t0) {
+		t.Fatalf("last error = %q at %v", res.State.LastError, res.State.LastErrorAt)
+	}
+	delete(w.askErr, state.Key("codex", h))
+	w.now = t0.Add(15 * time.Minute)
+	res := run(t, o)
+	if res.State.LastError != "" || !res.State.LastErrorAt.IsZero() {
+		t.Fatalf("last error after a clean run = %q at %v", res.State.LastError, res.State.LastErrorAt)
+	}
+	if got, _ := res.Key.Open(res.Doc.LastError); got != "" {
+		t.Fatalf("snapshot last error after a clean run = %q", got)
+	}
+}
+
+// A Claude Code that cannot give a quota reading is said in its source,
+// which is still ok, and is no problem of the run: its tokens are read.
+func TestNoQuotaIsNoProblem(t *testing.T) {
+	cases := []struct {
+		name, sessionVersion, want string
+	}{
+		{"older than the sessions", "2.1.210",
+			"claude: /opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update it or put the newer one first on PATH"},
+		{"as new as the sessions", "2.1.42", "claude: update Claude Code to 2.1.208 or newer (/opt/homebrew/bin/claude is 2.1.42, Homebrew)"},
+		{"sessions that do not say", "", "claude: update Claude Code to 2.1.208 or newer (/opt/homebrew/bin/claude is 2.1.42, Homebrew)"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			w, o := newWorld(t)
+			ch := w.home(t, "claude")
+			w.login("claude", ch, "ann", nil)
+			s := sess("s1", "/p", 10, t0)
+			s.Version = c.sessionVersion
+			// An older session's version is not the one the home runs now.
+			older := sess("s0", "/p", 10, t0.Add(-time.Hour))
+			if c.sessionVersion != "" {
+				older.Version = "2.1.300"
+			}
+			w.sessions("claude", ch, s, older)
+			w.askErr[state.Key("claude", ch)] = &probe.NoQuotaError{
+				Msg:  "update Claude Code to 2.1.208 or newer (/opt/homebrew/bin/claude is 2.1.42, Homebrew)",
+				Path: "/opt/homebrew/bin/claude", Version: "2.1.42", Kind: "Homebrew",
+			}
+			res := run(t, o)
+			if src := res.State.Sources["claude"]; src.Status != "ok" || src.Error != c.want {
+				t.Fatalf("claude source = %+v, want error %q", src, c.want)
+			}
+			if res.State.LastError != "" || res.State.LastSuccessAt.IsZero() {
+				t.Fatalf("last error = %q, last success %v", res.State.LastError, res.State.LastSuccessAt)
+			}
+			if !IsCurrent(res.State, "claude", "ann") || totalsFor(t, res.State, "claude", "ann").Tokens != tok(20) {
+				t.Fatalf("the account was not read: %+v", Totals(res.State, nil))
+			}
+		})
+	}
+}
+
+// With several homes, each note names the home it is about, unless all say
+// the same.
+func TestNoQuotaNamesItsHome(t *testing.T) {
+	w, o := newWorld(t)
+	def := w.home(t, "claude")
+	work := filepath.Join(w.userHome, ".claude-work")
+	mkdirs(t, work)
+	w.env[homeEnv["claude"]] = work
+	w.login("claude", def, "ann", nil)
+	w.login("claude", work, "sam", nil)
+	s := sess("s1", "/p", 10, t0)
+	s.Version = "2.1.210"
+	w.sessions("claude", work, s)
+	for _, h := range []string{def, work} {
+		w.askErr[state.Key("claude", h)] = &probe.NoQuotaError{Msg: "update Claude Code to 2.1.208 or newer (/usr/local/bin/claude is 2.1.42)", Path: "/usr/local/bin/claude", Version: "2.1.42"}
+	}
+	src := run(t, o).State.Sources["claude"]
+	want := "claude: update Claude Code to 2.1.208 or newer (/usr/local/bin/claude is 2.1.42) (~/.claude); " +
+		"claude: /usr/local/bin/claude is Claude Code 2.1.42 but your sessions run 2.1.210: update it or put the newer one first on PATH (~/.claude-work)"
+	if src.Status != "ok" || src.Error != want {
+		t.Fatalf("claude source = %+v\nwant error %q", src, want)
+	}
+
+	w.now = t0.Add(15 * time.Minute)
+	w.sessions("claude", work)
+	for _, h := range []string{def, work} {
+		w.askErr[state.Key("claude", h)] = &probe.NoQuotaError{Msg: "update Claude Code to 2.1.208 or newer"}
+	}
+	if src := run(t, o).State.Sources["claude"]; src.Error != "claude: update Claude Code to 2.1.208 or newer" {
+		t.Fatalf("the same note in both homes = %q", src.Error)
+	}
+}
+
+// A home nobody is logged in to and that has no sessions is a harness
+// installed but never used there: no problem.
+func TestUnusedHomeNotLoggedInIsNoProblem(t *testing.T) {
+	w, o := newWorld(t)
+	h := w.home(t, "claude")
+	w.logout("claude", h)
+	st := run(t, o).State
+	if src := st.Sources["claude"]; src.Status != "ok" || src.Error != "" || st.LastError != "" {
+		t.Fatalf("claude source = %+v, last error %q", src, st.LastError)
+	}
+	// Once it has sessions, nobody logged in is worth saying.
+	w.sessions("claude", h, sess("s1", "/p", 10, t0))
+	w.now = t0.Add(15 * time.Minute)
+	if st := run(t, o).State; st.Sources["claude"].Status != "partial" || !strings.Contains(st.LastError, "not logged in") {
+		t.Fatalf("claude source = %+v, last error %q", st.Sources["claude"], st.LastError)
+	}
+}

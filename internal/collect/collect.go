@@ -42,7 +42,7 @@ type Options struct {
 	// PullEvery, when set, skips the team read while the cached one is
 	// younger. Every read returns the whole team, so a team's reads grow
 	// with the square of its size; a scheduled run has no one to show the
-	// team to, and a report is fine with a read from the last hour.
+	// team to, and a report is fine with a read a few runs old.
 	PullEvery time.Duration
 	// Readers and prober are replaced in tests. ReadLogs reads all homes of
 	// one provider together and tags each session with its home.
@@ -124,7 +124,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 		}
 	}
 	s := newSampler(o, cfg, st, now)
-	problems, failed := s.collect(ctx, homes)
+	failed := s.collect(ctx, homes)
 	sample := sampleOf(st, s.growth, now)
 	// A run stopped before it writes, as when the view that started it
 	// closes, saves nothing: what failed in it failed because it stopped,
@@ -132,11 +132,12 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	var saving []string
 	if err := o.Dir.AppendSample(sample); err != nil {
-		problems = append(problems, "samples: "+err.Error())
+		saving = append(saving, "samples: "+err.Error())
 	}
 	if err := o.Dir.PruneSamples(now); err != nil {
-		problems = append(problems, "samples: "+err.Error())
+		saving = append(saving, "samples: "+err.Error())
 	}
 
 	// A run succeeds when every installed source could be read. A run where
@@ -148,13 +149,12 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	}
 	// Record this run's problems before the snapshot is built, so the team
 	// sees them now rather than one run late.
-	noteProblems(st, problems, now)
+	noteProblems(st, s.problems(saving, ""), now)
 	res := &Result{Config: cfg, State: st, Key: key}
 	res.Doc = BuildDoc(st, key, cfg, o.Hostname, o.OSUser, o.Version, now)
 	res.Team, _ = LoadTeamCache(o.Dir)
-	if problem := s.publish(ctx, key, cfg.Device, res); problem != "" {
-		problems = append(problems, problem)
-		noteProblems(st, problems, now)
+	if relayErr := s.publish(ctx, key, cfg.Device, res); relayErr != "" {
+		noteProblems(st, s.problems(saving, relayErr), now)
 	}
 	// A stopped run leaves its housekeeping to the next one.
 	if o.After != nil && ctx.Err() == nil {
@@ -219,13 +219,50 @@ func sampleOf(st *state.State, growth map[string]snapshot.Tokens, now time.Time)
 	return sample
 }
 
-// noteProblems records the run's problems, when it has any, as the state's
-// last error.
+// noteProblems records the run's problems as the state's last error. A run
+// without any clears it: what failed before works again. A failed release
+// check is kept apart, in st.Update.
 func noteProblems(st *state.State, problems []string, now time.Time) {
-	if len(problems) > 0 {
-		st.LastError = snapshot.Truncate(strings.Join(problems, "; "), 600)
-		st.LastErrorAt = now
+	if len(problems) == 0 {
+		st.LastError, st.LastErrorAt = "", time.Time{}
+		return
 	}
+	st.LastError = snapshot.Truncate(strings.Join(problems, "; "), 600)
+	st.LastErrorAt = now
+}
+
+// problems are the run's problems: the state's damage, each source's, the
+// ones saving the sample had, and the relay's.
+func (s *sampler) problems(saving []string, relayErr string) []string {
+	var out []string
+	if s.st.Damage != "" {
+		out = append(out, s.st.Damage)
+	}
+	for _, p := range snapshot.Providers {
+		if f := s.faults[p]; len(f) > 0 {
+			out = append(out, named(p, snapshot.Truncate(strings.Join(f, "; "), 300)))
+		}
+	}
+	out = append(out, saving...)
+	if relayErr != "" {
+		out = append(out, relayErr)
+	}
+	return out
+}
+
+// named puts the provider p before msg, unless msg starts with it, as a
+// harness's own messages do.
+func named(p, msg string) string {
+	if strings.HasPrefix(msg, p+":") || strings.HasPrefix(msg, p+" ") {
+		return msg
+	}
+	return p + ": " + msg
+}
+
+// sourceText is a source's error: its problems, then what keeps it from a
+// quota reading, which is no problem of the run.
+func sourceText(faults, notes []string) string {
+	return snapshot.Truncate(strings.Join(dedupe(append(slices.Clone(faults), notes...)), "; "), 300)
 }
 
 // runInputs fingerprints what a run collects with: the release, the relay it
@@ -263,6 +300,9 @@ type sampler struct {
 	paths               paths
 	// quotaFrom is Config.QuotaFrom keyed by resolved home.
 	quotaFrom map[string]map[string]string
+	// faults are each provider's problems of the run, and notes what keeps
+	// its accounts from a quota reading, which is not a problem of the run.
+	faults, notes map[string][]string
 }
 
 // newSampler starts a run's reading of the sources at now. Unless o.Ask is
@@ -279,29 +319,25 @@ func newSampler(o Options, cfg state.Config, st *state.State, now time.Time) *sa
 		prevRun: st.LastRunAt,
 		growth:  map[string]snapshot.Tokens{},
 		paths:   paths{},
+		faults:  map[string][]string{},
+		notes:   map[string][]string{},
 	}
 	s.quotaFrom = quotaLinks(cfg.QuotaFrom, s.paths)
 	return s
 }
 
-// collect reads every provider into the state and prunes it. It returns the
-// run's problems so far, and whether an installed source failed.
-func (s *sampler) collect(ctx context.Context, homes map[string][]string) (problems []string, failed bool) {
-	if s.st.Damage != "" {
-		problems = append(problems, s.st.Damage)
-	}
+// collect reads every provider into the state and prunes it. It reports
+// whether an installed source failed.
+func (s *sampler) collect(ctx context.Context, homes map[string][]string) (failed bool) {
 	for _, p := range snapshot.Providers {
 		src := s.source(ctx, p, homes[p])
 		s.st.Sources[p] = src
-		if src.Error != "" {
-			problems = append(problems, p+": "+src.Error)
-		}
 		if src.Status == "error" {
 			failed = true
 		}
 	}
 	prune(s.st, s.now)
-	return problems, failed
+	return failed
 }
 
 // source collects one provider. A bug that panics while reading or probing
@@ -309,7 +345,9 @@ func (s *sampler) collect(ctx context.Context, homes map[string][]string) (probl
 func (s *sampler) source(ctx context.Context, p string, homes []string) (src state.Source) {
 	defer func() {
 		if v := recover(); v != nil {
-			src = state.Source{Status: "error", Homes: homes, Error: snapshot.Truncate(fmt.Sprintf("stopped by a bug: %v", v), 300)}
+			msg := snapshot.Truncate(fmt.Sprintf("stopped by a bug: %v", v), 300)
+			src = state.Source{Status: "error", Homes: homes, Error: msg}
+			s.faults[p], s.notes[p] = []string{msg}, nil
 		}
 	}()
 	return s.provider(ctx, p, homes)
@@ -354,7 +392,7 @@ func (s *sampler) provider(ctx context.Context, p string, homes []string) state.
 		read, probed = s.hermes(homes, res, partial)
 	} else {
 		var probeErrs []string
-		read, probeErrs = s.harness(ctx, p, homes, res, partial)
+		read, probeErrs, s.notes[p] = s.harness(ctx, p, homes, res, partial)
 		errs = append(errs, probeErrs...)
 	}
 	applyRejected(s.st, p, read, s.now, s.prevRun)
@@ -371,7 +409,8 @@ func (s *sampler) provider(ctx context.Context, p string, homes []string) state.
 	default:
 		src.Status = "partial"
 	}
-	src.Error = snapshot.Truncate(strings.Join(dedupe(errs), "; "), 300)
+	s.faults[p] = dedupe(errs)
+	src.Error = sourceText(s.faults[p], s.notes[p])
 	return src
 }
 

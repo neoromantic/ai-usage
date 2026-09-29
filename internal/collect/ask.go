@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/logs"
 	"github.com/neoromantic/ai-usage/internal/probe"
+	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
@@ -57,8 +59,10 @@ func sharedClaudeLogs(p string, homes []string) map[string]bool {
 
 // harness asks each home of harness p who is logged in, labels each session
 // read with its account, and attributes the sessions' growth. It returns the
-// sessions and the probes' problems.
-func (s *sampler) harness(ctx context.Context, p string, homes []string, res logs.Result, partial bool) ([]readSession, []string) {
+// sessions, the probes' problems, and what keeps a home from a quota
+// reading. That is no problem of the run: the tokens are read all the same,
+// and the person has to act, not wait.
+func (s *sampler) harness(ctx context.Context, p string, homes []string, res logs.Result, partial bool) ([]readSession, []string, []string) {
 	// The Claude app's session homes have no login to ask about: the app
 	// recorded the account each session ran under.
 	apps := claudeApps(p, homes)
@@ -71,7 +75,7 @@ func (s *sampler) harness(ctx context.Context, p string, homes []string, res log
 		return s.Ask(ctx, p, home, lastUse[home])
 	}, p, homes)
 	labels := map[string]string{}
-	var probeErrs [][2]string
+	var probeErrs, noQuota [][2]string
 	for i, home := range homes {
 		if app, ok := apps[home]; ok {
 			labels[home] = touchAccount(s.st, p, app.account()).Label
@@ -83,7 +87,10 @@ func (s *sampler) harness(ctx context.Context, p string, homes []string, res log
 		// installed but never used, as in a bot's image, which Claude
 		// Code makes its home for as soon as it is asked who is logged
 		// in. Neither is a problem.
-		if a.err != nil && !(errors.Is(a.err, probe.ErrNotLoggedIn) && (isManaged(p, home) || !used[home])) {
+		switch {
+		case errors.Is(a.err, probe.ErrNoQuota):
+			noQuota = append(noQuota, [2]string{home, noQuotaText(p, home, a.err, res, s.UserHome)})
+		case a.err != nil && !(errors.Is(a.err, probe.ErrNotLoggedIn) && (isManaged(p, home) || !used[home])):
 			probeErrs = append(probeErrs, [2]string{home, shortErr(a.err)})
 		}
 		labels[home] = applyReading(s.st, p, home, a.reading, errors.Is(a.err, probe.ErrNotLoggedIn), res.Homes[home].Limits, s.now, s.prevRun)
@@ -107,7 +114,64 @@ func (s *sampler) harness(ctx context.Context, p string, homes []string, res log
 	for _, r := range read {
 		attribute(s.st, p, r.s, r.label, partial, s.now, s.growth)
 	}
-	return read, homeErrors(probeErrs, len(homes), s.UserHome)
+	// The app's homes are not asked, so they are not homes to tell apart.
+	asked := len(homes) - len(apps)
+	return read, homeErrors(probeErrs, asked, s.UserHome), homeNotes(noQuota, asked, s.UserHome)
+}
+
+// noQuotaText says what keeps a home of harness p from a quota reading,
+// after the harness's name. When the Claude Code that reads the usage is
+// older than the one the home's newest session ran, the person has two, and
+// the fix is to update the one this finds or to find the other first.
+func noQuotaText(p, home string, err error, res logs.Result, userHome string) string {
+	msg := shortErr(err)
+	var nq *probe.NoQuotaError
+	if errors.As(err, &nq) && nq.Version != "" {
+		if ran := sessionVersion(res, home); selfupdate.Newer("v"+ran, "v"+nq.Version) {
+			kind := ""
+			if nq.Kind != "" {
+				kind = " (" + nq.Kind + ")"
+			}
+			msg = fsutil.Tilde(nq.Path, userHome) + " is Claude Code " + nq.Version + kind +
+				" but your sessions run " + ran + ": update it or put the newer one first on PATH"
+		}
+	}
+	return named(p, msg)
+}
+
+// sessionVersion is the harness version the newest session of home that
+// records one ran.
+func sessionVersion(res logs.Result, home string) string {
+	var newest time.Time
+	ver := ""
+	for _, rs := range res.Sessions {
+		if rs.Version == "" || rs.Home != home && !slices.Contains(rs.Homes, home) {
+			continue
+		}
+		if ver == "" || rs.Updated.After(newest) {
+			newest, ver = rs.Updated, rs.Version
+		}
+	}
+	return ver
+}
+
+// homeNotes are the quota notes of a provider's homes, each followed by
+// the home it is about when the provider has several homes to ask, unless
+// every one of them has the same note.
+func homeNotes(notes [][2]string, asked int, userHome string) []string {
+	same := len(notes) == asked
+	for _, n := range notes {
+		same = same && n[1] == notes[0][1]
+	}
+	var out []string
+	for _, n := range notes {
+		if same || asked <= 1 {
+			out = append(out, n[1])
+			continue
+		}
+		out = append(out, n[1]+" ("+fsutil.Tilde(n[0], userHome)+")")
+	}
+	return dedupe(out)
 }
 
 // lastUses is which homes of p have usage, and when each was last used, as
