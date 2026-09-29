@@ -389,3 +389,93 @@ func TestPageWideCharacters(t *testing.T) {
 		}
 	}
 }
+
+// guideReport is a device's report the guide reads from: claude covered
+// for 89 days, and a grok account known by its id.
+func guideReport() Report {
+	r := Report{GeneratedAt: now}
+	r.Collector.DeviceLabel = "annbook"
+	r.Collector.Schedule.Registered = true
+	r.Providers = []Provider{
+		{Provider: "claude", CoveredSince: tp(now.Add(-89 * 24 * time.Hour)), Accounts: []Account{{Label: "ann@acme.dev"}}},
+		{Provider: "grok", Accounts: []Account{{Label: "a4c2e917", Name: "a4c2e917"}, {Label: "sam@mail.test", Name: "sam"}}},
+	}
+	return r
+}
+
+// TestGuideNotes: the guide says what a weighted token is, how to name a
+// Grok account known by its id, that the team counts UTC days where there
+// is a team, and how to keep 90 days of Claude where the ledger has less.
+func TestGuideNotes(t *testing.T) {
+	has := func(g, s string) bool { return strings.Contains(strings.Join(strings.Fields(g), " "), s) }
+	const (
+		weights = "weighted tokens: input 1, output 5 (codex 8), cache write 1.25–2, cache read 0.1–0.25, from API prices; a proxy for quota, not its formula"
+		grok    = "name grok a4c2e917 for the team: ai-usage alias grok:a4c2e917 NAME"
+		utc     = "USAGE and PROJECTS count your local days and rolling 7/30/90 days; team tables count UTC days, as devices send them"
+		cleanup = `Claude Code deletes transcripts after 30 days: set "cleanupPeriodDays": 90 in ~/.claude/settings.json to keep 90D whole`
+	)
+	r := guideReport()
+	g := Guide(r, "cron", Options{Width: 80, Loc: time.UTC})
+	for _, l := range strings.Split(g, "\n") {
+		if w := ansi.StringWidth(l); w > 80 {
+			t.Errorf("a line of %d cells: %q", w, l)
+		}
+	}
+	for s, want := range map[string]bool{weights: true, grok: true, "alias grok:sam": false, utc: false, cleanup: false} {
+		if has(g, s) != want {
+			t.Errorf("the guide says %q: %v, want %v\n%s", s, !want, want, g)
+		}
+	}
+	if !has(Guide(r, "cron", Options{Width: 80, Loc: time.UTC, ASCII: true}), strings.ReplaceAll(weights, "–", "-")) {
+		t.Error("the ASCII guide's weights are not in ASCII")
+	}
+
+	// A team of one device is this device alone.
+	r.Team.Devices = []TeamDevice{{Device: "a1"}}
+	if has(Guide(r, "cron", Options{Width: 80, Loc: time.UTC}), utc) {
+		t.Error("the guide notes UTC days without a team")
+	}
+	r.Team.Devices = append(r.Team.Devices, TeamDevice{Device: "b2"})
+	r.Providers[0].CoveredSince = tp(now.Add(-20 * 24 * time.Hour))
+	g = Guide(r, "cron", Options{Width: 80, Loc: time.UTC})
+	if !has(g, utc) || !has(g, cleanup) {
+		t.Errorf("the guide of a team, with 20 days of claude, lacks a note:\n%s", g)
+	}
+}
+
+// TestGuideTranscripts: where Claude's transcripts miss tokens, the guide
+// says so in one dim line, cut to the width.
+func TestGuideTranscripts(t *testing.T) {
+	const tail = "; ai-usage uses Claude Code's own count where it wrote one"
+	for _, c := range []struct {
+		gaps [2]*TranscriptGaps
+		want string
+	}{
+		{[2]*TranscriptGaps{}, ""},
+		{[2]*TranscriptGaps{{NullSnapshots: 30, OverTracked: 2}, {NullSnapshots: 7, OverTracked: 1}},
+			"claude: 37 replies end without a final token count and 3 sessions report over twice their transcript's output" + tail},
+		{[2]*TranscriptGaps{{NullSnapshots: 1}}, "claude: 1 reply ends without a final token count" + tail},
+		{[2]*TranscriptGaps{nil, {OverTracked: 1}}, "claude: 1 session reports over twice its transcript's output" + tail},
+		{[2]*TranscriptGaps{nil, {OverTracked: 2}}, "claude: 2 sessions report over twice their transcript's output" + tail},
+	} {
+		r := guideReport()
+		r.Providers[0].Accounts = []Account{{Label: "ann@acme.dev", TranscriptGaps: c.gaps[0]}, {Label: "sam@mail.test", TranscriptGaps: c.gaps[1]}}
+		// Grok's own gaps, were there any, are not Claude's.
+		r.Providers[1].Accounts[0].TranscriptGaps = &TranscriptGaps{NullSnapshots: 5}
+		if got := transcriptNote(r); got != c.want {
+			t.Errorf("%v: %q, want %q", c.gaps, got, c.want)
+		}
+		g := Guide(r, "cron", Options{Width: 80, Loc: time.UTC})
+		i := strings.Index(g, "  claude: ")
+		if (i >= 0) != (c.want != "") {
+			t.Errorf("%v: the guide's line at %d:\n%s", c.gaps, i, g)
+			continue
+		}
+		if i >= 0 {
+			l, _, _ := strings.Cut(g[i:], "\n")
+			if ansi.StringWidth(l) > 80 || !strings.HasPrefix(c.want, strings.TrimSuffix(strings.TrimSpace(l), "…")) {
+				t.Errorf("%v: the guide's line %q", c.gaps, l)
+			}
+		}
+	}
+}
