@@ -3,6 +3,7 @@ package collect
 import (
 	"cmp"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -29,9 +30,10 @@ func claimUnknown(st *state.State, p string, homes []string, answers []answer, r
 	if len(claim) == 0 {
 		return
 	}
+	ids := accountIDs(res)
 	for _, rs := range res.Sessions {
 		label, ok := claim[rs.Home]
-		if l := servedBy(st, p, rs, labels); l != "" {
+		if l := servedBy(st, p, rs, labels, ids); l != "" {
 			label, ok = l, slices.ContainsFunc(rs.Homes, func(h string) bool { return claim[h] == l })
 		}
 		if !ok {
@@ -121,9 +123,18 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 	if e.By == nil {
 		e.By = map[string]snapshot.Tokens{}
 	}
+	for _, id := range s.Folded {
+		if f := st.Sessions[state.Key(p, id)]; f != nil && f != e {
+			fold(e, f)
+			delete(st.Sessions, state.Key(p, id))
+		}
+	}
 	grown := map[string]snapshot.Tokens{}
 	if s.Parts == nil {
 		g := s.Tokens.Growth(e.Seen)
+		if p == "codex" && !partial {
+			shrink(e, s, now)
+		}
 		e.Seen = seenNow(e.Seen, s.Tokens, g, partial)
 		grown[label] = g
 	} else {
@@ -181,6 +192,140 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 		growth[ak] = growth[ak].Add(g)
 	}
 	return grown
+}
+
+// fold moves what the ledger kept for f, a session an earlier read took as
+// a root of its own, onto e, the session a read now finds it inside: its
+// counts, shares, hours and times. Growth is then only what grew past both,
+// and what both counted shows as a count the log no longer holds, which
+// shrink takes back.
+func fold(e, f *state.Session) {
+	labels := map[string]bool{}
+	for l := range e.By {
+		labels[l] = true
+	}
+	for l := range f.By {
+		labels[l] = true
+	}
+	if e.UB != nil || f.UB != nil || len(labels) > 1 {
+		ub := map[string]meter.Hours{}
+		for _, s := range []*state.Session{e, f} {
+			by := s.UB
+			if by == nil {
+				by = accountHours(s)
+			}
+			for l, h := range by {
+				ub[l] = meter.AddHours(ub[l], h)
+			}
+		}
+		for l := range labels {
+			if ub[l] == nil {
+				ub[l] = meter.Hours{}
+			}
+		}
+		e.UB = ub
+	}
+	e.U = meter.AddHours(e.U, f.U)
+	e.Seen = e.Seen.Add(f.Seen)
+	for l, t := range f.By {
+		e.By[l] = e.By[l].Add(t)
+	}
+	e.Via = addCounts(e.Via, f.Via)
+	e.Parts = addCounts(e.Parts, f.Parts)
+	for l, at := range f.Last {
+		if e.Last == nil {
+			e.Last = map[string]time.Time{}
+		}
+		if at.After(e.Last[l]) {
+			e.Last[l] = at
+		}
+	}
+	if f.Updated.After(e.Updated) {
+		e.Updated = f.Updated
+	}
+	e.Rederive = e.Rederive || f.Rederive
+}
+
+// addCounts adds b's counts onto a's, making a when needed.
+func addCounts(a, b map[string]snapshot.Tokens) map[string]snapshot.Tokens {
+	for k, t := range b {
+		if a == nil {
+			a = map[string]snapshot.Tokens{}
+		}
+		a[k] = a[k].Add(t)
+	}
+	return a
+}
+
+// shrink takes back what the ledger counted of a Codex session beyond what a
+// full read of its log now holds, as when a fork's replayed history, which
+// its source counts, or a sub-agent counted both in its family and as a
+// session of its own, is no longer counted twice. It comes off the account
+// that grew last, from the hours the ledger keeps where the log shows less
+// than the ledger placed, the newest first. A count that fell because a file
+// aged out of the window was spent in hours the ledger no longer keeps, and
+// stays counted.
+func shrink(e *state.Session, s logs.Session, now time.Time) {
+	over := meter.FromTokens(e.Seen.Growth(s.Tokens))
+	if over.Zero() || len(e.By) == 0 {
+		return
+	}
+	l := lastGrown(e)
+	first := firstKept(now.Add(-state.Retention))
+	excess := meter.Hours{}
+	for h, u := range e.U {
+		if h < first {
+			continue
+		}
+		x := u.Sub(s.Hours[h])
+		if e.UB != nil {
+			x = minUse(x, e.UB[l][h])
+		}
+		if !x.Zero() {
+			excess[h] = x
+		}
+	}
+	taken := excess.TakeNewest(minUse(over, excess.Sum()))
+	if len(taken) == 0 {
+		return
+	}
+	takeHours(e.U, taken)
+	if e.UB != nil {
+		takeHours(e.UB[l], taken)
+	}
+	e.By[l] = meter.FromTokens(e.By[l]).Sub(taken.Sum()).Tokens()
+}
+
+// lastGrown is the account whose share of a session grew last, the first by
+// name on a tie or where none has a time.
+func lastGrown(e *state.Session) string {
+	labels := slices.Sorted(maps.Keys(e.By))
+	best := labels[0]
+	for _, l := range labels[1:] {
+		if e.Last[l].After(e.Last[best]) {
+			best = l
+		}
+	}
+	return best
+}
+
+// minUse is the smaller of a and b, kind by kind.
+func minUse(a, b meter.Use) meter.Use {
+	return a.Sub(a.Sub(b))
+}
+
+// takeHours takes each hour of taken out of hours, dropping an hour it
+// empties.
+func takeHours(hours, taken meter.Hours) {
+	for h, t := range taken {
+		u := hours[h].Sub(t)
+		u.CacheWrite1h = min(u.CacheWrite1h, u.CacheWrite)
+		if u.Zero() {
+			delete(hours, h)
+		} else {
+			hours[h] = u
+		}
+	}
 }
 
 // partsOf is a session's tokens by the account each part bills, label being
@@ -246,24 +391,67 @@ func seenNow(prev, cur, g snapshot.Tokens, partial bool) snapshot.Tokens {
 }
 
 // servedBy is the account that served a session whose log file several homes
-// hold, as Orca links each Codex rollout into every account's home. The
-// file's newest rate-limit reading is the serving account's: a weekly window
-// resets at a time fixed per account, so the one account logged in at those
-// homes whose quota resets at the same time served it. With none or more
-// than one such account, it returns "" and the session stays with its first
-// home, the default home when it holds the file.
-func servedBy(st *state.State, p string, s logs.Session, labels map[string]string) string {
-	if len(s.Homes) < 2 || s.Limits == nil {
+// hold, as Orca links each Codex rollout into every account's home. Codex's
+// thread table names the account that created some threads: when exactly
+// one account logged in at those homes created the home's newest thread
+// with that account, it is the one. Otherwise the file's newest rate-limit
+// reading says: its weekly window resets when the serving account's does,
+// and accounts' windows reset apart, though sometimes only seconds apart.
+// The account whose reset is nearest, within resetSkew, served it, unless
+// another is about as near. With no such account, it returns "" and the
+// session stays with its first home, the default home when it holds the
+// file. ids are the account ids the homes' thread tables name, by home.
+func servedBy(st *state.State, p string, s logs.Session, labels, ids map[string]string) string {
+	if len(s.Homes) < 2 {
+		return ""
+	}
+	if l := createdBy(s, labels, ids); l != "" {
+		return l
+	}
+	if s.Limits == nil {
+		return ""
+	}
+	found, best, next := "", time.Duration(-1), time.Duration(-1)
+	seen := map[string]bool{}
+	for _, h := range s.Homes {
+		l := labels[h]
+		if l == "" || l == UnknownAccount || seen[l] {
+			continue
+		}
+		seen[l] = true
+		acct := st.Accounts[state.Key(p, l)]
+		if acct == nil || acct.Quota == nil {
+			continue
+		}
+		d, ok := resetDistance(acct.Quota.Windows, s.Limits.Windows)
+		if !ok || d > resetSkew {
+			continue
+		}
+		switch {
+		case best < 0 || d < best:
+			found, best, next = l, d, best
+		case next < 0 || d < next:
+			next = d
+		}
+	}
+	if next >= 0 && next-best < resetTie {
+		return ""
+	}
+	return found
+}
+
+// createdBy is the account logged in at the one home, among those holding
+// the session's file, whose thread table names the session's creator as the
+// account creating its threads. Two homes that name the creator for
+// different accounts leave it "".
+func createdBy(s logs.Session, labels, ids map[string]string) string {
+	if s.CreatorAccount == "" {
 		return ""
 	}
 	found := ""
 	for _, h := range s.Homes {
 		l := labels[h]
-		if l == "" || l == UnknownAccount || l == found {
-			continue
-		}
-		acct := st.Accounts[state.Key(p, l)]
-		if acct == nil || acct.Quota == nil || !sameReset(acct.Quota.Windows, s.Limits.Windows) {
+		if ids[h] != s.CreatorAccount || l == "" || l == UnknownAccount || l == found {
 			continue
 		}
 		if found != "" {
@@ -274,12 +462,29 @@ func servedBy(st *state.State, p string, s logs.Session, labels map[string]strin
 	return found
 }
 
-// resetSkew is how far apart two readings of one window's reset time may be.
-const resetSkew = time.Minute
+// accountIDs is the account id each home's thread table names, by home.
+func accountIDs(res logs.Result) map[string]string {
+	ids := map[string]string{}
+	for h, hr := range res.Homes {
+		if hr.AccountID != "" {
+			ids[h] = hr.AccountID
+		}
+	}
+	return ids
+}
 
-// sameReset reports whether the longest window of the log reading resets when
-// the window of the same length in the quota does.
-func sameReset(quota, log []snapshot.Window) bool {
+// resetSkew is how far apart two readings of one window's reset time may be.
+// One account's readings of it differ by up to about ten seconds; two
+// accounts' windows opened together can reset half a minute apart.
+const resetSkew = 20 * time.Second
+
+// resetTie is how much nearer one account's reset must be than another's to
+// tell them apart.
+const resetTie = 5 * time.Second
+
+// resetDistance is how far apart the reset of the longest window of the log
+// reading and the reset of the window of the same length in the quota are.
+func resetDistance(quota, log []snapshot.Window) (time.Duration, bool) {
 	var longest *snapshot.Window
 	for i, w := range log {
 		if w.ResetsAt != nil && w.Minutes > 0 && (longest == nil || w.Minutes > longest.Minutes) {
@@ -287,15 +492,15 @@ func sameReset(quota, log []snapshot.Window) bool {
 		}
 	}
 	if longest == nil {
-		return false
+		return 0, false
 	}
 	for _, w := range quota {
 		if w.Minutes == longest.Minutes && w.ResetsAt != nil {
 			d := w.ResetsAt.Sub(*longest.ResetsAt)
-			return d <= resetSkew && d >= -resetSkew
+			return max(d, -d), true
 		}
 	}
-	return false
+	return 0, false
 }
 
 // prune drops sessions and idle accounts older than the retention window.

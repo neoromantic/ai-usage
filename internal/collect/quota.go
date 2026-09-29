@@ -47,6 +47,30 @@ func setQuota(acct *state.Account, q *probe.Quota, now time.Time) {
 	}
 }
 
+// creditServed gives label, the account servedBy found served a session
+// whose file several homes hold, the quota reading the file recorded, as a
+// home's own files give theirs to whoever is logged in there. Such a file is
+// every home's, so no home's reading comes from it. The reading counts when
+// its weekly window resets when the account's does, as the account served
+// it then, and when it is newer than the account's own: when the harness
+// could not be asked, it is the freshest there is.
+func creditServed(st *state.State, p, label string, l *logs.Limits, now time.Time) {
+	if l == nil {
+		return
+	}
+	acct := st.Accounts[state.Key(p, label)]
+	if acct == nil || acct.Quota == nil {
+		return
+	}
+	if d, ok := resetDistance(acct.Quota.Windows, l.Windows); !ok || d > resetSkew {
+		return
+	}
+	if acct.Plan == "" && l.Plan != "" {
+		acct.Plan = snapshot.PlainLabel(l.Plan)
+	}
+	setQuota(acct, &probe.Quota{At: l.ObservedAt, Source: "log", Windows: l.Windows}, now)
+}
+
 // applyRejected gives each account the requests refused for a full window,
 // among the sessions attributed to it, whose window has not reset: the newest
 // of each window, as one reading as of the newest. A refusal says that window

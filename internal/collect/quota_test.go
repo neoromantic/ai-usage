@@ -114,6 +114,75 @@ func TestCodexLogLimitsAreOnlyAFallback(t *testing.T) {
 	}
 }
 
+// A rollout Orca links into every home is no home's own, so its rate limits
+// are no home's fallback reading. They are the account's that served it:
+// when that account's harness cannot be asked, the newest reading its
+// sessions recorded is its quota.
+func TestMirroredLimitsGoToTheAccountThatServedThem(t *testing.T) {
+	w, o := newWorld(t)
+	def := w.home(t, "codex")
+	a := orcaHome(t, defaultAppData("orca", w.userHome), "5b21", true)
+	annReset := t0.Add(100 * time.Hour)
+	samReset := annReset.Add(34 * time.Second)
+	w.login("codex", def, "sam@mail.test", weekly(t0, 30, samReset))
+	w.login("codex", a, "ann@acme.dev", weekly(t0, 60, annReset))
+	w.sessions("codex", def, mirrored("r1", 100, t0, ptr(annReset.Add(3*time.Second)), def, a))
+	run(t, o)
+
+	// ann's harness does not answer. The rollout ann served since recorded
+	// a newer reading; one older than ann's, and one no account's week
+	// resets with, are not ann's quota.
+	w.now = t0.Add(15 * time.Minute)
+	w.readings[state.Key("codex", a)] = probe.Reading{}
+	w.askErr[state.Key("codex", a)] = errors.New("codex account/rateLimits/read: no answer in time")
+	reading := func(at time.Time, pct float64, reset time.Time) *logs.Limits {
+		return &logs.Limits{ObservedAt: at, Plan: "pro", Windows: []snapshot.Window{
+			{Name: "5h", Percent: 20, Minutes: 300, ResetsAt: ptr(at.Add(3 * time.Hour))},
+			{Name: "7d", Percent: pct, Minutes: 10080, ResetsAt: &reset},
+		}}
+	}
+	r1 := mirrored("r1", 150, w.now, nil, def, a)
+	r1.Limits = reading(t0.Add(12*time.Minute), 64, annReset.Add(4*time.Second))
+	old := mirrored("r2", 10, w.now, nil, def, a)
+	old.Limits = reading(t0.Add(-time.Hour), 99, annReset)
+	other := mirrored("r3", 10, w.now, nil, def, a)
+	other.Limits = reading(t0.Add(14*time.Minute), 1, annReset.Add(-90*time.Second))
+	w.sessions("codex", def, r1, old, other)
+	res := run(t, o)
+
+	ann := totalsFor(t, res.State, "codex", "ann@acme.dev")
+	if q := ann.Quota; q == nil || q.Source != "log" || !q.At.Equal(t0.Add(12*time.Minute)) || q.Windows[1].Percent != 64 {
+		t.Fatalf("ann quota = %+v", q)
+	}
+	if ann.Tokens != tok(150).Add(tok(10)) {
+		t.Fatalf("ann tokens = %+v", ann.Tokens)
+	}
+	if q := totalsFor(t, res.State, "codex", "sam@mail.test").Quota; q.Source != "harness" || q.Windows[1].Percent != 30 {
+		t.Fatalf("sam quota = %+v", q)
+	}
+}
+
+// The account Codex's thread table names as a session's creator served it,
+// but may not have served its last request: its reading is that account's
+// only when their weeks reset together.
+func TestCreditServedNeedsTheSameWeek(t *testing.T) {
+	reset := t0.Add(100 * time.Hour)
+	st := state.NewState()
+	acct := touchAccount(st, "codex", "ann@acme.dev")
+	acct.Quota = &state.Quota{At: t0, Source: "harness", Windows: []snapshot.Window{{Name: "7d", Percent: 60, Minutes: 10080, ResetsAt: &reset}}}
+	far := reset.Add(time.Hour)
+	l := &logs.Limits{ObservedAt: t0.Add(time.Minute), Windows: []snapshot.Window{{Name: "7d", Percent: 5, Minutes: 10080, ResetsAt: &far}}}
+	creditServed(st, "codex", "ann@acme.dev", l, t0.Add(2*time.Minute))
+	if acct.Quota.Source != "harness" || acct.Quota.Windows[0].Percent != 60 {
+		t.Fatalf("quota = %+v", acct.Quota)
+	}
+	l.Windows[0].ResetsAt = ptr(reset.Add(-2 * time.Second))
+	creditServed(st, "codex", "ann@acme.dev", l, t0.Add(2*time.Minute))
+	if acct.Quota.Source != "log" || acct.Quota.Windows[0].Percent != 5 {
+		t.Fatalf("quota = %+v", acct.Quota)
+	}
+}
+
 func TestCodexLogLimitsFromBeforeASwitchStayWithTheOldAccount(t *testing.T) {
 	w, o := newWorld(t)
 	h := w.home(t, "codex")

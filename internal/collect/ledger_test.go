@@ -146,7 +146,13 @@ func TestPruneDropsAnAccountsOldShareOfALiveSession(t *testing.T) {
 // session, and loads it as every command does.
 func legacyLedger(t *testing.T, dir state.Dir, lastRun time.Time, key string, session map[string]any) *state.State {
 	t.Helper()
-	b, err := json.Marshal(map[string]any{"last_run_at": lastRun, "sessions": map[string]any{key: session}})
+	return legacyLedgerOf(t, dir, lastRun, map[string]any{key: session})
+}
+
+// legacyLedgerOf is legacyLedger with several sessions, by key.
+func legacyLedgerOf(t *testing.T, dir state.Dir, lastRun time.Time, sessions map[string]any) *state.State {
+	t.Helper()
+	b, err := json.Marshal(map[string]any{"last_run_at": lastRun, "sessions": sessions})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,5 +251,215 @@ func TestClaudeSessionIsDatedByItsLastMessage(t *testing.T) {
 	attribute(st, "grok", logs.Session{ID: "b5c6d7e8", Tokens: tokens, Updated: last}, "ann@acme.dev", false, now, growth)
 	if got := st.Sessions[gk].Updated; !got.Equal(mtime) {
 		t.Fatalf("grok session dated %v", got)
+	}
+}
+
+// codexLegacy is a Codex session as a v0.3.4 ledger kept it, all ann's:
+// its count, input plus output by hour, and when it last grew.
+func codexLegacy(project string, seen snapshot.Tokens, at time.Time, hours map[int64]int64) map[string]any {
+	return map[string]any{
+		"p": "codex", "proj": project, "at": at, "seen": seen,
+		"by":   map[string]snapshot.Tokens{"ann@acme.dev": seen},
+		"last": map[string]time.Time{"ann@acme.dev": at},
+		"h":    hours,
+	}
+}
+
+// codexRead is a full read of a Codex session: its tokens by hour.
+func codexRead(id string, updated time.Time, hours meter.Hours) logs.Session {
+	return logs.Session{ID: id, Project: "/work/app", Tokens: hours.Sum().Tokens(), Hours: hours, Updated: updated}
+}
+
+func use2(in, out int64) meter.Use { return meter.Use{Input: in, Output: out} }
+
+// A sub-agent whose parent's file aged out first was, for a while, a session
+// of its own. A read that finds it in its parent's family again moves what
+// the ledger kept for it onto the family: what it counted there is not new.
+func TestFoldedSubAgentMovesOntoItsFamily(t *testing.T) {
+	h0 := logs.HourOf(t0.Add(-5 * time.Hour))
+	at := logs.HourStart(h0 + 1).Add(30 * time.Minute)
+	st := legacyLedgerOf(t, state.Dir(t.TempDir()), at, map[string]any{
+		// The parent's ledger entry is from before the sub-agent ran.
+		state.Key("codex", "p1"): codexLegacy("/work/app", tok(1000), at.Add(-time.Hour), map[int64]int64{h0: 1100}),
+		state.Key("codex", "c1"): codexLegacy("/work/app", tok(400), at, map[int64]int64{h0 + 1: 440}),
+	})
+	before := totalsFor(t, st, "codex", "ann@acme.dev")
+	parsed := codexRead("p1", at, meter.Hours{h0: use2(1000, 100), h0 + 1: use2(400, 40)})
+	parsed.Folded = []string{"c1"}
+	growth := map[string]snapshot.Tokens{}
+	if g := attribute(st, "codex", parsed, "ann@acme.dev", false, t0, growth); len(g) != 0 || len(growth) != 0 {
+		t.Fatalf("growth = %+v", g)
+	}
+	if _, ok := st.Sessions[state.Key("codex", "c1")]; ok {
+		t.Fatal("the folded session's entry was kept")
+	}
+	e := st.Sessions[state.Key("codex", "p1")]
+	if e.Seen != tok(1400) || !reflect.DeepEqual(e.By, map[string]snapshot.Tokens{"ann@acme.dev": tok(1400)}) || !e.Last["ann@acme.dev"].Equal(at) {
+		t.Fatalf("family = %+v", e)
+	}
+	if want := (meter.Hours{h0: use2(1000, 100), h0 + 1: use2(400, 40)}); !reflect.DeepEqual(e.U, want) {
+		t.Fatalf("hours = %v, want %v", e.U, want)
+	}
+	// One session now, with the same tokens in the same hours.
+	after := totalsFor(t, st, "codex", "ann@acme.dev")
+	if after.Sessions != 1 || after.Tokens != before.Tokens || !reflect.DeepEqual(after.Hours, before.Hours) || !reflect.DeepEqual(after.Burn, before.Burn) {
+		t.Fatalf("totals changed:\n%+v\n%+v", before, after)
+	}
+}
+
+// While a sub-agent was a session of its own, what it spent counted there
+// and in its parent's family too. Once folded back, the family's count is
+// more than its log holds by that much, and the double count is taken back
+// from the hours it was placed in twice.
+func TestFoldedSubAgentCountedTwiceIsTakenBack(t *testing.T) {
+	h0 := logs.HourOf(t0.Add(-5 * time.Hour))
+	at := logs.HourStart(h0 + 1).Add(30 * time.Minute)
+	st := legacyLedgerOf(t, state.Dir(t.TempDir()), at, map[string]any{
+		state.Key("codex", "p1"): codexLegacy("/work/app", tok(1400), at, map[int64]int64{h0: 1100, h0 + 1: 440}),
+		state.Key("codex", "c1"): codexLegacy("/work/app", tok(400), at, map[int64]int64{h0 + 1: 440}),
+	})
+	if got := totalsFor(t, st, "codex", "ann@acme.dev").Tokens; got != tok(1800) {
+		t.Fatalf("ledger before = %+v", got)
+	}
+	parsed := codexRead("p1", at, meter.Hours{h0: use2(1000, 100), h0 + 1: use2(400, 40)})
+	parsed.Folded = []string{"c1"}
+	growth := map[string]snapshot.Tokens{}
+	if g := attribute(st, "codex", parsed, "ann@acme.dev", false, t0, growth); len(g) != 0 {
+		t.Fatalf("growth = %+v", g)
+	}
+	e := st.Sessions[state.Key("codex", "p1")]
+	if e.Seen != tok(1400) || e.By["ann@acme.dev"] != tok(1400) || len(st.Sessions) != 1 {
+		t.Fatalf("family = %+v, sessions %d", e, len(st.Sessions))
+	}
+	if want := (meter.Hours{h0: use2(1000, 100), h0 + 1: use2(400, 40)}); !reflect.DeepEqual(e.U, want) {
+		t.Fatalf("hours = %v, want %v", e.U, want)
+	}
+}
+
+// A fork whose source's file is gone counted the history it replayed as its
+// own, in the hour it was forked. A full read no longer counts it, so the
+// ledger takes it back, as a v0.3.4 ledger migrated holds it and as one this
+// release placed by the hour.
+func TestCodexCountThatFellIsTakenBack(t *testing.T) {
+	hf := logs.HourOf(t0.Add(-6 * time.Hour))
+	at := logs.HourStart(hf + 2).Add(10 * time.Minute)
+	own := meter.Hours{hf + 1: use2(2000, 200), hf + 2: use2(4000, 400)}
+	parsed := codexRead("f1", at, own)
+	seen := snapshot.Tokens{Input: 10000, Output: 600}
+
+	t.Run("migrated", func(t *testing.T) {
+		st := legacyLedger(t, state.Dir(t.TempDir()), at, state.Key("codex", "f1"),
+			codexLegacy("/work/app", seen, at, map[int64]int64{hf: 4000, hf + 1: 2200, hf + 2: 4400}))
+		growth := map[string]snapshot.Tokens{}
+		if g := attribute(st, "codex", parsed, "ann@acme.dev", false, t0, growth); len(g) != 0 {
+			t.Fatalf("growth = %+v", g)
+		}
+		e := st.Sessions[state.Key("codex", "f1")]
+		want := snapshot.Tokens{Input: 6000, Output: 600}
+		if e.Seen != want || e.By["ann@acme.dev"] != want || e.Rederive {
+			t.Fatalf("session = %+v", e)
+		}
+		if !reflect.DeepEqual(e.U, own) {
+			t.Fatalf("hours = %v, want %v", e.U, own)
+		}
+		if got := totalsFor(t, st, "codex", "ann@acme.dev").Tokens; got != want {
+			t.Fatalf("totals = %+v", got)
+		}
+	})
+
+	placed := func() *state.State {
+		st := state.NewState()
+		st.Sessions[state.Key("codex", "f1")] = &state.Session{
+			Provider: "codex", Project: "/work/app", Seen: seen, Updated: at,
+			By:   map[string]snapshot.Tokens{"ann@acme.dev": seen},
+			Last: map[string]time.Time{"ann@acme.dev": at},
+			U:    meter.Hours{hf: use2(4000, 0), hf + 1: use2(2000, 200), hf + 2: use2(4000, 400)},
+		}
+		return st
+	}
+	t.Run("placed by the hour", func(t *testing.T) {
+		st := placed()
+		attribute(st, "codex", parsed, "ann@acme.dev", false, t0, map[string]snapshot.Tokens{})
+		e := st.Sessions[state.Key("codex", "f1")]
+		if e.By["ann@acme.dev"] != (snapshot.Tokens{Input: 6000, Output: 600}) || !reflect.DeepEqual(e.U, own) {
+			t.Fatalf("session = %+v", e)
+		}
+	})
+	t.Run("partial read", func(t *testing.T) {
+		st := placed()
+		attribute(st, "codex", parsed, "ann@acme.dev", true, t0, map[string]snapshot.Tokens{})
+		e := st.Sessions[state.Key("codex", "f1")]
+		if e.Seen != seen || e.By["ann@acme.dev"] != seen || len(e.U) != 3 {
+			t.Fatalf("a partial read shrank the session: %+v", e)
+		}
+	})
+	// A sub-agent whose file aged out of the window leaves the count lower
+	// too, but what it spent is in hours the ledger no longer keeps.
+	t.Run("aged out", func(t *testing.T) {
+		st := placed()
+		e := st.Sessions[state.Key("codex", "f1")]
+		delete(e.U, hf)
+		now := logs.HourStart(hf).Add(state.Retention + 2*time.Hour)
+		attribute(st, "codex", parsed, "ann@acme.dev", false, now, map[string]snapshot.Tokens{})
+		if e.By["ann@acme.dev"] != seen || e.Seen != (snapshot.Tokens{Input: 6000, Output: 600}) {
+			t.Fatalf("session = %+v", e)
+		}
+	})
+	// Claude's counts can fall for reasons of its own: the ledger keeps them.
+	t.Run("claude", func(t *testing.T) {
+		st := placed()
+		e := st.Sessions[state.Key("codex", "f1")]
+		e.Provider = "claude"
+		st.Sessions[state.Key("claude", "f1")] = e
+		attribute(st, "claude", parsed, "ann@acme.dev", false, t0, map[string]snapshot.Tokens{})
+		if e.By["ann@acme.dev"] != seen {
+			t.Fatalf("claude session = %+v", e)
+		}
+	})
+}
+
+// ann's and sam's weekly windows reset 34 seconds apart. A rollout Orca
+// linked into both homes goes first to the account Codex's thread table says
+// created it, and otherwise to the account whose reset its reading is
+// nearest, within 20 seconds and 5 seconds nearer than the other's.
+func TestServedBy(t *testing.T) {
+	annReset := t0.Add(50 * time.Hour)
+	labels := map[string]string{"/a": "ann@acme.dev", "/s": "sam@mail.test"}
+	ids := map[string]string{"/a": "acct-7f3e0c21", "/s": "acct-19b4d6aa"}
+	s := func(sec int, creator string) logs.Session {
+		reset := annReset.Add(time.Duration(sec) * time.Second)
+		s := mirrored("r1", 100, t0, &reset, "/a", "/s")
+		s.CreatorAccount = creator
+		return s
+	}
+	for _, c := range []struct {
+		name string
+		// gap is how many seconds after ann's window sam's resets.
+		gap  int
+		s    logs.Session
+		ids  map[string]string
+		want string
+	}{
+		{"ids win over resets", 34, s(0, "acct-19b4d6aa"), ids, "sam@mail.test"},
+		{"no creator id", 34, s(34, ""), ids, "sam@mail.test"},
+		{"a creator no home names", 34, s(0, "acct-00000000"), ids, "ann@acme.dev"},
+		{"one creator for both homes", 34, s(0, "acct-7f3e0c21"), map[string]string{"/a": "acct-7f3e0c21", "/s": "acct-7f3e0c21"}, "ann@acme.dev"},
+		{"12s from ann", 34, s(12, ""), nil, "ann@acme.dev"},
+		{"5s from ann, 15s from sam", 20, s(5, ""), nil, "ann@acme.dev"},
+		{"15s from ann, 5s from sam", 20, s(15, ""), nil, "sam@mail.test"},
+		{"3s from ann, 6s from sam", 9, s(3, ""), nil, ""},
+		{"the same reset", 0, s(0, ""), nil, ""},
+		{"more than 20s from both", 34, s(-25, ""), nil, ""},
+	} {
+		st := state.NewState()
+		for l, r := range map[string]time.Time{"ann@acme.dev": annReset, "sam@mail.test": annReset.Add(time.Duration(c.gap) * time.Second)} {
+			st.Accounts[state.Key("codex", l)] = &state.Account{Provider: "codex", Label: l, Quota: &state.Quota{At: t0, Windows: []snapshot.Window{
+				{Name: "5h", Minutes: 300, ResetsAt: ptr(t0.Add(time.Hour))},
+				{Name: "7d", Minutes: 10080, ResetsAt: ptr(r)},
+			}}}
+		}
+		if got := servedBy(st, "codex", c.s, labels, c.ids); got != c.want {
+			t.Errorf("%s: served by %q, want %q", c.name, got, c.want)
+		}
 	}
 }

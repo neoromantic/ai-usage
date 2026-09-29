@@ -96,11 +96,13 @@ func (s *sampler) harness(ctx context.Context, p string, homes []string, res log
 		labels[home] = applyReading(s.st, p, home, a.reading, errors.Is(a.err, probe.ErrNotLoggedIn), res.Homes[home].Limits, s.now, s.prevRun)
 	}
 	claimUnknown(s.st, p, homes, answers, res, labels)
+	ids := accountIDs(res)
 	var read []readSession
 	for _, rs := range res.Sessions {
 		label, ok := labels[rs.Home]
-		if l := servedBy(s.st, p, rs, labels); l != "" {
+		if l := servedBy(s.st, p, rs, labels, ids); l != "" {
 			label, ok = l, true
+			creditServed(s.st, p, l, rs.Limits, s.now)
 		}
 		if !ok || label == "" {
 			// A session from a home that was not probed has no account.
