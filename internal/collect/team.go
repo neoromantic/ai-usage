@@ -32,6 +32,20 @@ type TeamCache struct {
 	// release. Each read carries it over, and starts a device again once it
 	// runs another, or after it has not reported for a day.
 	Behind map[string]Behind `json:"behind,omitempty"`
+	// Known is, by device id, the release each other device of the team
+	// last ran, as the reads found it. It outlives the device's document
+	// on the relay, so that a laptop asleep until its document expired
+	// still counts as on its release when it comes back. See knownAfter.
+	Known map[string]Known `json:"known,omitempty"`
+}
+
+// Known is the release a device ran when a read last found it.
+type Known struct {
+	Version string `json:"version"`
+	// First is the first read that found the device, and Last its newest
+	// snapshot's collected_at.
+	First time.Time `json:"first"`
+	Last  time.Time `json:"last"`
 }
 
 // Behind is a device's release older than the team's newest, and its first
@@ -69,10 +83,10 @@ func LoadTeamCache(dir state.Dir) (TeamCache, error) {
 
 // ForgetCachedDevice drops a device from the cached team read, so that the
 // team views stop listing a device the relay no longer has before the next
-// read. The caller holds the run lock.
+// read, and forgets the release it ran. The caller holds the run lock.
 func ForgetCachedDevice(dir state.Dir, device string) error {
 	c, err := LoadTeamCache(dir)
-	if err != nil || c.Bodies == nil {
+	if err != nil {
 		return err
 	}
 	kept := c.Bodies[:0]
@@ -82,10 +96,12 @@ func ForgetCachedDevice(dir state.Dir, device string) error {
 		}
 		kept = append(kept, body)
 	}
-	if len(kept) == len(c.Bodies) {
+	_, known := c.Known[device]
+	if len(kept) == len(c.Bodies) && !known {
 		return nil
 	}
 	c.Bodies = kept
+	delete(c.Known, device)
 	return saveTeamCache(dir, c)
 }
 
@@ -207,12 +223,13 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 			seen = append(seen, d.Doc)
 		}
 	}
-	prev, after := cache.Behind, cache.PulledAt
+	prev, known, after := cache.Behind, cache.Known, cache.PulledAt
 	if cache.Team != next.Team {
 		// With no read of this team before, no snapshot is known to be new.
-		prev, after = nil, now
+		prev, known, after = nil, nil, now
 	}
 	next.Behind = behindSince(prev, seen, st.Update.Latest, after, now)
+	next.Known = knownAfter(known, next.Docs, device, now)
 	next.ReadError = readError(pulled)
 	*cache = next
 	if err := saveTeamCache(o.Dir, next); err != nil {
@@ -252,6 +269,50 @@ func keepReadError(st *state.State, c TeamCache) {
 	if c.ReadError != "" {
 		st.Relay.LastErrorAt = c.PulledAt
 	}
+}
+
+// knownAfter is prev after a read that found docs, leaving out self. A
+// device the read found takes its release and its newest collected_at. One
+// it did not find was either forgotten with `ai-usage team forget-device`
+// or went quiet until the relay let its document expire. The relay keeps a
+// document at least as long as its device has been writing, and First is no
+// earlier than the device's first write, so a device gone before its Last
+// plus that long was forgotten and is dropped. One gone later expired, and
+// is kept until the longest a document is kept after its Last: when it
+// comes back, it may still run that release.
+func knownAfter(prev map[string]Known, docs []snapshot.Doc, self string, now time.Time) map[string]Known {
+	out := map[string]Known{}
+	for _, d := range docs {
+		if d.Device == self {
+			continue
+		}
+		k, ok := prev[d.Device]
+		if !ok {
+			k.First = now
+		}
+		k.Version = d.CollectorVersion
+		if d.CollectedAt.After(k.Last) {
+			k.Last = d.CollectedAt
+		}
+		out[d.Device] = k
+	}
+	// How long the relay keeps a document after its last write: as long as
+	// the device has been writing, within these bounds.
+	kept := relay.DefaultLimits()
+	for id, k := range prev {
+		if _, found := out[id]; found || id == self {
+			continue
+		}
+		ttl := min(max(k.Last.Sub(k.First), kept.MinRecordTTL), kept.RecordTTL)
+		if now.Before(k.Last.Add(ttl)) || !now.Before(k.Last.Add(kept.RecordTTL)) {
+			continue
+		}
+		out[id] = k
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // behindSince is, for each device in docs on an older release than the

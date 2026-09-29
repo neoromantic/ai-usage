@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http/httptest"
 	"os"
@@ -11,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/collect"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
+	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
 	"github.com/neoromantic/ai-usage/internal/view"
 	"github.com/neoromantic/ai-usage/relay"
@@ -159,7 +162,13 @@ func TestTwoDevicesShareATeam(t *testing.T) {
 	}
 
 	// Forgetting B takes it off the relay; A's next read has only itself.
+	if c := teamCache(t, a); c.Known[b.config().Device].Version == "" {
+		t.Fatalf("the team read did not remember B's release: %+v", c.Known)
+	}
 	a.ok("team", "forget-device", b.config().Device)
+	if c := teamCache(t, a); c.Known != nil {
+		t.Fatalf("forgetting B left its release: %+v", c.Known)
+	}
 	// The cached team read drops it at once, before the next collection.
 	if out := a.ok("team"); strings.Contains(out, b.config().Device) || !strings.Contains(out, a.config().Device) {
 		t.Fatalf("team after forget printed:\n%s", out)
@@ -167,5 +176,42 @@ func TestTwoDevicesShareATeam(t *testing.T) {
 	a.ok("collect", "--quiet")
 	if r := a.report(); len(r.Team.Devices) != 1 {
 		t.Fatalf("team devices after forget = %+v", r.Team.Devices)
+	}
+}
+
+func teamCache(t *testing.T, d *device) collect.TeamCache {
+	t.Helper()
+	c, err := collect.LoadTeamCache(state.Dir(d.dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// Forgetting a device also forgets the release it ran, even once its
+// document is gone from the cached read, so that it no longer holds back
+// the snapshot fields v0.4.0 added.
+func TestForgetDeviceForgetsItsRelease(t *testing.T) {
+	hermetic(t)
+	srv := httptest.NewServer(relay.NewServer(relay.NewMemory()))
+	defer srv.Close()
+	t.Setenv("AI_USAGE_RELAY", srv.URL)
+	a := newDevice(t)
+	fp := fingerprint(t, a)
+	at := time.Now().UTC().Add(-30 * 24 * time.Hour)
+	b, err := json.Marshal(collect.TeamCache{PulledAt: time.Now().UTC(), Team: fp, Known: map[string]collect.Known{
+		"d-leoair-0003":   {Version: "v0.3.0", First: at, Last: at},
+		"d-srv1-a4c2e917": {Version: "v0.3.4", First: at, Last: at},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(state.Dir(a.dir).TeamCacheFile(), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a.ok("team", "forget-device", "d-leoair-0003")
+	c := teamCache(t, a)
+	if _, ok := c.Known["d-leoair-0003"]; ok || c.Known["d-srv1-a4c2e917"].Version != "v0.3.4" {
+		t.Fatalf("known after forget = %+v", c.Known)
 	}
 }

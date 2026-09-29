@@ -89,7 +89,8 @@ func forgetDevice(ctx context.Context, d state.Dir, id string, stdout, stderr io
 		return err
 	}
 	fmt.Fprintf(stdout, "removed %s from team %s\n", id, key.Fingerprint())
-	// The cached team read no longer lists it either.
+	// The cached team read no longer lists it either, nor remembers the
+	// release it ran.
 	unlock, err := waitLock(ctx, d, stderr)
 	if err != nil {
 		return err

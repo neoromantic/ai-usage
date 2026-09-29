@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -423,6 +425,46 @@ func TestRelayDocsFromANewerReleaseAreReported(t *testing.T) {
 	}
 	if res.Team.ReadError != res.State.Relay.LastError || len(res.Team.Docs) != 1 {
 		t.Fatalf("team = %v, read error %q", deviceIDs(res.Team.Docs), res.Team.ReadError)
+	}
+	// Such a device reads what this one sends.
+	if g := ExtendedWire(res.Team, key.Fingerprint(), res.Config.Device, time.Time{}, w.now); !g.Open {
+		t.Fatalf("gate = %+v", g)
+	}
+}
+
+// Each read remembers the release of every other device it found, and
+// forgets a device the relay no longer lists within the time the relay would
+// have kept its document.
+func TestTeamReadsRememberReleases(t *testing.T) {
+	w, o := newWorld(t)
+	r := newRelay(t, w)
+	o.Relay = r.client(w)
+	key, _ := LoadKey(o.Dir)
+	publishRelease(t, r, w, key, "d-leoair-0003", "v0.3.4", ledger(), t0)
+	res := run(t, o)
+	if k := res.Team.Known["d-leoair-0003"]; k.Version != "v0.3.4" || !k.First.Equal(t0) || !k.Last.Equal(t0) || len(res.Team.Known) != 1 {
+		t.Fatalf("known = %+v", res.Team.Known)
+	}
+	cache, err := LoadTeamCache(o.Dir)
+	if err != nil || !reflect.DeepEqual(cache.Known, res.Team.Known) {
+		t.Fatalf("saved known = %+v, %v", cache.Known, err)
+	}
+	if g := ExtendedWire(cache, key.Fingerprint(), res.Config.Device, time.Time{}, w.now); g.Open || !slices.Equal(g.HeldBack, []string{"d-leoair-0003"}) {
+		t.Fatalf("gate = %+v", g)
+	}
+
+	// Forgotten on another device: gone from the relay long before it
+	// would have expired.
+	if err := r.store.Delete(context.Background(), key.Fingerprint(), "d-leoair-0003"); err != nil {
+		t.Fatal(err)
+	}
+	w.now = t0.Add(time.Hour)
+	res = run(t, o)
+	if res.Team.Known != nil {
+		t.Fatalf("known after the device was forgotten = %+v", res.Team.Known)
+	}
+	if g := ExtendedWire(res.Team, key.Fingerprint(), res.Config.Device, time.Time{}, w.now); !g.Open {
+		t.Fatalf("gate = %+v", g)
 	}
 }
 
