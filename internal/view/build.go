@@ -49,25 +49,29 @@ func Build(in Input) Report {
 	}
 	r.Collector.Health = health(r.Collector)
 
+	loc := cmp.Or(in.Loc, time.Local)
 	totals := collect.Totals(st, in.Folders)
+	covered := collect.Coverage(st)
 	for _, p := range snapshot.Providers {
 		src := st.Sources[p]
-		pv := Provider{Provider: p, Status: cmp.Or(src.Status, "skipped"), Error: strPtr(src.Error), Homes: src.Homes, Accounts: []Account{}}
+		pv := Provider{Provider: p, Status: cmp.Or(src.Status, "skipped"), Error: strPtr(src.Error), Homes: src.Homes,
+			CoveredSince: timePtr(covered[p]), Accounts: []Account{}}
 		if pv.Homes == nil {
 			pv.Homes = []string{}
 		}
 		for _, a := range totals {
 			if a.Provider == p {
-				pv.Accounts = append(pv.Accounts, accountView(st, p, pv.Homes, a, now))
+				pv.Accounts = append(pv.Accounts, accountView(st, p, pv.Homes, a, now, loc))
 			}
 		}
 		r.Providers = append(r.Providers, pv)
 	}
 	for _, pr := range collect.Projects(st, in.Folders) {
-		r.Projects = append(r.Projects, projectView(pr, now))
+		r.Projects = append(r.Projects, projectView(pr, now, loc))
 	}
 	sortProjects(r.Projects, Week)
 	r.Team = buildTeam(in, totals, now)
+	listDefaults(&r)
 	for i := range r.Providers {
 		for j := range r.Providers[i].Accounts {
 			a := &r.Providers[i].Accounts[j]
@@ -83,6 +87,10 @@ func Build(in Input) Report {
 // windows that limit each account, the working folders of each project,
 // one each, since such a release made a project of each, and the team's
 // devices that do not update themselves. A report that has them keeps them.
+//
+// A report saved before burn has its input plus output as burn, the team's
+// marked estimated, and its sessions of 90 days as the sessions active in
+// every period, as that release showed them.
 func Fill(r *Report) {
 	if r.Collector.Health == nil {
 		r.Collector.Health = health(r.Collector)
@@ -94,13 +102,114 @@ func Fill(r *Report) {
 	fillFolders(r.Projects)
 	for i := range r.Providers {
 		for j := range r.Providers[i].Accounts {
-			fillLimits(r.Providers[i].Accounts[j].Quota)
-			fillFolders(r.Providers[i].Accounts[j].Projects)
+			a := &r.Providers[i].Accounts[j]
+			fillLimits(a.Quota)
+			fillFolders(a.Projects)
+			if fillBurn(&a.Burn, a.Usage) && len(a.BurnDays) == 0 {
+				a.BurnDays = a.Days
+			}
 		}
 	}
 	for i := range r.Team.Providers {
 		for j := range r.Team.Providers[i].Accounts {
 			fillLimits(r.Team.Providers[i].Accounts[j].Quota)
+		}
+	}
+	fillOldBurn(r)
+	listDefaults(r)
+}
+
+// fillOldBurn gives a report saved before burn its input plus output as
+// burn, as Fill says.
+func fillOldBurn(r *Report) {
+	var projects []*Project
+	for i := range r.Projects {
+		projects = append(projects, &r.Projects[i])
+	}
+	for i := range r.Providers {
+		for j := range r.Providers[i].Accounts {
+			for k := range r.Providers[i].Accounts[j].Projects {
+				projects = append(projects, &r.Providers[i].Accounts[j].Projects[k])
+			}
+		}
+	}
+	for _, p := range projects {
+		fillBurn(&p.Burn, p.Usage)
+		if p.Active == (Counts{}) && p.Sessions > 0 {
+			p.Active = Counts{Today: p.Sessions, Week: p.Sessions, Month: p.Sessions, Quarter: p.Sessions}
+		}
+	}
+	t := &r.Team
+	est := func(filled bool, mark *bool) {
+		if filled {
+			*mark, t.Estimated = true, true
+		}
+	}
+	for i := range t.Devices {
+		d := &t.Devices[i]
+		est(fillBurn(&d.Burn, d.Usage), &d.BurnEstimated)
+	}
+	for i := range t.Providers {
+		for j := range t.Providers[i].Accounts {
+			a := &t.Providers[i].Accounts[j]
+			est(fillBurn(&a.Burn, a.Usage), &a.BurnEstimated)
+			for k := range a.PerDevice {
+				fillBurn(&a.PerDevice[k].Burn, a.PerDevice[k].Usage)
+			}
+		}
+	}
+	for i := range t.Matrix.Columns {
+		c := &t.Matrix.Columns[i]
+		if fillBurn(&c.Burn, c.Usage) && c.WindowBurn == 0 {
+			c.WindowBurn = c.WindowTokens
+		}
+	}
+	for i := range t.Matrix.Rows {
+		row := &t.Matrix.Rows[i]
+		if fillBurn(&row.Burn, row.Usage) {
+			row.BurnShare = row.Share
+			est(true, &row.BurnEstimated)
+		}
+		for k := range row.Cells {
+			c := &row.Cells[k]
+			if fillBurn(&c.Burn, c.Usage) {
+				c.BurnShare = c.Share
+				if c.WindowBurn == 0 {
+					c.WindowBurn = c.WindowTokens
+				}
+			}
+		}
+	}
+	if t.Estimated && t.EstimatedReason == nil {
+		t.EstimatedReason = strPtr("saved by a release before v0.4.0, which counts input plus output only")
+	}
+}
+
+// fillBurn sets burn to usage where burn is nothing and usage is not, and
+// says whether it did.
+func fillBurn(burn *Usage, usage Usage) bool {
+	if *burn != (Usage{}) || usage == (Usage{}) {
+		return false
+	}
+	*burn = usage
+	return true
+}
+
+// listDefaults gives every list of r that is missing an empty one, so it is
+// an array in JSON, never null.
+func listDefaults(r *Report) {
+	for i := range r.Providers {
+		for j := range r.Providers[i].Accounts {
+			a := &r.Providers[i].Accounts[j]
+			a.BurnDays = orEmpty(a.BurnDays)
+		}
+	}
+	if r.Team.HeldBackBy == nil {
+		r.Team.HeldBackBy = []string{}
+	}
+	for i := range r.Team.Devices {
+		if d := &r.Team.Devices[i]; d.Limitations == nil {
+			d.Limitations = []string{}
 		}
 	}
 }
@@ -132,7 +241,7 @@ func fillLimits(q *Quota) {
 
 // accountView is one of this device's accounts of provider, whose homes are
 // homes, without its name, which comes from the team.
-func accountView(st *state.State, provider string, homes []string, a collect.AccountTotals, now time.Time) Account {
+func accountView(st *state.State, provider string, homes []string, a collect.AccountTotals, now time.Time, loc *time.Location) Account {
 	days := collect.DaysOf(a.Hours.Series(meter.Use.InOut), now)
 	acct := Account{
 		Label:        a.Label,
@@ -145,6 +254,9 @@ func accountView(st *state.State, provider string, homes []string, a collect.Acc
 		Tokens:       a.Tokens,
 		Usage:        usageOf(days, 0),
 		Days:         orEmpty(days),
+		Burn:         localUsage(a.Burn, now, loc),
+		Fresh:        localUsage(a.Hours.Series(meter.Use.Fresh), now, loc),
+		BurnDays:     localDays(a.Burn, now, loc),
 		LinkedUsage:  []LinkedUsage{},
 		LastActiveAt: timePtr(a.LastActive),
 		Projects:     []Project{},
@@ -152,12 +264,15 @@ func accountView(st *state.State, provider string, homes []string, a collect.Acc
 	if a.Quota != nil {
 		acct.Quota, acct.State = quotaOf(Quota{Source: a.Quota.Source, From: a.QuotaFrom}, provider, readings(a.Quota.Windows, a.Quota.At), a.Quota.At, now)
 	}
+	if provider == "claude" && (a.Nulls > 0 || a.OverTracked > 0) {
+		acct.TranscriptGaps = &TranscriptGaps{NullSnapshots: a.Nulls, OverTracked: a.OverTracked}
+	}
 	if a.LinkedSessions > 0 {
 		// Only Hermes bills through another harness's login.
 		acct.LinkedUsage = append(acct.LinkedUsage, LinkedUsage{Provider: "hermes", Sessions: a.LinkedSessions, Tokens: a.Linked})
 	}
 	for _, pr := range a.Projects {
-		acct.Projects = append(acct.Projects, projectView(pr, now))
+		acct.Projects = append(acct.Projects, projectView(pr, now, loc))
 	}
 	return acct
 }
@@ -191,24 +306,26 @@ func quotaOf(q Quota, provider string, rs []reading, at, now time.Time) (*Quota,
 	return &q, state
 }
 
-func projectView(p collect.ProjectTotals, now time.Time) Project {
+// projectView is a project's totals as the report shows them, in the local
+// periods of loc as of now; its usage keeps UTC days.
+func projectView(p collect.ProjectTotals, now time.Time, loc *time.Location) Project {
 	return Project{
 		Path:         p.Path,
 		Folders:      p.Folders,
 		Sessions:     p.Sessions,
 		Tokens:       p.Tokens,
 		Usage:        usageOf(collect.DaysOf(p.Hours.Series(meter.Use.InOut), now), 0),
+		Burn:         localUsage(p.Burn, now, loc),
+		Fresh:        localUsage(p.Hours.Series(meter.Use.Fresh), now, loc),
+		Active:       activeCounts(p.Active, now, loc),
 		Providers:    p.Providers,
 		LastActiveAt: timePtr(p.LastActive),
 	}
 }
 
-// sortProjects puts the most tokens in the period first, then the most in
-// 90 days, then by path.
+// sortProjects puts projects in byBurn's order for the period.
 func sortProjects(ps []Project, p Period) {
-	slices.SortStableFunc(ps, func(a, b Project) int {
-		return cmp.Or(cmp.Compare(p.Of(b.Usage), p.Of(a.Usage)), cmp.Compare(b.Usage.Quarter, a.Usage.Quarter), cmp.Compare(a.Path, b.Path))
-	})
+	slices.SortStableFunc(ps, byBurn(p, func(x Project) Usage { return x.Burn }, func(x Project) string { return x.Path }))
 }
 
 // usageOf sums a device's days into the report's periods. Days[0] is the

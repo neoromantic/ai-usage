@@ -340,7 +340,7 @@ func TestPageHeadersDim(t *testing.T) {
 		}{
 			{"PROJECTS", "  PROJECT ", "PROJECTS  annbook · by " + per.String() + " · ", Render(team, o)},
 			{"status", "  DEVICE ", "DEVICES  13 · 1 error · 2 old · by " + per.String() + " · ", Render(team, devices(o))},
-			{"USAGE", "  CLAUDE ", "USAGE  sam-air · M tokens in+out", Render(single, o)},
+			{"USAGE", "  CLAUDE ", "USAGE  sam-air · M weighted tokens", Render(single, o)},
 		} {
 			l := bodyLine(t, c.p, c.title, func(text string) bool { return strings.HasPrefix(text, c.prefix) })
 			if !strings.Contains(l, dim+head+"\x1b[m") {

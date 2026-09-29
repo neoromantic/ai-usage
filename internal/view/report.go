@@ -35,8 +35,8 @@ type Report struct {
 	Attention []Attention `json:"attention"`
 	// Providers are this device's sources and accounts.
 	Providers []Provider `json:"providers"`
-	// Projects are this device's projects over every account, most tokens
-	// in the last 7 days first.
+	// Projects are this device's projects over every account, in the order
+	// PROJECTS shows them by 7d: the most burn first.
 	Projects []Project `json:"projects"`
 	Team     Team      `json:"team"`
 }
@@ -129,12 +129,16 @@ type Health struct {
 
 // Attention kinds, most urgent first.
 const (
-	AttentionOut    = "out"    // a window is at 100%
-	AttentionOver   = "over"   // a window will run out by its reset
-	AttentionError  = "error"  // a device's collector or one of its harnesses fails
-	AttentionSilent = "silent" // a device has not reported for a day
-	AttentionOld    = "old"    // devices run an older release
-	AttentionUnder  = "under"  // past half of a window, its forecast is under 50%
+	AttentionOut       = "out"        // a window is at 100%
+	AttentionOver      = "over"       // a window will run out by its reset
+	AttentionTight     = "tight"      // a logged-in account's window will end its reset 85% to 99% full
+	AttentionOutside   = "outside"    // a window fills while the team spends next to nothing on it
+	AttentionError     = "error"      // a device's collector or one of its harnesses fails
+	AttentionNoReading = "no_reading" // a subscription in use has no reading, for the reason given
+	AttentionSilent    = "silent"     // a device has not reported for a day
+	AttentionDuplicate = "duplicate"  // a device was reinstalled, and its old record stays
+	AttentionOld       = "old"        // devices run an older release
+	AttentionUnder     = "under"      // past half of a window, its forecast is under 50%
 )
 
 // Attention is one thing that needs attention. The fields that apply depend
@@ -167,11 +171,15 @@ type Attention struct {
 }
 
 type Provider struct {
-	Provider string    `json:"provider"`
-	Status   string    `json:"status"`
-	Error    *string   `json:"error"`
-	Homes    []string  `json:"homes"`
-	Accounts []Account `json:"accounts"`
+	Provider string   `json:"provider"`
+	Status   string   `json:"status"`
+	Error    *string  `json:"error"`
+	Homes    []string `json:"homes"`
+	// CoveredSince is the start of the first hour this device's ledger holds
+	// the provider's tokens for. Before it, the report knows nothing of them,
+	// so a 90d period that starts earlier counts less than was spent.
+	CoveredSince *time.Time `json:"covered_since"`
+	Accounts     []Account  `json:"accounts"`
 }
 
 // Account is one account on this device.
@@ -188,16 +196,36 @@ type Account struct {
 	Plan *string `json:"plan"`
 	// State is the worst state of the account's windows that limit it: out,
 	// over, tight, ok, or under, else unknown.
-	State        string          `json:"state"`
-	Quota        *Quota          `json:"quota"`
-	Link         *Link           `json:"link"`
-	Sessions     int             `json:"sessions"`
-	Tokens       snapshot.Tokens `json:"tokens"`
-	Usage        Usage           `json:"usage"`
-	Days         []int64         `json:"days"`
-	LinkedUsage  []LinkedUsage   `json:"linked_usage"`
-	LastActiveAt *time.Time      `json:"last_active_at"`
-	Projects     []Project       `json:"projects"`
+	State    string          `json:"state"`
+	Quota    *Quota          `json:"quota"`
+	Link     *Link           `json:"link"`
+	Sessions int             `json:"sessions"`
+	Tokens   snapshot.Tokens `json:"tokens"`
+	Usage    Usage           `json:"usage"`
+	Days     []int64         `json:"days"`
+	// Burn is the account's weighted tokens in this device's local periods,
+	// and Fresh its input, cache writes, and output in them. BurnDays is its
+	// burn per local day, newest first: the first is the report's local day,
+	// for up to 90 days, trailing zeros left out.
+	Burn     Usage   `json:"burn"`
+	Fresh    Usage   `json:"fresh"`
+	BurnDays []int64 `json:"burn_days"`
+	// TranscriptGaps are where a Claude account's transcripts miss tokens.
+	// It is left out for other providers, and when there are none.
+	TranscriptGaps *TranscriptGaps `json:"transcript_gaps,omitempty"`
+	LinkedUsage    []LinkedUsage   `json:"linked_usage"`
+	LastActiveAt   *time.Time      `json:"last_active_at"`
+	Projects       []Project       `json:"projects"`
+}
+
+// TranscriptGaps count, over the 90 days the ledger keeps, the replies of an
+// account's Claude sessions whose transcript ends without a final token
+// count, and the sessions whose Claude Code count has over twice the output
+// of their transcripts. Where Claude Code wrote its own count, ai-usage uses
+// it.
+type TranscriptGaps struct {
+	NullSnapshots int `json:"null_snapshots"`
+	OverTracked   int `json:"over_tracked"`
 }
 
 // Link names the account of another provider an account is assumed to bill
@@ -275,7 +303,7 @@ type Window struct {
 }
 
 // Forecast is how full a window will be at its reset if it is used from now
-// on at its average pace so far.
+// on at its pace.
 type Forecast struct {
 	// Percent is the forecast, as a whole percent up to 999.
 	Percent float64 `json:"percent"`
@@ -286,12 +314,22 @@ type Forecast struct {
 	// forecast is over 100% before it is rounded. At exactly 100% the
 	// window runs out at its reset, and this is nil.
 	RunsOutAt *time.Time `json:"runs_out_at"`
+	// Basis is the pace the forecast takes: "window", the average since the
+	// window began, or "recent", the pace of the last day's readings where
+	// it is faster.
+	Basis string `json:"basis"`
+	// Pace is that pace, in percent of the window an hour.
+	Pace float64 `json:"pace"`
 }
 
-// Usage is input plus output tokens, cache left out, in the report's
-// periods. Days are UTC days and each period ends with the report's: today
-// is the report's UTC day, and 7d, 30d, and 90d are that many UTC days up to
-// and including it.
+// Usage is tokens in the report's periods. As usage, it is input plus
+// output, cache left out, in UTC days that end with the report's: today is
+// the report's UTC day, and 7d, 30d, and 90d are that many UTC days up to
+// and including it. As burn, it is weighted tokens: every kind of token,
+// each weighed by what the provider's API charges for it against input, in
+// the same UTC days on the team's objects, and in this device's local
+// periods on its own accounts and projects: today is the hours since local
+// midnight, and 7d, 30d, and 90d are the last 168, 720, and 2160 hours.
 type Usage struct {
 	Today   int64 `json:"today"`
 	Week    int64 `json:"7d"`
@@ -311,19 +349,40 @@ type Project struct {
 	Sessions int             `json:"sessions"`
 	Tokens   snapshot.Tokens `json:"tokens"`
 	Usage    Usage           `json:"usage"`
+	// Burn is the project's weighted tokens in the local periods, and Fresh
+	// its input, cache writes, and output in them. Active counts its sessions
+	// last active in each: Sessions counts those with tokens in 90 days.
+	Burn   Usage  `json:"burn"`
+	Fresh  Usage  `json:"fresh"`
+	Active Counts `json:"active_sessions"`
 	// Providers are the harnesses that used it, most tokens first.
 	Providers    []string   `json:"providers,omitempty"`
 	LastActiveAt *time.Time `json:"last_active_at"`
+}
+
+// Counts are how many of something fall in each of the report's periods.
+type Counts struct {
+	Today   int `json:"today"`
+	Week    int `json:"7d"`
+	Month   int `json:"30d"`
+	Quarter int `json:"90d"`
 }
 
 type Team struct {
 	PulledAt *time.Time `json:"pulled_at"`
 	// Latest is the newest collector release any device in the team runs,
 	// or the newest this device's update check saw, whichever is newer.
-	Latest    *string        `json:"latest_version"`
-	Devices   []TeamDevice   `json:"devices"`
-	Providers []TeamProvider `json:"providers"`
-	Matrix    Matrix         `json:"matrix"`
+	Latest *string `json:"latest_version"`
+	// Estimated says the burn of some device is estimated from its input
+	// and output, as a release before v0.4.0 sends no burn. HeldBackBy are
+	// the devices whose release keeps this device from sending its own, and
+	// EstimatedReason says why, and what to do, in a line.
+	Estimated       bool           `json:"estimated"`
+	HeldBackBy      []string       `json:"held_back_by"`
+	EstimatedReason *string        `json:"estimated_reason"`
+	Devices         []TeamDevice   `json:"devices"`
+	Providers       []TeamProvider `json:"providers"`
+	Matrix          Matrix         `json:"matrix"`
 }
 
 type TeamDevice struct {
@@ -358,6 +417,25 @@ type TeamDevice struct {
 	// reported for BehindAfter since its BehindSince and is not silent.
 	NotUpdating bool  `json:"not_updating"`
 	Usage       Usage `json:"usage"`
+	// Burn is the device's weighted tokens, estimated where BurnEstimated
+	// says so.
+	Burn          Usage `json:"burn"`
+	BurnEstimated bool  `json:"burn_estimated"`
+	// Gap is the longest time within the last 2 days this device's reads of
+	// the team did not find the device's snapshot growing, when over an hour.
+	Gap *Gap `json:"gap"`
+	// ReplacedBy is the label of the device that reinstalled this one: the
+	// same name and OS user, reporting while this one is silent.
+	ReplacedBy *string `json:"replaced_by"`
+	// Limitations are what the device's release cannot do:
+	// "no_claude_quota" before v0.2.3, and "no_update_errors" before v0.2.5.
+	Limitations []string `json:"limitations"`
+}
+
+// Gap is a time a device did not report: how long, and when it began.
+type Gap struct {
+	Seconds int64     `json:"seconds"`
+	At      time.Time `json:"at"`
 }
 
 type Source struct {
@@ -408,6 +486,23 @@ type TeamAccount struct {
 	LastActiveAt *time.Time    `json:"last_active_at"`
 	PerDevice    []DeviceUsage `json:"per_device"`
 	LinkedUsage  []LinkedUsage `json:"linked_usage"`
+	// Burn is the account's own weighted tokens, estimated where
+	// BurnEstimated says so.
+	Burn          Usage `json:"burn"`
+	BurnEstimated bool  `json:"burn_estimated"`
+	// NoReading is why a subscription has no reading of its main window,
+	// with what to do, when that is known.
+	NoReading *string `json:"no_reading"`
+	// Outside is a window that filled in the last day while the team spent
+	// next to nothing on it: someone outside the team uses it.
+	Outside *Outside `json:"outside"`
+}
+
+// Outside is how many points a window rose since when, with no burn of the
+// team's to match.
+type Outside struct {
+	Points float64   `json:"points"`
+	Since  time.Time `json:"since"`
 }
 
 // DeviceUsage is one device's share of a team account.
@@ -418,6 +513,7 @@ type DeviceUsage struct {
 	Sessions     int             `json:"sessions"`
 	Tokens       snapshot.Tokens `json:"tokens"`
 	Usage        Usage           `json:"usage"`
+	Burn         Usage           `json:"burn"`
 	LastActiveAt *time.Time      `json:"last_active_at"`
 }
 
@@ -448,6 +544,9 @@ type Column struct {
 	// WindowTokens is the team's tokens since the main window began, what
 	// Hermes spent through the login included.
 	WindowTokens int64 `json:"window_tokens"`
+	// Burn and WindowBurn are the same as weighted tokens.
+	Burn       Usage `json:"burn"`
+	WindowBurn int64 `json:"window_burn"`
 }
 
 type Row struct {
@@ -460,6 +559,11 @@ type Row struct {
 	// Share is the device's part of the team's tokens, over every column. The
 	// rows' shares add up to 100.
 	Share Share `json:"share"`
+	// Burn and BurnShare are the same as weighted tokens, estimated where
+	// BurnEstimated says so.
+	Burn          Usage `json:"burn"`
+	BurnShare     Share `json:"burn_share"`
+	BurnEstimated bool  `json:"burn_estimated"`
 }
 
 type Cell struct {
@@ -470,6 +574,10 @@ type Cell struct {
 	// Share is the device's part of the column's tokens: its tokens over
 	// the team's. A column's shares add up to 100.
 	Share Share `json:"share"`
+	// Burn, WindowBurn, and BurnShare are the same as weighted tokens.
+	Burn       Usage `json:"burn"`
+	WindowBurn int64 `json:"window_burn"`
+	BurnShare  Share `json:"burn_share"`
 }
 
 // Share is a part of a whole in each period, in percent. A period's is nil
@@ -496,4 +604,9 @@ type Input struct {
 	// Folders are the projects of the working folders in State; a folder
 	// missing from it is its own.
 	Folders collect.Folders
+	// Samples are this device's runs of the last 2 days, oldest first, for
+	// the pace of each window.
+	Samples []state.Sample
+	// Loc is the zone of this device's local days; nil is time.Local.
+	Loc *time.Location
 }

@@ -378,8 +378,9 @@ func (p *page) rowMark(r Row) chunk {
 	return p.space(1)
 }
 
-// usage is USAGE: this device's tokens on each subscription, and those
-// with no quota, today and in 7, 30, and 90 days.
+// usage is USAGE: this device's weighted tokens on each subscription, and
+// those with no quota, today and in the last 7, 30, and 90 days, in its
+// local periods, as PROJECTS counts them.
 func (p *page) usage() []chunks {
 	g := p.g
 	cols := p.r.Team.Matrix.Columns
@@ -392,10 +393,11 @@ func (p *page) usage() []chunks {
 		name  string
 		u     Usage
 	}
+	burn := p.localBurn()
 	var rows []usageRow
 	var sum Usage
-	for _, c := range cols {
-		r := usageRow{group: c.Provider, name: p.txt(c.Name), u: c.Usage}
+	for i, c := range cols {
+		r := usageRow{group: c.Provider, name: p.txt(c.Name), u: burn[i]}
 		if c.NoQuota {
 			r.group = ""
 		} else {
@@ -406,7 +408,7 @@ func (p *page) usage() []chunks {
 			r.name = p.txt(label)
 		}
 		rows = append(rows, r)
-		sum = sum.add(c.Usage)
+		sum = sum.add(r.u)
 	}
 	numW := make([]int, len(Periods))
 	for i, per := range Periods {
@@ -429,7 +431,7 @@ func (p *page) usage() []chunks {
 		}
 		return line
 	}
-	out := []chunks{{p.bold("USAGE"), p.plain("  "), p.muted(p.txt(p.r.Collector.DeviceLabel) + g.sep + "M tokens in+out")}}
+	out := []chunks{{p.bold("USAGE"), p.plain("  "), p.muted(p.txt(p.r.Collector.DeviceLabel) + g.sep + "M weighted tokens")}}
 	for i, r := range rows {
 		if i == 0 || rows[i-1].group != r.group {
 			out = append(out, nil)
@@ -454,4 +456,36 @@ func (p *page) usage() []chunks {
 		out = append(out, numbers(line, r.u))
 	}
 	return append(out, nil, numbers(p.totalLead(acct), sum))
+}
+
+// localBurn is this device's burn in the local periods for each column of
+// the matrix, from its own accounts: a subscription's, what Hermes spent
+// through that login, and a provider's with no quota. An account with no
+// column of its own counts in none.
+func (p *page) localBurn() []Usage {
+	cols := p.r.Team.Matrix.Columns
+	out := make([]Usage, len(cols))
+	find := func(provider, label string, noQuota bool) int {
+		return slices.IndexFunc(cols, func(c Column) bool {
+			return c.Provider == provider && c.NoQuota == noQuota && (noQuota || c.Label == label)
+		})
+	}
+	for _, pv := range p.r.Providers {
+		for _, a := range pv.Accounts {
+			i := -1
+			switch {
+			case subscription(pv.Provider):
+				i = find(pv.Provider, a.Label, false)
+			case a.Link != nil && a.Link.Label != "":
+				i = find(a.Link.Provider, a.Link.Label, false)
+			}
+			if i < 0 {
+				i = find(pv.Provider, "", true)
+			}
+			if i >= 0 {
+				out[i] = out[i].add(a.Burn)
+			}
+		}
+	}
+	return out
 }

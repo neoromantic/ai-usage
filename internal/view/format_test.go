@@ -2,6 +2,7 @@ package view
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 )
@@ -138,5 +139,35 @@ func TestWrapWords(t *testing.T) {
 	}
 	if got := wrapWords("a b c", 30); !reflect.DeepEqual(got, []string{"a b c"}) {
 		t.Errorf("short text = %q", got)
+	}
+}
+
+// TestByBurn: things are in the order of what the page shows for the
+// period, values shown alike tie and go by 90 days, then by name.
+func TestByBurn(t *testing.T) {
+	for n, want := range map[int64]int64{0: 0, -5: 0, 1: 1, 999_999: 1, 1_000_000: 2, 1_499_999: 2, 1_500_000: 3} {
+		if got := shownValue(n); got != want {
+			t.Errorf("shownValue(%d) = %d, want %d", n, got, want)
+		}
+	}
+	type row struct {
+		name string
+		u    Usage
+	}
+	rows := []row{
+		{"a", Usage{Week: 900_000, Quarter: 1_000_000}},
+		{"b", Usage{Week: 100_000, Quarter: 50_000_000}},
+		{"c", Usage{Week: 1_200_000, Quarter: 2_000_000}},
+		{"d", Usage{Week: 1_400_000, Quarter: 2_000_000}},
+		{"e", Usage{Quarter: 90_000_000}},
+	}
+	slices.SortStableFunc(rows, byBurn(Week, func(r row) Usage { return r.u }, func(r row) string { return r.name }))
+	var got []string
+	for _, r := range rows {
+		got = append(got, r.name)
+	}
+	// c and d both show 1, and tie on 90 days; b and a both show <1.
+	if want := []string{"c", "d", "b", "a", "e"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("order %v, want %v", got, want)
 	}
 }

@@ -42,18 +42,18 @@ DEVICES × SUBSCRIPTIONS  13 · 30d · M tokens in+out                  ‹usage
   bot-i                   ·        ·         ·        ·        1        ·         ·         ·         1
   TOTAL                  87       40       791      149     1089      360        13        30      2559
 
-PROJECTS  annbook · by 30d · M tokens in+out
-  PROJECT                30D  90D  SESS  VIA            LAST
-  ~/src/acme/app         366  420    43  codex, claude    1h
-  ~/Vault                130  130    56  codex            3h
-  ~/src/site              57   62     6  codex            2d
-  ~/src/acme/os           12   12     3  claude, grok    11h
-  ~/src/ai-usage          11   11     3  claude, grok     7m
-  ~/src/acme/relay         9    9     2  codex            1d
-  ~/src/acme/os-archive    6   21    11  codex           12d
-  ~/dotfiles               5    5     4  codex, claude    4d
-  ~/scratch                3    3     5  claude           5d
-  ~/src/acme/landing       3    7     2  codex            6d
+PROJECTS  annbook · by 30d · M weighted tokens · claude since Sep 2
+  PROJECT                                            30D   90D  SESS  VIA            LAST
+  ~/src/acme/app                                    3023  3465    28  codex, claude    1h
+  ~/Vault                                            585   585    37  codex            3h
+  ~/src/site                                         255   279     4  codex            2d
+  ~/src/acme/os                                      105   105     2  claude, grok    11h
+  ~/src/ai-usage                                      98    98     2  claude, grok     7m
+  ~/dotfiles                                          41    41     2  codex, claude    4d
+  ~/src/acme/relay                                    41    41     1  codex            1d
+  ~/scratch                                           36    36     3  claude           5d
+  ~/src/acme/os-archive                               28    95     7  codex           12d
+  ~/Library/Mobile Documents/…/Notes/Projects/2026    22    24     1  claude           6d
   + 4 more
 
 ━ used  ─ left  ┃╋ even use  ┈ no reading  ~ stale  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen

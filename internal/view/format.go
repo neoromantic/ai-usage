@@ -1,7 +1,9 @@
 package view
 
 import (
+	"cmp"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -249,6 +251,35 @@ func ago(d time.Duration) string {
 		d = d.Truncate(time.Hour)
 	}
 	return dur(d) + " ago"
+}
+
+// shownValue is n as the page shows it in whole millions, as a number that
+// sorts: 0 for nothing, 1 for every value shown as <1, and one more than the
+// millions shown for the rest.
+func shownValue(n int64) int64 {
+	switch {
+	case n <= 0:
+		return 0
+	case n < 1_000_000:
+		return 1
+	default:
+		return 1 + int64(math.Round(float64(n)/1e6))
+	}
+}
+
+// byBurn orders things by their burn, as every list of the page does: the
+// most shown in the period p first, so values shown alike tie, then the
+// most burn in 90 days, then by name. burn and name give a thing's burn and
+// name.
+func byBurn[T any](p Period, burn func(T) Usage, name func(T) string) func(a, b T) int {
+	return func(a, b T) int {
+		x, y := burn(a), burn(b)
+		return cmp.Or(
+			cmp.Compare(shownValue(p.Of(y)), shownValue(p.Of(x))),
+			cmp.Compare(y.Quarter, x.Quarter),
+			cmp.Compare(name(a), name(b)),
+		)
+	}
 }
 
 func clamp(v, lo, hi int) int {
