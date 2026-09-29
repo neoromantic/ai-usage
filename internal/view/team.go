@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
@@ -29,6 +30,8 @@ type teamAccount struct {
 	// reset; main is its name.
 	start time.Time
 	main  string
+	// holders are the devices whose snapshots have the account.
+	holders []*device
 }
 
 type winReading struct {
@@ -39,12 +42,18 @@ type winReading struct {
 }
 
 // devAccount is one account on one device doc, or the part of a Hermes
-// account that went through one login.
+// account that went through one login. Its recent windows have their tokens
+// and their burn.
 type devAccount struct {
 	provider, label string
 	usage           Usage
 	days            []int64
 	recent          []snapshot.Recent
+	// burn is its weighted tokens, by the UTC days burnDays, estimated from
+	// its input and output where estimated says so.
+	burn      Usage
+	burnDays  []int64
+	estimated bool
 	// last is the account's newest activity on that device.
 	last *time.Time
 	// link is the account a Hermes account bills through on that device.
@@ -111,7 +120,9 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 		}
 	}
 	t.Matrix = matrix(t.Providers, m.byProv, m.devs)
+	m.replaced()
 	for _, dv := range m.devs {
+		dv.dev.Gap = gapOf(m.in.Team.Seen[dv.dev.Device], dv.collectedAt, now)
 		t.Devices = append(t.Devices, *dv.dev)
 	}
 	slices.SortFunc(t.Devices, func(a, b TeamDevice) int {
@@ -123,6 +134,7 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 		}
 		return cmp.Or(cmp.Compare(a.Label, b.Label), cmp.Compare(a.Device, b.Device))
 	})
+	m.estimate(&t)
 	return t
 }
 
@@ -164,6 +176,7 @@ func (m *merger) teamDevice(d snapshot.Doc) *TeamDevice {
 		UpdateError:      updateErr,
 		Sources:          []Source{},
 		Silent:           m.now.Sub(d.CollectedAt) > collect.SilentAfter,
+		Limitations:      limitations(d.CollectorVersion),
 	}
 	for _, s := range d.Sources {
 		dev.Sources = append(dev.Sources, Source{Provider: s.Provider, Status: s.Status, Error: strPtr(m.open(s.Error))})
@@ -183,11 +196,14 @@ func (m *merger) lastErrors(d snapshot.Doc, this bool) (lastErr, updateErr *stri
 }
 
 // account is the team account of provider and label, made when it is new.
+// Devices that spell an email in other cases hold one account, which keeps
+// the spelling it was first seen in.
 func (m *merger) account(provider, label string) *teamAccount {
 	if m.byProv[provider] == nil {
 		m.byProv[provider] = map[string]*teamAccount{}
 	}
-	x := m.byProv[provider][label]
+	k := snapshot.LabelKey(label)
+	x := m.byProv[provider][k]
 	if x == nil {
 		x = &teamAccount{
 			provider: provider,
@@ -197,7 +213,7 @@ func (m *merger) account(provider, label string) *teamAccount {
 			},
 			wins: map[string]*winReading{},
 		}
-		m.byProv[provider][label] = x
+		m.byProv[provider][k] = x
 	}
 	return x
 }
@@ -214,25 +230,33 @@ func (m *merger) addAccounts(dv *device, d snapshot.Doc) {
 	through := map[string][]login{}
 	for i, a := range d.Accounts {
 		for _, u := range a.Linked {
-			k := state.Key(u.Provider, m.open(u.Label))
-			through[k] = append(through[k], login{Link{a.Provider, labels[i]}, u.Tokens.InOut()})
+			label := m.open(u.Label)
+			k := state.Key(u.Provider, label)
+			through[k] = append(through[k], login{Link{a.Provider, labels[i]}, u.Tokens.InOut(), meter.TokensBurn(u.Tokens, u.Provider, label)})
 		}
 	}
 	for i, a := range d.Accounts {
 		l := labels[i]
 		x := m.account(a.Provider, l)
 		usage := usageOf(a.Days, dv.shift)
+		burnDays, recent, estimated := m.accountBurn(d, a, l)
+		burn := usageOf(burnDays, dv.shift)
 		dev.Usage = dev.Usage.add(usage)
+		dev.Burn = dev.Burn.add(burn)
+		dev.BurnEstimated = dev.BurnEstimated || estimated
 		x.ta.Devices = append(x.ta.Devices, dv.name)
+		x.holders = append(x.holders, dv)
 		x.ta.Sessions += a.Sessions
 		x.ta.Tokens = x.ta.Tokens.Add(a.Tokens)
 		x.ta.Usage = x.ta.Usage.add(usage)
+		x.ta.Burn = x.ta.Burn.add(burn)
+		x.ta.BurnEstimated = x.ta.BurnEstimated || estimated
 		if dev.This && a.Current {
 			x.ta.Current = true
 		}
 		x.ta.PerDevice = append(x.ta.PerDevice, DeviceUsage{
 			Device: dv.name, DeviceID: d.Device, Current: a.Current,
-			Sessions: a.Sessions, Tokens: a.Tokens, Usage: usage, LastActiveAt: timeOf(a.LastActiveAt),
+			Sessions: a.Sessions, Tokens: a.Tokens, Usage: usage, Burn: burn, LastActiveAt: timeOf(a.LastActiveAt),
 		})
 		x.active(a.LastActiveAt)
 		if a.Plan != "" && (x.ta.Plan == nil || d.CollectedAt.After(x.planAt)) {
@@ -247,8 +271,8 @@ func (m *merger) addAccounts(dv *device, d snapshot.Doc) {
 		for _, u := range a.Linked {
 			addLinked(m.linked, a.Provider, l, u.Provider, m.open(u.Label), dv.name, u)
 		}
-		da := devAccount{provider: a.Provider, label: l, usage: usage, days: a.Days, recent: a.Recent,
-			last: a.LastActiveAt, link: link}
+		da := devAccount{provider: a.Provider, label: l, usage: usage, days: a.Days, recent: recent,
+			burn: burn, burnDays: burnDays, estimated: estimated, last: a.LastActiveAt, link: link}
 		dv.accts = append(dv.accts, da.split(through[state.Key(a.Provider, l)], dv.shift)...)
 	}
 }
@@ -321,10 +345,14 @@ func (m *merger) provider(p string) (TeamProvider, bool) {
 		}
 		sort.Strings(x.ta.Devices)
 		sortPerDevice(x.ta.PerDevice)
-		x.ta.LinkedUsage = linkedList(m.linked[state.Key(p, x.ta.Label)])
+		x.ta.LinkedUsage = linkedList(m.linked[linkKey(p, x.ta.Label)])
+		if x.ta.Subscription && knownMain(x.ta.Quota) == nil {
+			x.ta.NoReading = m.noReading(x)
+		}
+		x.ta.Outside = outside(m.in.Team.History[collect.HistoryKey(p, x.ta.Label)], m.now)
 	}
 	names(p, accts, m.aliases)
-	users(p, accts, m.devs)
+	users(accts, m.byProv, m.devs)
 	for _, x := range accts {
 		tp.Accounts = append(tp.Accounts, x.ta)
 	}
@@ -415,9 +443,219 @@ func left(q *Quota) float64 {
 	return max(100-m.Percent, 0)
 }
 
-// sortPerDevice puts the device that used the account most first.
+// sortPerDevice puts the devices that used the account in byBurn's order
+// for 7d.
 func sortPerDevice(ds []DeviceUsage) {
-	slices.SortFunc(ds, func(a, b DeviceUsage) int {
-		return cmp.Or(cmp.Compare(b.Tokens.Total(), a.Tokens.Total()), cmp.Compare(a.Device, b.Device), cmp.Compare(a.DeviceID, b.DeviceID))
+	by := byBurn(Week, func(d DeviceUsage) Usage { return d.Burn }, func(d DeviceUsage) string { return d.Device })
+	slices.SortStableFunc(ds, func(a, b DeviceUsage) int { return cmp.Or(by(a, b), cmp.Compare(a.DeviceID, b.DeviceID)) })
+}
+
+// What a device's release cannot do, in TeamDevice.Limitations.
+const (
+	// LimitNoClaudeQuota is a release before v0.2.3, which reads no Claude
+	// quota.
+	LimitNoClaudeQuota = "no_claude_quota"
+	// LimitNoUpdateErrors is a release before v0.2.5, which does not say
+	// why its update failed.
+	LimitNoUpdateErrors = "no_update_errors"
+)
+
+// limitations are what a collector of version cannot do. A development
+// build, whose version is not a release, can do all of it.
+func limitations(version string) []string {
+	out := []string{}
+	if selfupdate.Newer("v0.2.3", version) {
+		out = append(out, LimitNoClaudeQuota)
+	}
+	if selfupdate.Newer("v0.2.5", version) {
+		out = append(out, LimitNoUpdateErrors)
+	}
+	return out
+}
+
+// replaced marks each silent device that another reporting device took the
+// place of: one with the same name, as labels compare, and OS user, that reported
+// after it. A reinstall gives a device a new id, and the old one's record
+// stays on the relay until it expires. Of several, the newest is named.
+func (m *merger) replaced() {
+	for _, old := range m.devs {
+		o := old.dev
+		if !o.Silent || o.Label == "(unreadable)" {
+			continue
+		}
+		var by *TeamDevice
+		for _, nw := range m.devs {
+			n := nw.dev
+			if n.Silent || n.Device == o.Device || n.OSUser != o.OSUser || snapshot.LabelKey(n.Label) != snapshot.LabelKey(o.Label) {
+				continue
+			}
+			if n.CollectedAt.After(o.CollectedAt) && (by == nil || n.CollectedAt.After(by.CollectedAt)) {
+				by = n
+			}
+		}
+		if by != nil {
+			o.ReplacedBy = strPtr(by.Label)
+		}
+	}
+}
+
+// gapKept is how far back a device's gaps count, as far as the team cache
+// keeps when devices reported, and gapMin the shortest gap that counts: more
+// than the runs of 15 minutes and the reads of 20 leave between reports.
+const (
+	gapKept = 48 * time.Hour
+	gapMin  = time.Hour
+)
+
+// gapOf is the longest time within gapKept of now that a device did not
+// report, over the times the team's reads found it reporting, seen, and its
+// snapshot collected at collected, until now, when that is over gapMin. With
+// no times seen there is nothing to go by, and it is nil.
+func gapOf(seen []time.Time, collected, now time.Time) *Gap {
+	cut := now.Add(-gapKept)
+	var ts []time.Time
+	for _, t := range append(slices.Clone(seen), collected) {
+		if !t.Before(cut) && !t.After(now) {
+			ts = append(ts, t)
+		}
+	}
+	if len(seen) == 0 || len(ts) == 0 {
+		return nil
+	}
+	slices.SortFunc(ts, time.Time.Compare)
+	var best time.Duration
+	var at time.Time
+	for i, t := range ts {
+		next := now
+		if i+1 < len(ts) {
+			next = ts[i+1]
+		}
+		if d := next.Sub(t); d > best {
+			best, at = d, t
+		}
+	}
+	if best <= gapMin {
+		return nil
+	}
+	return &Gap{Seconds: int64(best.Seconds()), At: at.UTC()}
+}
+
+// noReading is why subscription x has no reading of its main window, with
+// what to do, when that is known: the devices that hold a Claude account all
+// run a release that reads no Claude quota, or one of them could not read
+// it, as its source says without failing. Of several, this device, then
+// the one first by name, is named.
+func (m *merger) noReading(x *teamAccount) *string {
+	hs := slices.Clone(x.holders)
+	slices.SortStableFunc(hs, func(a, b *device) int {
+		if a.dev.This != b.dev.This {
+			if a.dev.This {
+				return -1
+			}
+			return 1
+		}
+		return cmp.Compare(a.dev.Label, b.dev.Label)
 	})
+	hs = slices.CompactFunc(hs, func(a, b *device) bool { return a == b })
+	if len(hs) == 0 {
+		return nil
+	}
+	if x.provider == "claude" && !slices.ContainsFunc(hs, func(dv *device) bool {
+		return !slices.Contains(dv.dev.Limitations, LimitNoClaudeQuota)
+	}) {
+		d := hs[0].dev
+		return strPtr(d.Label + " runs " + d.CollectorVersion + ": reinstall with install.sh")
+	}
+	for _, dv := range hs {
+		for _, s := range dv.dev.Sources {
+			if s.Provider == x.provider && s.Status == "ok" && s.Error != nil {
+				msg := strings.TrimPrefix(*s.Error, s.Provider+": ")
+				return strPtr(msg + " on " + dv.dev.Label)
+			}
+		}
+	}
+	return nil
+}
+
+// Outside is found over outsideSpan of an account's readings: a window that
+// rose outsideRise points or more while the team burned under a hundredth of
+// what a point of it usually takes.
+const (
+	outsideSpan = 24 * time.Hour
+	outsideRise = 5
+)
+
+// outside is the window of an account whose readings, ps, the team's reads
+// found filling while the team burned next to nothing on it: over the last
+// outsideSpan of the window's current period, it rose outsideRise points or
+// more while the team's burn on it grew by under a hundredth of the median
+// burn a point took between two readings where both grew. With no such two
+// readings, the team's burn must not have grown at all. Of several windows,
+// the one that rose most.
+func outside(ps []collect.Point, now time.Time) *Outside {
+	byWindow := map[string][]collect.Point{}
+	var order []string
+	for _, p := range ps {
+		if byWindow[p.Window] == nil {
+			order = append(order, p.Window)
+		}
+		byWindow[p.Window] = append(byWindow[p.Window], p)
+	}
+	var best *Outside
+	for _, name := range order {
+		w := slices.Clone(byWindow[name])
+		slices.SortStableFunc(w, func(a, b collect.Point) int { return a.At.Compare(b.At) })
+		last := w[len(w)-1]
+		// The points of the window's current period, over the span.
+		var cur []collect.Point
+		for _, p := range w {
+			if samePeriod(p, last) && !p.At.Before(now.Add(-outsideSpan)) {
+				cur = append(cur, p)
+			}
+		}
+		if len(cur) < 2 {
+			continue
+		}
+		rise, burned := last.Percent-cur[0].Percent, last.TeamBurn-cur[0].TeamBurn
+		if rise < outsideRise {
+			continue
+		}
+		var perPoint []float64
+		for i := 1; i < len(w); i++ {
+			dp, db := w[i].Percent-w[i-1].Percent, w[i].TeamBurn-w[i-1].TeamBurn
+			if samePeriod(w[i], w[i-1]) && dp > 0 && db > 0 {
+				perPoint = append(perPoint, float64(db)/dp)
+			}
+		}
+		switch {
+		case len(perPoint) == 0 && burned > 0:
+			continue
+		case len(perPoint) > 0 && float64(burned)*100 >= median(perPoint):
+			continue
+		}
+		if best == nil || rise > best.Points {
+			best = &Outside{Points: rise, Since: cur[0].At.UTC()}
+		}
+	}
+	return best
+}
+
+// samePeriod says two readings of a window are of one period of it: they
+// reset at the same time, give or take a minute.
+func samePeriod(a, b collect.Point) bool {
+	if a.ResetsAt == nil || b.ResetsAt == nil {
+		return a.ResetsAt == nil && b.ResetsAt == nil
+	}
+	return a.ResetsAt.Sub(*b.ResetsAt).Abs() <= time.Minute
+}
+
+// median is the middle of vs, or the mean of the two in the middle.
+func median(vs []float64) float64 {
+	s := slices.Clone(vs)
+	slices.Sort(s)
+	n := len(s)
+	if n%2 == 1 {
+		return s[n/2]
+	}
+	return (s[n/2-1] + s[n/2]) / 2
 }

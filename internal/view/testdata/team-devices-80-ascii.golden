@@ -18,29 +18,31 @@ SUBSCRIPTIONS  7 . 2 out . 1 over . 3 no reading
   CODEX
 * ann@acme.dev   =================+======    0%  1d 23h         out      2
   sam@mail.test  ======+===--------------   58%  5d 2h    157% over      1
-* lee@corp.test  ===|--------------------   88%  5d 22h      81% ok     10
+* lee@corp.test  ===|--------------------   88%  5d 22h      81% ok     11
   unknown        ........................     ?                   -      1
 
   GROK
 * a4c2e917       ........................     ?                   -      1
 
-DEVICES  13 . 1 error . 2 old . by 7d . M tokens in+out         usage  [status]
-                   COLLECTOR ----  TOKENS ----------------
-  DEVICE           VERSION   SEEN  TODAY    7D   30D   90D  NOTE
-  srv1             v1.4.2      8m     31   262   786  2227
-* annbook          v1.4.2      7m     42   202   849  2224
-x Mac.localdomain  v1.4.0 v   16m     32   105   400   947  codex: app-serve...
-v MacBook-Pro-Kim  v1.4.0 v   30m      3    60   149   239  latest v1.4.2
-  bot-a            v1.4.2      9m      4    30   105   210
-  bot-b            v1.4.2     10m      4    26    91   183
-  bot-c            v1.4.2     11m      2    17    58   116
-  bot-d            v1.4.2     12m      2    12    42    84
-  bot-e            v1.4.2     13m      1     9    32    63
-  bot-f            v1.4.2     14m     <1     7    25    49
-  bot-g            v1.4.2     15m     <1     4    14    28
-  bot-h            v1.4.2     16m     <1     2     7    14
-  bot-i            v1.4.2     17m     <1    <1     1     3
-  TOTAL                              123   736  2559  6387
+DEVICES  15 . 1 error . 1 silent . 4 old . by 7d UTC            usage  [status]
+                        COLLECTOR -----  TOKENS ------
+  DEVICE                VERSION    SEEN     7D     90D  NOTE
+  srv1                  v1.4.2       8m   1207   10259
+* annbook               v1.4.2       7m   1057   11627
+x Mac.localdomain       v1.4.0 v    16m    551    4963  codex: app-server ex...
+v MacBook-Pro-Kim       v1.4.0 v    30m    269    1075  update: latest v1.4.2
+  bot-a                 v1.4.2       9m    135     945
+  bot-b                 v1.4.2      10m    119     834
+  bot-c                 v1.4.2      11m     76     529  gap 12h Sep 22
+  bot-d                 v1.4.2      12m     54     378
+  bot-e                 v1.4.2      13m     41     284
+  bot-f                 v1.4.2      14m     32     221
+  bot-g                 v1.4.2      15m     18     126
+v ci-runner-eu-west...  v0.3.4 v    12m    ~18     ~90  update: latest v1.4.2
+  bot-h                 v1.4.2      16m      9      63
+  bot-i                 v1.4.2      17m      2      13
+~ Mac.localdomain       v1.4.0 v  3d 5h      .     492  reinstalled
+  TOTAL                                  ~3586  ~31896
 
 PROJECTS  annbook . by 7d . M weighted tokens . claude since Sep 2
   PROJECT                                   7D   90D  SESS  VIA            LAST
@@ -56,5 +58,5 @@ PROJECTS  annbook . by 7d . M weighted tokens . claude since Sep 2
   ~/src/acme/landing                         4    32     1  codex            6d
   + 4 more
 
-= used  - left  |+ even use  . no reading  ~ stale
-? unknown  - no forecast  * here  x error  v old  [] chosen
+= used  - left  |+ even use  . no reading  ~ stale/estimated
+? unknown  - no forecast  * here  x error  v old  . none  [] chosen

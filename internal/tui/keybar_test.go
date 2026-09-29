@@ -276,7 +276,7 @@ func TestDeviceViewsDrawn(t *testing.T) {
 	lines := len(m.page.Body)
 	m = keys(t, m, "s")
 	text := strings.Join(screen(m), "\n")
-	if !strings.Contains(text, "DEVICES  13 · 1 error · 2 old · by 7d") || !strings.Contains(text, "v1.4.0 ↓") || len(m.page.Body) != lines {
+	if !strings.Contains(text, "DEVICES  15 · 1 error · 1 silent · 4 old · by 7d") || !strings.Contains(text, "v1.4.0 ↓") || len(m.page.Body) != lines {
 		t.Fatalf("status view, %d lines, was %d:\n%s", len(m.page.Body), lines, text)
 	}
 }

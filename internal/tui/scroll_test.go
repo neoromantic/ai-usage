@@ -13,7 +13,7 @@ import (
 
 // bigTeam is the team fixture with 12 more Hermes bots, bot-j to bot-u, on
 // lee's subscription as bot-i is, each a little less busy than the one
-// before: 25 devices, more rows than a screen holds.
+// before: 27 devices, more rows than a screen holds.
 func bigTeam(t *testing.T) view.Report {
 	t.Helper()
 	r := teamReport(t)
@@ -44,12 +44,13 @@ func bigTeam(t *testing.T) view.Report {
 		u := view.Usage{Today: week / 7, Week: week, Month: 4 * week, Quarter: 11 * week}
 		name, id := fmt.Sprintf("bot-%c", 'j'+i), fmt.Sprintf("d-b%02xc1d2e3f4a5b6c7d8e9f%x0", 9+i, (9+i)%16)
 		cells := append([]view.Cell(nil), row.Cells...)
-		cells[lee] = view.Cell{Usage: u, WindowTokens: week / 7}
-		m.Rows = append(m.Rows, view.Row{Device: name, DeviceID: id, Cells: cells, Usage: u})
-		c := &m.Columns[lee].Usage
-		c.Today, c.Week, c.Month, c.Quarter = c.Today+u.Today, c.Week+u.Week, c.Month+u.Month, c.Quarter+u.Quarter
+		cells[lee] = view.Cell{Usage: u, WindowTokens: week / 7, Burn: u, WindowBurn: week / 7}
+		m.Rows = append(m.Rows, view.Row{Device: name, DeviceID: id, Cells: cells, Usage: u, Burn: u})
+		for _, c := range []*view.Usage{&m.Columns[lee].Usage, &m.Columns[lee].Burn} {
+			c.Today, c.Week, c.Month, c.Quarter = c.Today+u.Today, c.Week+u.Week, c.Month+u.Month, c.Quarter+u.Quarter
+		}
 		d := dev
-		d.Device, d.Label, d.Usage = id, name, u
+		d.Device, d.Label, d.Usage, d.Burn = id, name, u, u
 		d.Sources = append([]view.Source(nil), dev.Sources...)
 		r.Team.Devices = append(r.Team.Devices, d)
 	}
@@ -105,11 +106,11 @@ func TestPinnedHead(t *testing.T) {
 			if short := m.maxTop() < end-3; short != (size.h == 24) {
 				t.Fatalf("%s: the page's last top is %d, DEVICES ends at %d", at, m.maxTop(), end)
 			}
-			title := "DEVICES × SUBSCRIPTIONS  25 · "
+			title := "DEVICES × SUBSCRIPTIONS  27 · "
 			if status {
-				title = "DEVICES  25 · "
+				title = "DEVICES  27 · "
 			}
-			if h[1]-h[0] != 3 || end-h[1]-1 != 25 || !strings.HasPrefix(ansi.Strip(m.page.Body[h[0]]), title) {
+			if h[1]-h[0] != 3 || end-h[1]-1 != 27 || !strings.HasPrefix(ansi.Strip(m.page.Body[h[0]]), title) {
 				t.Fatalf("%s: head %v, end %d:\n%s", at, h, end, strings.Join(ansiStrip(m.page.Body), "\n"))
 			}
 			first := ansi.Strip(m.page.Body[h[1]])
@@ -208,14 +209,14 @@ func TestPinnedHeadSideways(t *testing.T) {
 		t.Fatalf("wheel down: top %d, pinned %v", m.top, pinned)
 	}
 	m = keys(t, m, "s")
-	if _, pinned := sight(t, m); !pinned || !strings.HasPrefix(screen(m)[1], "DEVICES  25 · ") || !strings.HasPrefix(screen(m)[3], "  DEVICE ") {
+	if _, pinned := sight(t, m); !pinned || !strings.HasPrefix(screen(m)[1], "DEVICES  27 · ") || !strings.HasPrefix(screen(m)[3], "  DEVICE ") {
 		t.Fatalf("status view, pinned %v:\n%s", pinned, strings.Join(screen(m), "\n"))
 	}
 	m = keys(t, m, "?")
 	if rows := screen(m); rows[1] != "" || rows[2] != "KEYS" {
 		t.Fatalf("the help under a pinned head:\n%s", strings.Join(rows, "\n"))
 	}
-	if m = keys(t, m, "esc"); !strings.HasPrefix(screen(m)[1], "DEVICES  25 · ") {
+	if m = keys(t, m, "esc"); !strings.HasPrefix(screen(m)[1], "DEVICES  27 · ") {
 		t.Fatalf("the head is not back after the help: %q", screen(m)[1])
 	}
 }

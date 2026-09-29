@@ -77,13 +77,16 @@ func TestMatrix(t *testing.T) {
 	for _, c := range mx.Columns {
 		cols = append(cols, c.Provider+":"+c.Name)
 	}
-	if want := []string{"claude:ann", "codex:bots", "hermes:hermes"}; !reflect.DeepEqual(cols, want) {
+	// Codex burns more than Claude, so its group goes first; the tokens with
+	// no quota go last.
+	if want := []string{"codex:bots", "claude:ann", "hermes:hermes"}; !reflect.DeepEqual(cols, want) {
 		t.Fatalf("columns = %v", cols)
 	}
 	if c := mx.Columns[2]; !c.NoQuota || c.Label != "" || c.Usage.Week != 500_000 || c.Percent != nil {
 		t.Fatalf("no quota column = %+v", c)
 	}
-	if c := mx.Columns[1]; c.Percent == nil || *c.Percent != 40 || c.State != StateTight || c.Usage.Week != 5_000_000 || c.WindowTokens != 4_000_000 {
+	if c := mx.Columns[0]; c.Percent == nil || *c.Percent != 40 || c.State != StateTight || c.Usage.Week != 5_000_000 || c.WindowTokens != 4_000_000 ||
+		c.Burn != c.Usage || c.WindowBurn != c.WindowTokens {
 		t.Fatalf("codex column = %+v", c)
 	}
 	// Rows by tokens in 7 days: build spent 3.5M, this device 5M.
@@ -96,17 +99,17 @@ func TestMatrix(t *testing.T) {
 	}
 	// Hermes through the bots login counts in the bots column: 3M of the
 	// team's 5M in 7 days.
-	if c := other.Cells[1]; c.Usage.Week != 3_000_000 || c.WindowTokens != 3_000_000 || !near(c.Share.Week, 60) || !near(c.Share.Today, 75) {
+	if c := other.Cells[0]; c.Usage.Week != 3_000_000 || c.WindowTokens != 3_000_000 || !near(c.Share.Week, 60) || !near(c.Share.Today, 75) {
 		t.Fatalf("build codex cell = %+v", c)
 	}
 	// This device spent 2M in 7 days, 1M of them since the window began.
-	if c := this.Cells[1]; c.WindowTokens != 1_000_000 || !near(c.Share.Week, 40) || !near(c.Share.Today, 25) || c.Usage.Month != 2_000_000 {
+	if c := this.Cells[0]; c.WindowTokens != 1_000_000 || !near(c.Share.Week, 40) || !near(c.Share.Today, 25) || c.Usage.Month != 2_000_000 {
 		t.Fatalf("this codex cell = %+v", c)
 	}
-	if c := this.Cells[0]; !near(c.Share.Week, 100) {
+	if c := this.Cells[1]; !near(c.Share.Week, 100) || !near(c.BurnShare.Week, 100) {
 		t.Fatalf("this claude cell = %+v", c)
 	}
-	if c := other.Cells[0]; !near(c.Share.Week, 0) {
+	if c := other.Cells[1]; !near(c.Share.Week, 0) {
 		t.Fatalf("build claude cell = %+v", c)
 	}
 	if c := other.Cells[2]; c.Usage.Week != 500_000 || !near(c.Share.Week, 100) {

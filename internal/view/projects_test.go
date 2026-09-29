@@ -32,9 +32,9 @@ func TestLegend(t *testing.T) {
 		}
 	}
 	// The team's page at 120 shows every kind of mark, and ends with one
-	// line of them.
-	if l := Render(loadReport(t, "team"), Options{Width: 120, Loc: sampleZone}).Legend; strings.Contains(l, "\n") {
-		t.Errorf("the team's legend at 120 is more than one line:\n%s", l)
+	// line of them, then why its totals are estimated.
+	if l := strings.Split(Render(loadReport(t, "team"), Options{Width: 120, Loc: sampleZone}).Legend, "\n"); len(l) != 2 || !strings.HasPrefix(l[1], "~ stale/estimated: ") {
+		t.Errorf("the team's legend at 120 is not one line of marks and one of why:\n%s", strings.Join(l, "\n"))
 	}
 }
 

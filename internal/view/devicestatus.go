@@ -2,8 +2,10 @@ package view
 
 import (
 	"image/color"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // statusCol is a column of the status view right of the device's name: its
@@ -32,8 +34,8 @@ const (
 
 // deviceStatus is the status view of DEVICES: a row per device, in the
 // matrix's order, with its mark, its OS user, its collector's release, how
-// long ago it reported, the harnesses it reads, its tokens in each period,
-// and a note of what is wrong with it. Where the page is narrow, NOTE is cut
+// long ago it reported, the harnesses it reads, its burn in each period, a
+// ~ before it where it is estimated, and a note of what is wrong with it. Where the page is narrow, NOTE is cut
 // first, then USER goes, then VIA, then the periods: today, 30d, and 7d,
 // but never the chosen one or 90d.
 func (p *page) deviceStatus() []chunks {
@@ -44,7 +46,7 @@ func (p *page) deviceStatus() []chunks {
 	var grand Usage
 	for i, r := range rows {
 		devs[i] = p.device(r.DeviceID, r.Device)
-		grand = grand.add(r.Usage)
+		grand = grand.add(r.Burn)
 	}
 	cols, note := p.statusColumns(rows, devs, grand)
 
@@ -104,7 +106,7 @@ func (p *page) deviceStatus() []chunks {
 }
 
 // statusColumns are the status view's columns, with a cell for each of
-// rows, whose devices devs are, and one for TOTAL, whose tokens grand are.
+// rows, whose devices devs are, and one for TOTAL, whose burn grand is.
 // note is NOTE, which is among the columns only where a device has one.
 func (p *page) statusColumns(rows []Row, devs []*TeamDevice, grand Usage) (cols []*statusCol, note *statusCol) {
 	g := p.g
@@ -159,13 +161,19 @@ func (p *page) statusColumns(rows []Row, devs []*TeamDevice, grand Usage) (cols 
 		return p.harnesses(*d)
 	})
 	cols = []*statusCol{user, version, seen, via}
+	estimated := slices.ContainsFunc(rows, func(r Row) bool { return r.BurnEstimated })
 	for _, q := range Periods {
 		c := col(q.String(), strings.ToUpper(q.String()), "TOKENS", true, func(i int, _ *TeamDevice) chunks {
-			u := grand
+			u, est := grand, estimated
 			if i < n {
-				u = rows[i].Usage
+				u, est = rows[i].Burn, rows[i].BurnEstimated
 			}
-			return chunks{p.cell(p.millions(q.Of(u)))}
+			s := p.millions(q.Of(u))
+			if est && s != g.none {
+				p.mark("estimated")
+				s = g.silent + s
+			}
+			return chunks{p.cell(s)}
 		})
 		// Every header is dim, the period the rows are in the order of too:
 		// the title names it.
@@ -277,8 +285,8 @@ func (p *page) statusTitle(devs []*TeamDevice, edge int) chunks {
 	count(errs, errors, p.paint("", p.th.Out, false, false))
 	count(silent, "silent", p.paint("", p.th.Tight, false, false))
 	count(old, "old", p.muted(""))
-	title = append(title, p.muted(g.sep+"by "+p.o.Period.String()))
-	unit := append(append(chunks(nil), title...), p.muted(g.sep+"M tokens in+out"))
+	title = append(title, p.muted(g.sep+"by "+p.o.Period.String()+" UTC"))
+	unit := append(append(chunks(nil), title...), p.muted(g.sep+"M weighted tokens"))
 
 	pills := p.viewPills()
 	for _, t := range []chunks{unit, title} {
@@ -328,18 +336,20 @@ func (p *page) harnesses(d TeamDevice) chunks {
 	return out
 }
 
-// deviceNote is NOTE within w columns, or all of it for w below 0: a silent
-// device's silence, with the error it last reported, as ATTENTION has it;
-// else what fails on the device, in the error's color; else, on an old
-// release, why its release check failed, in the error's color, how long it
-// has not updated once that is longer than updating takes, in the tight
-// color, or the release it is behind; else why its release check failed.
-// The rest is dim. A short column cuts the error, then drops the last one,
-// says only "since" of the silence, then only its day, then only "silent",
-// so a time is never cut, and says only "latest" of the release. It keeps a
-// release check's error while 12 columns of it fit, after a shorter form of
-// what failed if need be, and how long a device has not updated, but not the
-// release.
+// deviceNote is NOTE within w columns, or all of it for w below 0, one note
+// a device, the first that applies: a silent device's silence, with the
+// device that reinstalled it, else the error it last reported, as ATTENTION
+// has it; else what fails on the device, in the error's color; else, on an
+// old release, why its release check failed, in the error's color, how long
+// it has not updated once that is longer than updating takes, in the tight
+// color, or the release it is behind; else why its release check failed;
+// else what its release cannot do; else its longest gap in reporting of the
+// last 2 days. The rest is dim. A short column cuts the error, then drops
+// the last one, says only "since" of the silence, then only its day, then
+// only "silent", so a time is never cut, and says only "latest" of the
+// release. It keeps a release check's error while 12 columns of it fit,
+// after a shorter form of what failed if need be, and how long a device has
+// not updated, but not the release. The other notes have shorter forms.
 func (p *page) deviceNote(d TeamDevice, w int) chunks {
 	g := p.g
 	fit := func(forms ...chunk) chunks {
@@ -375,6 +385,10 @@ func (p *page) deviceNote(d TeamDevice, w int) chunks {
 		s := "silent since " + c
 		// The clock without its time is its weekday or its date.
 		silence := []chunk{p.muted(s), p.muted("since " + c), p.muted("since " + c[:strings.LastIndexByte(c, ' ')]), p.muted("silent")}
+		if d.ReplacedBy != nil {
+			as := "reinstalled as " + p.txt(*d.ReplacedBy)
+			return fit(append([]chunk{p.muted(s + g.sep + as), p.muted(as), p.muted("reinstalled")}, silence[1:]...)...)
+		}
 		if d.Error == nil {
 			return fit(silence...)
 		}
@@ -396,6 +410,13 @@ func (p *page) deviceNote(d TeamDevice, w int) chunks {
 		return fit(p.muted("update: "+latest), p.muted(latest))
 	case d.UpdateError != nil:
 		return update(p.muted, "update check failing", "check failing")
+	case slices.Contains(d.Limitations, LimitNoClaudeQuota):
+		return fit(p.muted("cannot read Claude quota"), p.muted("no Claude quota"))
+	case slices.Contains(d.Limitations, LimitNoUpdateErrors):
+		return fit(p.muted("does not report update errors"), p.muted("no update errors"))
+	case d.Gap != nil:
+		long := "gap " + age(time.Duration(d.Gap.Seconds)*time.Second)
+		return fit(p.muted(long+" "+d.Gap.At.In(p.loc).Format("Jan 2")), p.muted(long))
 	}
 	return nil
 }

@@ -82,7 +82,8 @@ func TestAliasesTravelAndTheNewestWins(t *testing.T) {
 	for _, c := range r.Team.Matrix.Columns {
 		cols = append(cols, c.Name)
 	}
-	if !reflect.DeepEqual(cols, []string{"sam", "build", "sam"}) {
+	// Codex's accounts burn more than Claude's, so its group goes first.
+	if !reflect.DeepEqual(cols, []string{"build", "sam", "sam"}) {
 		t.Fatalf("columns = %v", cols)
 	}
 }

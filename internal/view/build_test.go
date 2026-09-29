@@ -392,6 +392,7 @@ func TestFillGivesAnEarlierReportBurn(t *testing.T) {
 		r.Projects[i].Burn, r.Projects[i].Active = Usage{}, Counts{}
 	}
 	t0 := &r.Team
+	t0.Estimated, t0.EstimatedReason = false, nil
 	for i := range t0.Devices {
 		t0.Devices[i].Burn = Usage{}
 	}

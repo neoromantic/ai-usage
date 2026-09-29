@@ -88,8 +88,8 @@ func TestStatusTitle(t *testing.T) {
 		width int
 		want  string
 	}{
-		{loadReport(t, "team"), 120, "DEVICES  13 · 1 error · 2 old · by 7d · M tokens in+out"},
-		{troubled(t), 120, "DEVICES  13 · 2 errors · 1 silent · 2 old · by 7d · M tokens in+out"},
+		{loadReport(t, "team"), 120, "DEVICES  15 · 1 error · 1 silent · 4 old · by 7d UTC · M weighted tokens"},
+		{troubled(t), 120, "DEVICES  15 · 2 errors · 2 silent · 4 old · by 7d UTC · M weighted tokens"},
 	} {
 		got := title(c.r, Options{Width: c.width, Loc: sampleZone})
 		if !strings.HasPrefix(got, c.want+"  ") || !strings.HasSuffix(got, "usage  ‹status›") {
@@ -99,9 +99,9 @@ func TestStatusTitle(t *testing.T) {
 	// A team with nothing wrong counts nothing.
 	r := loadReport(t, "team")
 	for i := range r.Team.Devices {
-		r.Team.Devices[i].Error, r.Team.Devices[i].Old = nil, false
+		r.Team.Devices[i].Error, r.Team.Devices[i].Old, r.Team.Devices[i].Silent = nil, false, false
 	}
-	if got := title(r, Options{Width: 120}); !strings.HasPrefix(got, "DEVICES  13 · by 7d · M tokens in+out  ") {
+	if got := title(r, Options{Width: 120}); !strings.HasPrefix(got, "DEVICES  15 · by 7d UTC · M weighted tokens  ") {
 		t.Errorf("a sound team: %q", got)
 	}
 	// Each count is in its state's color, and the views stay at 80.
@@ -116,14 +116,14 @@ func TestStatusTitle(t *testing.T) {
 	}
 	for _, want := range []string{
 		(&page{o: o, th: th}).paint("2 errors", th.Out, false, false).st.Render("2 errors"),
-		(&page{o: o, th: th}).paint("1 silent", th.Tight, false, false).st.Render("1 silent"),
-		(&page{o: o, th: th}).muted("2 old").st.Render("2 old"),
+		(&page{o: o, th: th}).paint("2 silent", th.Tight, false, false).st.Render("2 silent"),
+		(&page{o: o, th: th}).muted("4 old").st.Render("4 old"),
 	} {
 		if !strings.Contains(line, want) {
 			t.Errorf("title %q lacks %q", line, want)
 		}
 	}
-	if plain := sgr.ReplaceAllString(line, ""); !strings.HasPrefix(plain, "DEVICES  13 · 2 errors · 1 silent · 2 old · by 30d") || !strings.HasSuffix(plain, "usage  ‹status›") {
+	if plain := sgr.ReplaceAllString(line, ""); !strings.HasPrefix(plain, "DEVICES  15 · 2 errors · 2 silent · 4 old · by 30d UTC") || !strings.HasSuffix(plain, "usage  ‹status›") {
 		t.Errorf("title at 80: %q", plain)
 	}
 }
@@ -138,8 +138,8 @@ func TestStatusColumns(t *testing.T) {
 		per   Period
 		want  string
 	}{
-		{80, Week, "DEVICE VERSION SEEN TODAY 7D 30D 90D NOTE"},
-		{100, Week, "DEVICE VERSION SEEN VIA TODAY 7D 30D 90D NOTE"},
+		{80, Week, "DEVICE VERSION SEEN 7D 90D NOTE"},
+		{100, Week, "DEVICE VERSION SEEN TODAY 7D 30D 90D NOTE"},
 		{120, Week, "DEVICE USER VERSION SEEN VIA TODAY 7D 30D 90D NOTE"},
 		{160, Today, "DEVICE USER VERSION SEEN VIA TODAY 7D 30D 90D NOTE"},
 	} {
@@ -284,10 +284,10 @@ func TestStatusNote(t *testing.T) {
 	if !strings.Contains(strings.Join(p.Body, "\n"), sgr.FindString(lipglossFg(NewTheme(true).Tight))+"2d 3h") {
 		t.Error("a silent device's age is not in the silent color")
 	}
-	// At 80 columns NOTE is short, and bot-e's says since when, whole.
+	// At 80 columns bot-e's NOTE says since when, whole.
 	for _, ascii := range []bool{false, true} {
 		p := Render(troubled(t), devices(Options{Width: 80, Loc: sampleZone, ASCII: ascii}))
-		if l := statusLine(t, p, "bot-e"); !strings.HasSuffix(l, "  since Mon 14:02") {
+		if l := statusLine(t, p, "bot-e"); !strings.HasSuffix(l, " since Mon 14:02") {
 			t.Errorf("bot-e at 80, ascii %v: %q", ascii, l)
 		}
 	}
@@ -300,7 +300,7 @@ func TestStatusNote(t *testing.T) {
 // run since, or is silent; a failing check on a device that is not old is a
 // dim note alone. A short NOTE keeps some of why a check fails.
 func TestStatusNoteUpdate(t *testing.T) {
-	r := loadReport(t, "team")
+	r := withoutReplaced(loadReport(t, "team"))
 	kim := slices.IndexFunc(r.Team.Devices, func(d TeamDevice) bool { return d.Label == "MacBook-Pro-Kim" })
 	srv := slices.IndexFunc(r.Team.Devices, func(d TeamDevice) bool { return d.Label == "srv1" })
 	behind, timeout := r.GeneratedAt.Add(-26*time.Hour), "update check: github.com did not answer in 30s"
@@ -318,8 +318,8 @@ func TestStatusNoteUpdate(t *testing.T) {
 			t.Errorf("a failing check on a current device, in %d: %q, want %q", w, got, want)
 		}
 	}
-	if l := statusLine(t, Render(r, devices(Options{Width: 120, Loc: sampleZone})), "srv1"); !strings.Contains(l, "failing: github.com") {
-		t.Errorf("srv1 at 120: %q", l)
+	if l := statusLine(t, Render(r, devices(Options{Width: 160, Loc: sampleZone})), "srv1"); !strings.Contains(l, "failing: github.com") {
+		t.Errorf("srv1 at 160: %q", l)
 	}
 	old := func() string {
 		t.Helper()
@@ -331,7 +331,7 @@ func TestStatusNoteUpdate(t *testing.T) {
 		t.Fatalf("no OLD in ATTENTION:\n%s", strings.Join(got, "\n"))
 		return ""
 	}
-	if got := old(); got != " OLD    2 devices on v1.4.0  Mac.localdomain, MacBook-Pro-Kim · latest v1.4.2 · not updated for up to 1d" {
+	if got := old(); got != " OLD    3 devices on old releases  Mac.localdomain, MacBook-Pro-Kim +1 · latest v1.4.2 · not updated for up to 1d" {
 		t.Errorf("OLD: %q", got)
 	}
 	// A silent device is silent: OLD does not count its days.
@@ -391,6 +391,76 @@ func TestStatusNoteUpdate(t *testing.T) {
 	}
 }
 
+// TestStatusNoteReplacedLimitGap: a silent device reinstalled as another
+// says so, before since when; a release that cannot read the Claude quota,
+// or report its update errors, says what it cannot, after being behind; and
+// a device that missed runs says its longest gap, last.
+func TestStatusNoteReplacedLimitGap(t *testing.T) {
+	r := loadReport(t, "team")
+	o := Options{Width: 160, Loc: sampleZone}
+	find := func(pred func(TeamDevice) bool) int {
+		t.Helper()
+		i := slices.IndexFunc(r.Team.Devices, pred)
+		if i < 0 {
+			t.Fatal("no such device")
+		}
+		return i
+	}
+	note := func(i, w int) string { return newPage(&r, o).deviceNote(r.Team.Devices[i], w).String() }
+	old := find(func(d TeamDevice) bool { return d.ReplacedBy != nil })
+	botC := find(func(d TeamDevice) bool { return d.Label == "bot-c" })
+	botD := find(func(d TeamDevice) bool { return d.Label == "bot-d" })
+	for _, c := range []struct {
+		i, w int
+		want string
+	}{
+		{old, -1, "silent since Sun 12:12 · reinstalled as Mac.localdomain"},
+		{old, 40, "reinstalled as Mac.localdomain"},
+		{old, 20, "reinstalled"},
+		{old, 10, "since Sun"},
+		{botC, -1, "gap 12h Sep 22"},
+		{botC, 10, "gap 12h"},
+	} {
+		if got := note(c.i, c.w); got != c.want {
+			t.Errorf("%s in %d: %q, want %q", r.Team.Devices[c.i].Label, c.w, got, c.want)
+		}
+	}
+	r.Team.Devices[botD].Limitations = []string{LimitNoUpdateErrors}
+	r.Team.Devices[botC].Limitations = []string{LimitNoClaudeQuota, LimitNoUpdateErrors}
+	for _, c := range []struct {
+		i, w int
+		want string
+	}{
+		{botC, -1, "cannot read Claude quota"},
+		{botC, 20, "no Claude quota"},
+		{botD, -1, "does not report update errors"},
+		{botD, 20, "no update errors"},
+	} {
+		if got := note(c.i, c.w); got != c.want {
+			t.Errorf("%s in %d: %q, want %q", r.Team.Devices[c.i].Label, c.w, got, c.want)
+		}
+	}
+	// Behind, it says so first.
+	r.Team.Devices[botC].Old = true
+	if got := note(botC, -1); got != "update: latest v1.4.2" {
+		t.Errorf("old and limited: %q", got)
+	}
+}
+
+// withoutReplaced is r without the devices reinstalled as another, whose
+// silence and empty periods other tests do not expect.
+func withoutReplaced(r Report) Report {
+	var gone []string
+	r.Team.Devices = slices.DeleteFunc(r.Team.Devices, func(d TeamDevice) bool {
+		if d.ReplacedBy != nil {
+			gone = append(gone, d.Device)
+		}
+		return d.ReplacedBy != nil
+	})
+	r.Team.Matrix.Rows = slices.DeleteFunc(r.Team.Matrix.Rows, func(row Row) bool { return slices.Contains(gone, row.DeviceID) })
+	return r
+}
+
 // lipglossFg is the escape a text in color c starts with.
 func lipglossFg(c color.Color) string {
 	p := &page{o: Options{Color: true}}
@@ -435,7 +505,7 @@ func TestStatusVersion(t *testing.T) {
 // fails or reads in part with ×, and shows · for none; a mark in VIA is in
 // the legend only when VIA shows.
 func TestStatusVia(t *testing.T) {
-	r := loadReport(t, "team")
+	r := withoutReplaced(loadReport(t, "team"))
 	for i := range r.Team.Devices {
 		d := &r.Team.Devices[i]
 		d.Error = nil
@@ -493,7 +563,7 @@ func TestStatusViews(t *testing.T) {
 		}
 	}
 	// The matrix names both views where they fit beside its modes.
-	for w, want := range map[int]string{80: "13 · 7d · M tokens in+out        ‹tokens›  share", 120: "‹usage›  status   ‹tokens›  share"} {
+	for w, want := range map[int]string{80: "15 · 7d UTC · M weighted tokens       ‹tokens›  share", 120: "‹usage›  status   ‹tokens›  share"} {
 		if got := pageSection(Render(team, Options{Width: w}), "DEVICES")[0]; !strings.HasSuffix(got, want) {
 			t.Errorf("matrix title at %d: %q", w, got)
 		}

@@ -188,7 +188,7 @@ func TestPageOverAtReset(t *testing.T) {
 // line's names give way to a count, so the latest release stays on it, and
 // the subject of devices on several releases is not cut, from 80 columns.
 func TestPageOldLine(t *testing.T) {
-	names := regexp.MustCompile(`^ OLD +12 devices on (v1\.4\.0|old releases)  +(.+) \+(\d+) · latest v1\.4\.2$`)
+	names := regexp.MustCompile(`^ OLD +14 devices on (v1\.4\.0|old releases)  +(.+) \+(\d+) · latest v1\.4\.2$`)
 	for _, mixed := range []bool{false, true} {
 		r := loadReport(t, "team")
 		var old []string
@@ -228,13 +228,13 @@ func TestPageOldLine(t *testing.T) {
 func TestPageMatrixScroll(t *testing.T) {
 	r := loadReport(t, "team")
 	p := Render(r, Options{Width: 80, Loc: sampleZone})
-	if p.MatrixColumns != 8 || p.MatrixShown != 5 {
-		t.Errorf("columns %d, shown %d; want 8 and 5", p.MatrixColumns, p.MatrixShown)
+	if p.MatrixColumns != 8 || p.MatrixShown != 4 {
+		t.Errorf("columns %d, shown %d; want 8 and 4", p.MatrixColumns, p.MatrixShown)
 	}
 	p = Render(r, Options{Width: 80, Loc: sampleZone, Interactive: true, MatrixScroll: 5})
 	m := pageSection(p, "DEVICES")
-	if p.MatrixShown != 3 || !strings.Contains(m[1], "CODEX") || !strings.Contains(m[1], "NO QUOTA") ||
-		!strings.Contains(m[2], "unknown") || strings.Contains(m[2], "lee") {
+	if p.MatrixShown != 3 || !strings.Contains(m[1], "GROK") || !strings.Contains(m[1], "NO QUOTA") ||
+		!strings.Contains(m[2], "hermes") || strings.Contains(m[2], "lee") {
 		t.Errorf("scrolled by 5, shown %d:\n%s", p.MatrixShown, strings.Join(m, "\n"))
 	}
 	if !strings.HasPrefix(m[3], "  srv1 ") {
@@ -301,12 +301,12 @@ func TestPageHeat(t *testing.T) {
 	}
 	// In color the top step is bold: the largest cell on the page.
 	color := Render(r, Options{Width: 120, Loc: sampleZone, Color: true})
-	if l := row(color, "srv1"); !strings.Contains(l, "\x1b[1;38;2;") || !strings.Contains(l, "m240\x1b[m") {
+	if l := row(color, "srv1"); !strings.Contains(l, "\x1b[1;38;2;") || !strings.Contains(l, "m1080\x1b[m") {
 		t.Errorf("the largest cell is not bold in color: %q", l)
 	}
 	// Without color the largest of each column is bold, and nothing else.
 	mono := Render(r, Options{Width: 120, Loc: sampleZone})
-	if l := row(mono, "annbook"); !strings.Contains(l, "\x1b[1m19\x1b[m") || !strings.Contains(l, "\x1b[1m180\x1b[m") {
+	if l := row(mono, "annbook"); !strings.Contains(l, "\x1b[1m810\x1b[m") || !strings.Contains(l, "\x1b[1m230\x1b[m") {
 		t.Errorf("the largest of a column is not bold: %q", l)
 	}
 	if l := row(mono, "bot-a"); strings.Contains(l, "\x1b[1m") {
@@ -339,7 +339,7 @@ func TestPageHeadersDim(t *testing.T) {
 			p                    Page
 		}{
 			{"PROJECTS", "  PROJECT ", "PROJECTS  annbook · by " + per.String() + " · ", Render(team, o)},
-			{"status", "  DEVICE ", "DEVICES  13 · 1 error · 2 old · by " + per.String() + " · ", Render(team, devices(o))},
+			{"status", "  DEVICE ", "DEVICES  15 · 1 error · 1 silent · 4 old · by " + per.String() + " UTC · ", Render(team, devices(o))},
 			{"USAGE", "  CLAUDE ", "USAGE  sam-air · M weighted tokens", Render(single, o)},
 		} {
 			l := bodyLine(t, c.p, c.title, func(text string) bool { return strings.HasPrefix(text, c.prefix) })

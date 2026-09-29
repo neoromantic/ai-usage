@@ -1,7 +1,6 @@
 package view
 
 import (
-	"cmp"
 	"math"
 	"slices"
 	"strconv"
@@ -30,15 +29,6 @@ func (p *page) viewPills() chunks {
 	return chunks{p.pill("usage", !st), p.plain(" "), p.pill("status", st)}
 }
 
-// sortRows puts the matrix's rows in the order it shows them: the most
-// tokens in the period first, then by name. The status view shows its rows
-// in the same order.
-func sortRows(rows []Row, per Period) {
-	slices.SortStableFunc(rows, func(a, b Row) int {
-		return cmp.Or(cmp.Compare(per.Of(b.Usage), per.Of(a.Usage)), cmp.Compare(a.Device, b.Device))
-	})
-}
-
 // gridCol is one column of the matrix: a subscription, or the tokens of a
 // provider that have no quota.
 type gridCol struct {
@@ -59,19 +49,20 @@ const (
 	devicesHead = 3
 )
 
-// grid is DEVICES × SUBSCRIPTIONS: a row per device, the most tokens in
-// the period first, and a column per subscription, grouped under its
-// provider, with totals on the right and at the bottom. The cells are a
-// heat map on a log scale; without color, the largest in each column is
-// bold. The share mode shows each value as a part of its column's total: a
-// subscription's column adds up to 100, and TOTAL is each device's part of
-// the team's tokens.
+// grid is DEVICES × SUBSCRIPTIONS: a row per device and a column per
+// subscription, grouped under its provider, all in byBurn's order for the
+// period, with totals on the right and at the bottom. The columns that do
+// not fit fold into REST, so a row's cells add up to its TOTAL. The cells
+// are a heat map on a log scale; without color, the largest in each column
+// is bold. The share mode shows each value as a part of its column's total:
+// a subscription's column adds up to 100, and TOTAL is each device's part
+// of the team's burn. A TOTAL estimated from input and output has a ~.
 func (p *page) grid() []chunks {
 	g := p.g
 	m := p.r.Team.Matrix
 	per, share := p.o.Period, p.o.Share
 	var cols []gridCol
-	for i := range m.Columns {
+	for _, i := range columnOrder(m.Columns, per) {
 		c := &m.Columns[i]
 		grp := c.Provider
 		if c.NoQuota {
@@ -87,12 +78,12 @@ func (p *page) grid() []chunks {
 		}
 		cell := r.Cells[c.idx]
 		if share {
-			if v := per.share(cell.Share); v != nil {
+			if v := per.share(cell.BurnShare); v != nil {
 				return *v
 			}
 			return 0
 		}
-		return float64(per.Of(cell.Usage))
+		return float64(per.Of(cell.Burn))
 	}
 	// part prints a share in the period: the none mark when its whole has
 	// no tokens.
@@ -114,15 +105,15 @@ func (p *page) grid() []chunks {
 		}
 		cell := r.Cells[c.idx]
 		if share {
-			return part(cell.Share)
+			return part(cell.BurnShare)
 		}
-		return p.millions(per.Of(cell.Usage))
+		return p.millions(per.Of(cell.Burn))
 	}
 
 	var top float64
 	for k := range cols {
 		c := &cols[k]
-		c.w = max(gridCell, width(p.txt(c.c.Name)), width(totalOf(c.c.Usage)))
+		c.w = max(gridCell, width(p.txt(c.c.Name)), width(totalOf(c.c.Burn)))
 		for _, r := range rows {
 			c.w = max(c.w, width(text(r, *c)))
 			c.top = max(c.top, value(r, *c))
@@ -131,16 +122,31 @@ func (p *page) grid() []chunks {
 	}
 	nameW := width("TOTAL")
 	var grand Usage
+	estimated := false
 	for _, r := range rows {
 		nameW = max(nameW, min(width(p.txt(r.Device)), deviceName))
-		grand = grand.add(r.Usage)
+		grand = grand.add(r.Burn)
+		estimated = estimated || r.BurnEstimated
+	}
+	// est marks a total estimated.
+	est := func(s string, on bool) string {
+		if on && s != g.none {
+			p.mark("estimated")
+			return g.silent + s
+		}
+		return s
 	}
 	lead := 2 + nameW
-	totalW := max(gridCell, width(totalOf(grand)))
-	shown, hidden, edge := p.fitColumns(cols, lead, totalW)
+	totalW := max(gridCell, width(totalOf(grand))+btoi(estimated))
+	// A fold of columns is at most all of them.
+	restW := max(gridCell, width(totalOf(grand)))
+	shown, folded, edge := p.fitColumns(cols, lead, restW, totalW)
+	rest := p.restColumn(cols, folded, rows)
 	out := []chunks{p.gridTitle(len(rows), edge)}
+	restX := edge - 2 - totalW - restW
 
-	// The providers over their columns, each with a thin rule.
+	// The providers over their columns, each with a thin rule, and the
+	// count of the columns folded into REST.
 	heads := chunks{p.space(lead)}
 	cur := lead
 	for i := 0; i < len(shown); {
@@ -155,8 +161,9 @@ func (p *page) grid() []chunks {
 		cur = last.x + last.w
 		i = j + 1
 	}
-	if hidden > 0 {
-		heads = append(heads, p.space(edge-width(more(hidden))-cur), p.muted(more(hidden)))
+	if len(folded) > 0 {
+		n := "+" + strconv.Itoa(len(folded))
+		heads = append(heads, p.space(restX+restW-width(n)-cur), p.muted(n))
 	}
 	out = append(out, heads)
 
@@ -173,11 +180,26 @@ func (p *page) grid() []chunks {
 		names = append(names, p.right(name, c.w)...)
 		cur = c.x + c.w
 	}
+	if len(folded) > 0 {
+		names = append(names, p.space(restX-cur))
+		names = append(names, p.right(p.muted("rest"), restW)...)
+	}
 	names = append(names, p.space(2))
 	names = append(names, p.right(p.muted("TOTAL"), totalW)...)
 	out = append(out, names)
 
-	for _, r := range rows {
+	// restCell prints REST's part of burn u, of the folded columns' whole.
+	restCell := func(u, whole Usage) chunk {
+		s := p.millions(per.Of(u))
+		if share {
+			s = part(shareOf(u, whole))
+		}
+		if s == g.none {
+			return p.cell(s)
+		}
+		return p.muted(s)
+	}
+	for i, r := range rows {
 		line := p.deviceLead(r, nameW)
 		cur := lead
 		for _, k := range shown {
@@ -186,11 +208,15 @@ func (p *page) grid() []chunks {
 			line = append(line, p.right(p.heat(text(r, c), value(r, c), c, top), c.w)...)
 			cur = c.x + c.w
 		}
+		if len(folded) > 0 {
+			line = append(line, p.space(restX-cur))
+			line = append(line, p.right(restCell(rest.rows[i], rest.total), restW)...)
+		}
 		line = append(line, p.space(2))
 		if share {
-			line = append(line, p.right(p.cell(part(r.Share)), totalW)...)
+			line = append(line, p.right(p.cell(est(part(r.BurnShare), r.BurnEstimated)), totalW)...)
 		} else {
-			line = append(line, p.right(p.cell(p.millions(per.Of(r.Usage))), totalW)...)
+			line = append(line, p.right(p.cell(est(p.millions(per.Of(r.Burn)), r.BurnEstimated)), totalW)...)
 		}
 		out = append(out, line)
 	}
@@ -200,25 +226,60 @@ func (p *page) grid() []chunks {
 	for _, k := range shown {
 		c := cols[k]
 		total = append(total, p.space(c.x-cur))
-		total = append(total, p.right(p.cell(totalOf(c.c.Usage)), c.w)...)
+		total = append(total, p.right(p.cell(totalOf(c.c.Burn)), c.w)...)
 		cur = c.x + c.w
 	}
+	if len(folded) > 0 {
+		total = append(total, p.space(restX-cur))
+		total = append(total, p.right(p.cell(totalOf(rest.total)), restW)...)
+	}
 	total = append(total, p.space(2))
-	total = append(total, p.right(p.cell(totalOf(grand)), totalW)...)
+	total = append(total, p.right(p.cell(est(totalOf(grand), estimated)), totalW)...)
 	return append(out, total)
 }
 
+// rest is the burn of the matrix's folded columns: each row's, in the order
+// of the rows, and all of it.
+type rest struct {
+	rows  []Usage
+	total Usage
+}
+
+// restColumn adds up the folded columns of cols for each of rows.
+func (p *page) restColumn(cols []gridCol, folded []int, rows []Row) rest {
+	out := rest{rows: make([]Usage, len(rows))}
+	for _, k := range folded {
+		c := cols[k]
+		out.total = out.total.add(c.c.Burn)
+		for i, r := range rows {
+			if c.idx < len(r.Cells) {
+				out.rows[i] = out.rows[i].add(r.Cells[c.idx].Burn)
+			}
+		}
+	}
+	return out
+}
+
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 // fitColumns places the columns that fit on the page, from the scroll on,
-// between the rows' lead and TOTAL, totalW wide, and notes how many there
-// are and how many show. It returns the shown ones, how many are off the
-// right edge, and where the matrix ends.
-func (p *page) fitColumns(cols []gridCol, lead, totalW int) (shown []int, hidden, edge int) {
-	// after is how wide the matrix is right of its last column: TOTAL, and
-	// over it the count of the columns off the right edge, if any.
-	after := func(off int) int {
+// between the rows' lead and TOTAL, totalW wide, with REST, restW wide,
+// before TOTAL when any column does not show, and notes how many there are
+// and how many show. It returns the shown ones, the folded ones, those
+// scrolled off the left and those off the right edge, and where the matrix
+// ends.
+func (p *page) fitColumns(cols []gridCol, lead, restW, totalW int) (shown, folded []int, edge int) {
+	// after is how wide the matrix is right of its last column: REST, when
+	// columns fold, and TOTAL.
+	after := func(folds bool) int {
 		n := 2 + totalW
-		if off > 0 {
-			n = max(n, 2+width(more(off)))
+		if folds {
+			n += 2 + restW
 		}
 		return n
 	}
@@ -229,7 +290,7 @@ func (p *page) fitColumns(cols []gridCol, lead, totalW int) (shown []int, hidden
 		if k == scroll || cols[k].group != cols[k-1].group {
 			gap = 2
 		}
-		if len(shown) > 0 && x+gap+cols[k].w+after(len(cols)-k-1) > p.w {
+		if len(shown) > 0 && x+gap+cols[k].w+after(scroll > 0 || k < len(cols)-1) > p.w {
 			break
 		}
 		cols[k].x = x + gap
@@ -237,26 +298,25 @@ func (p *page) fitColumns(cols []gridCol, lead, totalW int) (shown []int, hidden
 		shown = append(shown, k)
 	}
 	p.matrixColumns, p.matrixShown = len(cols), len(shown)
-	// The count is of the columns off the right edge only. Those scrolled
-	// off the left are the interactive view's, whose key bar leads back.
-	hidden = len(cols) - scroll - len(shown)
-	return shown, hidden, x + after(hidden)
+	for k := range cols {
+		if k < scroll || k >= scroll+len(shown) {
+			folded = append(folded, k)
+		}
+	}
+	return shown, folded, x + after(len(folded) > 0)
 }
 
-// more says how many of the matrix's columns are off the right edge.
-func more(n int) string { return "+" + strconv.Itoa(n) + " more" }
-
 // gridTitle is the matrix's title line: its name, the count of its rows,
-// the period and the unit, and the pills of its views and modes, ending at
-// edge.
+// the period in UTC days and the unit, and the pills of its views and
+// modes, ending at edge.
 func (p *page) gridTitle(rows, edge int) chunks {
 	g, per, share := p.g, p.o.Period, p.o.Share
 	title := chunks{p.bold("DEVICES " + g.times + " SUBSCRIPTIONS"), p.plain("  ")}
-	unit := "M tokens in+out"
+	unit := "M weighted tokens"
 	if share {
 		unit = "% of column total"
 	}
-	title = append(title, p.muted(strconv.Itoa(rows)+g.sep+per.String()+g.sep+unit))
+	title = append(title, p.muted(strconv.Itoa(rows)+g.sep+per.String()+" UTC"+g.sep+unit))
 	// The views go before the matrix's modes, and are the first to go
 	// where both do not fit.
 	modes := chunks{p.pill("tokens", !share), p.plain(" "), p.pill("share", share)}

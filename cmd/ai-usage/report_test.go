@@ -34,14 +34,14 @@ func TestReportFrom(t *testing.T) {
 	d := newDevice(t)
 	saved := filepath.Join("..", "..", "internal", "view", "testdata", "team.json")
 	if out := d.ok("report", "--from", saved, "--width", "120"); !strings.Contains(out, "ai-usage · annbook · team qmvrtzpa") ||
-		!strings.Contains(out, "\nDEVICES × SUBSCRIPTIONS  13 · 7d") {
+		!strings.Contains(out, "\nDEVICES × SUBSCRIPTIONS  15 · 7d") {
 		t.Fatalf("report --from:\n%s", out)
 	}
 	var r view.Report
 	if err := json.Unmarshal([]byte(d.ok("report", "--from", saved, "--json")), &r); err != nil {
 		t.Fatal(err)
 	}
-	if r.Collector.DeviceLabel != "annbook" || len(r.Team.Devices) != 13 {
+	if r.Collector.DeviceLabel != "annbook" || len(r.Team.Devices) != 15 {
 		t.Fatalf("report --from --json: %s with %d devices", r.Collector.DeviceLabel, len(r.Team.Devices))
 	}
 	if _, err := os.Stat(d.dir); !os.IsNotExist(err) {

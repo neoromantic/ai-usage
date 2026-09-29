@@ -10,26 +10,29 @@ import (
 	"github.com/neoromantic/ai-usage/internal/state"
 )
 
-// login is what a Hermes account on one device spent through one login, in
-// input plus output tokens.
+// login is what a Hermes account on one device spent through one login: its
+// input plus output tokens, and its burn.
 type login struct {
 	link   Link
 	tokens int64
+	burn   int64
 }
 
 // split divides a Hermes account on one device among the logins it spent
-// through, in proportion to what the device counted through each. The
-// snapshot does not split the account's days, or its tokens since a window
-// began, by login, so each login gets that share of them, and so does what
-// the device counted through no login, as from before it recorded logins.
-// An account that spent through no login stays whole, on its link.
+// through, in proportion to what the device counted through each: its
+// tokens by their input plus output, and its burn by the burn. The snapshot
+// does not split the account's days, or what it spent since a window began,
+// by login, so each login gets that share of them, and so does what the
+// device counted through no login, as from before it recorded logins. An
+// account that spent through no login stays whole, on its link.
 func (a devAccount) split(logins []login, shift int) []devAccount {
 	var parts []devAccount
-	var weights []int64
+	var weights, burns []int64
 	for _, l := range logins {
 		if l.tokens > 0 {
-			parts = append(parts, devAccount{provider: a.provider, label: a.label, last: a.last, link: &l.link})
+			parts = append(parts, devAccount{provider: a.provider, label: a.label, last: a.last, link: &l.link, estimated: a.estimated})
 			weights = append(weights, l.tokens)
+			burns = append(burns, l.burn)
 		}
 	}
 	if subscription(a.provider) || len(parts) == 0 {
@@ -40,23 +43,34 @@ func (a devAccount) split(logins []login, shift int) []devAccount {
 			parts[i].days = append(parts[i].days, v)
 		}
 	}
+	for _, n := range a.burnDays {
+		for i, v := range shares(n, burns) {
+			parts[i].burnDays = append(parts[i].burnDays, v)
+		}
+	}
 	for _, r := range a.recent {
-		for i, v := range shares(r.Tokens, weights) {
-			parts[i].recent = append(parts[i].recent, snapshot.Recent{Window: r.Window, Start: r.Start, Tokens: v})
+		tokens, burn := shares(r.Tokens, weights), shares(r.Burn, burns)
+		for i := range parts {
+			parts[i].recent = append(parts[i].recent, snapshot.Recent{Window: r.Window, Start: r.Start, Tokens: tokens[i], Burn: burn[i]})
 		}
 	}
 	for i := range parts {
 		parts[i].usage = usageOf(parts[i].days, shift)
+		parts[i].burn = usageOf(parts[i].burnDays, shift)
 	}
 	return parts
 }
 
 // shares divides n in proportion to weights, in whole tokens that add up to
-// n.
+// n. Weights that add up to nothing weigh alike.
 func shares(n int64, weights []int64) []int64 {
 	var sum, upTo, prev int64
 	for _, w := range weights {
 		sum += w
+	}
+	if sum <= 0 {
+		weights = slices.Repeat([]int64{1}, len(weights))
+		sum = int64(len(weights))
 	}
 	out := make([]int64, len(weights))
 	for i, w := range weights {
@@ -101,7 +115,7 @@ func sameReading(a, b snapshot.Account) bool {
 // addLinked counts what account (provider, label) on one device spent
 // through the account (to, toLabel).
 func addLinked(linked map[string]map[string]*LinkedUsage, to, toLabel, provider, label, device string, a snapshot.Linked) {
-	target := state.Key(to, toLabel)
+	target := linkKey(to, toLabel)
 	if linked[target] == nil {
 		linked[target] = map[string]*LinkedUsage{}
 	}
@@ -114,6 +128,12 @@ func addLinked(linked map[string]map[string]*LinkedUsage, to, toLabel, provider,
 	u.Devices = append(u.Devices, device)
 	u.Sessions += a.Sessions
 	u.Tokens = u.Tokens.Add(a.Tokens)
+}
+
+// linkKey keys what was spent through the account of provider with label,
+// an email in any case.
+func linkKey(provider, label string) string {
+	return state.Key(provider, snapshot.LabelKey(label))
 }
 
 func linkedList(m map[string]*LinkedUsage) []LinkedUsage {

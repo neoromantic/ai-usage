@@ -56,8 +56,10 @@ func (p *page) legend() string {
 		items = append(items, g.tickIn+" even use")
 	}
 	add(s["dotted"], g.unread+" no reading")
-	// An old reading and a silent device are both stale.
-	add(s["stale"] || s["silent"], g.silent+" stale")
+	// An old reading and a silent device are both stale, and a total from
+	// input and output estimated.
+	short, long := p.staleItem(s["stale"] || s["silent"], s["estimated"])
+	add(long == "" && (s["stale"] || s["silent"] || s["estimated"]), short)
 	// A window not read since a refusal is not known either.
 	add(s["unknown"] || s["unread"], "? unknown")
 	add(s["dash"], g.dash+" no forecast")
@@ -67,6 +69,9 @@ func (p *page) legend() string {
 	add(s["old"], g.old+" old")
 	add(s["none"], g.none+" none")
 	add(s["chosen"], g.open+g.shut+" chosen")
+	// Why totals are estimated comes last, where it wraps onto a line of
+	// its own after the marks.
+	add(long != "", long)
 	if len(items) == 0 {
 		return ""
 	}
@@ -239,4 +244,23 @@ func (p *page) align(c chunks, w int, right bool) chunks {
 		return append(chunks{p.space(w - c.width())}, c...)
 	}
 	return c.padTo(w)
+}
+
+// staleItem is the legend's item for ~: stale, estimated, or both; and,
+// when totals are estimated, the item with why, if that fits in a line.
+func (p *page) staleItem(stale, estimated bool) (short, long string) {
+	g := p.g
+	if !estimated {
+		return g.silent + " stale", ""
+	}
+	short = g.silent + " estimated"
+	if stale {
+		short = g.silent + " stale/estimated"
+	}
+	if r := p.r.Team.EstimatedReason; r != nil {
+		if s := short + ": " + p.txt(strings.ReplaceAll(*r, "…", g.ell)); width(s) <= p.w-1 {
+			long = s
+		}
+	}
+	return short, long
 }
