@@ -92,3 +92,28 @@ func TestClaudeAppAccountDoesNotStopAClaim(t *testing.T) {
 		t.Fatal("unknown account kept history")
 	}
 }
+
+// A home logged in to the account of the Claude app's sessions is told it
+// was used when they were, so that Claude Code reads the usage they spend.
+// Another account's sessions tell it nothing.
+func TestClaudeAppUseIsItsLoginsUse(t *testing.T) {
+	w, o := newWorld(t)
+	def := w.home(t, "claude")
+	w.login("claude", def, "ann@x", nil)
+	w.sessions("claude", def, sess("cli", "/src/api", 100, t0.Add(-3*time.Hour)))
+	a := claudeAppHome(t, w.userHome, "", "a1", `{"emailAddress":"ann@x"}`)
+	b := claudeAppHome(t, w.userHome, "", "b2", `{"emailAddress":"bea@x"}`)
+	w.sessions("claude", a, sess("app-a", "/sessions/brave-owl", 200, t0.Add(-10*time.Minute)))
+	w.sessions("claude", b, sess("app-b", "/sessions/calm-fox", 300, t0.Add(-5*time.Minute)))
+	k := state.Key("claude", def)
+	// The first run learns who is logged in.
+	run(t, o)
+	if got := w.lastUse[k]; !got.Equal(t0.Add(-3 * time.Hour)) {
+		t.Errorf("first run: last use %v", got)
+	}
+	w.now = t0.Add(15 * time.Minute)
+	run(t, o)
+	if got := w.lastUse[k]; !got.Equal(t0.Add(-10 * time.Minute)) {
+		t.Errorf("last use %v", got)
+	}
+}

@@ -63,6 +63,7 @@ func (s *sampler) harness(ctx context.Context, p string, homes []string, res log
 	// recorded the account each session ran under.
 	apps := claudeApps(p, homes)
 	used, lastUse := lastUses(p, homes, res)
+	lendAppUse(s.st, p, homes, apps, lastUse)
 	answers := askAll(ctx, func(ctx context.Context, p, home string) (probe.Reading, error) {
 		if _, ok := apps[home]; ok {
 			return probe.Reading{}, nil
@@ -128,6 +129,24 @@ func lastUses(p string, homes []string, res logs.Result) (used map[string]bool, 
 		delete(lastUse, h)
 	}
 	return used, lastUse
+}
+
+// lendAppUse gives each home logged in to the account of one of the Claude
+// app's sessions, as the last run found it, the time that session was last
+// used when it is later than its own. The app's sessions spend that
+// account's quota, and have no login of their own to read it with.
+func lendAppUse(st *state.State, p string, homes []string, apps map[string]claudeAppSession, lastUse map[string]time.Time) {
+	for appHome, app := range apps {
+		used, acct := lastUse[appHome], app.account()
+		if used.IsZero() || acct == UnknownAccount {
+			continue
+		}
+		for _, h := range homes {
+			if _, isApp := apps[h]; !isApp && st.Current[state.Key(p, h)] == acct && used.After(lastUse[h]) {
+				lastUse[h] = used
+			}
+		}
+	}
 }
 
 // answer is one home's reply to a probe.
