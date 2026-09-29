@@ -2,33 +2,50 @@ package logs
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
-// cl is one Claude transcript line. Usage is [input, output, cache write, cache read].
+// cl is one Claude transcript line. Usage is [input, output, cache write,
+// cache read], and ttl splits the cache writes into [kept 5m, kept 1h]. Stop
+// is the stop reason as JSON, left out when empty, and so is the version.
 type cl struct {
 	typ, uuid, id, req, session, cwd, at string
 	side                                 bool
 	usage                                *[4]int64
+	ttl                                  *[2]int64
+	stop, version                        string
 }
 
 func (c cl) String() string {
 	if c.typ == "" {
 		c.typ = "assistant"
 	}
-	usage := ""
+	usage, stop, version := "", "", ""
 	if c.usage != nil {
-		usage = fmt.Sprintf(`,"usage":{"input_tokens":%d,"output_tokens":%d,"cache_creation_input_tokens":%d,"cache_read_input_tokens":%d,"service_tier":"standard"}`, c.usage[0], c.usage[1], c.usage[2], c.usage[3])
+		ttl := ""
+		if c.ttl != nil {
+			ttl = fmt.Sprintf(`,"cache_creation":{"ephemeral_5m_input_tokens":%d,"ephemeral_1h_input_tokens":%d}`, c.ttl[0], c.ttl[1])
+		}
+		usage = fmt.Sprintf(`,"usage":{"input_tokens":%d,"output_tokens":%d,"cache_creation_input_tokens":%d,"cache_read_input_tokens":%d%s,"service_tier":"standard"}`, c.usage[0], c.usage[1], c.usage[2], c.usage[3], ttl)
 	}
-	return fmt.Sprintf(`{"parentUuid":null,"isSidechain":%t,"userType":"external","cwd":%q,"sessionId":%q,"version":"2.1.3","type":%q,"message":{"id":%q,"role":"assistant","model":"claude-opus-4-5","content":[{"type":"text","text":%q}]%s},"requestId":%q,"uuid":%q,"timestamp":%q}`,
-		c.side, c.cwd, c.session, c.typ, c.id, secret, usage, c.req, c.uuid, c.at)
+	if c.stop != "" {
+		stop = `,"stop_reason":` + c.stop + `,"stop_sequence":null`
+	}
+	if c.version != "" {
+		version = fmt.Sprintf(`"version":%q,`, c.version)
+	}
+	return fmt.Sprintf(`{"parentUuid":null,"isSidechain":%t,"userType":"external","cwd":%q,"sessionId":%q,%s"type":%q,"message":{"id":%q,"role":"assistant","model":"claude-opus-4-5","content":[{"type":"text","text":%q}]%s%s},"requestId":%q,"uuid":%q,"timestamp":%q}`,
+		c.side, c.cwd, c.session, version, c.typ, c.id, secret, stop, usage, c.req, c.uuid, c.at)
 }
 
 func use(in, out, cacheWrite, cacheRead int64) *[4]int64 {
@@ -44,6 +61,12 @@ func costState(session string, perModel ...[4]int64) string {
 	}
 	return fmt.Sprintf(`{"type":"cost-state","sessionId":%q,"totalCostUSD":1.5,"totalAPIDuration":900,"totalAPIDurationWithoutRetries":800,"totalToolDuration":10,"totalLinesAdded":3,"totalLinesRemoved":0,"totalDuration":5000,"startTime":1790000000000,"modelUsage":{%s},"hasUnknownModelCost":false}`,
 		session, strings.Join(models, ","))
+}
+
+// costStateAt is a cost-state line that records when it was written, which
+// the lines Claude Code writes today do not.
+func costStateAt(session, at string, perModel ...[4]int64) string {
+	return strings.Replace(costState(session, perModel...), `"sessionId"`, fmt.Sprintf(`"timestamp":%q,"sessionId"`, at), 1)
 }
 
 func TestClaudeStreamingSnapshotsCountOnce(t *testing.T) {
@@ -101,7 +124,9 @@ func TestClaudeSubAgentsRollIntoSession(t *testing.T) {
 	if want := (Tokens{Input: 18, Output: 10, CacheWrite: 1, CacheRead: 2}); got.Tokens != want {
 		t.Fatalf("tokens = %+v, want %+v", got.Tokens, want)
 	}
-	if got.Project != "/work/claude" || !got.Updated.Equal(now.Add(-time.Hour)) {
+	// The session was last active at its newest message, a sub-agent's,
+	// whenever the files were written; the journal records no usage.
+	if got.Project != "/work/claude" || !got.Updated.Equal(mustTime(t, "2026-09-20T10:02:00Z")) {
 		t.Fatalf("session = %+v", got)
 	}
 }
@@ -405,8 +430,8 @@ func TestClaudeRejectedRequests(t *testing.T) {
 }
 
 // Each message's input and output go to the hour of its last snapshot, in the
-// session that counts it. What the log gives no time for, a line without one
-// or the tracker's side calls, is spread over those hours in proportion.
+// session that counts it, and the tracker's side calls to the hour of its
+// line. A line without a time is spread over those hours in proportion.
 func TestClaudeHours(t *testing.T) {
 	t.Run("messages, sub-agents, copies, and the tracker", func(t *testing.T) {
 		home := t.TempDir()
@@ -437,14 +462,187 @@ func TestClaudeHours(t *testing.T) {
 		if want := (Tokens{Input: 50, Output: 20, CacheWrite: 5, CacheRead: 7}); got.Tokens != want {
 			t.Fatalf("orig tokens = %+v, want %+v", got.Tokens, want)
 		}
-		// The messages with a time spent 22, 19, and 8. The 21 left, m3 and
-		// what the tracker adds to the messages, goes along in proportion,
-		// with what rounding leaves to the largest hour.
+		// The messages with a time spent 22, 19, and 8. What the tracker
+		// adds to the messages, 18, was spent by the newest message before
+		// its line. The 3 of m3, which has no time, goes along in
+		// proportion, with what rounding leaves to the largest hour.
 		checkHours(t, got, map[string]int64{
-			"2026-09-20T22:10:00Z": 32,
-			"2026-09-21T00:00:01Z": 27,
-			"2026-09-21T05:30:00Z": 11,
+			"2026-09-20T22:10:00Z": 23,
+			"2026-09-21T00:00:01Z": 39,
+			"2026-09-21T05:30:00Z": 8,
 		})
 		checkHours(t, byID(t, res, "copy"), map[string]int64{"2026-09-21T09:00:00Z": 44})
 	})
+}
+
+// Claude splits each message's cache writes by how long they are kept. The
+// hour keeps the split; the session's counts do not carry it.
+func TestClaudeCacheWriteTTL(t *testing.T) {
+	home := t.TempDir()
+	mustWrite(t, filepath.Join(home, "projects", "-Users-ann-src-app", "a4c2e917.jsonl"),
+		cl{id: "m1", req: "r1", session: "a4c2e917", cwd: "/Users/ann/src/app", at: "2026-09-20T10:05:00Z", usage: use(10, 20, 4000, 900), ttl: &[2]int64{1000, 3000}}.String(),
+		// No split: none of it is kept an hour.
+		cl{id: "m2", req: "r2", session: "a4c2e917", cwd: "/Users/ann/src/app", at: "2026-09-20T11:05:00Z", usage: use(10, 20, 500, 900)}.String(),
+		// More kept an hour than written: no more than was written.
+		cl{id: "m3", req: "r3", session: "a4c2e917", cwd: "/Users/ann/src/app", at: "2026-09-20T12:05:00Z", usage: use(10, 20, 100, 900), ttl: &[2]int64{0, 700}}.String(),
+	)
+	got := byID(t, mustRead(t, "claude", home, since), "a4c2e917")
+	if want := (Tokens{Input: 30, Output: 60, CacheRead: 2700, CacheWrite: 4600}); got.Tokens != want {
+		t.Fatalf("tokens = %+v, want %+v", got.Tokens, want)
+	}
+	for at, want := range map[string]meter.Use{
+		"2026-09-20T10:05:00Z": {Input: 10, Output: 20, CacheRead: 900, CacheWrite: 4000, CacheWrite1h: 3000},
+		"2026-09-20T11:05:00Z": {Input: 10, Output: 20, CacheRead: 900, CacheWrite: 500},
+		"2026-09-20T12:05:00Z": {Input: 10, Output: 20, CacheRead: 900, CacheWrite: 100, CacheWrite1h: 100},
+	} {
+		if h := got.Hours[HourOf(mustTime(t, at))]; h != want {
+			t.Errorf("hour of %s = %+v, want %+v", at, h, want)
+		}
+	}
+	if len(got.Hours) != 3 {
+		t.Fatalf("hours = %+v", got.Hours)
+	}
+}
+
+// What Claude Code tracked beyond the transcript, for the session and its
+// sub-agents, was spent when it wrote its line. It lands in that hour whole,
+// and the hours the messages place keep what they had.
+func TestClaudeTrackedLandsInItsHour(t *testing.T) {
+	msgs := []string{
+		cl{id: "m1", req: "r1", session: "a4c2e917", cwd: "/Users/ann/src/app", at: "2026-09-20T10:15:00Z", usage: use(100, 1000, 50, 400)}.String(),
+		cl{id: "m2", req: "r2", session: "a4c2e917", cwd: "/Users/ann/src/app", at: "2026-09-20T11:30:00Z", usage: use(50, 2000, 0, 800)}.String(),
+	}
+	sub := cl{id: "s1", req: "rs1", session: "a4c2e917", side: true, at: "2026-09-20T11:45:00Z", usage: use(20, 500, 0, 100)}.String()
+	// The tracker has 5000 more output than the transcripts, and nothing
+	// more of the rest.
+	tracked := [4]int64{170, 8500, 50, 1300}
+	hours := map[string]meter.Use{
+		"2026-09-20T10:15:00Z": {Input: 100, Output: 1000, CacheRead: 400, CacheWrite: 50},
+		"2026-09-20T11:30:00Z": {Input: 70, Output: 2500, CacheRead: 900},
+	}
+	for _, tc := range []struct {
+		name, at string
+		lines    []string
+		more     map[string]meter.Use
+	}{
+		{name: "a line with its time", at: "2026-09-20T12:40:00Z",
+			lines: append(slices.Clone(msgs), costStateAt("a4c2e917", "2026-09-20T12:40:00Z", tracked))},
+		// Claude Code writes no time on the line. The newest message before
+		// it was the last the tracker saw; one after it is a resumed run's,
+		// which the tracker has not seen yet.
+		{name: "a line without one", at: "2026-09-20T11:30:00Z",
+			lines: append(slices.Clone(msgs), costState("a4c2e917", tracked),
+				cl{id: "m3", req: "r3", session: "a4c2e917", cwd: "/Users/ann/src/app", at: "2026-09-20T14:20:00Z", usage: use(30, 0, 0, 0)}.String()),
+			more: map[string]meter.Use{"2026-09-20T14:20:00Z": {Input: 30}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			dir := filepath.Join(home, "projects", "-Users-ann-src-app")
+			mustWrite(t, filepath.Join(dir, "a4c2e917.jsonl"), tc.lines...)
+			mustWrite(t, filepath.Join(dir, "a4c2e917", "subagents", "agent-1.jsonl"), sub)
+
+			// Before the hours are fitted to the tokens they already add up.
+			files, _ := claudeFiles(home, since)
+			for _, s := range rollup(countClaude(files)) {
+				if s.Hours.Sum().Tokens() != s.Tokens {
+					t.Fatalf("%s hours add up to %+v, tokens %+v", s.ID, s.Hours.Sum(), s.Tokens)
+				}
+			}
+			got := byID(t, mustRead(t, "claude", home, since), "a4c2e917")
+			if got.Side != (Tokens{Output: 5000}) {
+				t.Fatalf("side = %+v", got.Side)
+			}
+			want := maps.Clone(hours)
+			maps.Copy(want, tc.more)
+			want[tc.at] = want[tc.at].Add(meter.Use{Output: 5000})
+			if len(got.Hours) != len(want) {
+				t.Fatalf("hours = %+v, want %+v", got.Hours, want)
+			}
+			for at, w := range want {
+				if h := got.Hours[HourOf(mustTime(t, at))]; h != w {
+					t.Errorf("hour of %s = %+v, want %+v", at, h, w)
+				}
+			}
+		})
+	}
+}
+
+// A reply whose stream ended before its final count keeps a null stop reason
+// and next to no output. The session counts those it counts the messages of,
+// its sub-agents' among them.
+func TestClaudeNullReplies(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, "projects", "-Users-ann-src-app")
+	null := func(id string, out int64) string {
+		return cl{id: id, req: "r" + id, session: "a4c2e917", cwd: "/Users/ann/src/app", at: "2026-09-20T10:00:00Z", usage: use(1, out, 0, 0), stop: "null"}.String()
+	}
+	mustWrite(t, filepath.Join(dir, "a4c2e917.jsonl"),
+		null("m1", 5),
+		// Enough output is a reply, however it ended.
+		null("m2", 20),
+		cl{id: "m3", req: "rm3", session: "a4c2e917", at: "2026-09-20T10:01:00Z", usage: use(1, 3, 0, 0), stop: `"tool_use"`}.String(),
+		// No stop reason at all is not a null one.
+		cl{id: "m4", req: "rm4", session: "a4c2e917", at: "2026-09-20T10:02:00Z", usage: use(1, 0, 0, 0)}.String(),
+		// The last snapshot of a message decides.
+		null("m5", 1),
+		cl{id: "m5", req: "rm5", session: "a4c2e917", at: "2026-09-20T10:03:00Z", usage: use(1, 300, 0, 0), stop: `"end_turn"`}.String(),
+		null("m6", 1),
+		null("m6", 2),
+	)
+	mustWrite(t, filepath.Join(dir, "a4c2e917", "subagents", "agent-1.jsonl"),
+		cl{id: "s1", req: "rs1", session: "a4c2e917", side: true, at: "2026-09-20T10:04:00Z", usage: use(1, 0, 0, 0), stop: "null"}.String())
+	// A resumed copy repeats m1, which counts in the session that has it first.
+	mustWrite(t, filepath.Join(dir, "b7d1e3a0.jsonl"),
+		null("m1", 5),
+		cl{id: "c1", req: "rc1", session: "b7d1e3a0", cwd: "/Users/ann/src/app", at: "2026-09-21T09:00:00Z", usage: use(1, 40, 0, 0), stop: `"end_turn"`}.String())
+
+	res := mustRead(t, "claude", home, since)
+	if got := byID(t, res, "a4c2e917").Nulls; got != 3 {
+		t.Errorf("session nulls = %d, want 3", got)
+	}
+	if got := byID(t, res, "b7d1e3a0").Nulls; got != 0 {
+		t.Errorf("copy nulls = %d, want 0", got)
+	}
+}
+
+// A session records the Claude Code version of its newest message, whatever
+// order the lines are in, and a session whose messages record none has none.
+func TestClaudeVersion(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, "projects", "-Users-ann-src-app")
+	msg := func(id, at, version string) string {
+		return cl{id: id, req: "r" + id, session: "a4c2e917", cwd: "/Users/ann/src/app", at: at, usage: use(1, 1, 0, 0), version: version}.String()
+	}
+	mustWrite(t, filepath.Join(dir, "a4c2e917.jsonl"),
+		msg("m1", "2026-09-20T10:00:00Z", "2.1.200"),
+		msg("m2", "2026-09-20T12:00:00Z", "2.1.210"),
+		msg("m3", "2026-09-20T11:00:00Z", "2.1.200"),
+	)
+	mustWrite(t, filepath.Join(dir, "a4c2e917", "subagents", "agent-1.jsonl"),
+		cl{id: "s1", req: "rs1", session: "a4c2e917", side: true, at: "2026-09-20T11:30:00Z", usage: use(1, 1, 0, 0), version: "2.1.200"}.String())
+	mustWrite(t, filepath.Join(dir, "c9e2f4b1.jsonl"),
+		cl{id: "x1", req: "rx1", session: "c9e2f4b1", cwd: "/Users/ann/src/app", at: "2026-09-20T13:00:00Z", usage: use(1, 1, 0, 0)}.String())
+
+	res := mustRead(t, "claude", home, since)
+	if got := byID(t, res, "a4c2e917").Version; got != "2.1.210" {
+		t.Errorf("version = %q, want 2.1.210", got)
+	}
+	if got := byID(t, res, "c9e2f4b1").Version; got != "" {
+		t.Errorf("version = %q, want none", got)
+	}
+}
+
+// A session was last active at its newest message, not when its file was
+// last written: Claude Code rewrites a file it resumes or compacts.
+func TestClaudeUpdatedIsLastMessage(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, "projects", "-Users-ann-src-app", "a4c2e917.jsonl")
+	mustWrite(t, path,
+		cl{id: "m1", req: "r1", session: "a4c2e917", cwd: "/Users/ann/src/app", at: "2026-09-20T10:00:00Z", usage: use(1, 1, 0, 0)}.String(),
+		cl{id: "m2", req: "r2", session: "a4c2e917", cwd: "/Users/ann/src/app", at: "2026-09-20T11:20:00Z", usage: use(1, 1, 0, 0)}.String(),
+	)
+	ageFile(t, path, now.Add(-time.Minute))
+	if got := byID(t, mustRead(t, "claude", home, since), "a4c2e917").Updated; !got.Equal(mustTime(t, "2026-09-20T11:20:00Z")) {
+		t.Fatalf("updated = %v", got)
+	}
 }
