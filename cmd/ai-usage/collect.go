@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"os"
 	"runtime/debug"
@@ -127,6 +128,9 @@ func (c collection) run(ctx context.Context) (res *collect.Result, err error) {
 	if err != nil {
 		return nil, err
 	}
+	if c.scheduled && !pause(ctx, jitter(cfg.Device)) {
+		return nil, ctx.Err()
+	}
 	opts := collect.Options{
 		Dir:      c.d,
 		Version:  version,
@@ -147,7 +151,7 @@ func (c collection) run(ctx context.Context) (res *collect.Result, err error) {
 		opts.Relay = &relay.Client{BaseURL: endpoint}
 	}
 	if c.scheduled {
-		opts.PullEvery = time.Hour
+		opts.PullEvery = scheduledPull
 	} else {
 		// A run the person started while another, usually the scheduled
 		// one, collects waits for it and shows its result rather than
@@ -196,9 +200,30 @@ func rescue(ctx context.Context, d state.Dir, cause error, scheduled bool) {
 	}
 }
 
+// scheduledPull is how old a team read a scheduled run keeps before it
+// reads the team again: every other run, so a teammate's change reaches the
+// menu bar within about 20 minutes.
+const scheduledPull = 20 * time.Minute
+
+// jitter is how long a scheduled run waits before it starts: the same for a
+// device every time, and spread over a minute across a team's devices, whose
+// schedulers all start them at the quarter hour, so their relay requests do
+// not all come at once.
+func jitter(device string) time.Duration {
+	h := fnv.New64a()
+	h.Write([]byte(device))
+	return time.Duration(h.Sum64() % uint64(time.Minute))
+}
+
+// pause waits d before a scheduled run, and reports whether the run should
+// go on: false once ctx ends. It is replaced in tests.
+var pause = func(ctx context.Context, d time.Duration) bool { return sleepCtx(ctx, d) }
+
 // lockWait is how long a command the person started waits for another run,
-// such as a scheduled one, to release the run lock. A scheduled run on a Mac
-// takes up to about a minute at background priority.
+// such as a scheduled one, to release the run lock. Runs were measured at up
+// to about 158 seconds before logs were cached between runs, and at seconds
+// after; 3 minutes covers both, and waiting longer would only hold the
+// person's command.
 const lockWait = 3 * time.Minute
 
 // waitLock takes the run lock for a command the person started that changes

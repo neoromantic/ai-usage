@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -282,5 +284,96 @@ func TestStopAfterSample(t *testing.T) {
 	}
 	if !reflect.DeepEqual(st.Update, state.Update{}) {
 		t.Errorf("update %+v", st.Update)
+	}
+}
+
+// Scheduled runs in tests start at once; TestScheduledRunWaitsItsJitter
+// checks the wait.
+func init() {
+	pause = func(ctx context.Context, _ time.Duration) bool { return ctx.Err() == nil }
+}
+
+// A device's scheduled runs start the same time past the quarter hour, and
+// a team's devices are spread over the minute after it.
+func TestJitter(t *testing.T) {
+	seen := map[time.Duration]bool{}
+	for i := range 60 {
+		dev := fmt.Sprintf("d-%024x", i)
+		j := jitter(dev)
+		if j < 0 || j >= time.Minute || jitter(dev) != j {
+			t.Fatalf("jitter(%s) = %v, then %v", dev, j, jitter(dev))
+		}
+		seen[j/time.Second] = true
+	}
+	if len(seen) < 30 {
+		t.Fatalf("60 devices start in %d of the minute's seconds", len(seen))
+	}
+}
+
+// Only a scheduled run waits its jitter, and a stop while it waits ends it
+// before it collects.
+func TestScheduledRunWaitsItsJitter(t *testing.T) {
+	hermetic(t)
+	d := newDevice(t)
+	d.claude("11111111-aaaa", "/work/app", 1)
+	d.ok("collect", "--offline")
+	saved := pause
+	t.Cleanup(func() { pause = saved })
+	var waited []time.Duration
+	pause = func(_ context.Context, dur time.Duration) bool {
+		waited = append(waited, dur)
+		return true
+	}
+	d.ok("collect", "--quiet", "--offline")
+	d.ok("collect", "--offline")
+	if want := []time.Duration{jitter(d.config().Device)}; !reflect.DeepEqual(waited, want) {
+		t.Fatalf("waited %v, want %v", waited, want)
+	}
+
+	pause = saved
+	ran := d.state().LastRunAt
+	clock = func() time.Time { return time.Now().Add(time.Hour) }
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := (collection{d: state.Dir(d.dir), offline: true, scheduled: true}).run(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a scheduled run stopped while it waits: %v", err)
+	}
+	if got := d.state().LastRunAt; !got.Equal(ran) {
+		t.Fatalf("a run stopped while it waits collected at %v", got)
+	}
+}
+
+// A scheduled run reads the team when the last read is 20 minutes old, so
+// the menu bar shows a teammate's change within about that.
+func TestScheduledRunReadsTheTeamEvery20Minutes(t *testing.T) {
+	hermetic(t)
+	var mu sync.Mutex
+	reads := 0
+	rs := relay.NewServer(relay.NewMemory())
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			mu.Lock()
+			reads++
+			mu.Unlock()
+		}
+		rs.ServeHTTP(w, r)
+	}))
+	defer srv.Close()
+	t.Setenv("AI_USAGE_RELAY", srv.URL)
+	d := newDevice(t)
+	d.claude("11111111-aaaa", "/work/app", 1)
+	start := time.Now().Add(-time.Hour)
+	var want []int
+	var got []int
+	for i, n := range []int{1, 1, 2, 2, 3} {
+		clock = func() time.Time { return start.Add(time.Duration(i) * 15 * time.Minute) }
+		d.ok("collect", "--quiet")
+		mu.Lock()
+		got = append(got, reads)
+		mu.Unlock()
+		want = append(want, n)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("team reads after each run %v, want %v", got, want)
 	}
 }
