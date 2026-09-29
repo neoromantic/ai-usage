@@ -1,6 +1,7 @@
 package logs
 
 import (
+	"bytes"
 	"fmt"
 	"maps"
 	"os"
@@ -644,5 +645,125 @@ func TestClaudeUpdatedIsLastMessage(t *testing.T) {
 	ageFile(t, path, now.Add(-time.Minute))
 	if got := byID(t, mustRead(t, "claude", home, since), "a4c2e917").Updated; !got.Equal(mustTime(t, "2026-09-20T11:20:00Z")) {
 		t.Fatalf("updated = %v", got)
+	}
+}
+
+// claudeCorpus is a home whose logs hold every kind of line the parse keeps
+// something of, and the lines it skips.
+type claudeCorpus struct {
+	home, main, sub, copy string
+}
+
+// Line makers of the corpus: a message of session a4c2e917 with Claude Code's
+// version, a user line, and a line that only names a working directory.
+func corpusMsg(id, at string, usage *[4]int64, stop string) string {
+	return cl{id: id, req: "r" + id, session: "a4c2e917", cwd: "/Users/ann/src/app", at: at, usage: usage, stop: stop, version: "2.1.210"}.String()
+}
+
+func corpusUser(uuid, at, extra string) string {
+	return fmt.Sprintf(`{"type":"user","cwd":"/Users/ann/src/app","sessionId":"a4c2e917","version":"2.1.210","message":{"role":"user","content":[{"type":"tool_result","content":"usage: app [-h] and \"usage\" in quotes, %s"}]},"uuid":%q,"timestamp":%q%s}`, secret, uuid, at, extra)
+}
+
+func corpusCwd(cwd, at string) string {
+	return fmt.Sprintf(`{"type":"system","subtype":"local_command","cwd":%q,"sessionId":"a4c2e917","content":%q,"timestamp":%q}`, cwd, secret, at)
+}
+
+func newClaudeCorpus(t *testing.T) claudeCorpus {
+	t.Helper()
+	home := t.TempDir()
+	dir := filepath.Join(home, "projects", "-Users-ann-src-app")
+	c := claudeCorpus{
+		home: home,
+		main: filepath.Join(dir, "a4c2e917.jsonl"),
+		sub:  filepath.Join(dir, "a4c2e917", "subagents", "agent-1.jsonl"),
+		copy: filepath.Join(dir, "b7d1e3a0.jsonl"),
+	}
+	week := time.Date(2026, 9, 25, 0, 0, 0, 0, time.UTC)
+	mustWrite(t, c.main,
+		`{"type":"file-history-snapshot","messageId":"u0","snapshot":{"trackedFileBackups":{}}}`,
+		corpusUser("u0", "2026-09-20T10:00:00Z", ""),
+		cl{uuid: "u1", id: "m1", req: "r1", session: "a4c2e917", cwd: "/Users/ann/src/app", at: "2026-09-20T10:00:05Z", usage: use(10, 2, 4000, 900), ttl: &[2]int64{1000, 3000}, version: "2.1.200"}.String(),
+		cl{uuid: "u2", id: "m1", req: "r1", session: "a4c2e917", cwd: "/Users/ann/src/app", at: "2026-09-20T10:00:09Z", usage: use(10, 90, 4000, 900), ttl: &[2]int64{1000, 3000}, stop: `"tool_use"`, version: "2.1.200"}.String(),
+		// A tool result that names usage, and one that carries a usage
+		// object of its own: neither is a message.
+		corpusUser("u3", "2026-09-20T10:01:00Z", ""),
+		corpusUser("u4", "2026-09-20T10:01:30Z", `,"toolUseResult":{"usage":{"input_tokens":999,"output_tokens":999}}`),
+		corpusCwd("/Users/ann/src/app/web", "2026-09-20T10:02:00Z"),
+		corpusMsg("m2", "2026-09-20T11:05:00Z", use(3, 4, 0, 50), "null"),
+		rejected("x1", "a4c2e917", "2026-09-20T11:10:00Z", "rejected", "seven_day", week),
+		cl{session: "a4c2e917", cwd: "/Users/ann/src/app", at: "2026-09-20T11:20:00Z", usage: use(1, 1, 0, 0), version: "2.1.210"}.String(),
+		`{"type":"assistant","usage"`,
+		costStateAt("a4c2e917", "2026-09-20T11:30:00Z", [4]int64{60, 9000, 4000, 1900}),
+	)
+	mustWrite(t, c.sub,
+		cl{id: "s1", req: "rs1", session: "a4c2e917", side: true, cwd: "/Users/ann/src/app", at: "2026-09-20T10:30:00Z", usage: use(5, 50, 0, 100), version: "2.1.200"}.String())
+	// A resumed copy repeats m1 and adds a message of its own.
+	mustWrite(t, c.copy,
+		cl{uuid: "c0", id: "m1", req: "r1", session: "b7d1e3a0", cwd: "/Users/ann/src/app", at: "2026-09-20T10:00:09Z", usage: use(10, 90, 4000, 900), stop: `"tool_use"`}.String(),
+		cl{id: "c1", req: "rc1", session: "b7d1e3a0", cwd: "/Users/ann/src/app", at: "2026-09-21T09:00:00Z", usage: use(7, 70, 0, 10), stop: `"end_turn"`}.String(),
+	)
+	ageFile(t, c.main, now.Add(-2*time.Hour))
+	ageFile(t, c.sub, now.Add(-3*time.Hour))
+	ageFile(t, c.copy, now.Add(-time.Hour))
+	return c
+}
+
+// appendLines adds lines to the end of path, and returns how many bytes.
+func appendLines(t *testing.T, path string, lines ...string) int64 {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := strings.Join(lines, "\n") + "\n"
+	if _, err := f.WriteString(body); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return int64(len(body))
+}
+
+// Past the header, the parse decodes only the lines that can hold usage or a
+// cost-state, and keeps what decoding every line with a working directory
+// kept.
+func TestClaudeLineFilter(t *testing.T) {
+	c := newClaudeCorpus(t)
+	journal := filepath.Join(c.home, "projects", "-Users-ann-src-app", "a4c2e917", "subagents", "journal.jsonl")
+	mustWrite(t, journal, `{"type":"workflow","cwd":"/Users/ann/src/app"}`)
+	for _, tc := range []struct{ path, id, parent string }{
+		{c.main, "a4c2e917", ""},
+		{c.sub, "a4c2e917/agent-1.jsonl", "a4c2e917"},
+		{c.copy, "b7d1e3a0", ""},
+		{journal, "a4c2e917/journal.jsonl", "a4c2e917"},
+	} {
+		parse := func(visit func(*claudeParse, []byte)) *claudeFile {
+			f := &claudeFile{path: tc.path, sess: Session{ID: tc.id, ParentID: tc.parent}}
+			p := newClaudeParse(f)
+			if _, err := ForEachLine(tc.path, maxLineBytes, func(line []byte) { visit(p, line) }); err != nil {
+				t.Fatal(err)
+			}
+			return f.done()
+		}
+		got := parse((*claudeParse).line)
+		want := parse(func(p *claudeParse, line []byte) {
+			for _, key := range []string{`"usage"`, `"cwd"`, `"cost-state"`} {
+				if bytes.Contains(line, []byte(key)) {
+					p.decode(line)
+					return
+				}
+			}
+		})
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s: filtered parse =\n%+v\nwant\n%+v", filepath.Base(tc.path), got, want)
+		}
+	}
+
+	// Once the header is known, a line that only names a working directory
+	// is not decoded at all.
+	appendLines(t, c.main, `{"type":"system","cwd":"/Users/ann/src/app"`)
+	if res := mustRead(t, "claude", c.home, since); res.Malformed != 1 {
+		t.Fatalf("malformed = %d, want the corpus's 1", res.Malformed)
 	}
 }

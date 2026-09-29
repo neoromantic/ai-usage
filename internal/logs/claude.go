@@ -104,20 +104,20 @@ func claimMessages(files []*claudeFile) (copied map[string]bool) {
 	slices.SortStableFunc(order, func(x, y *claudeFile) int {
 		// A copy that kept the original times still names the original
 		// session in its lines; the original keeps the messages.
-		if x.start.Equal(y.start) && x.native != y.native {
-			if x.native {
+		if x.Start.Equal(y.Start) && x.Native != y.Native {
+			if x.Native {
 				return -1
 			}
 			return 1
 		}
-		return cmp.Or(x.start.Compare(y.start), cmp.Compare(x.path, y.path))
+		return cmp.Or(x.Start.Compare(y.Start), cmp.Compare(x.path, y.path))
 	})
 	// claimed names the session each message counts in. A session whose file
 	// repeats another session's messages is a copy of that session.
 	claimed := map[string]string{}
 	copied = map[string]bool{}
 	for _, f := range order {
-		for _, m := range f.msgs {
+		for _, m := range f.Msgs {
 			if key := m.key(f.sess.ID); key != "" {
 				if owner, ok := claimed[key]; ok {
 					if owner != f.root() {
@@ -127,13 +127,13 @@ func claimMessages(files []*claudeFile) (copied map[string]bool) {
 				}
 				claimed[key] = f.root()
 			}
-			f.sess.Tokens = f.sess.Tokens.Add(m.use.Tokens())
-			f.sess.Hours.Add(m.at, m.use)
-			if m.null {
+			f.sess.Tokens = f.sess.Tokens.Add(m.Use.Tokens())
+			f.sess.Hours.Add(m.At, m.Use)
+			if m.Null {
 				f.nulls++
 			}
-			if m.rejected != nil {
-				f.sess.Rejected = AddRejected(f.sess.Rejected, m.rejected)
+			if m.Rejected != nil {
+				f.sess.Rejected = AddRejected(f.sess.Rejected, m.Rejected)
 			}
 		}
 	}
@@ -152,12 +152,12 @@ func addTracked(out []Session, files []*claudeFile, copied map[string]bool) []Se
 	tracked := map[string]Tokens{}
 	at := map[string]time.Time{}
 	for _, f := range files {
-		if f.tracked != nil && !copied[f.sess.ID] {
+		if f.Tracks && !copied[f.sess.ID] {
 			// One session under two project directories: the larger of each field.
 			t := tracked[f.sess.ID]
-			tracked[f.sess.ID] = t.Add(f.tracked.Growth(t))
-			if f.trackedAt.After(at[f.sess.ID]) {
-				at[f.sess.ID] = f.trackedAt
+			tracked[f.sess.ID] = t.Add(f.Tracked.Growth(t))
+			if f.TrackedAt.After(at[f.sess.ID]) {
+				at[f.sess.ID] = f.TrackedAt
 			}
 		}
 	}
@@ -211,30 +211,46 @@ func addFamilies(out []Session, files []*claudeFile) {
 		}
 		r := root(i)
 		out[r].Nulls += f.nulls
-		if f.last.After(newest[r]) || (f.last.Equal(newest[r]) && f.version > out[r].Version) {
-			newest[r], out[r].Version = f.last, f.version
+		if f.Last.After(newest[r]) || (f.Last.Equal(newest[r]) && f.Version > out[r].Version) {
+			newest[r], out[r].Version = f.Last, f.Version
 		}
 	}
 }
 
 type claudeFile struct {
-	path  string
-	sess  Session
-	start time.Time
-	// native is a file whose first line names the session the file is for.
-	native bool
-	msgs   []claudeMsg
+	path string
+	sess Session
+	claudeState
 	// nulls is how many of the file's counted messages are null replies.
 	nulls int
-	// last is the newest message's time, and version the Claude Code
-	// version that message recorded.
-	last    time.Time
-	version string
-	// tracked is the session's usage from its last cost-state line, which
-	// Claude Code writes when it exits. trackedAt is when: the line's own
-	// time, or else that of the newest message before it.
-	tracked   *Tokens
-	trackedAt time.Time
+}
+
+// claudeState is what a file's lines have told its parse so far.
+type claudeState struct {
+	// Project is the first working directory the lines name, and Start the
+	// first time.
+	Project string
+	Start   time.Time
+	// Native is a file whose first line naming a session names the one the
+	// file is for. Named is set once a line has named one.
+	Native, Named bool
+	// SidechainOf is the session the first sidechain line names.
+	SidechainOf string
+	Msgs        []claudeMsg
+	// Anon counts the messages with neither an id nor a line uuid, and Bad
+	// the lines that were malformed or too long.
+	Anon, Bad int
+	// Last is the newest message's time, and Version the Claude Code version
+	// that message recorded.
+	Last    time.Time
+	Version string
+	// Tracked is the session's usage from its last cost-state line, which
+	// Claude Code writes when it exits, and Tracks says there was one.
+	// TrackedAt is when: the line's own time, or else that of the newest
+	// message before it.
+	Tracked   Tokens
+	Tracks    bool
+	TrackedAt time.Time
 }
 
 // updated is when the file's session was last active: the newest time its
@@ -242,11 +258,11 @@ type claudeFile struct {
 // such as a workflow journal, dates nothing.
 func (f *claudeFile) updated(mod time.Time) time.Time {
 	switch {
-	case f.trackedAt.After(f.last):
-		return f.trackedAt
-	case !f.last.IsZero():
-		return f.last
-	case len(f.msgs) > 0 || f.tracked != nil:
+	case f.TrackedAt.After(f.Last):
+		return f.TrackedAt
+	case !f.Last.IsZero():
+		return f.Last
+	case len(f.Msgs) > 0 || f.Tracks:
 		return mod.UTC()
 	}
 	return time.Time{}
@@ -256,18 +272,18 @@ func (f *claudeFile) updated(mod time.Time) time.Time {
 func (f *claudeFile) root() string { return cmp.Or(f.sess.ParentID, f.sess.ID) }
 
 type claudeMsg struct {
-	id      string
-	request string
-	// anon is a message with neither an id nor a line uuid; it cannot be matched.
-	anon bool
-	use  meter.Use
-	// at is when the message's last snapshot was written.
-	at time.Time
-	// null is a reply whose last snapshot has no stop reason and next to no
+	ID      string
+	Request string
+	// Anon is a message with neither an id nor a line uuid; it cannot be matched.
+	Anon bool
+	Use  meter.Use
+	// At is when the message's last snapshot was written.
+	At time.Time
+	// Null is a reply whose last snapshot has no stop reason and next to no
 	// output: the stream ended before Claude Code wrote the final count.
-	null bool
-	// rejected is set on a request Claude refused because a window was full.
-	rejected *Limits
+	Null bool
+	// Rejected is set on a request Claude refused because a window was full.
+	Rejected *Limits
 }
 
 // key matches the message across files: by its request id when it has one,
@@ -275,47 +291,83 @@ type claudeMsg struct {
 // id has no key.
 func (m claudeMsg) key(session string) string {
 	switch {
-	case m.request != "":
-		return "r\x00" + m.id + "\x00" + m.request
-	case !m.anon:
-		return "s\x00" + session + "\x00" + m.id
+	case m.Request != "":
+		return "r\x00" + m.ID + "\x00" + m.Request
+	case !m.Anon:
+		return "s\x00" + session + "\x00" + m.ID
 	}
 	return ""
 }
 
+// parseClaude parses one log. It returns the file, how many of its lines
+// were malformed or too long, and why it could not be read.
 func parseClaude(path, id, parent string) (*claudeFile, int, error) {
-	p := &claudeParse{
-		f:      &claudeFile{path: path, sess: Session{ID: id, ParentID: parent}},
-		id:     id,
-		parent: parent,
-		// Sub-agent lines carry their parent's session id.
-		own:   cmp.Or(parent, id),
-		index: map[string]int{},
-	}
+	f := &claudeFile{path: path, sess: Session{ID: id, ParentID: parent}}
+	p := newClaudeParse(f)
 	long, err := ForEachLine(path, maxLineBytes, p.line)
-	// Older Claude Code wrote sub-agent transcripts beside the session they belong to.
-	if parent == "" && p.sidechainOf != "" && p.sidechainOf != id {
-		p.f.sess.ParentID = p.sidechainOf
+	f.Bad += long
+	return f.done(), f.Bad, err
+}
+
+// newClaudeParse goes on parsing f, whose state holds what its earlier lines
+// told.
+func newClaudeParse(f *claudeFile) *claudeParse {
+	p := &claudeParse{
+		f:      f,
+		id:     f.sess.ID,
+		parent: f.sess.ParentID,
+		// Sub-agent lines carry their parent's session id.
+		own:   cmp.Or(f.sess.ParentID, f.sess.ID),
+		index: make(map[string]int, len(f.Msgs)),
 	}
-	return p.f, p.malformed + long, err
+	for i, m := range f.Msgs {
+		p.index[m.ID] = i
+	}
+	return p
+}
+
+// done fills in the session fields the file's lines decide.
+func (f *claudeFile) done() *claudeFile {
+	f.sess.Project = f.Project
+	// Older Claude Code wrote sub-agent transcripts beside the session they belong to.
+	if f.sess.ParentID == "" && f.SidechainOf != "" && f.SidechainOf != f.sess.ID {
+		f.sess.ParentID = f.SidechainOf
+	}
+	return f
 }
 
 type claudeParse struct {
 	f               *claudeFile
 	id, parent, own string
 	index           map[string]int
-	anon, malformed int
-	sidechainOf     string
-	sawSession      bool
 }
 
+var (
+	usageKey = []byte(`"usage"`)
+	costKey  = []byte(`"cost-state"`)
+	cwdKey   = []byte(`"cwd"`)
+)
+
+// line decodes a line that can hold usage or a cost-state, and, until the
+// file's header is known, a line naming the working directory. Most lines
+// are prompts and tool results, and skipping them undecoded is most of the
+// parse's speed.
 func (p *claudeParse) line(line []byte) {
-	if !bytes.Contains(line, []byte(`"usage"`)) && !bytes.Contains(line, []byte(`"cwd"`)) && !bytes.Contains(line, []byte(`"cost-state"`)) {
-		return
+	if bytes.Contains(line, usageKey) || bytes.Contains(line, costKey) || (!p.headed() && bytes.Contains(line, cwdKey)) {
+		p.decode(line)
 	}
+}
+
+// headed is set once the lines have given the file's project, first time,
+// and session, which the header takes from the first line to give each.
+func (p *claudeParse) headed() bool {
+	return p.f.Project != "" && p.f.Named && !p.f.Start.IsZero()
+}
+
+func (p *claudeParse) decode(line []byte) {
 	var row claudeLine
 	if json.Unmarshal(line, &row) != nil {
-		p.malformed++
+		p.f.Bad++
 		return
 	}
 	if row.Type == "cost-state" {
@@ -331,25 +383,24 @@ func (p *claudeParse) line(line []byte) {
 
 func (p *claudeParse) costState(row claudeLine) {
 	if p.parent == "" && row.SessionID == p.id {
-		t := row.tracked()
-		p.f.tracked = &t
-		p.f.trackedAt = cmp.Or(parseTime(row.Timestamp), p.f.last)
+		p.f.Tracked, p.f.Tracks = row.tracked(), true
+		p.f.TrackedAt = cmp.Or(parseTime(row.Timestamp), p.f.Last)
 	}
 }
 
 func (p *claudeParse) header(row claudeLine) {
-	if row.Cwd != "" && p.f.sess.Project == "" {
-		p.f.sess.Project = strings.TrimSpace(row.Cwd)
+	if row.Cwd != "" && p.f.Project == "" {
+		p.f.Project = strings.TrimSpace(row.Cwd)
 	}
-	if p.f.start.IsZero() {
-		p.f.start = parseTime(row.Timestamp)
+	if p.f.Start.IsZero() {
+		p.f.Start = parseTime(row.Timestamp)
 	}
-	if !p.sawSession && row.SessionID != "" {
-		p.sawSession = true
-		p.f.native = row.SessionID == p.own
+	if !p.f.Named && row.SessionID != "" {
+		p.f.Named = true
+		p.f.Native = row.SessionID == p.own
 	}
-	if row.IsSidechain && row.SessionID != "" && p.sidechainOf == "" {
-		p.sidechainOf = row.SessionID
+	if row.IsSidechain && row.SessionID != "" && p.f.SidechainOf == "" {
+		p.f.SidechainOf = row.SessionID
 	}
 }
 
@@ -357,44 +408,44 @@ func (p *claudeParse) message(row claudeLine) {
 	msgID := cmp.Or(row.Message.ID, row.UUID)
 	named := msgID != ""
 	if !named {
-		p.anon++
-		msgID = fmt.Sprintf("\x00anon-%d", p.anon)
+		p.f.Anon++
+		msgID = fmt.Sprintf("\x00anon-%d", p.f.Anon)
 	}
 	u := row.Message.Usage
 	at := parseTime(row.Timestamp)
 	m := claudeMsg{
-		id:      msgID,
-		request: row.RequestID,
-		anon:    !named,
-		use: meter.Use{
+		ID:      msgID,
+		Request: row.RequestID,
+		Anon:    !named,
+		Use: meter.Use{
 			Input:      u.InputTokens,
 			Output:     u.OutputTokens,
 			CacheRead:  u.CacheReadInputTokens,
 			CacheWrite: u.CacheCreationInputTokens,
 		},
-		at:       at,
-		null:     string(row.Message.StopReason) == "null" && u.OutputTokens < nullOutput,
-		rejected: claudeRejected(row.QuotaLimits, at),
+		At:       at,
+		Null:     string(row.Message.StopReason) == "null" && u.OutputTokens < nullOutput,
+		Rejected: claudeRejected(row.QuotaLimits, at),
 	}
 	if c := u.CacheCreation; c != nil {
-		m.use.CacheWrite1h = min(max(c.Ephemeral1h, 0), m.use.CacheWrite)
+		m.Use.CacheWrite1h = min(max(c.Ephemeral1h, 0), m.Use.CacheWrite)
 	}
-	if !at.Before(p.f.last) {
-		p.f.last, p.f.version = at, row.Version
+	if !at.Before(p.f.Last) {
+		p.f.Last, p.f.Version = at, row.Version
 	}
 	i, ok := p.index[msgID]
 	if !ok {
-		p.index[msgID] = len(p.f.msgs)
-		p.f.msgs = append(p.f.msgs, m)
+		p.index[msgID] = len(p.f.Msgs)
+		p.f.Msgs = append(p.f.Msgs, m)
 		return
 	}
-	if m.request == "" {
-		m.request = p.f.msgs[i].request
+	if m.Request == "" {
+		m.Request = p.f.Msgs[i].Request
 	}
-	if m.at.IsZero() {
-		m.at = p.f.msgs[i].at
+	if m.At.IsZero() {
+		m.At = p.f.Msgs[i].At
 	}
-	p.f.msgs[i] = m
+	p.f.Msgs[i] = m
 }
 
 // nullOutput is the output under which a reply without a stop reason is
