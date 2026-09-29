@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/fsutil"
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
@@ -657,5 +658,98 @@ func TestPublishSendsExtendedFieldsBehindTheGate(t *testing.T) {
 		if got, want := rec.sent(self, from), []bool{c.second[len(c.second)-1]}; !slices.Equal(got, want) {
 			t.Fatalf("%s: the third run put %v, want %v", c.name, got, want)
 		}
+	}
+}
+
+// Each read adds the newest quota reading of every account, with what the
+// team burned in each window, and when each device reported.
+func TestTeamReadsRememberReadingsAndReports(t *testing.T) {
+	w, o := newWorld(t)
+	o.Version = "v0.4.0"
+	h := w.home(t, "claude")
+	w.login("claude", h, "ann@acme.dev", quota(t0, 10))
+	w.sessions("claude", h, sess("a4c2e917", "/p", 100, t0))
+	r := newRelay(t, w)
+	o.Relay = r.client(w)
+	key, _ := LoadKey(o.Dir)
+
+	// A teammate on the same login, with an older reading of the same
+	// window, spelled in another case.
+	other := func(at time.Time, pct float64) *state.State {
+		reset := t0.Add(5 * time.Hour)
+		return &state.State{
+			Accounts: map[string]*state.Account{state.Key("claude", "Ann@Acme.dev"): {Provider: "claude", Label: "Ann@Acme.dev",
+				Quota: &state.Quota{At: at, Windows: []snapshot.Window{{Name: "5h", Percent: pct, ResetsAt: &reset}}}}},
+			Sessions: map[string]*state.Session{state.Key("claude", "b7d1f3a0"): {Provider: "claude", Project: "/q", Updated: t0,
+				By: map[string]snapshot.Tokens{"Ann@Acme.dev": {Input: 1000, Output: 100}},
+				U:  meter.Hours{t0.Unix() / 3600: {Input: 1000, Output: 100}}}},
+		}
+	}
+	publishRelease(t, r, w, key, "d-srv1-a4c2e917", "v0.4.0", other(t0.Add(-30*time.Minute), 5), t0)
+	res := run(t, o)
+	self := res.Config.Device
+	k := HistoryKey("claude", "ann@acme.dev")
+	// 100 + 10·5 here and 1000 + 100·5 there since the 5h window began.
+	if got := res.Team.History[k]; len(got) != 1 || !got[0].At.Equal(t0) || got[0].Window != "5h" || got[0].Percent != 10 || got[0].TeamBurn != 1650 {
+		t.Fatalf("history = %+v", res.Team.History)
+	}
+
+	// The teammate reads the window later; this device's reading stays.
+	w.now = t0.Add(20 * time.Minute)
+	publishRelease(t, r, w, key, "d-srv1-a4c2e917", "v0.4.0", other(t0.Add(15*time.Minute), 12), w.now)
+	run(t, o)
+	// Nothing newer on the third read.
+	w.now = t0.Add(40 * time.Minute)
+	res = run(t, o)
+	got := res.Team.History[k]
+	if len(got) != 2 || !got[1].At.Equal(t0.Add(15*time.Minute)) || got[1].Percent != 12 || got[1].TeamBurn != 1650 || len(res.Team.History) != 1 {
+		t.Fatalf("history = %+v", res.Team.History)
+	}
+	want := map[string][]time.Time{
+		self:              {t0, t0.Add(20 * time.Minute), t0.Add(40 * time.Minute)},
+		"d-srv1-a4c2e917": {t0, t0.Add(20 * time.Minute)},
+	}
+	if !reflect.DeepEqual(res.Team.Seen, want) {
+		t.Fatalf("seen = %v", res.Team.Seen)
+	}
+	cache, err := LoadTeamCache(o.Dir)
+	if err != nil || !reflect.DeepEqual(cache.Seen, want) || len(cache.History[k]) != 2 {
+		t.Fatalf("saved cache: %+v, %v", cache, err)
+	}
+	if err := ForgetCachedDevice(o.Dir, "d-srv1-a4c2e917"); err != nil {
+		t.Fatal(err)
+	}
+	if cache, _ := LoadTeamCache(o.Dir); len(cache.Seen) != 1 {
+		t.Fatalf("seen after the device was forgotten = %v", cache.Seen)
+	}
+}
+
+func TestHistoryAndSeenKeepTwoDays(t *testing.T) {
+	key := mustKey(t)
+	now := t0
+	var old []Point
+	for i := range maxHistory + 10 {
+		old = append(old, Point{At: now.Add(-49*time.Hour + time.Duration(i)*time.Minute), Window: "5h"})
+	}
+	prev := map[string][]Point{"claude/gone": old[:5], HistoryKey("claude", "ann@acme.dev"): old}
+	got := historyAfter(prev, nil, key, now)
+	if len(got) != 1 || len(got[HistoryKey("claude", "ann@acme.dev")]) != maxHistory-50 {
+		t.Fatalf("%d keys, %d points", len(got), len(got[HistoryKey("claude", "ann@acme.dev")]))
+	}
+	for i := range maxHistory + 10 {
+		old[i].At = now.Add(-time.Duration(i) * time.Minute)
+	}
+	if got := historyAfter(map[string][]Point{"k": old}, nil, key, now)["k"]; len(got) != maxHistory || !got[len(got)-1].At.Equal(now) {
+		t.Fatalf("%d points, the newest %v", len(got), got[len(got)-1].At)
+	}
+
+	var ts []time.Time
+	for i := range maxSeenPerDev + 10 {
+		ts = append(ts, now.Add(-time.Duration(i)*time.Minute))
+	}
+	seen := seenAfter(map[string][]time.Time{"d-srv1-a4c2e917": ts, "d-gone-0001": {now.Add(-49 * time.Hour)}},
+		[]snapshot.Doc{{Device: "d-srv1-a4c2e917", CollectedAt: now}}, now)
+	if len(seen) != 1 || len(seen["d-srv1-a4c2e917"]) != maxSeenPerDev || !slices.IsSortedFunc(seen["d-srv1-a4c2e917"], time.Time.Compare) {
+		t.Fatalf("seen = %v", seen)
 	}
 }

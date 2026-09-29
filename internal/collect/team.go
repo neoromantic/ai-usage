@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -37,6 +38,41 @@ type TeamCache struct {
 	// on the relay, so that a laptop asleep until its document expired
 	// still counts as on its release when it comes back. See knownAfter.
 	Known map[string]Known `json:"known,omitempty"`
+	// History is, by HistoryKey, the quota readings of each account the
+	// reads found over the last historyKept, oldest first, one point per
+	// window and reading, with what the team had burned in the window by
+	// then. It outlives the readings the documents carry, so that a
+	// forecast can follow the pace of the last hours.
+	History map[string][]Point `json:"history,omitempty"`
+	// Seen is, by device id, the distinct collected_at of the device's
+	// documents the reads found over the last historyKept, oldest first: when
+	// a device reported, between the reads.
+	Seen map[string][]time.Time `json:"seen,omitempty"`
+}
+
+// Point is one window of an account's quota reading, as a team read found
+// it.
+type Point struct {
+	At       time.Time  `json:"at"`
+	Window   string     `json:"window"`
+	ResetsAt *time.Time `json:"resets_at,omitempty"`
+	Percent  float64    `json:"percent"`
+	// TeamBurn is what the devices holding the account had burned on it
+	// since the window began, as their documents in the read said.
+	TeamBurn int64 `json:"team_burn"`
+}
+
+// How long, and how many, points and report times the team cache keeps.
+const (
+	historyKept   = 48 * time.Hour
+	maxHistory    = 400
+	maxSeenPerDev = 300
+)
+
+// HistoryKey keys an account in TeamCache.History: one person on a
+// provider, however the devices spell the label.
+func HistoryKey(provider, label string) string {
+	return state.Key(provider, snapshot.LabelKey(label))
 }
 
 // Known is the release a device ran when a read last found it.
@@ -97,11 +133,13 @@ func ForgetCachedDevice(dir state.Dir, device string) error {
 		kept = append(kept, body)
 	}
 	_, known := c.Known[device]
-	if len(kept) == len(c.Bodies) && !known {
+	_, seen := c.Seen[device]
+	if len(kept) == len(c.Bodies) && !known && !seen {
 		return nil
 	}
 	c.Bodies = kept
 	delete(c.Known, device)
+	delete(c.Seen, device)
 	return saveTeamCache(dir, c)
 }
 
@@ -249,6 +287,11 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 	}
 	next.Behind = behindSince(prev, seen, st.Update.Latest, after, now)
 	next.Known = knownAfter(known, next.Docs, device, now)
+	if cache.Team == next.Team {
+		next.History, next.Seen = cache.History, cache.Seen
+	}
+	next.History = historyAfter(next.History, seen, o.Relay.Key, now)
+	next.Seen = seenAfter(next.Seen, seen, now)
 	next.ReadError = readError(pulled)
 	*cache = next
 	if err := saveTeamCache(o.Dir, next); err != nil {
@@ -364,6 +407,116 @@ func behindSince(prev map[string]Behind, docs []snapshot.Doc, checked string, af
 			out = map[string]Behind{}
 		}
 		out[d.Device] = b
+	}
+	return out
+}
+
+// historyAfter is prev with the newest quota reading that docs hold of each
+// account: a point per window of it, unless the window has a point as new.
+// Each point has what the devices holding the account burned on it in the
+// window's current period, as their documents say. Points older than
+// historyKept are left out, and the oldest beyond maxHistory an account.
+func historyAfter(prev map[string][]Point, docs []snapshot.Doc, key *team.Key, now time.Time) map[string][]Point {
+	type held struct {
+		a    snapshot.Account
+		burn map[string]int64
+	}
+	byKey := map[string][]held{}
+	for _, d := range docs {
+		for _, a := range d.Accounts {
+			label, err := key.Open(a.Label)
+			if err != nil {
+				continue
+			}
+			_, burn, _, _ := AccountBurn(a, a.Provider, label, d.CollectedAt)
+			k := HistoryKey(a.Provider, label)
+			byKey[k] = append(byKey[k], held{a, burn})
+		}
+	}
+	out := map[string][]Point{}
+	for k, hs := range byKey {
+		var newest snapshot.Account
+		for _, h := range hs {
+			if h.a.QuotaAt != nil && len(h.a.Windows) > 0 && (newest.QuotaAt == nil || h.a.QuotaAt.After(*newest.QuotaAt)) {
+				newest = h.a
+			}
+		}
+		if newest.QuotaAt == nil {
+			continue
+		}
+		for _, w := range newest.Windows {
+			// The points are oldest first.
+			var last time.Time
+			for _, p := range prev[k] {
+				if p.Window == w.Name {
+					last = p.At
+				}
+			}
+			if !newest.QuotaAt.After(last) {
+				continue
+			}
+			p := Point{At: newest.QuotaAt.UTC(), Window: w.Name, ResetsAt: w.ResetsAt, Percent: w.Percent}
+			start, ok := w.Start()
+			for _, h := range hs {
+				for _, r := range h.a.Recent {
+					// A device's own reading may be of the window's
+					// last period.
+					if ok && r.Window == w.Name && r.Start.Sub(start).Abs() < time.Hour {
+						p.TeamBurn += h.burn[r.Window]
+					}
+				}
+			}
+			out[k] = append(out[k], p)
+		}
+	}
+	cut := now.Add(-historyKept)
+	for k, ps := range prev {
+		out[k] = append(slices.Clone(ps), out[k]...)
+	}
+	for k, ps := range out {
+		ps = slices.DeleteFunc(ps, func(p Point) bool { return p.At.Before(cut) })
+		slices.SortStableFunc(ps, func(a, b Point) int { return a.At.Compare(b.At) })
+		if len(ps) > maxHistory {
+			ps = ps[len(ps)-maxHistory:]
+		}
+		if len(ps) == 0 {
+			delete(out, k)
+			continue
+		}
+		out[k] = ps
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// seenAfter is prev with when each of docs was collected, over the last
+// historyKept and at most maxSeenPerDev times a device.
+func seenAfter(prev map[string][]time.Time, docs []snapshot.Doc, now time.Time) map[string][]time.Time {
+	out := map[string][]time.Time{}
+	for id, ts := range prev {
+		out[id] = slices.Clone(ts)
+	}
+	for _, d := range docs {
+		out[d.Device] = append(out[d.Device], d.CollectedAt.UTC())
+	}
+	cut := now.Add(-historyKept)
+	for id, ts := range out {
+		ts = slices.DeleteFunc(ts, func(t time.Time) bool { return t.Before(cut) })
+		slices.SortFunc(ts, time.Time.Compare)
+		ts = slices.CompactFunc(ts, time.Time.Equal)
+		if len(ts) > maxSeenPerDev {
+			ts = ts[len(ts)-maxSeenPerDev:]
+		}
+		if len(ts) == 0 {
+			delete(out, id)
+			continue
+		}
+		out[id] = ts
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
