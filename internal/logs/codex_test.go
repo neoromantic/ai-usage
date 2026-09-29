@@ -212,29 +212,62 @@ func TestCodexSeededForkWithoutParent(t *testing.T) {
 	}
 }
 
-// Two forks of a parent that is no longer on disk replay the same history.
-// It counts once, with the fork that started first.
-func TestCodexSiblingForksShareReplayOnce(t *testing.T) {
+// Two forks of a parent that is no longer on disk replay the same history
+// as they start. The history is the parent's usage, counted while its file
+// was there, so each fork counts only the requests made after it began.
+func TestCodexSiblingForksOfALostParentCountOnlyTheirOwn(t *testing.T) {
 	home := t.TempDir()
-	sibling := func(id, at string, own [2]u) []string {
+	sibling := func(id, at, own string, total, last u) []string {
 		return []string{
 			cxMeta{at: at, id: id, session: lostID, cwd: "/work/app", source: spawnedBy(lostID), extra: `,"forked_from_id":"` + lostID + `"`}.String(),
 			cxCount(at, u{1000, 0, 10}, u{1000, 0, 10}),
 			cxCount(at, u{1500, 0, 15}, u{500, 0, 5}),
-			cxCount(at, own[0], own[1]),
+			cxCount(own, total, last),
 		}
 	}
 	// B sorts first on disk but started later.
-	mustWrite(t, rollout(home, "sessions", "20", kidB), sibling(kidB, "2026-09-20T11:00:00.000Z", [2]u{{1700, 0, 20}, {200, 0, 5}})...)
-	mustWrite(t, rollout(home, "sessions", "21", kidA), sibling(kidA, "2026-09-20T10:00:00.000Z", [2]u{{1600, 0, 17}, {100, 0, 2}})...)
+	mustWrite(t, rollout(home, "sessions", "20", kidB), sibling(kidB, "2026-09-20T11:00:00.000Z", "2026-09-20T11:00:30.000Z", u{1700, 0, 20}, u{200, 0, 5})...)
+	mustWrite(t, rollout(home, "sessions", "21", kidA), sibling(kidA, "2026-09-20T10:00:00.000Z", "2026-09-20T10:00:25.000Z", u{1600, 0, 17}, u{100, 0, 2})...)
 
 	res := mustRead(t, "codex", home, since)
-	if got := byID(t, res, kidA).Tokens; got != (Tokens{Input: 1600, Output: 17}) {
+	if got := byID(t, res, kidA).Tokens; got != (Tokens{Input: 100, Output: 2}) {
 		t.Fatalf("first fork = %+v", got)
 	}
 	if got := byID(t, res, kidB).Tokens; got != (Tokens{Input: 200, Output: 5}) {
 		t.Fatalf("second fork = %+v", got)
 	}
+}
+
+// A fork of a thread whose file is gone, as a fork of a fork whose source
+// was deleted, replays history no file here holds. Codex writes it in one
+// burst as the fork begins, or with the earlier times it was spent at. Only
+// what the fork asked after the burst counts, and the replay's rate limits,
+// the source's, are no reading of the fork's.
+func TestCodexForkPrefixCountsOnlyItsOwn(t *testing.T) {
+	home := t.TempDir()
+	path := rollout(home, "sessions", "21", forkID)
+	mustWrite(t, path,
+		cxMeta{at: "2026-09-21T09:00:00.000Z", id: forkID, cwd: "/work/app", source: `"vscode"`, extra: `,"forked_from_id":"` + lostID + `"`}.String(),
+		cxCount("2026-09-19T08:00:00.000Z", u{800, 0, 8}, u{800, 0, 8}),
+		cxLimits("2026-09-21T09:00:00.001Z", `{"limit_id":"codex","primary":{"used_percent":97.0,"window_minutes":300,"resets_at":1790000000},"secondary":null,"plan_type":"pro"}`),
+		cxCount("2026-09-21T09:00:00.002Z", u{1000, 0, 10}, u{1000, 0, 10}),
+		cxCount("2026-09-21T09:00:00.003Z", u{4000, 0, 40}, u{3000, 0, 30}),
+		cxCount("2026-09-21T09:00:00.900Z", u{5000, 1000, 50}, u{1000, 1000, 10}),
+		// The fork's own first request, answered after a pause.
+		cxCount("2026-09-21T09:00:14.000Z", u{5600, 1000, 56}, u{600, 0, 6}),
+		cxLimits("2026-09-21T09:00:14.500Z", `{"limit_id":"codex","primary":{"used_percent":12.0,"window_minutes":300,"resets_at":1790000000},"secondary":null,"plan_type":"pro"}`),
+		// A later line in a quick burst is the fork's own again.
+		cxCount("2026-09-21T09:00:14.600Z", u{5900, 1000, 60}, u{300, 0, 4}),
+	)
+	res := mustRead(t, "codex", home, since)
+	got := byID(t, res, forkID)
+	if got.Tokens != (Tokens{Input: 900, Output: 10}) {
+		t.Fatalf("fork = %+v", got.Tokens)
+	}
+	if got.Limits == nil || got.Limits.Windows[0].Percent != 12 {
+		t.Fatalf("limits = %+v", got.Limits)
+	}
+	checkHours(t, got, map[string]int64{"2026-09-21T09:00:00Z": 910})
 }
 
 // A parent older than the window is read only to recognise what a fresh fork
@@ -263,6 +296,49 @@ func TestCodexStaleParentOnlyMatchesReplay(t *testing.T) {
 	}
 	if res.Limits != nil {
 		t.Fatalf("stale file gave limits %+v", res.Limits)
+	}
+}
+
+// A sub-agent can outlive its parent's file: the parent stops being written
+// while the sub-agent still runs, and ages out of the window first. The
+// family is still the parent's session, as it was while both were read, up
+// a chain of parents that aged out, and it names the threads rolled into it.
+func TestCodexSubAgentOutlivesItsParent(t *testing.T) {
+	home := t.TempDir()
+	parent := rollout(home, "sessions", "20", rootID)
+	mustWrite(t, parent, rootLines...)
+	ageFile(t, parent, since.Add(-10*time.Minute))
+	middle := rollout(home, "sessions", "20", kidA)
+	mustWrite(t, middle,
+		cxMeta{at: "2026-09-20T10:01:00.000Z", id: kidA, session: rootID, cwd: "/work/app", source: spawnedBy(rootID)}.String(),
+		cxCount("2026-09-20T10:01:10.000Z", u{300, 100, 20}, u{300, 100, 20}),
+	)
+	ageFile(t, middle, since.Add(-5*time.Minute))
+	leaf := rollout(home, "sessions", "20", kidB)
+	mustWrite(t, leaf,
+		cxMeta{at: "2026-09-20T10:02:00.000Z", id: kidB, session: rootID, cwd: "/work/app", source: spawnedBy(kidA)}.String(),
+		cxCount("2026-09-20T10:02:10.000Z", u{50, 0, 5}, u{50, 0, 5}),
+	)
+	ageFile(t, leaf, since.Add(20*time.Minute))
+	// A stale thread no read thread names as parent reports nothing.
+	unrelated := rollout(home, "sessions", "19", lostID)
+	mustWrite(t, unrelated, cxMeta{at: "2026-06-01T10:00:00.000Z", id: lostID, cwd: "/work/old"}.String(), cxCount("2026-06-01T10:00:05.000Z", u{5, 0, 1}, u{5, 0, 1}))
+	ageFile(t, unrelated, since.Add(-time.Hour))
+
+	res := mustRead(t, "codex", home, since)
+	if got := strings.Join(ids(res), ","); got != rootID {
+		t.Fatalf("sessions = %s", got)
+	}
+	got := byID(t, res, rootID)
+	want := rootOwn.Add(Tokens{Input: 200, CacheRead: 100, Output: 20}).Add(Tokens{Input: 50, Output: 5})
+	if got.Tokens != want || !got.Updated.Equal(since.Add(20*time.Minute)) || got.Home != home {
+		t.Fatalf("session = %+v, want tokens %+v", got, want)
+	}
+	if !reflect.DeepEqual(got.Folded, []string{kidA, kidB}) {
+		t.Fatalf("folded = %v", got.Folded)
+	}
+	if res.Limits != nil {
+		t.Fatalf("a stale parent gave the home limits %+v", res.Limits)
 	}
 }
 

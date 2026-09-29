@@ -32,6 +32,14 @@ type codexFile struct {
 	// limits is the newest reading per limit id.
 	limits map[string]*Limits
 	fresh  bool
+	// root is set on a file too old to read for itself that a read thread
+	// names as its parent: the family's session is reported under it.
+	root bool
+	// source is the thread a fork was forked from. replayAt is the time of
+	// the last line of the history it replays as it starts, while it is
+	// still replaying it.
+	source   string
+	replayAt time.Time
 	// own and hours are what this file counts once replays are matched.
 	own   Tokens
 	hours meter.Hours
@@ -96,6 +104,37 @@ func (f *codexFile) meta(row codexLine) {
 	} else if t := parseTime(row.Timestamp); !t.IsZero() {
 		f.start = t
 	}
+	if p.ForkedFromID != "" && p.ForkedFromID != f.id {
+		f.source, f.replayAt = p.ForkedFromID, f.start
+	}
+}
+
+// forkReplayGap is the longest pause between two lines of the history a
+// fork replays as it starts. Codex writes the replay in one burst, hundreds
+// of requests within milliseconds, and no request of the fork's own is
+// answered that fast.
+const forkReplayGap = time.Second
+
+// replayed reports whether a line written at at is part of the history the
+// fork replays as it starts: a line from before the fork began, or one of
+// the burst written as it began. The first line after a pause ends the
+// replay.
+func (f *codexFile) replayed(at time.Time) bool {
+	switch {
+	case f.source == "":
+		return false
+	case !at.IsZero() && at.Before(f.start):
+		return true
+	case f.replayAt.IsZero():
+		return false
+	case at.IsZero() || at.Sub(f.replayAt) < forkReplayGap:
+		if at.After(f.replayAt) {
+			f.replayAt = at
+		}
+		return true
+	}
+	f.replayAt = time.Time{}
+	return false
 }
 
 func (f *codexFile) count(row codexLine) {
@@ -103,7 +142,9 @@ func (f *codexFile) count(row codexLine) {
 	if f.start.IsZero() {
 		f.start = at
 	}
-	if bucket, l := row.Payload.RateLimits.reading(at); l != nil {
+	// A replayed line's rate limits are the source's, read long before.
+	replay := f.replayed(at)
+	if bucket, l := row.Payload.RateLimits.reading(at); l != nil && !replay {
 		if f.limits == nil {
 			f.limits = map[string]*Limits{}
 		}
@@ -124,7 +165,7 @@ func (f *codexFile) count(row codexLine) {
 	if n := len(f.events); n > 0 && f.events[n-1].event == ev {
 		return
 	}
-	f.events = append(f.events, codexCount{event: ev, at: at})
+	f.events = append(f.events, codexCount{event: ev, at: at, replay: replay})
 }
 
 // record holds a response's usage until the next token_count shows whether it
@@ -152,10 +193,13 @@ func (f *codexFile) settle(ev *codexEvent) {
 	f.pending = nil
 }
 
-// codexCount is one token_count line and when it was written.
+// codexCount is one token_count line and when it was written. replay marks
+// one of the history a fork replayed as it started, which counts only as a
+// match for its source's own lines.
 type codexCount struct {
-	event codexEvent
-	at    time.Time
+	event  codexEvent
+	at     time.Time
+	replay bool
 }
 
 // codexEvent is what one token_count line counts. It is also the key that

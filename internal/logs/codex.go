@@ -36,6 +36,12 @@ import (
 // A request's tokens go to the hour of the line that counts it, in the thread
 // that counts it.
 //
+// A stale file that a fresh thread names as its parent reports the family's
+// session, as it did while it was fresh, so a sub-agent that outlives its
+// parent's file does not become a session of its own. Each session lists in
+// Folded the threads rolled into it, which a read before that fix, or one
+// that could not see the parent, took as sessions of their own.
+//
 // OpenAI counts cached input inside input_tokens, so cached tokens are moved
 // out of Input. token_count lines also carry the rate limits the harness last
 // saw; each home's newest reading is kept as a fallback quota reading for
@@ -43,22 +49,38 @@ import (
 //
 // One file linked into several homes, as Orca links each rollout into every
 // account's home, is read once, from the first of them. Its readings are no
-// home's fallback, since the file does not say which account it ran under.
+// home's fallback, since the file does not say which account it ran under;
+// the session keeps them, and collect credits them to the account it finds
+// served the session.
+//
+// Codex's thread table names, for some threads, the account that created
+// them. Each session carries its root thread's, and each home the one that
+// created its newest thread.
 func readCodexHomes(homes []string, since time.Time, reads map[string]HomeRead) []Session {
 	var files []*codexFile
-	stale := map[string]string{}
+	stale := map[string]staleCodex{}
 	linked := sameFiles{}
+	creators := map[string]string{}
 	for _, h := range homes {
 		fs, hr := codexFiles(h, since, stale, linked)
 		files = append(files, fs...)
+		th := readCodexThreads(h)
+		hr.AccountID = th.newest
+		for id, a := range th.creators {
+			if _, ok := creators[id]; !ok {
+				creators[id] = a
+			}
+		}
 		reads[h] = hr
 	}
 	files = append(files, linkedCodexFiles(files, stale)...)
+	markStaleRoots(files)
 	sessions := countCodex(files)
+	foldFamilies(sessions, creators)
 	for _, h := range homes {
 		var own []*codexFile
 		for _, f := range files {
-			if f.home == h && len(f.mirrors) == 0 {
+			if f.fresh && f.home == h && len(f.mirrors) == 0 {
 				own = append(own, f)
 			}
 		}
@@ -71,7 +93,7 @@ func readCodexHomes(homes []string, since time.Time, reads map[string]HomeRead) 
 
 // codexFiles parses the fresh rollout files of one home and indexes its stale
 // ones in stale. A file an earlier home already holds is noted on that one.
-func codexFiles(home string, since time.Time, stale map[string]string, linked sameFiles) ([]*codexFile, HomeRead) {
+func codexFiles(home string, since time.Time, stale map[string]staleCodex, linked sameFiles) ([]*codexFile, HomeRead) {
 	var out HomeRead
 	var files []*codexFile
 	for _, leaf := range []string{"sessions", "archived_sessions"} {
@@ -89,7 +111,7 @@ func codexFiles(home string, since time.Time, stale map[string]string, linked sa
 
 // walkCodex parses the fresh rollout files under root and indexes the stale
 // ones by the thread id in their name.
-func walkCodex(root, home string, since time.Time, stale map[string]string, linked sameFiles, out *HomeRead) []*codexFile {
+func walkCodex(root, home string, since time.Time, stale map[string]staleCodex, linked sameFiles, out *HomeRead) []*codexFile {
 	var files []*codexFile
 	walkLogs(root, &out.Unreadable, isJSONL, func(file, _ string, info fs.FileInfo) {
 		name := info.Name()
@@ -102,7 +124,7 @@ func walkCodex(root, home string, since time.Time, stale map[string]string, link
 		if !freshEnough(info.ModTime(), since) {
 			linked.add(name, info, nil)
 			if id := codexNameID(name); id != "" {
-				stale[id] = file
+				stale[id] = staleCodex{path: file, home: home, updated: info.ModTime().UTC()}
 			}
 			return
 		}
@@ -116,6 +138,13 @@ func walkCodex(root, home string, since time.Time, stale map[string]string, link
 		files = append(files, f)
 	})
 	return files
+}
+
+// staleCodex is a rollout file too old to read for itself: where it is,
+// which home holds it, and when it was last written.
+type staleCodex struct {
+	path, home string
+	updated    time.Time
 }
 
 // sameFiles finds a file already read under another path, by name and then
@@ -143,8 +172,9 @@ func (s sameFiles) add(name string, info fs.FileInfo, f *codexFile) {
 
 // linkedCodexFiles reads stale files that loaded threads name as parent,
 // root, or fork source, so a fork of an old thread does not count the history
-// it replays. They report no session of their own.
-func linkedCodexFiles(files []*codexFile, stale map[string]string) []*codexFile {
+// it replays. They report no session of their own, unless markStaleRoots
+// finds a read thread's parent among them.
+func linkedCodexFiles(files []*codexFile, stale map[string]staleCodex) []*codexFile {
 	loaded := map[string]bool{}
 	for _, f := range files {
 		loaded[f.id] = true
@@ -155,16 +185,17 @@ func linkedCodexFiles(files []*codexFile, stale map[string]string) []*codexFile 
 		f := queue[0]
 		queue = queue[1:]
 		for _, id := range f.links {
-			path, ok := stale[id]
+			sf, ok := stale[id]
 			if !ok || loaded[id] {
 				continue
 			}
 			loaded[id] = true
 			// A stale file that fails to parse only loses its matching.
-			p, _, _ := parseCodex(path)
+			p, _, _ := parseCodex(sf.path)
 			if p.id == "" {
 				p.id = id
 			}
+			p.home, p.updated = sf.home, sf.updated
 			extra = append(extra, p)
 			queue = append(queue, p)
 		}
@@ -172,19 +203,89 @@ func linkedCodexFiles(files []*codexFile, stale map[string]string) []*codexFile 
 	return extra
 }
 
+// markStaleRoots marks each stale file that a reported thread names as its
+// parent to report too, up its chain of parents, so the family is reported
+// under the root it had while every file was fresh.
+func markStaleRoots(files []*codexFile) {
+	byID := map[string][]*codexFile{}
+	for _, f := range files {
+		byID[f.id] = append(byID[f.id], f)
+	}
+	for _, f := range files {
+		for g := f; g.fresh || g.root; {
+			parents := byID[g.parent]
+			if g.parent == "" || g.parent == g.id || len(parents) == 0 || parents[0].fresh || parents[0].root {
+				break
+			}
+			for _, p := range parents {
+				p.root = true
+			}
+			g = parents[0]
+		}
+	}
+}
+
 // countCodex gives each fresh file the requests no earlier thread in its
 // family already logged, and merges files of one thread into one session.
 func countCodex(files []*codexFile) []Session {
+	loaded := map[string]bool{}
+	for _, f := range files {
+		loaded[f.id] = true
+	}
 	for _, family := range codexFamilies(files) {
-		countFamily(family)
+		countFamily(family, loaded)
 	}
 	var rows []Session
 	for _, f := range files {
-		if f.fresh {
+		if f.fresh || f.root {
 			rows = append(rows, f.session())
 		}
 	}
 	return mergeByID(rows, addCopy)
+}
+
+// foldFamilies gives each session that others roll into, as rollup will
+// roll them, the ids of those others in Folded, and the account Codex's
+// thread table says created it: its own thread's, or else the first of its
+// members' that names one.
+func foldFamilies(sessions []Session, creators map[string]string) {
+	at := map[string]int{}
+	for i, s := range sessions {
+		if s.ID != "" {
+			at[s.ID] = i
+		}
+	}
+	rootOf := func(i int) int {
+		seen := map[int]bool{}
+		for !seen[i] {
+			seen[i] = true
+			j, ok := at[sessions[i].ParentID]
+			if sessions[i].ParentID == "" || !ok {
+				break
+			}
+			i = j
+		}
+		return i
+	}
+	members := map[int][]int{}
+	for i := range sessions {
+		r := rootOf(i)
+		members[r] = append(members[r], i)
+	}
+	for r, ms := range members {
+		root := &sessions[r]
+		root.CreatorAccount = creators[root.ID]
+		for _, i := range ms {
+			if i == r {
+				continue
+			}
+			root.Folded = append(root.Folded, sessions[i].ID)
+			if root.CreatorAccount == "" {
+				root.CreatorAccount = creators[sessions[i].ID]
+			}
+		}
+		slices.Sort(root.Folded)
+	}
 }
 
 // codexFamilies groups the files whose threads link to each other, each
@@ -218,11 +319,15 @@ func codexFamilies(files []*codexFile) [][]*codexFile {
 }
 
 // countFamily gives each file of one family the requests no earlier file in
-// it already logged.
-func countFamily(family []*codexFile) {
+// it already logged. A fork whose source's file is gone replays history no
+// file here holds to match it against: the source's usage, counted while
+// its file was there, so none of it is the fork's. loaded is the ids of the
+// threads whose files were read.
+func countFamily(family []*codexFile, loaded map[string]bool) {
 	seen := map[codexEvent]bool{}
 	responses := map[string]bool{}
 	for _, f := range family {
+		lost := f.source != "" && !loaded[f.source]
 		var prev codexUsage
 		for _, c := range f.events {
 			ev := c.event
@@ -231,7 +336,8 @@ func countFamily(family []*codexFile) {
 				delta = ev.total.since(prev)
 			}
 			prev = ev.total
-			if seen[ev] {
+			if seen[ev] || (lost && c.replay) {
+				seen[ev] = true
 				continue
 			}
 			seen[ev] = true
@@ -251,9 +357,13 @@ func countFamily(family []*codexFile) {
 	}
 }
 
-// session is the file's row, with the usage countFamily gave it.
+// session is the file's row, with the usage countFamily gave it, and its
+// newest reading of the main limit with the other limits read around then.
 func (f *codexFile) session() Session {
-	s := Session{ID: f.id, ParentID: f.parent, Project: f.project, Tokens: f.own, Hours: f.hours, Updated: f.updated, Home: f.home, Limits: f.limits[CodexMainLimit]}
+	s := Session{ID: f.id, ParentID: f.parent, Project: f.project, Tokens: f.own, Hours: f.hours, Updated: f.updated, Home: f.home}
+	if f.limits[CodexMainLimit] != nil {
+		s.Limits = codexLimits([]*codexFile{f})
+	}
 	if len(f.mirrors) > 0 {
 		s.Homes = append([]string{f.home}, f.mirrors...)
 	}

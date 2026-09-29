@@ -1,8 +1,9 @@
 // Package logs reads token counts the harnesses already wrote to disk.
 //
-// It opens session logs and the Hermes session table, and nothing else in a
-// harness home. It never writes there. Prompts, tool arguments, and message
-// text are skipped at the line filter and never decoded into memory we keep.
+// It opens session logs, the Hermes session table, and the account ids in
+// Codex's thread table, and nothing else in a harness home. It never writes
+// there. Prompts, tool arguments, and message text are skipped at the line
+// filter and never decoded into memory we keep.
 package logs
 
 import (
