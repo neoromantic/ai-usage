@@ -542,9 +542,9 @@ func TestHermesUsageOlderSchemas(t *testing.T) {
 	}
 }
 
-// An auxiliary call on a fallback route records no billing provider, and
-// Hermes keeps such a call off the main loop's route: it is not billed to
-// the session's provider.
+// An auxiliary call on a fallback route records no billing provider. The
+// reader keeps it apart under UnknownAccount, as the log has it; the
+// collector bills it to the session's main route.
 func TestHermesAuxWithoutRouteIsUnknown(t *testing.T) {
 	home := t.TempDir()
 	db := hermesDB(t, home, hermesColumns)

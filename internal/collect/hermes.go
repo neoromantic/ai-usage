@@ -17,14 +17,15 @@ import (
 
 // hermes labels each Hermes session read with the billing provider its row
 // names, as its account, attributes the sessions' growth, and links the
-// accounts to the logins they bill through. It returns the sessions, and the
+// accounts to the logins they bill through. A row that names no login of its
+// own bills as its auxiliary calls do. It returns the sessions, and the
 // homes whose current account stays: Hermes keeps its current account under
 // no home, and forgets it when no Hermes home is found.
 func (s *sampler) hermes(homes []string, res logs.Result, partial bool) (read []readSession, probed []string) {
 	for _, rs := range res.Sessions {
 		label := rs.Account
-		if label == "" {
-			label = UnknownAccount
+		if auxRoute(label) {
+			label = auxBillsTo(rs, UnknownAccount)
 		}
 		read = append(read, readSession{s: rs, label: label})
 	}
@@ -53,6 +54,44 @@ func (s *sampler) hermes(homes []string, res logs.Result, partial bool) (read []
 var hermesLinks = map[string]string{
 	"openai-codex": "codex",
 	"xai-oauth":    "grok",
+}
+
+// auxRoute reports whether a Hermes billing route names no login: the empty
+// route Hermes records for an auxiliary call on a fallback route, UnknownAccount
+// that stands for it, and "auto", which leaves the choice to Hermes. Such a
+// call goes out on the login the session is using.
+func auxRoute(route string) bool {
+	switch strings.ToLower(strings.TrimSpace(route)) {
+	case "", "auto", UnknownAccount:
+		return true
+	}
+	return false
+}
+
+// auxBillsTo is the account a Hermes session's calls on an auxiliary route
+// bill to: its main route, the known route it spent the most tokens on, the
+// first by name on a tie. With none, it is the session's own label when that
+// names a login, else UnknownAccount.
+func auxBillsTo(s logs.Session, label string) string {
+	spent := map[string]int64{}
+	for r, t := range s.Parts {
+		if r = strings.TrimSpace(r); !auxRoute(r) {
+			spent[r] += t.Total()
+		}
+	}
+	best := ""
+	for r, n := range spent {
+		if best == "" || n > spent[best] || (n == spent[best] && r < best) {
+			best = r
+		}
+	}
+	if best != "" {
+		return best
+	}
+	if !auxRoute(label) {
+		return label
+	}
+	return UnknownAccount
 }
 
 // BillsThrough reports whether Hermes can bill a subscription through the

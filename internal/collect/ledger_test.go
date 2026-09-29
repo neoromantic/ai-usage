@@ -162,3 +162,51 @@ func legacyLedger(t *testing.T, dir state.Dir, lastRun time.Time, key string, se
 	}
 	return st
 }
+
+// A ledger from before auxiliary calls billed to the session's main route
+// credited them apart, and a read that finds them under the main route must
+// move that credit, with its hours, rather than count them again there.
+func TestAuxShareOfAMigratedLedgerMovesToTheMainRoute(t *testing.T) {
+	const id = "20260801_090000_a4c2e917"
+	k := state.Key("hermes", id)
+	h := logs.HourOf(t0.Add(-5 * time.Hour))
+	at := logs.HourStart(h + 1).Add(20 * time.Minute)
+	in := func(n int64) snapshot.Tokens { return snapshot.Tokens{Input: n} }
+	st := legacyLedger(t, state.Dir(t.TempDir()), at, k, map[string]any{
+		"p": "hermes", "proj": "/work/bot", "at": at, "seen": in(13000),
+		"by":    map[string]snapshot.Tokens{UnknownAccount: in(3000), "openai-codex": in(10000)},
+		"parts": map[string]snapshot.Tokens{UnknownAccount: in(3000), "openai-codex": in(10000)},
+		"last":  map[string]time.Time{UnknownAccount: at.Add(-time.Hour), "openai-codex": at},
+		"h":     map[int64]int64{h: 6000, h + 1: 7000},
+		"bh":    map[string]map[int64]int64{UnknownAccount: {h: 3000}, "openai-codex": {h: 3000, h + 1: 7000}},
+	})
+	e := st.Sessions[k]
+	hours := e.U.Clone()
+	if !e.Rederive || len(hours) != 2 || e.UB[UnknownAccount].Sum().Input != 3000 {
+		t.Fatalf("migrated = %+v", e)
+	}
+
+	now := t0
+	growth := map[string]snapshot.Tokens{}
+	parsed := hermesSess(id, "openai-codex", now.Add(-time.Minute), map[string]snapshot.Tokens{"openai-codex": in(13000)})
+	if g := attribute(st, "hermes", parsed, "openai-codex", false, now, growth); len(g) != 0 || len(growth) != 0 {
+		t.Fatalf("growth = %+v, %+v", g, growth)
+	}
+	if !reflect.DeepEqual(e.U, hours) {
+		t.Fatalf("hours = %v, want %v", e.U, hours)
+	}
+	if want := map[string]snapshot.Tokens{"openai-codex": in(13000)}; !reflect.DeepEqual(e.By, want) || !reflect.DeepEqual(e.Parts, want) {
+		t.Fatalf("by = %+v, parts = %+v", e.By, e.Parts)
+	}
+	if _, ok := e.UB[UnknownAccount]; ok || e.UB["openai-codex"].Sum().Input != 13000 {
+		t.Fatalf("hours by account = %+v", e.UB)
+	}
+	if _, ok := e.Last[UnknownAccount]; ok || !e.Last["openai-codex"].Equal(at) {
+		t.Fatalf("last = %+v", e.Last)
+	}
+	// Its tokens stay in the hours they were spent in, now the main route's.
+	a := totalsFor(t, st, "hermes", "openai-codex")
+	if a.Tokens != in(13000) || hasTotals(st, "hermes", UnknownAccount) {
+		t.Fatalf("totals = %+v", Totals(st, nil))
+	}
+}

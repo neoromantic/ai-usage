@@ -1,6 +1,7 @@
 package collect
 
 import (
+	"cmp"
 	"errors"
 	"slices"
 	"strings"
@@ -105,6 +106,11 @@ func touchAccount(st *state.State, p, label string) *state.Account {
 // attribute moves a session's growth since the last run onto label, or onto
 // each part's account when the log splits the session by account. It returns
 // the growth by account.
+//
+// The ledger remembers what it saw of a split session by the route each part
+// names, and credits a part on an auxiliary route to the route its calls bill
+// to now. A route that overtakes another as the session's main one then takes
+// only the auxiliary calls made after, never what was counted before.
 func attribute(st *state.State, p string, s logs.Session, label string, partial bool, now time.Time, growth map[string]snapshot.Tokens) map[string]snapshot.Tokens {
 	k := state.Key(p, s.ID)
 	e := st.Sessions[k]
@@ -124,10 +130,14 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 		if e.Parts == nil {
 			e.Parts = map[string]snapshot.Tokens{}
 		}
-		for l, t := range partsOf(s, label) {
-			g := t.Growth(e.Parts[l])
-			e.Parts[l] = seenNow(e.Parts[l], t, g, partial)
-			grown[l] = g
+		seen, to := seenParts(s), auxBillsTo(s, label)
+		if !partial {
+			relabelAux(e, seen, to)
+		}
+		for r, t := range seen {
+			g := t.Growth(e.Parts[r])
+			e.Parts[r] = seenNow(e.Parts[r], t, g, partial)
+			grown[billedTo(r, to)] = grown[billedTo(r, to)].Add(g)
 		}
 		e.Seen = snapshot.Tokens{}
 		for _, t := range e.Parts {
@@ -171,20 +181,56 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 	return grown
 }
 
-// partsOf is a session's tokens by the account each part names, label being
-// the session's own.
+// partsOf is a session's tokens by the account each part bills, label being
+// the session's own. A part on an auxiliary route bills to auxBillsTo.
 func partsOf(s logs.Session, label string) map[string]snapshot.Tokens {
+	to := auxBillsTo(s, label)
 	parts := map[string]snapshot.Tokens{}
-	for acct, t := range s.Parts {
-		// A part that names no account, as a row from before Hermes
-		// recorded billing, is the session's.
-		l := strings.TrimSpace(acct)
-		if l == "" {
-			l = label
-		}
-		parts[l] = parts[l].Add(t)
+	for r, t := range seenParts(s) {
+		parts[billedTo(r, to)] = parts[billedTo(r, to)].Add(t)
 	}
 	return parts
+}
+
+// seenParts is a session's tokens by the route each part names, as the
+// ledger remembers them. A part that names no route, as a row from before
+// Hermes recorded billing, is the route of the session's own row.
+func seenParts(s logs.Session) map[string]snapshot.Tokens {
+	own := cmp.Or(strings.TrimSpace(s.Account), UnknownAccount)
+	parts := map[string]snapshot.Tokens{}
+	for r, t := range s.Parts {
+		r = cmp.Or(strings.TrimSpace(r), own)
+		parts[r] = parts[r].Add(t)
+	}
+	return parts
+}
+
+// billedTo is the account a part on route r bills: r, or to for an
+// auxiliary route.
+func billedTo(r, to string) string {
+	if auxRoute(r) {
+		return to
+	}
+	return r
+}
+
+// relabelAux moves what the ledger credited to an auxiliary route onto the
+// account those calls bill to now, to: its tokens, hours and last growth. A
+// ledger from before auxiliary calls billed to the session's main route has
+// them apart, and a count it saw under a route this read no longer names
+// was read since under to, so it is to's, or it would count again there.
+func relabelAux(e *state.Session, seen map[string]snapshot.Tokens, to string) {
+	for r, t := range e.Parts {
+		if _, ok := seen[r]; !ok && r != to && auxRoute(r) {
+			e.Parts[to] = e.Parts[to].Add(t)
+			delete(e.Parts, r)
+		}
+	}
+	for l := range e.By {
+		if l != to && auxRoute(l) {
+			moveShare(e, l, to)
+		}
+	}
 }
 
 // seenNow is the count to remember after a read that found cur, g past prev.

@@ -345,6 +345,48 @@ func TestHermesAttributesByBillingProvider(t *testing.T) {
 	}
 }
 
+// Auxiliary calls on a fallback route, or on "auto", go out on the session's
+// login: they bill to its main route, the one it spent the most on, and to
+// the subscription that route is linked to. When another route overtakes it,
+// the new one takes the auxiliary calls made after, and nothing counts twice.
+func TestHermesAuxCallsBillToTheMainRoute(t *testing.T) {
+	w, o := newWorld(t)
+	w.login("codex", w.home(t, "codex"), "sam", nil)
+	h := w.home(t, "hermes")
+	const id = "20260901_100000_a4c2e917"
+	w.sessions("hermes", h, hermesSess(id, "xai-oauth", t0, map[string]snapshot.Tokens{
+		"openai-codex": tok(1000), "xai-oauth": tok(200), UnknownAccount: tok(30), "auto": tok(20),
+	}))
+	res := run(t, o)
+	e := res.State.Sessions[state.Key("hermes", id)]
+	if want := map[string]snapshot.Tokens{"openai-codex": tok(1050), "xai-oauth": tok(200)}; !reflect.DeepEqual(e.By, want) {
+		t.Fatalf("by = %+v, want %+v", e.By, want)
+	}
+	if hasTotals(res.State, "hermes", UnknownAccount) || hasTotals(res.State, "hermes", "auto") {
+		t.Fatalf("totals = %+v", Totals(res.State, nil))
+	}
+	if sam := totalsFor(t, res.State, "codex", "sam"); sam.Linked != tok(1050) {
+		t.Fatalf("codex sam linked = %+v", sam.Linked)
+	}
+
+	w.now = t0.Add(15 * time.Minute)
+	w.sessions("hermes", h, hermesSess(id, "xai-oauth", w.now, map[string]snapshot.Tokens{
+		"openai-codex": tok(1000), "xai-oauth": tok(2000), UnknownAccount: tok(40), "auto": tok(20),
+	}))
+	res = run(t, o)
+	e = res.State.Sessions[state.Key("hermes", id)]
+	if want := map[string]snapshot.Tokens{"openai-codex": tok(1050), "xai-oauth": tok(200).Add(tok(1800)).Add(tok(10))}; !reflect.DeepEqual(e.By, want) {
+		t.Fatalf("by after the switch = %+v, want %+v", e.By, want)
+	}
+	s := lastSample(t, o)
+	if g := growthOf(s, "hermes", "openai-codex"); !g.Zero() {
+		t.Fatalf("openai-codex grew %+v", g)
+	}
+	if g := growthOf(s, "hermes", "xai-oauth"); g.Input != 1810 {
+		t.Fatalf("xai-oauth grew %+v", g)
+	}
+}
+
 // A ledger from before v0.4 kept a Hermes session's whole history in the
 // hour a run first saw it. The first read after the upgrade spreads it over
 // the hours the session worked, and the account keeps its tokens.
