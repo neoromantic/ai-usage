@@ -1,13 +1,17 @@
 package collect
 
 import (
+	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
 
@@ -49,13 +53,23 @@ func (f Folders) of(dir string) Folder {
 //     repository. One with no .git entry left is the project named <name>
 //     that a .git entry found, when there is exactly one. Else the Codex
 //     worktrees of one name make one project, ~/.codex/worktrees/*/<name>.
-//   - Any other folder, such as the home folder, is its own project.
+//   - A folder that is gone counts where a .git entry placed it before, as
+//     projects.json in dir remembers.
+//   - Orca keeps worktrees in ~/orca/workspaces/<repo>/<name>. One that no
+//     .git entry places counts where a .git entry places all the other
+//     folders under ~/orca/workspaces/<repo>, when they agree on one.
+//   - Any other folder is in the nearest folder above it that the ledger
+//     names and that is its own project, as that one is; or, in a folder
+//     that holds unrelated things, such as ~/Downloads, in the folder right
+//     under that; else its own. It never goes into, or past, the home
+//     folder, a folder that holds unrelated things, or a temporary folder.
+//     Codex chats, in ~/Documents/Codex/<date>/<name>, make one project.
 //
 // Links are resolved and paths cleaned, so neither splits a project. On
 // macOS it does not look inside the folders the system asks the person
 // about before an app reads them, nor follow a link into one: a folder
-// there is its own project, but for the worktree folders above.
-func FindProjects(st *state.State) Folders {
+// there counts by its path alone, but for the worktree folders above.
+func FindProjects(dir state.Dir, st *state.State) Folders {
 	home, _ := os.UserHomeDir()
 	if r, err := filepath.EvalSymlinks(home); err == nil {
 		home = r
@@ -64,7 +78,48 @@ func FindProjects(st *state.State) Folders {
 	for _, s := range st.Sessions {
 		dirs = append(dirs, s.Project)
 	}
-	return finder{home: home, private: privateFolders(runtime.GOOS, home)}.find(dirs)
+	file := dir.Path("projects.json")
+	known := map[string]string{}
+	if b, err := os.ReadFile(file); err == nil {
+		_ = json.Unmarshal(b, &known)
+	}
+	f := finder{home: home, private: privateFolders(runtime.GOOS, home), bins: privateFolders("darwin", home),
+		temps: tempFolders(), known: known, learn: map[string]string{}}
+	out := f.find(dirs)
+	changed := false
+	for d, p := range f.learn {
+		if known[d] != p {
+			changed = true
+		}
+	}
+	if changed {
+		// The file keeps only the folders the ledger still names.
+		next := map[string]string{}
+		for _, d := range dirs {
+			if p, ok := f.learn[d]; ok {
+				next[d] = p
+			} else if p, ok := known[d]; ok {
+				next[d] = p
+			}
+		}
+		if b, err := json.MarshalIndent(next, "", " "); err == nil {
+			_ = fsutil.WriteFile(file, append(b, '\n'), 0o600)
+		}
+	}
+	return out
+}
+
+// tempFolders are the temporary folders, as written and with their links
+// resolved.
+func tempFolders() []string {
+	var out []string
+	for _, d := range []string{"/tmp", "/private/tmp", os.TempDir()} {
+		if !filepath.IsAbs(d) {
+			continue
+		}
+		out = append(out, filepath.Clean(d), fsutil.RealPath(filepath.Clean(d)))
+	}
+	return out
 }
 
 // privateFolders are the folders macOS asks the person about before an app
@@ -85,10 +140,17 @@ func privateFolders(goos, home string) []string {
 }
 
 // finder finds projects without looking inside its private folders. Its
-// home folder, with its links resolved, is no project of the folders in it.
+// home folder, with its links resolved, is no project of the folders in it,
+// nor are its bins, which hold unrelated things, or its temporary folders.
+// known are the projects a .git entry found for folders before, by folder;
+// learn, when set, gets those it finds now.
 type finder struct {
 	home    string
 	private []string
+	bins    []string
+	temps   []string
+	known   map[string]string
+	learn   map[string]string
 }
 
 // place is where a folder counts: its project, whether a .git entry found
@@ -143,7 +205,177 @@ func (f finder) find(dirs []string) Folders {
 			out[dir] = Folder{Path: out[dir].Path, Project: p}
 		}
 	}
+	// git are the folders a .git entry placed, now or before.
+	git := map[string]bool{}
+	for dir, pl := range places {
+		x := out[dir]
+		switch p, ok := f.known[dir]; {
+		case pl.git:
+			git[dir] = true
+			if f.learn != nil {
+				f.learn[dir] = x.Project
+			}
+		case ok && f.gone(x.Path):
+			out[dir], git[dir] = Folder{Path: x.Path, Project: p}, true
+		}
+	}
+	f.orca(out, git)
+	f.rollup(out, git)
 	return out
+}
+
+// gone reports whether the folder at path is missing, never looking inside
+// a private folder.
+func (f finder) gone(path string) bool {
+	if f.inside(path) {
+		return false
+	}
+	_, err := os.Lstat(path)
+	return errors.Is(err, fs.ErrNotExist)
+}
+
+// orca places the folders of an Orca worktree no .git entry placed,
+// ~/orca/workspaces/<repo>/<name>, as gone ones are, where a .git entry
+// placed every other folder under ~/orca/workspaces/<repo>, when they all
+// agree on one project.
+func (f finder) orca(out Folders, git map[string]bool) {
+	if f.home == "" {
+		return
+	}
+	root := filepath.Join(f.home, "orca", "workspaces")
+	// top is the repository's folder and the worktree's under root that
+	// hold path, or "" for a path in no worktree.
+	top := func(path string) (repo, wt string) {
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return "", ""
+		}
+		parts := strings.Split(rel, string(filepath.Separator))
+		if len(parts) < 2 || parts[0] == ".." || parts[0] == "." {
+			return "", ""
+		}
+		return parts[0], parts[1]
+	}
+	// placed are the projects of the placed folders, by repository and
+	// worktree.
+	placed := map[string]map[string]map[string]bool{}
+	for dir, x := range out {
+		if repo, wt := top(x.Path); repo != "" && git[dir] {
+			if placed[repo] == nil {
+				placed[repo] = map[string]map[string]bool{}
+			}
+			if placed[repo][wt] == nil {
+				placed[repo][wt] = map[string]bool{}
+			}
+			placed[repo][wt][x.Project] = true
+		}
+	}
+	for dir, x := range out {
+		repo, wt := top(x.Path)
+		if repo == "" || git[dir] {
+			continue
+		}
+		agreed := map[string]bool{}
+		for other, projects := range placed[repo] {
+			if other == wt {
+				continue
+			}
+			for p := range projects {
+				agreed[p] = true
+			}
+		}
+		if len(agreed) != 1 {
+			continue
+		}
+		for p := range agreed {
+			out[dir] = Folder{Path: x.Path, Project: p}
+		}
+	}
+}
+
+// rollup places, by their paths alone, the folders that are still their
+// own project but no .git entry's, as FindProjects tells.
+func (f finder) rollup(out Folders, git map[string]bool) {
+	own := map[string]bool{}
+	var paths []string
+	for dir, x := range out {
+		if !git[dir] && x.Project == x.Path && !own[x.Path] {
+			own[x.Path] = true
+			paths = append(paths, x.Path)
+		}
+	}
+	// A folder comes after the folders above it, which are placed first.
+	sort.Slice(paths, func(i, j int) bool {
+		if len(paths[i]) != len(paths[j]) {
+			return len(paths[i]) < len(paths[j])
+		}
+		return paths[i] < paths[j]
+	})
+	placed := map[string]string{}
+	for _, p := range paths {
+		placed[p] = f.rollTo(p, own, placed)
+	}
+	for dir, x := range out {
+		if p, ok := placed[x.Path]; ok && !git[dir] && x.Project == x.Path {
+			out[dir] = Folder{Path: x.Path, Project: p}
+		}
+	}
+}
+
+// rollTo is where the folder at path counts when no .git entry places it:
+// own are the ledger's folders that are their own project, and placed where
+// those above path count.
+func (f finder) rollTo(path string, own map[string]bool, placed map[string]string) string {
+	if f.stop(path) {
+		return path
+	}
+	if f.home != "" {
+		chats := filepath.Join(f.home, "Documents", "Codex")
+		if strings.HasPrefix(path, chats+string(filepath.Separator)) {
+			return chats
+		}
+	}
+	below := path
+	for d := filepath.Dir(path); !f.stop(d); below, d = d, filepath.Dir(d) {
+		if own[d] {
+			return placed[d]
+		}
+	}
+	if f.bin(filepath.Dir(below)) {
+		return below
+	}
+	return path
+}
+
+// stop reports whether folders go neither into nor past d: the root, the
+// home folder, a bin, or a temporary folder.
+func (f finder) stop(d string) bool {
+	if filepath.Dir(d) == d || d == f.home || f.bin(d) {
+		return true
+	}
+	for _, t := range f.temps {
+		if d == t {
+			return true
+		}
+	}
+	return false
+}
+
+// bin reports whether d holds unrelated folders: one of the bins, or a
+// volume or a cloud drive, each folder in /Volumes, ~/Library/Mobile
+// Documents or ~/Library/CloudStorage.
+func (f finder) bin(d string) bool {
+	up := filepath.Dir(d)
+	for _, b := range f.bins {
+		if d == b {
+			return true
+		}
+		if up == b && up != d && (filepath.Base(b) == "Volumes" || filepath.Base(b) == "Mobile Documents" ||
+			filepath.Base(b) == "CloudStorage") {
+			return true
+		}
+	}
+	return false
 }
 
 // place is where the folder at path counts, before a Codex worktree is

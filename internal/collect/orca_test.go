@@ -246,3 +246,42 @@ func TestHomesAreAskedTogether(t *testing.T) {
 		}
 	}
 }
+
+// TestFindProjectsOrcaWorktrees: an Orca worktree no .git entry places, gone
+// or not, with its folders, is where the repository's other worktrees are,
+// when they agree; with worktrees of two repositories there, it stays its
+// own.
+func TestFindProjectsOrcaWorktrees(t *testing.T) {
+	home := tree(t,
+		"src/app/.git/worktrees/feat-a/commondir=../..",
+		"src/app/.git/worktrees/feat-b/commondir=../..",
+		"orca/workspaces/app/feat-a/.git=gitdir: $ROOT/src/app/.git/worktrees/feat-a",
+		"orca/workspaces/app/feat-b/.git=gitdir: $ROOT/src/app/.git/worktrees/feat-b",
+		"orca/workspaces/app/feat-b/web",
+		"orca/workspaces/app/scratch",
+		"src/lib/.git/worktrees/one/commondir=../..",
+		"src/kit/.git/worktrees/two/commondir=../..",
+		"orca/workspaces/lib/one/.git=gitdir: $ROOT/src/lib/.git/worktrees/one",
+		"orca/workspaces/lib/two/.git=gitdir: $ROOT/src/kit/.git/worktrees/two",
+	)
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	cases := [][2]string{
+		{"orca/workspaces/app/feat-a", "src/app"},
+		{"orca/workspaces/app/feat-b/web", "src/app"},
+		{"orca/workspaces/app/old-branch", "src/app"},
+		{"orca/workspaces/app/old-branch/pkg", "src/app"},
+		{"orca/workspaces/app/scratch", "src/app"},
+		{"orca/workspaces/lib/one", "src/lib"},
+		{"orca/workspaces/lib/two", "src/kit"},
+		{"orca/workspaces/lib/old", "orca/workspaces/lib/old"},
+	}
+	var dirs, want []string
+	for _, c := range cases {
+		dirs, want = append(dirs, c[0]), append(want, c[1])
+	}
+	f := FindProjects(state.Dir(t.TempDir()), ledgerIn(under(home, dirs...)...))
+	if got := projectsOf(t, f, home, dirs...); !reflect.DeepEqual(got, want) {
+		t.Errorf("projects\n got %v\nwant %v", got, want)
+	}
+}

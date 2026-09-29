@@ -1,10 +1,12 @@
 package collect
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -79,7 +81,7 @@ func ledgerIn(dirs ...string) *state.State {
 // git config names it; a bare repository's worktrees are its, or the
 // folder's that holds it when it is hidden, or the checkout's whose .git
 // file names it, as git clone --separate-git-dir makes; a folder outside
-// any repository is its own.
+// any repository is its own, or its folder's above it in the ledger.
 func TestFindProjectsInRepositories(t *testing.T) {
 	root := tree(t,
 		"src/app/.git/HEAD=ref: refs/heads/main",
@@ -117,12 +119,12 @@ func TestFindProjectsInRepositories(t *testing.T) {
 		"bare/main", "hidden", "hidden/main/src", "wt/sep", "sep/app",
 		"plain", "plain/notes",
 	}
-	f := FindProjects(ledgerIn(append(under(root, dirs...), "unknown", "Claude app")...))
+	f := FindProjects(state.Dir(t.TempDir()), ledgerIn(append(under(root, dirs...), "unknown", "Claude app")...))
 	want := []string{
 		"src/app", "src/app", "src/app", "src/app", "src/app", "src/app",
 		"src/app/vendor/lib", "src/app/vendor/lib", "src/app/worktrees/x", "src/lib", "src/app/vendor/ui",
 		"bare/app.git", "hidden", "hidden", "sep/app", "sep/app",
-		"plain", "plain/notes",
+		"plain", "plain",
 	}
 	if got := projectsOf(t, f, root, dirs...); !reflect.DeepEqual(got, want) {
 		t.Errorf("projects\n got %v\nwant %v", got, want)
@@ -151,7 +153,7 @@ func TestFindProjectsFollowsLinks(t *testing.T) {
 	for d := range want {
 		dirs = append(dirs, d)
 	}
-	f := FindProjects(ledgerIn(dirs...))
+	f := FindProjects(state.Dir(t.TempDir()), ledgerIn(dirs...))
 	for dir, want := range want {
 		if got := f.of(dir); got != want {
 			t.Errorf("%s is %+v, want %+v", dir, got, want)
@@ -173,7 +175,7 @@ func TestFindProjectsClaudeWorktrees(t *testing.T) {
 		"src/gone/.claude/worktrees/x/y", "src/gone",
 	}
 	want := []string{"src/app", "src/app", "src/app", "src/gone", "src/gone"}
-	if got := projectsOf(t, FindProjects(ledgerIn(under(root, dirs...)...)), root, dirs...); !reflect.DeepEqual(got, want) {
+	if got := projectsOf(t, FindProjects(state.Dir(t.TempDir()), ledgerIn(under(root, dirs...)...)), root, dirs...); !reflect.DeepEqual(got, want) {
 		t.Errorf("projects\n got %v\nwant %v", got, want)
 	}
 }
@@ -201,15 +203,15 @@ func TestFindProjectsCodexWorktrees(t *testing.T) {
 		"home/.codex/worktrees/*/tool", "home/.codex/worktrees/*/tool",
 		"home/.codex/worktrees/cc33",
 	}
-	if got := projectsOf(t, FindProjects(ledgerIn(under(root, dirs...)...)), root, dirs...); !reflect.DeepEqual(got, want) {
+	if got := projectsOf(t, FindProjects(state.Dir(t.TempDir()), ledgerIn(under(root, dirs...)...)), root, dirs...); !reflect.DeepEqual(got, want) {
 		t.Errorf("projects\n got %v\nwant %v", got, want)
 	}
 }
 
 // TestFindProjectsLeavesPrivateFoldersUnread: nothing inside a folder macOS
-// asks about is read, nor reached through a link. A folder there is its own
-// project, but for the worktree folders; a worktree whose git folder is
-// there is told by where that is.
+// asks about is read, nor reached through a link. A folder there counts by
+// its path alone, but for the worktree folders; a worktree whose git folder
+// is there is told by where that is.
 func TestFindProjectsLeavesPrivateFoldersUnread(t *testing.T) {
 	root := tree(t,
 		"Documents/app/.git/worktrees/app/commondir=../../../../elsewhere/.git",
@@ -220,9 +222,10 @@ func TestFindProjectsLeavesPrivateFoldersUnread(t *testing.T) {
 		"elsewhere/app/.git/HEAD=x",
 		"elsewhere/app/sub",
 	)
-	f := finder{private: []string{filepath.Join(root, "Documents")}}
+	docs := []string{filepath.Join(root, "Documents")}
+	f := finder{private: docs, bins: docs}
 	dirs := []string{"Documents/app/sub", "Documents/app/.claude/worktrees/x", "home/.codex/worktrees/1a2b/app"}
-	want := []string{"Documents/app/sub", "Documents/app", "Documents/app"}
+	want := []string{"Documents/app", "Documents/app", "Documents/app"}
 	if got := projectsOf(t, f.find(under(root, dirs...)), root, dirs...); !reflect.DeepEqual(got, want) {
 		t.Errorf("projects\n got %v\nwant %v", got, want)
 	}
@@ -236,7 +239,7 @@ func TestFindProjectsLeavesPrivateFoldersUnread(t *testing.T) {
 		}
 	}
 	dirs = []string{"work/app/sub", "wt"}
-	want = []string{"Documents/work/app/sub", "wt"}
+	want = []string{"Documents/work", "wt"}
 	if got := projectsOf(t, f.find(under(root, dirs...)), root, dirs...); !reflect.DeepEqual(got, want) {
 		t.Errorf("projects through links\n got %v\nwant %v", got, want)
 	}
@@ -253,6 +256,132 @@ func TestFindProjectsLeavesPrivateFoldersUnread(t *testing.T) {
 	}
 	if got := privateFolders("linux", home); got != nil {
 		t.Errorf("private folders on Linux: %v", got)
+	}
+}
+
+// TestFindProjectsRollsUpFolders: a folder no .git entry places is in the
+// ledger's nearest folder above it that is its own project, as that one is;
+// in a bin, such as ~/Downloads, in the folder right under it; never in the
+// home folder or a bin itself. An unused repository below changes nothing,
+// and one inside a folder stays its own. Codex chats make one project.
+func TestFindProjectsRollsUpFolders(t *testing.T) {
+	home := tree(t,
+		"Downloads/ChatExport_Ёлочка/work/game/lpc/.git/HEAD=x",
+		"Downloads/ChatExport_Ёлочка/work/game/art/tests",
+		"Documents/Codex/2026-09-01/fix-bug",
+		"notes/tool/.git/HEAD=x",
+		"notes/tool/cmd",
+	)
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	chat := "Downloads/ChatExport_Ёлочка"
+	cases := [][2]string{
+		{".", "."},
+		{"Downloads", "Downloads"},
+		{chat, chat},
+		{chat + "/work/game/art/tests", chat},
+		{chat + "/work/game", chat},
+		{"Downloads/Квакша/sub/deeper", "Downloads/Квакша"},
+		{"Documents/Codex/2026-09-01/fix-bug", "Documents/Codex"},
+		{"Documents/Codex/2026-09-02/notes", "Documents/Codex"},
+		{"notes", "notes"},
+		{"notes/draft/old", "notes"},
+		{"notes/tool", "notes/tool"},
+		{"notes/tool/cmd", "notes/tool"},
+		{"scratch/a/b", "scratch/a/b"},
+	}
+	var dirs, want []string
+	for _, c := range cases {
+		dirs, want = append(dirs, c[0]), append(want, c[1])
+	}
+	f := FindProjects(state.Dir(t.TempDir()), ledgerIn(under(home, dirs...)...))
+	if got := projectsOf(t, f, home, dirs...); !reflect.DeepEqual(got, want) {
+		t.Errorf("projects\n got %v\nwant %v", got, want)
+	}
+}
+
+// TestFindProjectsStopsAtTemporaryFolders: a folder in a temporary folder
+// goes into the ledger's folder above it, but never into the temporary
+// folder itself.
+func TestFindProjectsStopsAtTemporaryFolders(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no /tmp")
+	}
+	x, y := "/tmp/quokka-notes-7f3e", "/tmp/quokka-notes-7f3e/y"
+	z := "/tmp/quokka-drafts-7f3e/z"
+	f := FindProjects(state.Dir(t.TempDir()), ledgerIn(x, y, z, "/tmp"))
+	if got, want := f.of(y).Project, f.of(x).Path; got != want {
+		t.Errorf("%s is in %s, want %s", y, got, want)
+	}
+	if got := f.of(z); got.Project != got.Path {
+		t.Errorf("%s is in %s", z, got.Project)
+	}
+}
+
+// TestRollToBins: every volume and cloud drive holds unrelated folders, as
+// ~/Downloads does.
+func TestRollToBins(t *testing.T) {
+	home := filepath.FromSlash("/Users/ann")
+	f := finder{home: home, bins: privateFolders("darwin", home)}
+	for path, want := range map[string]string{
+		"/Volumes/Data/src/app": "/Volumes/Data/src",
+		"/Volumes/Data":         "/Volumes/Data",
+		"/Users/ann/Library/Mobile Documents/com~apple~CloudDocs/notes/x": "/Users/ann/Library/Mobile Documents/com~apple~CloudDocs/notes",
+		"/Users/ann/Library/CloudStorage/Drive-ann/work/q3":               "/Users/ann/Library/CloudStorage/Drive-ann/work",
+		"/Users/ann/Desktop/site/web":                                     "/Users/ann/Desktop/site",
+		"/Users/ann/src/app/web":                                          "/Users/ann/src/app/web",
+	} {
+		path, want = filepath.FromSlash(path), filepath.FromSlash(want)
+		if got := f.rollTo(path, nil, nil); got != want {
+			t.Errorf("%s is in %s, want %s", path, got, want)
+		}
+	}
+}
+
+// TestFindProjectsRemembersGoneFolders: a folder a .git entry placed keeps
+// its project after it is gone, as projects.json remembers; the file keeps
+// only the folders the ledger still names.
+func TestFindProjectsRemembersGoneFolders(t *testing.T) {
+	root := tree(t,
+		"src/app/.git/worktrees/fix/commondir=../..",
+		"wt/fix/.git=gitdir: $ROOT/src/app/.git/worktrees/fix",
+		"wt/fix/pkg",
+	)
+	d := state.Dir(t.TempDir())
+	dirs := []string{"wt/fix", "wt/fix/pkg", "wt"}
+	st := ledgerIn(under(root, dirs...)...)
+	want := []string{"src/app", "src/app", "wt"}
+	if got := projectsOf(t, FindProjects(d, st), root, dirs...); !reflect.DeepEqual(got, want) {
+		t.Fatalf("projects\n got %v\nwant %v", got, want)
+	}
+	for _, p := range []string{"wt/fix", "src/app/.git/worktrees/fix"} {
+		if err := os.RemoveAll(filepath.Join(root, filepath.FromSlash(p))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := projectsOf(t, FindProjects(d, st), root, dirs...); !reflect.DeepEqual(got, want) {
+		t.Errorf("gone worktree\n got %v\nwant %v", got, want)
+	}
+	// Without the file the gone worktree is only a folder in wt.
+	if got := projectsOf(t, FindProjects(state.Dir(t.TempDir()), st), root, dirs...); !reflect.DeepEqual(got, []string{"wt", "wt", "wt"}) {
+		t.Errorf("gone worktree, forgotten: %v", got)
+	}
+
+	// A folder a .git entry places anew rewrites the file, without the
+	// folders the ledger no longer names.
+	dirs = []string{"wt/fix", "src/app"}
+	FindProjects(d, ledgerIn(under(root, dirs...)...))
+	b, err := os.ReadFile(d.Path("projects.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file map[string]string
+	if err := json.Unmarshal(b, &file); err != nil {
+		t.Fatal(err)
+	}
+	app := filepath.Join(root, "src", "app")
+	if want := map[string]string{filepath.Join(root, "wt", "fix"): app, app: app}; !reflect.DeepEqual(file, want) {
+		t.Errorf("projects.json = %v, want %v", file, want)
 	}
 }
 
