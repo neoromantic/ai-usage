@@ -1,4 +1,4 @@
-ai-usage · sam-air               ● collected 8m  ● no relay  ● v1.4.3 available
+ai-usage · sam-air     ● collected 8m  ● no relay  ● v1.4.3 available
 
 ATTENTION
  OVER   claude sam · 5h        runs out ~Wed 18:27, 12m before reset
@@ -6,17 +6,17 @@ ATTENTION
 
 SUBSCRIPTIONS  5 · 1 over · 2 no reading
 
-  CLAUDE               THIS WEEK                 LEFT  RESETS   AT RESET  USERS
-● sam@example.com      ━━━━━━━━━━━━━─┃─────────   45%  2d 18h  91% tight      1
-    5h                 ━━━━━━━━━━━━━━━━━━╋─────   20%  1h 2m   104% over
+  CLAUDE               THIS WEEK     LEFT  RESETS   AT RESET  DEVICES
+● sam@example.com      ━━━━━━━┃────   45%  2d 18h  91% tight        1
+    5h                 ━━━━━━━━━╋──   20%  1h 2m   104% over
 
   CODEX
-  sam+old@example.com  ━━━━━━━───┃─────────────  ~70%  3d 17h    ~71% ok      1
-● sam@example.com      ━━━━━────────────┃──────   80%  1d 18h  27% under      1
-  work@example.org     ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                  —      ·
+  sam+old@example.com  ━━━━─┃──────  ~70%  3d 17h    ~71% ok        1
+● sam@example.com      ━━──────┃───   80%  1d 18h  27% under        1
+  work@example.org     ┈┈┈┈┈┈┈┈┈┈┈┈     ?                  —        ·
 
   GROK
-● 3f2a9c1e             ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                  —      1
+● 3f2a9c1e             ┈┈┈┈┈┈┈┈┈┈┈┈     ?                  —        1
 
 USAGE  sam-air · M weighted tokens
 

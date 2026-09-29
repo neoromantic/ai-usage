@@ -10,10 +10,10 @@ ATTENTION
 
 SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
 
-  CLAUDE         THIS WEEK                 LEFT  RESETS              AT RESET  USERS
+  CLAUDE         THIS WEEK                 LEFT  RESETS              AT RESET  DEVICES
 ● ann@acme.dev   ━━━━━━━━━╋━━━━━━────────  ~33%  3d 7h  Sun 01:00  ~174% over   2  annbook
     Fable        ━━━━━━━━━━━━╋━━━━━━━━━━━    0%  3d 7h  Sun 01:00         out
-  kim@corp.test  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  Mac.localdomain
+  kim@corp.test  /opt/homebrew/bin/claud…     ?                             —   1  Mac.localdomain
 
   CODEX
 ● ann@acme.dev   ━━━━━━━━━━━━━━━━━╋━━━━━━    0%  1d 23h Fri 17:09         out   2  annbook

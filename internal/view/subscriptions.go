@@ -16,6 +16,8 @@ type subRow struct {
 	users   int
 	busiest string
 	last    string
+	// noReading is why an account has no reading, when that is known.
+	noReading string
 }
 
 type subGroup struct {
@@ -44,7 +46,7 @@ func (l subLayout) users() int {
 	if l.showBusiest && l.busiest > 0 {
 		w += 2 + l.busiest
 	}
-	return max(w, width("USERS"))
+	return max(w, width("DEVICES"))
 }
 
 func (l subLayout) width() int {
@@ -130,6 +132,9 @@ func (p *page) subRows(a *TeamAccount) []subRow {
 	}
 	if a.Busiest != nil {
 		row.busiest = p.txt(*a.Busiest)
+	}
+	if a.NoReading != nil {
+		row.noReading = p.txt(*a.NoReading)
 	}
 	if a.LastActiveAt != nil {
 		row.last = age(p.now.Sub(*a.LastActiveAt))
@@ -226,7 +231,7 @@ func (p *page) subHeader(l subLayout, provider string) chunks {
 		{"LEFT", l.left, true, true},
 		{"RESETS", l.resets(), false, true},
 		{"AT RESET", l.at, true, true},
-		{"USERS", l.users(), false, true},
+		{"DEVICES", l.users(), false, true},
 		{"LAST", l.last, true, l.showLast},
 	} {
 		if !c.show {
@@ -260,7 +265,12 @@ func (p *page) subLine(l subLayout, r subRow) chunks {
 		out = append(out, p.left(p.muted(truncEnd(r.plan, l.plan, g.ell)), l.plan)...)
 	}
 	out = append(out, p.space(2))
-	out = append(out, p.bar(r.win, l.bar)...)
+	if r.noReading != "" && !known(r.win) {
+		// Why there is no reading says more than a bar of none.
+		out = append(out, p.left(p.muted(truncEnd(r.noReading, l.bar, g.ell)), l.bar)...)
+	} else {
+		out = append(out, p.bar(r.win, l.bar)...)
+	}
 	out = append(out, p.space(2))
 	out = append(out, p.right(p.leftCell(r.win), l.left)...)
 	out = append(out, p.space(2))

@@ -10,19 +10,19 @@ ATTENTION
 
 SUBSCRIPTIONS  7 . 2 out . 1 over . 3 no reading
 
-  CLAUDE         THIS WEEK                 LEFT  RESETS    AT RESET  USERS
-* ann@acme.dev   =========+======--------  ~33%  3d 7h   ~174% over      2
+  CLAUDE         THIS WEEK                 LEFT  RESETS    AT RESET  DEVICES
+* ann@acme.dev   =========+======--------  ~33%  3d 7h   ~174% over        2
     Fable        ============+===========    0%  3d 7h          out
-  kim@corp.test  ........................     ?                   -      1
+  kim@corp.test  /opt/homebrew/bin/cla...     ?                   -        1
 
   CODEX
-* ann@acme.dev   =================+======    0%  1d 23h         out      2
-  sam@mail.test  ======+===--------------   58%  5d 2h    157% over      1
-* lee@corp.test  ===|--------------------   88%  5d 22h      81% ok     11
-  unknown        ........................     ?                   -      1
+* ann@acme.dev   =================+======    0%  1d 23h         out        2
+  sam@mail.test  ======+===--------------   58%  5d 2h    157% over        1
+* lee@corp.test  ===|--------------------   88%  5d 22h      81% ok       11
+  unknown        ........................     ?                   -        1
 
   GROK
-* a4c2e917       ........................     ?                   -      1
+* a4c2e917       ........................     ?                   -        1
 
 DEVICES  15 . 1 error . 1 silent . 4 old . by 7d UTC            usage  [status]
                         COLLECTOR -----  TOKENS ------

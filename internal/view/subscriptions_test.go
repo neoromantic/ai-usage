@@ -1,6 +1,7 @@
 package view
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -57,5 +58,40 @@ func TestBarTickFollowsTheForecast(t *testing.T) {
 		if got := p.bar(&w, barCells).String(); got != c.bar {
 			t.Errorf("%v%% used at %v, %s: bar %s, want %s", c.used, c.elapsed, w.State, got, c.bar)
 		}
+	}
+}
+
+// TestSubscriptionsDevicesAndNoReading: the column of how many devices hold
+// an account is DEVICES, and a row with no reading says why in its bar's
+// place, dim and cut to the bar.
+func TestSubscriptionsDevicesAndNoReading(t *testing.T) {
+	r := loadReport(t, "team")
+	for _, w := range []int{80, 120} {
+		p := Render(r, Options{Width: w, Loc: sampleZone})
+		head := bodyLine(t, p, "SUBSCRIPTIONS", func(l string) bool { return strings.HasPrefix(l, "  CLAUDE ") })
+		if !strings.Contains(head, " DEVICES") || strings.Contains(head, "USERS") {
+			t.Errorf("at %d the header is %q", w, head)
+		}
+		kim := bodyLine(t, p, "SUBSCRIPTIONS", func(l string) bool { return strings.Contains(l, "kim@corp.test") })
+		if !strings.Contains(kim, "  /opt/homebrew/bin/cl") || !strings.Contains(kim, "…") {
+			t.Errorf("at %d kim's row is %q", w, kim)
+		}
+	}
+	color := Render(r, Options{Width: 120, Loc: sampleZone, Color: true, Dark: true})
+	dim := sgr.FindString(lipglossFg(NewTheme(true).Muted))
+	if !strings.Contains(strings.Join(color.Body, "\n"), dim+"/opt/homebrew/bin/claud…") {
+		t.Error("the reason there is no reading is not dim")
+	}
+	// A row that has a reading has its bar whatever else it says.
+	for i := range r.Team.Providers {
+		for j := range r.Team.Providers[i].Accounts {
+			if a := &r.Team.Providers[i].Accounts[j]; a.Label == "lee@corp.test" {
+				why := "should not show"
+				a.NoReading = &why
+			}
+		}
+	}
+	if s := strings.Join(Render(r, Options{Width: 120, Loc: sampleZone}).Body, "\n"); strings.Contains(s, "should not") {
+		t.Errorf("a reason over a reading:\n%s", s)
 	}
 }
