@@ -543,7 +543,7 @@ func TestClaudeTrackedLandsInItsHour(t *testing.T) {
 			mustWrite(t, filepath.Join(dir, "a4c2e917", "subagents", "agent-1.jsonl"), sub)
 
 			// Before the hours are fitted to the tokens they already add up.
-			files, _ := claudeFiles(home, since)
+			files, _ := claudeFiles(home, since, nil)
 			for _, s := range rollup(countClaude(files)) {
 				if s.Hours.Sum().Tokens() != s.Tokens {
 					t.Fatalf("%s hours add up to %+v, tokens %+v", s.ID, s.Hours.Sum(), s.Tokens)

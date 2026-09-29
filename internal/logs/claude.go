@@ -22,7 +22,7 @@ import (
 // Files anywhere under <session>/subagents roll into that session, and so does
 // a top-level sidechain file that names another session.
 // Anthropic reports input_tokens without cache reads, so no adjustment is needed.
-func claudeFiles(home string, since time.Time) ([]*claudeFile, HomeRead) {
+func claudeFiles(home string, since time.Time, cache *claudeCache) ([]*claudeFile, HomeRead) {
 	root, err := resolveDir(filepath.Join(home, "projects"))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, HomeRead{}
@@ -38,7 +38,7 @@ func claudeFiles(home string, since time.Time) ([]*claudeFile, HomeRead) {
 	var out HomeRead
 	var files []*claudeFile
 	read := func(path, id, parent string, mod time.Time) {
-		f, bad, err := parseClaude(path, id, parent)
+		f, bad, err := cache.parse(path, id, parent)
 		f.sess.Updated = f.updated(mod)
 		f.sess.Home = home
 		out.add(bad, err)
@@ -225,7 +225,8 @@ type claudeFile struct {
 	nulls int
 }
 
-// claudeState is what a file's lines have told its parse so far.
+// claudeState is what a file's lines have told its parse so far. The parse
+// cache keeps it, so the next run parses only the lines written since.
 type claudeState struct {
 	// Project is the first working directory the lines name, and Start the
 	// first time.
@@ -271,6 +272,8 @@ func (f *claudeFile) updated(mod time.Time) time.Time {
 // root is the session this file's usage rolls into.
 func (f *claudeFile) root() string { return cmp.Or(f.sess.ParentID, f.sess.ID) }
 
+// claudeMsg is one message of a file. Its fields are exported for the parse
+// cache.
 type claudeMsg struct {
 	ID      string
 	Request string
@@ -297,16 +300,6 @@ func (m claudeMsg) key(session string) string {
 		return "s\x00" + session + "\x00" + m.ID
 	}
 	return ""
-}
-
-// parseClaude parses one log. It returns the file, how many of its lines
-// were malformed or too long, and why it could not be read.
-func parseClaude(path, id, parent string) (*claudeFile, int, error) {
-	f := &claudeFile{path: path, sess: Session{ID: id, ParentID: parent}}
-	p := newClaudeParse(f)
-	long, err := ForEachLine(path, maxLineBytes, p.line)
-	f.Bad += long
-	return f.done(), f.Bad, err
 }
 
 // newClaudeParse goes on parsing f, whose state holds what its earlier lines

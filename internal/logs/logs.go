@@ -3,7 +3,8 @@
 // It opens session logs, the Hermes session table, and the account ids in
 // Codex's thread table, and nothing else in a harness home. It never writes
 // there. Prompts, tool arguments, and message text are skipped at the line
-// filter and never decoded into memory we keep.
+// filter and never decoded into memory we keep. A Reader may keep what it
+// parsed of Claude's logs in a cache of its own, outside every home.
 package logs
 
 import (
@@ -140,15 +141,37 @@ type Limits struct {
 // again. Each session is tagged with its Home. Files older than since are
 // skipped, and sub-agent sessions are rolled into their parents.
 func ReadHomes(provider string, homes []string, since time.Time) Result {
+	return Reader{}.ReadHomes(provider, homes, since)
+}
+
+// Reader reads logs. The zero Reader parses every log in full.
+type Reader struct {
+	// CacheDir, when set, keeps what a read parsed of each Claude log, so
+	// the next read skips a log that has not changed and parses only the
+	// lines added to one that grew. One read at a time may use it.
+	CacheDir string
+}
+
+// ReadHomes is the package's ReadHomes, with r's cache.
+func (r Reader) ReadHomes(provider string, homes []string, since time.Time) Result {
 	res := Result{Homes: map[string]HomeRead{}}
 	var raw []Session
 	switch provider {
 	case "claude":
+		cache := loadClaudeCache(r.CacheDir)
 		var files []*claudeFile
+		failed := false
 		for _, h := range homes {
-			fs, hr := claudeFiles(h, since)
+			fs, hr := claudeFiles(h, since, cache)
 			files = append(files, fs...)
 			res.Homes[h] = hr
+			failed = failed || hr.Err != nil
+		}
+		// A home that could not be read would drop its logs from the cache,
+		// so it stays as it was. It only saves time: one that cannot be
+		// written is no error.
+		if !failed {
+			_ = cache.save()
 		}
 		raw = countClaude(files)
 	case "codex":

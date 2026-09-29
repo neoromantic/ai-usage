@@ -83,7 +83,9 @@ func (o *Options) fill() {
 		o.Probe.HomeDir = o.UserHome
 	}
 	if o.ReadLogs == nil {
-		o.ReadLogs = logs.ReadHomes
+		// Only the run that holds the lock reads logs, so one read at a
+		// time uses the cache beside the state.
+		o.ReadLogs = logs.Reader{CacheDir: o.Dir.Path("cache")}.ReadHomes
 	}
 }
 
