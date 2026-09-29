@@ -35,10 +35,11 @@ func TestPublishPullRoundTrip(t *testing.T) {
 
 	c := e.client(k)
 	c.BaseURL += "/" // a configured trailing slash is fine
-	devices, bad, err := c.Pull(ctx)
-	if err != nil || bad != 0 {
-		t.Fatalf("Pull = %d bad, %v", bad, err)
+	res, err := c.Pull(ctx)
+	if err != nil || res.Unverified != 0 || res.Undecodable != 0 {
+		t.Fatalf("Pull = %+v, %v", res, err)
 	}
+	devices := res.Devices
 	if len(devices) != 2 || devices[0].Doc.Device != "home-desktop" || devices[1].Doc.Device != "work-laptop" {
 		t.Fatalf("Pull returned %+v, want both devices sorted", devices)
 	}
@@ -52,7 +53,10 @@ func TestPublishPullRoundTrip(t *testing.T) {
 	}
 }
 
-func TestPullCountsDocumentsThatDoNotVerify(t *testing.T) {
+// Pull leaves out what does not verify and what it cannot read, and tells
+// them apart: a document signed with the team key that does not decode is
+// most likely from a newer release, not a forgery.
+func TestPullCountsDocumentsItLeavesOut(t *testing.T) {
 	e := newRelay(t)
 	k, other := newKey(t), newKey(t)
 	ctx := context.Background()
@@ -65,30 +69,40 @@ func TestPullCountsDocumentsThatDoNotVerify(t *testing.T) {
 	altered := bytes.Replace(good, []byte(`"sessions":4`), []byte(`"sessions":5`), 1)
 	foreign := marshal(t, docFor(other, "foreign-device", t0))
 	foreign = bytes.Replace(foreign, []byte(other.Fingerprint()), []byte(fp), 1)
+	otherTeam := marshal(t, docFor(other, "team-device", t0))
 	junk := []byte(`{"hello":"world"}`)
+	newer := bytes.Replace(marshal(t, docFor(k, "newer-device", t0)), []byte(`{"v":1,`), []byte(`{"v":1,"pace":[3],`), 1)
+	unknown := bytes.Replace(marshal(t, docFor(k, "gemini-device", t0)), []byte(`"provider":"codex","label"`), []byte(`"provider":"gemini","label"`), 1)
 	// The relay, or whoever controls its store, writes these directly.
-	forged := map[string]Record{
+	unverified := map[string]Record{
 		"altered-body":   {Body: altered, Sig: sign(k, good)},
 		"moved-device":   {Body: good, Sig: sign(k, good)},
 		"other-team-key": {Body: foreign, Sig: sign(other, foreign)},
 		"short-sig":      {Body: good, Sig: []byte("abc")},
-		"signed-junk":    {Body: junk, Sig: sign(k, junk)},
 		"no-sig":         {Body: good},
+		"team-device":    {Body: otherTeam, Sig: sign(k, otherTeam)},
 	}
-	for dev, rec := range forged {
-		if err := e.mem.Put(ctx, fp, dev, rec, time.Hour); err != nil {
-			t.Fatal(err)
+	undecodable := map[string]Record{
+		"signed-junk":   {Body: junk, Sig: sign(k, junk)},
+		"newer-device":  {Body: newer, Sig: sign(k, newer)},
+		"gemini-device": {Body: unknown, Sig: sign(k, unknown)},
+	}
+	for _, recs := range []map[string]Record{unverified, undecodable} {
+		for dev, rec := range recs {
+			if err := e.mem.Put(ctx, fp, dev, rec, time.Hour); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
-	devices, bad, err := e.client(k).Pull(ctx)
+	res, err := e.client(k).Pull(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(devices) != 1 || devices[0].Doc.Device != "good-device" {
-		t.Fatalf("Pull kept %d documents, want only good-device", len(devices))
+	if len(res.Devices) != 1 || res.Devices[0].Doc.Device != "good-device" {
+		t.Fatalf("Pull kept %d documents, want only good-device", len(res.Devices))
 	}
-	if bad != len(forged) {
-		t.Fatalf("bad = %d, want %d", bad, len(forged))
+	if res.Unverified != len(unverified) || res.Undecodable != len(undecodable) {
+		t.Fatalf("unverified %d, undecodable %d; want %d and %d", res.Unverified, res.Undecodable, len(unverified), len(undecodable))
 	}
 }
 
@@ -109,11 +123,11 @@ func TestPullKeepsOneDocumentPerDevice(t *testing.T) {
 		json.NewEncoder(w).Encode(list)
 	}))
 	defer ts.Close()
-	devices, bad, err := (&Client{BaseURL: ts.URL, Key: k}).Pull(context.Background())
-	if err != nil || bad != 3 || len(devices) != 2 {
-		t.Fatalf("Pull = %d devices, %d bad, %v; want 2 devices and 3 bad", len(devices), bad, err)
+	res, err := (&Client{BaseURL: ts.URL, Key: k}).Pull(context.Background())
+	if err != nil || res.Unverified != 3 || res.Undecodable != 0 || len(res.Devices) != 2 {
+		t.Fatalf("Pull = %+v, %v; want 2 devices and 3 unverified", res, err)
 	}
-	if devices[0].Doc.Device != "device-aaaa" || !bytes.Equal(devices[1].Body, newer) {
+	if res.Devices[0].Doc.Device != "device-aaaa" || !bytes.Equal(res.Devices[1].Body, newer) {
 		t.Fatal("Pull did not keep the newest snapshot of each device")
 	}
 }
@@ -134,19 +148,19 @@ func TestPullRejectsAMalformedTeamRead(t *testing.T) {
 				io.WriteString(w, body)
 			}))
 			defer ts.Close()
-			devices, bad, err := (&Client{BaseURL: ts.URL, Key: k}).Pull(context.Background())
+			res, err := (&Client{BaseURL: ts.URL, Key: k}).Pull(context.Background())
 			switch name {
 			case "not json":
 				if err == nil {
 					t.Fatal("Pull accepted HTML")
 				}
 			case "bad base64":
-				if err != nil || bad != 1 || len(devices) != 0 {
-					t.Fatalf("Pull = %d devices, %d bad, %v", len(devices), bad, err)
+				if err != nil || res.Unverified != 1 || res.Undecodable != 0 || len(res.Devices) != 0 {
+					t.Fatalf("Pull = %+v, %v", res, err)
 				}
 			default:
-				if err != nil || bad != 0 || len(devices) != 0 {
-					t.Fatalf("Pull = %d devices, %d bad, %v", len(devices), bad, err)
+				if err != nil || res.Unverified+res.Undecodable != 0 || len(res.Devices) != 0 {
+					t.Fatalf("Pull = %+v, %v", res, err)
 				}
 			}
 		})
@@ -161,7 +175,7 @@ func TestClientErrors(t *testing.T) {
 		if err := c.Publish(ctx, "work-laptop", []byte("{}")); !errors.Is(err, errNoRelay) {
 			t.Fatalf("Publish with base %q: %v", base, err)
 		}
-		if _, _, err := c.Pull(ctx); !errors.Is(err, errNoRelay) {
+		if _, err := c.Pull(ctx); !errors.Is(err, errNoRelay) {
 			t.Fatalf("Pull with base %q: %v", base, err)
 		}
 		if err := c.Remove(ctx, "work-laptop"); !errors.Is(err, errNoRelay) {
@@ -187,7 +201,35 @@ func TestClientErrors(t *testing.T) {
 	if statusOf(err) != http.StatusBadGateway || strings.Contains(err.Error(), "html") {
 		t.Fatalf("non-JSON error: %v", err)
 	}
+	if errors.Is(err, ErrRejected) {
+		t.Fatalf("a 502 is a rejected snapshot: %v", err)
+	}
 	if got := (&ErrStatus{Code: 409, Msg: "newer"}).Error(); !strings.Contains(got, "newer") || !strings.Contains(got, "409") {
 		t.Fatalf("ErrStatus = %q", got)
+	}
+}
+
+// A relay that refuses the snapshot itself, as one older than the collector
+// refuses fields it does not know, says so apart from other failures.
+func TestPublishRejected(t *testing.T) {
+	e := newRelay(t)
+	k := newKey(t)
+	ctx := context.Background()
+	c := e.client(k)
+	d := docFor(k, "work-laptop", t0)
+	d.Accounts[0].Plan = "<not plain>"
+	err := c.Publish(ctx, "work-laptop", marshal(t, d))
+	if !errors.Is(err, ErrRejected) || statusOf(err) != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid snapshot: %v", err)
+	}
+	if !strings.Contains(err.Error(), "HTTP 422") {
+		t.Fatalf("message = %q", err)
+	}
+	if err := c.Publish(ctx, "work-laptop", marshal(t, docFor(k, "work-laptop", t0))); err != nil {
+		t.Fatal(err)
+	}
+	err = c.Publish(ctx, "work-laptop", marshal(t, docFor(k, "work-laptop", t0.Add(-time.Minute))))
+	if statusOf(err) != http.StatusConflict || errors.Is(err, ErrRejected) {
+		t.Fatalf("older snapshot: %v", err)
 	}
 }

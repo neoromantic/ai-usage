@@ -416,9 +416,9 @@ func TestRelayOverKV(t *testing.T) {
 	if err := client.Remove(ctx, "device-two"); err != nil {
 		t.Fatal(err)
 	}
-	devices, bad, err := client.Pull(ctx)
-	if err != nil || bad != 0 || len(devices) != 1 || devices[0].Doc.Device != "device-one" {
-		t.Fatalf("Pull = %d devices, %d bad, %v", len(devices), bad, err)
+	res, err := client.Pull(ctx)
+	if err != nil || res.Unverified+res.Undecodable != 0 || len(res.Devices) != 1 || res.Devices[0].Doc.Device != "device-one" {
+		t.Fatalf("Pull = %+v, %v", res, err)
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -254,11 +254,11 @@ func TestClientThroughRewrite(t *testing.T) {
 	if err := c.Publish(ctx, device, body); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
-	devices, bad, err := c.Pull(ctx)
-	if err != nil || bad != 0 || len(devices) != 1 {
-		t.Fatalf("pull: %d devices, %d bad, err %v", len(devices), bad, err)
+	res, err := c.Pull(ctx)
+	if err != nil || res.Unverified+res.Undecodable != 0 || len(res.Devices) != 1 {
+		t.Fatalf("pull: %+v, err %v", res, err)
 	}
-	if string(devices[0].Body) != string(body) {
+	if string(res.Devices[0].Body) != string(body) {
 		t.Fatal("pulled body differs from the published one")
 	}
 
@@ -268,14 +268,14 @@ func TestClientThroughRewrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	stranger := &relay.Client{BaseURL: srv.URL, Key: other, HTTP: srv.Client(), Now: c.Now}
-	if devices, _, err := stranger.Pull(ctx); err != nil || len(devices) != 0 {
-		t.Fatalf("other team sees %d devices, err %v", len(devices), err)
+	if res, err := stranger.Pull(ctx); err != nil || len(res.Devices) != 0 {
+		t.Fatalf("other team sees %d devices, err %v", len(res.Devices), err)
 	}
 
 	if err := c.Remove(ctx, device); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
-	if devices, _, err := c.Pull(ctx); err != nil || len(devices) != 0 {
-		t.Fatalf("after remove: %d devices, err %v", len(devices), err)
+	if res, err := c.Pull(ctx); err != nil || len(res.Devices) != 0 {
+		t.Fatalf("after remove: %d devices, err %v", len(res.Devices), err)
 	}
 }

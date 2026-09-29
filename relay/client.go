@@ -65,52 +65,83 @@ func (c *Client) Publish(ctx context.Context, device string, body []byte) error 
 	req.Header.Set(HeaderKey, encode(c.Key.Public()))
 	req.Header.Set(HeaderSig, encode(c.Key.Sign(SnapshotMessage(body))))
 	_, err = c.do(req)
+	var status *ErrStatus
+	if errors.As(err, &status) && status.Code == http.StatusUnprocessableEntity {
+		return rejected{status}
+	}
 	return err
 }
 
+// ErrRejected is what Publish fails with when the relay refuses the snapshot
+// itself (HTTP 422), as a relay older than the collector refuses fields it
+// does not know. The error is also the relay's *ErrStatus.
+var ErrRejected = errors.New("relay rejected the snapshot")
+
+type rejected struct{ *ErrStatus }
+
+func (r rejected) Unwrap() []error { return []error{ErrRejected, r.ErrStatus} }
+
+// PullResult is a team read: the documents that verify and decode, one per
+// device, and how many were left out.
+type PullResult struct {
+	Devices []Device
+	// Unverified counts documents that do not verify with the team key or
+	// do not name the device and team the relay filed them under, and extra
+	// documents for a device the relay already listed.
+	Unverified int
+	// Undecodable counts documents signed with the team key that this
+	// release cannot read, such as one from a newer release that added
+	// fields to the snapshot.
+	Undecodable int
+}
+
 // Pull reads the team and returns documents that verify and decode, one per
-// device. Documents that do not verify, and extra documents for a device the
-// relay already listed, are counted in bad and left out.
-func (c *Client) Pull(ctx context.Context) (devices []Device, bad int, err error) {
+// device, sorted by device id.
+func (c *Client) Pull(ctx context.Context) (PullResult, error) {
+	var out PullResult
 	req, err := c.signed(ctx, http.MethodGet, "")
 	if err != nil {
-		return nil, 0, err
+		return out, err
 	}
 	raw, err := c.do(req)
 	if err != nil {
-		return nil, 0, err
+		return out, err
 	}
 	var res ListResponse
 	if err := json.Unmarshal(raw, &res); err != nil {
-		return nil, 0, fmt.Errorf("relay: team read is not JSON")
+		return out, fmt.Errorf("relay: team read is not JSON")
 	}
 	at := map[string]int{}
 	for _, d := range res.Devices {
 		body, err1 := decode(d.Body)
 		sig, err2 := decode(d.Sig)
 		if err1 != nil || err2 != nil || !team.Verify(c.Key.Public(), SnapshotMessage(body), sig) {
-			bad++
+			out.Unverified++
 			continue
 		}
 		doc, err := snapshot.Decode(body)
-		if err != nil || doc.Team != c.Key.Fingerprint() || doc.Device != d.Device {
-			bad++
+		if err != nil {
+			out.Undecodable++
+			continue
+		}
+		if doc.Team != c.Key.Fingerprint() || doc.Device != d.Device {
+			out.Unverified++
 			continue
 		}
 		// A relay that lists a device twice, even with genuine older snapshots,
 		// would have its tokens added twice. Keep the newest.
 		if i, ok := at[doc.Device]; ok {
-			bad++
-			if doc.CollectedAt.After(devices[i].Doc.CollectedAt) {
-				devices[i] = Device{Body: body, Doc: doc}
+			out.Unverified++
+			if doc.CollectedAt.After(out.Devices[i].Doc.CollectedAt) {
+				out.Devices[i] = Device{Body: body, Doc: doc}
 			}
 			continue
 		}
-		at[doc.Device] = len(devices)
-		devices = append(devices, Device{Body: body, Doc: doc})
+		at[doc.Device] = len(out.Devices)
+		out.Devices = append(out.Devices, Device{Body: body, Doc: doc})
 	}
-	sort.Slice(devices, func(i, j int) bool { return devices[i].Doc.Device < devices[j].Doc.Device })
-	return devices, bad, nil
+	sort.Slice(out.Devices, func(i, j int) bool { return out.Devices[i].Doc.Device < out.Devices[j].Doc.Device })
+	return out, nil
 }
 
 // Remove deletes one device's document.

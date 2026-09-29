@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -46,6 +48,13 @@ func TestPutRejects(t *testing.T) {
 	pretty, _ := json.MarshalIndent(docFor(k, dev, t0), "", "  ")
 	unknown := []byte(strings.Replace(str, `{"v":1,`, `{"v":1,"note":"x",`, 1))
 	big := append(bytes.Clone(body), bytes.Repeat([]byte(" "), snapshot.MaxBytes-len(body)+1)...)
+	// The fields v0.4.0 added are left out when empty, so an empty one is
+	// not what encoding/json makes of the document.
+	emptyBurnDays := []byte(strings.Replace(str, `"days":[1200,0,300],`, `"days":[1200,0,300],"burn_days":[],`, 1))
+	zeroBurn := []byte(strings.Replace(str, `"tokens":900}`, `"tokens":900,"burn":0}`, 1))
+	failedAt := func(d time.Duration) func(*snapshot.Doc) {
+		return func(doc *snapshot.Doc) { at := t0.Add(d); doc.LastErrorAt = &at }
+	}
 
 	cases := []struct {
 		name string
@@ -65,6 +74,11 @@ func TestPutRejects(t *testing.T) {
 		{"names another device", edited(func(d *snapshot.Doc) { d.Device = "other-device" }), http.StatusUnprocessableEntity},
 		{"names another team", edited(func(d *snapshot.Doc) { d.Team = other.Fingerprint() }), http.StatusUnprocessableEntity},
 		{"unknown field", signed(unknown), http.StatusUnprocessableEntity},
+		{"empty burn_days", signed(emptyBurnDays), http.StatusUnprocessableEntity},
+		{"zero burn", signed(zeroBurn), http.StatusUnprocessableEntity},
+		{"last_error_at without last_error", edited(func(d *snapshot.Doc) { failedAt(-time.Hour)(d); d.LastError = "" }), http.StatusUnprocessableEntity},
+		{"last_error_at after collected_at", edited(failedAt(5*time.Minute + time.Second)), http.StatusUnprocessableEntity},
+		{"last_error_at zero", edited(func(d *snapshot.Doc) { d.LastErrorAt = &time.Time{} }), http.StatusUnprocessableEntity},
 		{"repeated key", signed(smuggled), http.StatusUnprocessableEntity},
 		{"case variant key", signed(caseVariant), http.StatusUnprocessableEntity},
 		{"pretty printed", signed(pretty), http.StatusUnprocessableEntity},
@@ -164,14 +178,14 @@ func TestSignedRead(t *testing.T) {
 	for _, skew := range []time.Duration{-ClockSkew, ClockSkew, 0} {
 		c := e.client(k)
 		c.Now = func() time.Time { return t0.Add(skew) }
-		if devices, _, err := c.Pull(ctx); err != nil || len(devices) != 1 {
-			t.Fatalf("skew %v: %d devices, %v", skew, len(devices), err)
+		if res, err := c.Pull(ctx); err != nil || len(res.Devices) != 1 {
+			t.Fatalf("skew %v: %d devices, %v", skew, len(res.Devices), err)
 		}
 	}
 	for _, skew := range []time.Duration{-ClockSkew - time.Second, ClockSkew + time.Second, -24 * time.Hour} {
 		c := e.client(k)
 		c.Now = func() time.Time { return t0.Add(skew) }
-		if _, _, err := c.Pull(ctx); statusOf(err) != http.StatusUnauthorized {
+		if _, err := c.Pull(ctx); statusOf(err) != http.StatusUnauthorized {
 			t.Fatalf("skew %v: err = %v, want 401", skew, err)
 		}
 	}
@@ -273,9 +287,9 @@ func TestDelete(t *testing.T) {
 	if err := c.Remove(ctx, "device-two"); err != nil {
 		t.Fatalf("removing twice: %v", err)
 	}
-	devices, _, err := c.Pull(ctx)
-	if err != nil || len(devices) != 1 || devices[0].Doc.Device != "device-one" {
-		t.Fatalf("after delete: %d devices, %v", len(devices), err)
+	res, err := c.Pull(ctx)
+	if err != nil || len(res.Devices) != 1 || res.Devices[0].Doc.Device != "device-one" {
+		t.Fatalf("after delete: %d devices, %v", len(res.Devices), err)
 	}
 }
 
@@ -309,7 +323,7 @@ func TestStoreFailuresAre503(t *testing.T) {
 				err = c.Remove(ctx, "work-laptop")
 			case "list":
 				if err = c.Publish(ctx, "work-laptop", body); statusOf(err) == http.StatusServiceUnavailable {
-					_, _, err = c.Pull(ctx)
+					_, err = c.Pull(ctx)
 				}
 			default:
 				err = c.Publish(ctx, "work-laptop", body)
@@ -376,5 +390,56 @@ func TestSlowBodyTimesOut(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+// The relay takes both the snapshot a collector before v0.4.0 sends and one
+// with the fields v0.4.0 added, each only as the exact bytes it signs. The
+// bodies are the snapshot package's hand-written goldens, filed under a test
+// key's team.
+func TestPutAcceptsOlderAndExtendedSnapshots(t *testing.T) {
+	e := newRelay(t)
+	k := newKey(t)
+	c := e.client(k)
+	ctx := context.Background()
+	golden := func(name string) []byte {
+		b, err := os.ReadFile(filepath.Join("..", "internal", "snapshot", "testdata", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return bytes.Replace(bytes.TrimSpace(b), []byte(`"team":"a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2"`), []byte(`"team":"`+k.Fingerprint()+`"`), 1)
+	}
+	extended := docFor(k, "work-laptop", t0)
+	at := t0.Add(-time.Hour)
+	extended.LastErrorAt = &at
+	extended.Accounts[0].BurnDays = []int64{9000, 0, 2500}
+	extended.Accounts[0].Recent[0].Burn = 7000
+	inSkew := docFor(k, "work-laptop", t0.Add(time.Minute))
+	skewed := inSkew.CollectedAt.Add(5 * time.Minute)
+	inSkew.LastErrorAt = &skewed
+	for _, step := range []struct {
+		name, device string
+		body         []byte
+	}{
+		{"v1.json, as v0.3.4 sends it", "mac-0123abcd", golden("v1.json")},
+		{"v1-extended.json", "mac-0123abcd", golden("v1-extended.json")},
+		{"an extended collector document", "work-laptop", marshal(t, extended)},
+		{"last_error_at within the skew", "work-laptop", marshal(t, inSkew)},
+	} {
+		if err := c.Publish(ctx, step.device, step.body); err != nil {
+			t.Fatalf("%s: %v", step.name, err)
+		}
+		if got := stored(t, e, k.Fingerprint())[step.device].Body; !bytes.Equal(got, step.body) {
+			t.Fatalf("%s: stored\n%s", step.name, got)
+		}
+	}
+	res, err := c.Pull(ctx)
+	if err != nil || len(res.Devices) != 2 || res.Unverified+res.Undecodable != 0 {
+		t.Fatalf("Pull = %+v, %v", res, err)
+	}
+	for _, d := range res.Devices {
+		if !d.Doc.Extended() {
+			t.Fatalf("%s: read back without its extended fields", d.Doc.Device)
+		}
 	}
 }

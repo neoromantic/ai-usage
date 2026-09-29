@@ -406,6 +406,43 @@ func TestRelayDocsThatDoNotVerifyAreReported(t *testing.T) {
 	}
 }
 
+// A document signed with the team key that this release cannot read comes
+// from a newer release: the fix is to update, not to check the team key.
+func TestRelayDocsFromANewerReleaseAreReported(t *testing.T) {
+	w, o := newWorld(t)
+	r := newRelay(t, w)
+	key, _ := LoadKey(o.Dir)
+	body, _ := json.Marshal(BuildDoc(ledger(), key, state.Config{Device: "d-newer-device"}, "x", "y", "v9.0.0", t0))
+	body = bytes.Replace(body, []byte(`{"v":1,`), []byte(`{"v":1,"pace":[2],`), 1)
+	_ = r.store.Put(context.Background(), key.Fingerprint(), "d-newer-device", relay.Record{Body: body, Sig: key.Sign(relay.SnapshotMessage(body))}, time.Hour)
+
+	o.Relay = r.client(w)
+	res := run(t, o)
+	if got := res.State.Relay.LastError; got != "1 device sends a newer snapshot format: update ai-usage" {
+		t.Fatalf("relay error = %q", got)
+	}
+	if res.Team.ReadError != res.State.Relay.LastError || len(res.Team.Docs) != 1 {
+		t.Fatalf("team = %v, read error %q", deviceIDs(res.Team.Docs), res.Team.ReadError)
+	}
+}
+
+func TestReadError(t *testing.T) {
+	for _, c := range []struct {
+		res  relay.PullResult
+		want string
+	}{
+		{relay.PullResult{}, ""},
+		{relay.PullResult{Undecodable: 1}, "1 device sends a newer snapshot format: update ai-usage"},
+		{relay.PullResult{Undecodable: 3}, "3 devices send a newer snapshot format: update ai-usage"},
+		{relay.PullResult{Unverified: 2}, "relay returned documents that do not verify with the team key"},
+		{relay.PullResult{Unverified: 1, Undecodable: 2}, "2 devices send a newer snapshot format: update ai-usage; relay returned documents that do not verify with the team key"},
+	} {
+		if got := readError(c.res); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.res, got, c.want)
+		}
+	}
+}
+
 func TestRunUsesItsOwnKeyForTheRelay(t *testing.T) {
 	w, o := newWorld(t)
 	r := newRelay(t, w)

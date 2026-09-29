@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/fsutil"
@@ -189,7 +190,7 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 		return
 	}
 	pullCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	devices, bad, err := o.Relay.Pull(pullCtx)
+	pulled, err := o.Relay.Pull(pullCtx)
 	cancel()
 	if err != nil {
 		fail(err)
@@ -199,7 +200,7 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 	next := TeamCache{PulledAt: now, Team: o.Relay.Key.Fingerprint()}
 	// This device is as this run built it, whatever the relay holds for it.
 	seen := []snapshot.Doc{*doc}
-	for _, d := range devices {
+	for _, d := range pulled.Devices {
 		next.Bodies = append(next.Bodies, d.Body)
 		next.Docs = append(next.Docs, d.Doc)
 		if d.Doc.Device != device {
@@ -212,9 +213,7 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 		prev, after = nil, now
 	}
 	next.Behind = behindSince(prev, seen, st.Update.Latest, after, now)
-	if bad > 0 {
-		next.ReadError = "relay returned documents that do not verify with the team key"
-	}
+	next.ReadError = readError(pulled)
 	*cache = next
 	if err := saveTeamCache(o.Dir, next); err != nil {
 		fail(err)
@@ -229,6 +228,21 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 		return
 	}
 	st.Relay.LastError = ""
+}
+
+// readError is what was wrong with a team read, or "" when nothing was.
+func readError(p relay.PullResult) string {
+	var errs []string
+	switch {
+	case p.Undecodable == 1:
+		errs = append(errs, "1 device sends a newer snapshot format: update ai-usage")
+	case p.Undecodable > 1:
+		errs = append(errs, fmt.Sprintf("%d devices send a newer snapshot format: update ai-usage", p.Undecodable))
+	}
+	if p.Unverified > 0 {
+		errs = append(errs, "relay returned documents that do not verify with the team key")
+	}
+	return strings.Join(errs, "; ")
 }
 
 // keepReadError makes the relay's error the one the cached read had, if any,

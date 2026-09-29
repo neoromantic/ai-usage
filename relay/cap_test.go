@@ -56,12 +56,12 @@ func TestTeamReadListsNoMoreThanTheCap(t *testing.T) {
 	ctx := context.Background()
 	e.join(t, c, k, "device-c", "device-a", "device-b")
 	e.srv.Limits.DevicesPerTeam = 2
-	devices, _, err := c.Pull(ctx)
+	res, err := c.Pull(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var got []string
-	for _, d := range devices {
+	for _, d := range res.Devices {
 		got = append(got, d.Doc.Device)
 	}
 	slices.Sort(got)
