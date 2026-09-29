@@ -1,6 +1,9 @@
 package probe
 
 import (
+	"errors"
+	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -30,5 +33,24 @@ func TestLastLineSaysTheError(t *testing.T) {
 		if got := l.String(); got != want {
 			t.Errorf("lastLine(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// A command that failed says why in the last line it printed on its errors,
+// cut short, after its exit status.
+func TestShortErrSaysWhy(t *testing.T) {
+	err := fmt.Errorf("auth: %w", &exec.ExitError{Stderr: []byte("line1\nfatal: token expired\n")})
+	if got := shortErr(err); !strings.HasPrefix(got, "exit status ") || !strings.HasSuffix(got, ": fatal: token expired") {
+		t.Errorf("got %q", got)
+	}
+	long := &exec.ExitError{Stderr: []byte("error: " + strings.Repeat("é", 80) + "\n")}
+	if got := shortErr(long); len(got) > len("exit status -1: ")+maxSaid || strings.ContainsRune(got, '\uFFFD') {
+		t.Errorf("got %q, %d bytes", got, len(got))
+	}
+	if got := shortErr(&exec.ExitError{}); got != "exit status -1" {
+		t.Errorf("got %q", got)
+	}
+	if got := shortErr(errors.New("plain")); got != "plain" {
+		t.Errorf("got %q", got)
 	}
 }

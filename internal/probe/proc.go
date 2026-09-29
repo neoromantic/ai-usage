@@ -132,10 +132,24 @@ func rescue(err *error) {
 // error text the probe stores stays byte-identical.
 const maxErrLine = 160
 
+// maxSaid is how many bytes of the line a failed command printed last on
+// its errors shortErr keeps.
+const maxSaid = 100
+
+// shortErr is err in a few words. For a command that exited with an error,
+// that is its exit status, then the line of what it printed on its errors
+// that errorOf picks, when cmd.Output kept that.
 func shortErr(err error) string {
 	var exit interface{ ExitCode() int }
 	if errors.As(err, &exit) {
-		return fmt.Sprintf("exit status %d", exit.ExitCode())
+		msg := fmt.Sprintf("exit status %d", exit.ExitCode())
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			if said := errorOf(printedLines(string(ee.Stderr))); said != "" {
+				msg += ": " + truncate(said, maxSaid)
+			}
+		}
+		return msg
 	}
 	return truncate(err.Error(), maxErrLine)
 }
