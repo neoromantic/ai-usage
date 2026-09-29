@@ -1,10 +1,13 @@
 package collect
 
 import (
+	"math"
 	"slices"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
+	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
 // ExtSince is the first release that reads the snapshot fields v0.4.0
@@ -80,4 +83,70 @@ func heldBack(c TeamCache, self string) []string {
 	}
 	slices.Sort(out)
 	return slices.Compact(out)
+}
+
+// AccountBurn is what an account burned on the device whose snapshot,
+// collected at collected, holds a: by UTC day, laid out as a.Days is; since
+// each window in a.Recent began, by window name; and over all the days the
+// device keeps. label is the account's opened label, which names the
+// provider Hermes bills to.
+//
+// A snapshot from ExtSince on has the burn itself. Days its burn days were
+// cut short of weigh as that account's tokens do on average. A snapshot from
+// an earlier release has only input plus output, so every day and window
+// weighs so, and estimated is true; an account that spent only cache puts
+// all it burned on the day it was last active.
+func AccountBurn(a snapshot.Account, provider, label string, collected time.Time) (days []int64, recent map[string]int64, total int64, estimated bool) {
+	all := meter.TokensBurn(a.Tokens, provider, label)
+	inOut := a.Tokens.InOut()
+	weigh := func(n int64) int64 {
+		if inOut <= 0 {
+			return 0
+		}
+		return int64(math.Round(float64(n) * float64(all) / float64(inOut)))
+	}
+	recent = map[string]int64{}
+	if len(a.BurnDays) > 0 || slices.ContainsFunc(a.Recent, func(r snapshot.Recent) bool { return r.Burn != 0 }) {
+		days = slices.Clone(a.BurnDays)
+		for i := len(days); i < len(a.Days); i++ {
+			days = append(days, weigh(a.Days[i]))
+		}
+		for _, r := range a.Recent {
+			recent[r.Window] = r.Burn
+		}
+		total = all
+		if len(a.BurnDays) >= len(a.Days) {
+			total = 0
+			for _, n := range a.BurnDays {
+				total += n
+			}
+		}
+		return days, recent, total, false
+	}
+	if inOut <= 0 {
+		if all <= 0 {
+			return nil, recent, 0, false
+		}
+		day := 0
+		if a.LastActiveAt != nil {
+			day = int(dayNumber(collected) - dayNumber(*a.LastActiveAt))
+		}
+		if day >= 0 && day < snapshot.MaxDays {
+			days = make([]int64, day+1)
+			days[day] = all
+		}
+		for _, r := range a.Recent {
+			if a.LastActiveAt != nil && !a.LastActiveAt.Before(r.Start) {
+				recent[r.Window] = all
+			}
+		}
+		return days, recent, all, true
+	}
+	for _, n := range a.Days {
+		days = append(days, weigh(n))
+	}
+	for _, r := range a.Recent {
+		recent[r.Window] = weigh(r.Tokens)
+	}
+	return days, recent, all, true
 }

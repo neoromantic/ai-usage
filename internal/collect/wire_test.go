@@ -1,6 +1,7 @@
 package collect
 
 import (
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -128,4 +129,39 @@ func TestKnownAfter(t *testing.T) {
 	if k := knownAfter(nil, docs[:1], self, now); k != nil {
 		t.Errorf("only this device: %+v", k)
 	}
+}
+
+func TestAccountBurn(t *testing.T) {
+	start := t0.Add(-2 * time.Hour)
+	legacy := snapshot.Account{Provider: "claude", Tokens: snapshot.Tokens{Input: 100, Output: 900, CacheRead: 10000, CacheWrite: 1000},
+		Days: []int64{1000, 0, 500}, Recent: []snapshot.Recent{{Window: "5h", Start: start, Tokens: 200}}}
+	check := func(name string, a snapshot.Account, provider, label string, days []int64, recent map[string]int64, total int64, estimated bool) {
+		t.Helper()
+		d, r, n, e := AccountBurn(a, provider, label, t0)
+		if !slices.Equal(d, days) || !maps.Equal(r, recent) || n != total || e != estimated {
+			t.Errorf("%s: %v %v %d %v, want %v %v %d %v", name, d, r, n, e, days, recent, total, estimated)
+		}
+	}
+	// 100 + 900·5 + 10000·0.1 + 1000·1.25 = 6850 for 1000 in+out.
+	check("a release before v0.4.0", legacy, "claude", "ann@acme.dev", []int64{6850, 0, 3425}, map[string]int64{"5h": 1370}, 6850, true)
+	// Hermes on a Codex login weighs output 8: 100 + 7200 + 1000 + 1000.
+	check("hermes billed to codex", legacy, "hermes", "openai-codex", []int64{9300, 0, 4650}, map[string]int64{"5h": 1860}, 9300, true)
+
+	exact := legacy
+	exact.BurnDays = []int64{7000, 0, 3000}
+	exact.Recent = []snapshot.Recent{{Window: "5h", Start: start, Tokens: 200, Burn: 1500}}
+	check("v0.4.0", exact, "claude", "ann@acme.dev", []int64{7000, 0, 3000}, map[string]int64{"5h": 1500}, 10000, false)
+	// Burn days cut short of the days: the rest weigh as the tokens do,
+	// and the total is the tokens'.
+	exact.BurnDays = []int64{7000}
+	check("cut burn days", exact, "claude", "ann@acme.dev", []int64{7000, 0, 3425}, map[string]int64{"5h": 1500}, 6850, false)
+
+	// Only cache: all of it on the day it was last active.
+	last := t0.Add(-24 * time.Hour)
+	cache := snapshot.Account{Provider: "claude", Tokens: snapshot.Tokens{CacheRead: 10000}, LastActiveAt: &last,
+		Recent: []snapshot.Recent{{Window: "7d", Start: t0.Add(-72 * time.Hour)}, {Window: "5h", Start: start}}}
+	check("only cache", cache, "claude", "ann@acme.dev", []int64{0, 1000}, map[string]int64{"7d": 1000}, 1000, true)
+	cache.LastActiveAt = nil
+	check("only cache, never active", cache, "claude", "ann@acme.dev", []int64{1000}, map[string]int64{}, 1000, true)
+	check("nothing", snapshot.Account{Provider: "codex"}, "codex", "ann@acme.dev", nil, map[string]int64{}, 0, false)
 }
