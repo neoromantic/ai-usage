@@ -49,6 +49,26 @@ var ErrNotLoggedIn = errors.New("not logged in")
 
 func notLoggedIn(harness string) error { return fmt.Errorf("%s: %w", harness, ErrNotLoggedIn) }
 
+// ErrNoQuota is the error of a harness that answered who is logged in but
+// cannot give a new quota reading for a reason of its own: the one installed
+// is too old to read or cache the usage, or its settings turn off the
+// traffic the read needs. Its tokens are read all the same, so collect keeps
+// it apart from a failure with errors.Is. It is never joined with another
+// problem.
+var ErrNoQuota = errors.New("no quota reading")
+
+// NoQuotaError is an ErrNoQuota with its reason in Msg, and the harness it
+// is about, where known: its binary, version, and install kind, such as
+// "Homebrew". collect compares that version with the one the home's
+// sessions ran, to say which install to update.
+type NoQuotaError struct {
+	Msg, Path, Version, Kind string
+}
+
+func (e *NoQuotaError) Error() string { return e.Msg }
+
+func (e *NoQuotaError) Is(target error) bool { return target == ErrNoQuota }
+
 // joinErrors joins a probe's problems into one error whose message is the
 // messages in order, separated by "; ", and whose chain keeps each of them,
 // so errors.Is still finds ErrNotLoggedIn among them.

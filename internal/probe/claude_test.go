@@ -295,7 +295,7 @@ func TestClaudeAnswers(t *testing.T) {
 		// wantErr is part of the error, which says why.
 		{mode: "claude-logged-out", wantErr: "not logged in", loggedOut: true},
 		{mode: "claude-not-json", wantErr: "not JSON"},
-		{mode: "claude-fail", wantErr: "exit status 2"},
+		{mode: "claude-fail", wantErr: "exit status 2: boom"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.mode, func(t *testing.T) {
@@ -459,7 +459,8 @@ func TestClaudeSkipsUsageRefresh(t *testing.T) {
 		// without an account.
 		{name: "config names no account", mode: "claude-ok", config: `{}`},
 		{name: "config not JSON", mode: "claude-ok", config: `{`},
-		{name: "console login", mode: "claude-console", config: claudeCache},
+		// Its account has no usage cache, as a subscription's would.
+		{name: "console login", mode: "claude-console", config: `{"oauthAccount":{"accountUuid":"acct-1"}}`},
 		{name: "api key", mode: "claude-no-email", config: claudeCache},
 		{name: "cloud provider", mode: "claude-bedrock", config: claudeCache},
 		{name: "logged out", mode: "claude-logged-out", config: claudeCache},
@@ -597,7 +598,9 @@ func TestClaudeUsageRefreshTimeout(t *testing.T) {
 // A read that leaves the cache stale says why, from the forms of what each
 // Claude Code prints, with the cache it left. What it printed of the usage,
 // when windows reset, and what contributes to the usage never reach the
-// error, nor does the model catalog's warning, even as its last line.
+// error, nor does the model catalog's warning, even as its last line. A
+// Claude Code too old to read the usage, or that shows it in a form not
+// known, is a problem of the quota alone.
 func TestClaudeUsageRefreshSaysWhy(t *testing.T) {
 	const update = "no new reading: this Claude Code cannot read the usage; update it (cache 1d old)"
 	tests := []struct {
@@ -608,7 +611,7 @@ func TestClaudeUsageRefreshSaysWhy(t *testing.T) {
 		{"unavailable", update},
 		{"no-option", update},
 		{"old", update},
-		{"shows", "no new reading: Claude Code showed the usage but did not cache it; update it (cache 1d old)"},
+		{"shows-odd", "no new reading: Claude Code showed the usage but did not cache it; update it (cache 1d old)"},
 		{"offline", "no new reading: could not read the usage (cache 1d old)"},
 		{"overage-offline", "no new reading: could not read the usage (cache 1d old)"},
 		{"cost", "no new reading: Claude Code sees no claude.ai plan (cache 1d old)"},
@@ -627,6 +630,9 @@ func TestClaudeUsageRefreshSaysWhy(t *testing.T) {
 			}
 			if got, want := errText(err), "claude /usage: "+tc.want; got != want {
 				t.Errorf("error = %q\nwant    %q", got, want)
+			}
+			if quotaOnly := strings.Contains(tc.want, "update it"); errors.Is(err, ErrNoQuota) != quotaOnly {
+				t.Errorf("error %q is ErrNoQuota: %v", errText(err), !quotaOnly)
 			}
 			for _, secret := range []string{"zebra", "heron", "otter", "walrus", "contributing", "Europe/Berlin", "resets", "%", "catalog"} {
 				if strings.Contains(errText(err), secret) {
@@ -753,15 +759,17 @@ func TestClaudeVersion(t *testing.T) {
 	}
 }
 
-// A Claude Code older than 2.1.208 does not cache the usage, so it is not
-// asked, and the error says so at every run. One since is asked, and its
-// version is told.
+// A Claude Code older than 2.1.193 cannot read the usage, so it is not
+// asked, and at every run the error says to update it, naming it, as a
+// problem of the quota alone. One since is asked, and its version is told:
+// one from 2.1.193 prints the usage it does not cache.
 func TestClaudeOldVersionIsNotAsked(t *testing.T) {
 	for _, tc := range []struct {
 		version, want string
 	}{
-		{"2.1.207", "claude /usage: Claude Code 2.1.207 does not cache the usage; update it to 2.1.208 or later (cache 1d old)"},
-		{"1.0.128", "claude /usage: Claude Code 1.0.128 does not cache the usage; update it to 2.1.208 or later (cache 1d old)"},
+		{"2.1.192", "update Claude Code to 2.1.208 or newer (~/Caskroom/claude-code/2.1.192/claude is 2.1.192, Homebrew)"},
+		{"1.0.128", "update Claude Code to 2.1.208 or newer (~/Caskroom/claude-code/1.0.128/claude is 1.0.128, Homebrew)"},
+		{"2.1.193", "claude /usage: no new reading: could not read the usage (Claude Code 2.1.193, cache 1d old)"},
 		{"2.1.208", "claude /usage: no new reading: could not read the usage (Claude Code 2.1.208, cache 1d old)"},
 		{"9.9.9", "claude /usage: no new reading: could not read the usage (Claude Code 9.9.9, cache 1d old)"},
 	} {
@@ -771,10 +779,18 @@ func TestClaudeOldVersionIsNotAsked(t *testing.T) {
 			writeExe(t, bin)
 			env.LookPath = func(string) (string, error) { return bin, nil }
 			writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
+			tooOld := strings.HasPrefix(tc.want, "update")
 			for range 2 {
 				r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", testNow)
 				if errText(err) != tc.want {
 					t.Errorf("error = %q\nwant    %q", errText(err), tc.want)
+				}
+				var nq *NoQuotaError
+				if errors.As(err, &nq) != tooOld || errors.Is(err, ErrNoQuota) != tooOld {
+					t.Errorf("error %q is a NoQuotaError: %v", errText(err), !tooOld)
+				}
+				if tooOld && (nq.Path != bin || nq.Version != tc.version || nq.Kind != kindHomebrew) {
+					t.Errorf("about %+v", nq)
 				}
 				if r.Quota == nil || r.Quota.Windows[0].Percent != 12 {
 					t.Errorf("quota = %+v", describe(r.Quota))
@@ -786,7 +802,7 @@ func TestClaudeOldVersionIsNotAsked(t *testing.T) {
 					usage++
 				}
 			}
-			if asked := usage > 0; asked != !strings.Contains(tc.want, "does not cache") {
+			if asked := usage > 0; asked == tooOld {
 				t.Errorf("asked %d times", usage)
 			}
 		})
@@ -835,28 +851,34 @@ func TestClaudeUsageErrorFitsTwice(t *testing.T) {
 			{},
 			{out: []string{"Something unexpected happened"}},
 		} {
-			why, _ := run.why(version)
+			why, _, _ := run.why(version)
 			msgs = append(msgs, errText(claudeUsageError(why, version, cfg.cacheState(testNow), "")))
 		}
 	}
-	// The reasons Claude Code is not run for, which run nothing.
+	// A reason Claude Code is not run for, which runs nothing.
 	env := Env{HomeDir: dir, Now: func() time.Time { return testNow }}
-	old := filepath.Join(dir, "Caskroom", "claude-code", "2.1.207", "claude")
-	writeExe(t, old)
-	_, err := claudeReadUsage(context.Background(), env, old, "", filepath.Join(dir, ".claude"), file, cfg)
-	msgs = append(msgs, errText(err))
 	writeFile(t, filepath.Join(dir, ".claude", "settings.json"), `{"env":{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":"1"}}`)
 	current := filepath.Join(dir, "Caskroom", "claude-code", "2.1.281", "claude")
 	writeExe(t, current)
-	_, err = claudeReadUsage(context.Background(), env, current, "", filepath.Join(dir, ".claude"), file, cfg)
+	_, _, err := claudeReadUsage(context.Background(), env, current, []candidate{{current, "2.1.281", kindHomebrew}}, "", filepath.Join(dir, ".claude"), file, cfg)
 	msgs = append(msgs, errText(err))
 	for _, msg := range msgs {
 		if !strings.HasPrefix(msg, "claude /usage: ") || !strings.Contains(msg, "cache of another account") {
 			t.Errorf("error = %q", msg)
 		}
+	}
+	msgs = append(msgs, "claude /usage: another Claude Code process rewrote ~/.claude-work/.claude.json; reading is 23h old")
+	for _, msg := range msgs {
 		if len(msg) > budget {
 			t.Errorf("error = %q, %d bytes, over %d", msg, len(msg), budget)
 		}
+	}
+	// Nor is one too old, which names itself, as the desktop app's copy does
+	// with its long path. It is every home's reason, so it is told once.
+	app := "~/Library/Application Support/Claude/claude-code/2.1.192/claude.app/Contents/MacOS/claude"
+	_, _, err = claudeReadUsage(context.Background(), env, app, []candidate{{app, "2.1.192", kindApp}}, "", filepath.Join(dir, ".claude"), file, cfg)
+	if msg := errText(err); len(msg) > 300-len("~/.claude-work: ") {
+		t.Errorf("error = %q, %d bytes", msg, len(msg))
 	}
 }
 
@@ -940,5 +962,231 @@ func TestClaudeNoTrafficIsNotAsked(t *testing.T) {
 				t.Errorf("ran %d commands", len(runs))
 			}
 		})
+	}
+}
+
+// claudeLayout lays out a Claude Code of version under dir, where its kind
+// of install keeps it, and returns its binary: a Homebrew cask, or the
+// native installer's versions.
+func claudeLayout(t *testing.T, dir, kind, version string) string {
+	t.Helper()
+	switch kind {
+	case kindHomebrew:
+		bin := filepath.Join(dir, "homebrew", "Caskroom", "claude-code", version, "claude")
+		writeExe(t, bin)
+		link(t, bin, filepath.Join(dir, "homebrew", "bin", "claude"))
+		return filepath.Join(dir, "homebrew", "bin", "claude")
+	case kindNative:
+		bin := filepath.Join(dir, ".local", "share", "claude", "versions", version)
+		writeExe(t, bin)
+		return bin
+	}
+	t.Fatalf("no layout for %s", kind)
+	return ""
+}
+
+// The usage is read by the newest Claude Code installed, though an old one
+// is first on PATH and answers who is logged in.
+func TestClaudeReadsWithTheNewestInstall(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the layouts are macOS and Linux installs")
+	}
+	env, record := fakeEnv(t, "claude-ok")
+	env.Now = time.Now
+	old := claudeLayout(t, env.HomeDir, kindHomebrew, "2.1.42")
+	current := claudeLayout(t, env.HomeDir, kindNative, "2.1.210")
+	claudeLayout(t, env.HomeDir, kindNative, "2.1.199")
+	env.LookPath = func(string) (string, error) { return old, nil }
+	file := filepath.Join(env.HomeDir, ".claude.json")
+	writeFile(t, file, claudeCache)
+	env.Environ = append(env.Environ, "PROBE_CACHE="+file)
+	r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", time.Now())
+	if err != nil || r.Quota == nil || r.Quota.Windows[0].Percent != 7 {
+		t.Fatalf("quota %+v, error %v", describe(r.Quota), err)
+	}
+	runs := readRuns(t, record)
+	if len(runs) != 2 || runs[0].Path != old || runs[1].Path != current || !slices.Contains(runs[1].Args, "/usage") {
+		t.Errorf("ran %+v", runs)
+	}
+}
+
+// With only a Claude Code too old to read the usage, and that one not on
+// PATH, nothing reads it, and the error names that install for collect to
+// compare with the version the sessions ran.
+func TestClaudeOnlyAnOldInstall(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the layout is a macOS and Linux install")
+	}
+	env, record := fakeEnv(t, "claude-ok")
+	env.LookPath = notOnPath
+	dir := t.TempDir()
+	bin := claudeLayout(t, dir, kindHomebrew, "2.1.42")
+	env.SystemBinDirs = []string{filepath.Dir(bin)}
+	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
+	r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", testNow)
+	var nq *NoQuotaError
+	if !errors.Is(err, ErrNoQuota) || !errors.As(err, &nq) {
+		t.Fatalf("error = %#v", err)
+	}
+	if nq.Path != bin || nq.Version != "2.1.42" || nq.Kind != "Homebrew" {
+		t.Errorf("about %+v", nq)
+	}
+	if want := "update Claude Code to 2.1.208 or newer (" + bin + " is 2.1.42, Homebrew)"; errText(err) != want {
+		t.Errorf("error = %q\nwant    %q", errText(err), want)
+	}
+	if r.Account != "dev@example.com" || r.Quota == nil || r.Quota.Windows[0].Percent != 12 {
+		t.Errorf("reading %+v, quota %+v", r, describe(r.Quota))
+	}
+	if runs := readRuns(t, record); len(runs) != 1 || runs[0].Path != bin {
+		t.Errorf("ran %+v", runs)
+	}
+}
+
+// When auth status fails without saying nobody is logged in, the usage
+// Claude Code cached for the account its config names is still the reading,
+// and that account the one logged in. A config that names no email, or whose
+// cache is another account's, gives none, and the error says what auth
+// status printed.
+func TestClaudeAuthFailsKeepsTheCache(t *testing.T) {
+	named := strings.Replace(claudeCache, `{"accountUuid":"acct-1"}`, `{"accountUuid":"acct-1","emailAddress":" ann@acme.dev "}`, 1)
+	for _, tc := range []struct {
+		name, config, account string
+	}{
+		{"cache of the account", named, "ann@acme.dev"},
+		{"no email", claudeCache, ""},
+		{"another account's cache", strings.Replace(named, `"accountUuid":"acct-1","utilization"`, `"accountUuid":"acct-2","utilization"`, 1), ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env, record := fakeEnv(t, "claude-auth-fails")
+			writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), tc.config)
+			r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", testNow)
+			if r.Account != tc.account {
+				t.Errorf("account = %q", r.Account)
+			}
+			if tc.account == "" {
+				if want := "claude auth status: exit status 1: Error: keychain is locked"; errText(err) != want || r.Quota != nil {
+					t.Errorf("error = %q, quota %+v", errText(err), describe(r.Quota))
+				}
+				return
+			}
+			if err != nil || r.Quota == nil || r.Quota.Windows[0].Percent != 12 {
+				t.Errorf("quota %+v, error %v", describe(r.Quota), err)
+			}
+			if runs := readRuns(t, record); len(runs) != 1 {
+				t.Errorf("ran %d commands", len(runs))
+			}
+		})
+	}
+}
+
+// A login whose subscription type auth status does not tell is still a
+// subscription when its account has a usage cache, and the usage is read.
+func TestClaudeSubscriptionTypeNotTold(t *testing.T) {
+	env, record := fakeEnv(t, "claude-console")
+	env.Now = time.Now
+	file := filepath.Join(env.HomeDir, ".claude.json")
+	writeFile(t, file, claudeCache)
+	env.Environ = append(env.Environ, "PROBE_CACHE="+file)
+	r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", time.Now())
+	if err != nil || r.Quota == nil || r.Quota.Windows[0].Percent != 7 {
+		t.Errorf("quota %+v, error %v", describe(r.Quota), err)
+	}
+	if runs := readRuns(t, record); len(runs) != 2 {
+		t.Errorf("ran %d commands", len(runs))
+	}
+}
+
+// Claude Code from 2.1.193 to 2.1.207 prints the usage without caching it,
+// and what it printed is the reading, as of the read.
+func TestClaudePrintedUsageIsTheReading(t *testing.T) {
+	env, record := fakeEnv(t, "claude-ok", "PROBE_USAGE=shows")
+	bin := filepath.Join(env.HomeDir, "Caskroom", "claude-code", "2.1.200", "claude")
+	writeExe(t, bin)
+	env.LookPath = func(string) (string, error) { return bin, nil }
+	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
+	r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", testNow)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	// The weekly reset is further than a week ahead of the test's clock.
+	want := &Quota{At: testNow, Source: "harness", Windows: []snapshot.Window{
+		{Name: "5h", Percent: 7, Minutes: 300, ResetsAt: ts("2026-09-23T13:40:00Z")},
+		{Name: "7d", Percent: 40, Minutes: 10080},
+	}}
+	if !reflect.DeepEqual(r.Quota, want) {
+		t.Errorf("quota\n got  %v\n want %v", describe(r.Quota), describe(want))
+	}
+	if runs := readRuns(t, record); len(runs) != 2 {
+		t.Errorf("ran %d commands", len(runs))
+	}
+}
+
+// Each window /usage prints is read with its reset, in the time zone it
+// names, and the year or day it leaves out is the next to come.
+func TestClaudePrintedQuota(t *testing.T) {
+	now := time.Date(2026, 9, 29, 10, 0, 0, 0, time.UTC)
+	lines := []string{
+		"You are currently using your subscription to power your Claude Code usage",
+		"Current session: 47% used · resets Sep 29 at 3pm (Europe/Madrid)",
+		"Current week (all models): 80% used · resets Sep 30 at 5:30pm (Europe/Madrid)",
+		"Current week (Opus): 1.5% used · resets Oct 1, 9am (Europe/Madrid)",
+		"Current week (Sonnet): 0% used",
+		"Current week (Haiku): 2% used · resets whenever (Europe/Madrid)",
+		"Current week (Fable): 3% used · resets Oct 1, 9am (Nowhere/Nothing)",
+		"Current month: 5% used · resets Oct 31 at 9am (Europe/Madrid)",
+		"Last 24h · 21190 requests · 7 sessions",
+	}
+	want := &Quota{At: now, Source: "harness", Windows: []snapshot.Window{
+		{Name: "5h", Percent: 47, Minutes: 300, ResetsAt: ts("2026-09-29T13:00:00Z")},
+		{Name: "7d", Percent: 80, Minutes: 10080, ResetsAt: ts("2026-09-30T15:30:00Z")},
+		{Name: "7d Opus", Percent: 1.5, Minutes: 10080, ResetsAt: ts("2026-10-01T07:00:00Z")},
+		{Name: "7d Sonnet", Percent: 0, Minutes: 10080},
+		{Name: "7d Haiku", Percent: 2, Minutes: 10080},
+		{Name: "7d Fable", Percent: 3, Minutes: 10080},
+	}}
+	if got := claudePrintedQuota(lines, now); !reflect.DeepEqual(got, want) {
+		t.Errorf("got  %v\nwant %v", describe(got), describe(want))
+	}
+	if got := claudePrintedQuota([]string{"Current session: a lot used"}, now); got != nil {
+		t.Errorf("got %v", describe(got))
+	}
+	for _, tc := range []struct {
+		when, zone string
+		now        time.Time
+		minutes    int
+		want       *time.Time
+	}{
+		{"11:40pm", "Asia/Tokyo", now, 300, ts("2026-09-29T14:40:00Z")},
+		// A time of day already past today is tomorrow's, here too far ahead.
+		{"3:40pm", "Asia/Tokyo", now, 300, nil},
+		{"Jan 2 at 9am", "UTC", time.Date(2026, 12, 31, 20, 0, 0, 0, time.UTC), 10080, ts("2027-01-02T09:00:00Z")},
+		{"Sep 29 at 9am", "UTC", now, 300, ts("2026-09-29T09:00:00Z")},
+		{"Sep 28 at 9am", "UTC", now, 300, nil},
+		{"3pm", "", now, 300, nil},
+	} {
+		if got := claudeResetAt(tc.when, tc.zone, tc.now, tc.minutes); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s (%s): got %v, want %v", tc.when, tc.zone, got, tc.want)
+		}
+	}
+}
+
+// Another Claude Code that saves its config as it had it hours ago takes
+// the cache back in time. The reading that was there stands, and the error
+// says so, as a problem of the quota alone.
+func TestClaudeCacheTakenBack(t *testing.T) {
+	env, _ := fakeEnv(t, "claude-ok", "PROBE_USAGE=regress")
+	env.Now = time.Now
+	file := filepath.Join(env.HomeDir, ".claude.json")
+	writeFile(t, file, claudeCacheAt(time.Now().Add(-20*time.Minute)))
+	env.Environ = append(env.Environ, "PROBE_CACHE="+file)
+	r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", time.Now())
+	if want := "claude /usage: another Claude Code process rewrote ~/.claude.json; reading is 20m old"; errText(err) != want {
+		t.Errorf("error = %q\nwant    %q", errText(err), want)
+	}
+	if !errors.Is(err, ErrNoQuota) {
+		t.Error("not ErrNoQuota")
+	}
+	if r.Quota == nil || r.Quota.Windows[0].Percent != 12 {
+		t.Errorf("quota = %+v", describe(r.Quota))
 	}
 }

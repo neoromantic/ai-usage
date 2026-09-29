@@ -139,6 +139,14 @@ func fakeHarness(mode string, args []string) int {
 		}
 		return 0
 	}
+	if strings.HasPrefix(mode, "claude-") && slices.Contains(args, "--version") {
+		// Claude Code says its version, as PROBE_VERSION gives it, or
+		// nothing, like a shim that cannot run it. It is not recorded.
+		if v := os.Getenv("PROBE_VERSION"); v != "" {
+			fmt.Printf("%s (Claude Code)\n", v)
+		}
+		return 0
+	}
 	rec, err := os.OpenFile(os.Getenv("PROBE_RECORD"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return 90
@@ -192,6 +200,10 @@ func fakeHarness(mode string, args []string) int {
 	case "claude-fail":
 		fmt.Fprintln(os.Stderr, "boom")
 		return 2
+	case "claude-auth-fails":
+		// As when the login cannot be read under the system scheduler.
+		fmt.Fprint(os.Stderr, "Checking authentication status...\nError: keychain is locked\n")
+		return 1
 	case "claude-orphan":
 		return hangWithChild(rec)
 	default:
@@ -278,6 +290,10 @@ func fakeClaudeUsage(mode string, args []string) int {
 		// 2.1.193 to 2.1.207: the usage, and no cache.
 		fmt.Print(claudeHeadlineOut + claudeUsageOut + claudeContributing)
 		return 0
+	case "shows-odd":
+		// The usage in a form not known.
+		fmt.Print(claudeHeadlineOut + "Current session: a lot used\n\n" + claudeContributing)
+		return 0
 	case "cost":
 		fmt.Print("Total cost:            $0.0000\nTotal duration (API):  0s\nUsage:                 0 input, 0 output\n" + claudeContributing)
 		return 0
@@ -298,18 +314,27 @@ func fakeClaudeUsage(mode string, args []string) int {
 			return 94
 		}
 		acct, _ := cfg["oauthAccount"].(map[string]any)
+		fetched, pct := time.Now(), 7
+		if mode == "regress" {
+			// Another Claude Code saves the config as it had it hours ago.
+			fetched, pct = fetched.Add(-9*time.Hour), 3
+		}
 		cfg["cachedUsageUtilization"] = map[string]any{
-			"fetchedAtMs": time.Now().UnixMilli(),
+			"fetchedAtMs": fetched.UnixMilli(),
 			"accountUuid": acct["accountUuid"],
-			"utilization": map[string]any{"limits": []any{map[string]any{"kind": "session", "percent": 7}}},
+			"utilization": map[string]any{"limits": []any{map[string]any{"kind": "session", "percent": pct}}},
 		}
 		body, _ = json.Marshal(cfg)
 		if os.WriteFile(path, body, 0o600) != nil {
 			return 95
 		}
 	}
-	if mode == "write-then-fail" {
+	switch mode {
+	case "write-then-fail":
 		return 1
+	case "regress":
+		fmt.Print(claudeHeadlineOut + claudeContributing)
+		return 0
 	}
 	fmt.Print(claudeHeadlineOut + claudeUsageOut + claudeContributing)
 	return 0
