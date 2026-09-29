@@ -16,6 +16,7 @@ import (
 
 	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/meter"
+	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
@@ -91,8 +92,12 @@ type State struct {
 	// when state.json does not exist.
 	GuideDue bool `json:"guide_due,omitempty"`
 
-	// Damage says why LoadState started from an empty state. It is not saved.
+	// Damage says why LoadState did not take state.json as it was: it did
+	// not parse, or an older ai-usage saved it. It is not saved.
 	Damage string `json:"-"`
+	// Newer says a newer ai-usage saved the ledger, in a format this build
+	// does not know all of: SaveState refuses to write over it.
+	Newer bool `json:"-"`
 }
 
 // Source is the last health of one provider on this device.
@@ -248,42 +253,183 @@ func (s *State) fill() {
 	}
 }
 
-// LoadState reads state.json. A missing file is an empty state. So is one
-// that does not parse, such as a file cut short by a crash: otherwise every
-// later run, and the self-update that could fix it, would stop on it. Its
-// bytes are kept in state.json.bad, and Damage and LastError say so.
+// LoadState reads state.json. A missing file is a new device.
+//
+// A file that does not parse, such as one cut short by a crash, must not
+// stop every later run, and the self-update that could fix it: its bytes are
+// kept in state.json.bad, and the state is the one in state.json.last, the
+// copy SaveState keeps of what it last wrote, or an empty one when that does
+// not parse either. Damage and LastError say so.
 //
 // A ledger older than LedgerVersion is migrated in memory, whatever the
 // command, and its file is kept once as state.json.pre-v0.4, for going back
-// to an older ai-usage.
+// to an older ai-usage. When state.json.last holds a ledger of this version
+// and is not newer, an older ai-usage collected after this one, and its
+// growth is merged into the ledger that one did not keep.
+//
+// A ledger newer than LedgerVersion is read as far as this build knows it,
+// and Newer keeps SaveState from writing over it.
 func (d Dir) LoadState() (*State, error) {
 	path := d.StateFile()
-	s := &State{}
 	b, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, os.ErrNotExist) {
+		s := NewState()
+		s.GuideDue = true
+		return s, nil
+	}
+	if err != nil {
 		return nil, err
 	}
-	// No state yet is a new device.
-	s.GuideDue = err != nil
-	if err != nil {
-		s.Ledger = LedgerVersion
-	} else if jerr := json.Unmarshal(b, s); jerr != nil {
-		s = &State{Ledger: LedgerVersion, Damage: "state.json did not parse (" + jerr.Error() + "); started again from an empty state"}
-		if werr := fsutil.WriteFile(path+".bad", b, 0o600); werr == nil {
-			s.Damage += ", the damaged file is state.json.bad"
-		}
-		s.LastError, s.LastErrorAt = s.Damage, time.Now().UTC()
+	s := &State{}
+	if jerr := json.Unmarshal(b, s); jerr != nil {
+		s = d.restore(b, jerr)
 	} else if s.Ledger < LedgerVersion {
 		_ = writeOnce(path+".pre-v0.4", b)
-		for _, sess := range s.Sessions {
-			if sess != nil {
-				migrateSession(sess)
-			}
+		last := d.readLast()
+		switch {
+		case last != nil && last.Ledger > LedgerVersion:
+			migrate(s)
+			s.Newer = true
+		case last != nil && last.Ledger == LedgerVersion && !last.LastRunAt.After(s.LastRunAt):
+			mergeOlder(s, last)
+		default:
+			migrate(s)
 		}
-		s.Ledger = LedgerVersion
+	}
+	s.Newer = s.Newer || s.Ledger > LedgerVersion
+	if s.Damage != "" {
+		s.LastError, s.LastErrorAt = s.Damage, time.Now().UTC()
 	}
 	s.fill()
 	return s, nil
+}
+
+// restore is the state in place of a state.json that did not parse, whose
+// bytes are b: the last one saved, or an empty one.
+func (d Dir) restore(b []byte, jerr error) *State {
+	kerr := fsutil.WriteFile(d.StateFile()+".bad", b, 0o600)
+	if s := d.readLast(); s != nil {
+		if s.Ledger < LedgerVersion {
+			migrate(s)
+		}
+		s.Damage = "state.json did not parse; restored the last saved state (state.json.last)"
+		return s
+	}
+	s := &State{Ledger: LedgerVersion, Damage: "state.json did not parse (" + jerr.Error() + "); started again from an empty state"}
+	if kerr == nil {
+		s.Damage += ", the damaged file is state.json.bad"
+	}
+	return s
+}
+
+// readLast is state.json.last, or nil when it is missing or does not parse.
+func (d Dir) readLast() *State {
+	b, err := os.ReadFile(d.lastFile())
+	if err != nil {
+		return nil
+	}
+	s := &State{}
+	if json.Unmarshal(b, s) != nil {
+		return nil
+	}
+	return s
+}
+
+func (d Dir) lastFile() string { return d.StateFile() + ".last" }
+
+// migrate moves a ledger before version 2 to this version.
+func migrate(s *State) {
+	for _, sess := range s.Sessions {
+		if sess != nil {
+			migrateSession(sess)
+		}
+	}
+	s.Ledger = LedgerVersion
+}
+
+// mergeOlder heals s, a ledger that an ai-usage before version 2 of the
+// ledger saved after last, the one this build saved before it. That one kept
+// what it knows, the accounts, sources and relay, newer than last, and
+// dropped what it does not: the tokens of every kind by hour, and the counts
+// beyond the transcript. A session both have keeps last's hours, and the
+// growth since goes to the hours the older ai-usage placed it in from the
+// hour before last's run on, or to the session's last activity. A session
+// only s has is migrated, and one only last has was pruned.
+func mergeOlder(s, last *State) {
+	s.Relay.NoExtUntil = last.Relay.NoExtUntil
+	from := hourOf(last.LastRunAt) - 1
+	for k, sess := range s.Sessions {
+		if sess == nil {
+			continue
+		}
+		if old := last.Sessions[k]; old != nil {
+			mergeSession(sess, old, from, s.LastRunAt)
+		} else {
+			migrateSession(sess)
+		}
+	}
+	s.Ledger = LedgerVersion
+	who := "v0.3"
+	if v := s.Update.Installed; selfupdate.Newer("v0.4.0", v) {
+		who = v
+	}
+	s.Damage = "an older ai-usage (" + who + ") collected here after v0.4; its hours were merged"
+}
+
+// mergeSession gives s, as an older ai-usage saved it, the hours old kept,
+// and adds the growth since, each account's where the accounts keep their
+// own. Hours before from were in old already. A session without a time has
+// its growth at ran.
+func mergeSession(s, old *Session, from int64, ran time.Time) {
+	at := s.Updated
+	if at.IsZero() {
+		at = ran
+	}
+	shape := sinceHour(s.Hours, from)
+	if len(shape) == 0 {
+		shape = map[int64]int64{hourOf(at): 1}
+	}
+	var grown meter.Use
+	growth := map[string]meter.Use{}
+	for l, t := range s.By {
+		if g := meter.FromTokens(t.Growth(old.By[l])); !g.Zero() {
+			growth[l] = g
+			grown = grown.Add(g)
+		}
+	}
+	u := old.U.Clone()
+	if old.UB == nil {
+		u = meter.AddHours(u, meter.Spread(grown, shape))
+	} else {
+		// U stays the sum of the accounts' hours.
+		s.UB = map[string]meter.Hours{}
+		for l, h := range old.UB {
+			s.UB[l] = h.Clone()
+		}
+		for l, g := range growth {
+			own := sinceHour(s.ByHours[l], from)
+			if len(own) == 0 {
+				own = shape
+			}
+			part := meter.Spread(g, own)
+			s.UB[l] = meter.AddHours(s.UB[l], part)
+			u = meter.AddHours(u, part)
+		}
+	}
+	s.U = u
+	s.Side, s.Nulls, s.Rederive = old.Side, old.Nulls, old.Rederive
+	s.Hours, s.ByHours = nil, nil
+}
+
+// sinceHour is the hours from the hour with key first on.
+func sinceHour(hours map[int64]int64, first int64) map[int64]int64 {
+	out := map[int64]int64{}
+	for k, n := range hours {
+		if k >= first && n > 0 {
+			out[k] = n
+		}
+	}
+	return out
 }
 
 // migrateSession moves a session from a ledger before version 2, which kept
@@ -367,7 +513,26 @@ func writeOnce(path string, b []byte) error {
 	return os.Rename(tmp, path)
 }
 
-func (d Dir) SaveState(s *State) error { return writeJSON(d.StateFile(), s) }
+// ErrNewer is SaveState refusing to write over a ledger a newer ai-usage saved.
+var ErrNewer = errors.New("state.json was saved by a newer ai-usage; update ai-usage")
+
+// SaveState replaces state.json, and then state.json.last with the same
+// bytes: the last state this build, or a later one, saved, which LoadState
+// falls back on. Keeping that copy is best effort.
+func (d Dir) SaveState(s *State) error {
+	if s.Newer {
+		return ErrNewer
+	}
+	b, err := marshal(s)
+	if err != nil {
+		return err
+	}
+	if err := fsutil.WriteFile(d.StateFile(), b, 0o600); err != nil {
+		return err
+	}
+	_ = fsutil.WriteFile(d.lastFile(), b, 0o600)
+	return nil
+}
 
 func readJSON(path string, v any) error {
 	b, err := os.ReadFile(path)
@@ -382,9 +547,15 @@ func readJSON(path string, v any) error {
 
 // writeJSON replaces a file atomically.
 func writeJSON(path string, v any) error {
-	b, err := json.MarshalIndent(v, "", " ")
+	b, err := marshal(v)
 	if err != nil {
 		return err
 	}
-	return fsutil.WriteFile(path, append(b, '\n'), 0o600)
+	return fsutil.WriteFile(path, b, 0o600)
+}
+
+// marshal is v as the collector's files keep it.
+func marshal(v any) ([]byte, error) {
+	b, err := json.MarshalIndent(v, "", " ")
+	return append(b, '\n'), err
 }
