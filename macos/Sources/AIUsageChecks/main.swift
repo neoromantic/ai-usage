@@ -260,6 +260,138 @@ let rejectedLine = rejected.flatMap(LimitLine.init)
 equal("rejection row", [rejectedLine?.window.name, rejectedLine?.unreadMain?.name, rejectedLine?.blocking?.name], ["5h", "7d", nil])
 check("never read has no row", try withQuota("leo@studio.dev") { _ in NSNull() }.flatMap(LimitLine.init) == nil)
 
+// Two reports of the same team: one as v0.3.4 printed it, with no
+// weighted tokens, and one as v0.4.0 prints it, with every field it added.
+// The lists show what the report sent, and say which it is. An entry's
+// device_id is new too, but a matrix row has had one all along.
+let added: Set<String> = ["burn", "fresh", "burn_days", "burn_share", "window_burn", "covered_since", "active_sessions", "transcript_gaps",
+                          "estimated", "held_back_by", "estimated_reason", "burn_estimated", "gap", "replaced_by", "limitations",
+                          "no_reading", "outside", "basis", "pace"]
+let stripped = { (json: Any) in objects(json) { $0.filter { !added.contains($0.key) } } }
+let v034 = try edited("team.json", stripped)
+let v034Solo = try edited("solo.json", stripped)
+equal("v0.3.4 label", v034.tokenLabel, "tokens in+out")
+equal("v0.3.4 solo label", v034Solo.tokenLabel, "tokens in+out")
+check("v0.3.4 tooltip", v034.tokenHelp.hasPrefix("Input + output tokens"))
+let row034 = v034.team.matrix.rows[0]
+check("v0.3.4 row falls back", row034.shown.value == row034.usage && row034.shown.label == "tokens in+out")
+check("v0.3.4 share falls back", row034.shownShare.value == row034.share && row034.cells[0].shownShare.value == row034.cells[0].share)
+check("v0.3.4 window falls back", v034.team.matrix.columns.allSatisfy { $0.shownWindow.value == $0.windowTokens && $0.shown.value == $0.usage })
+check("v0.3.4 cells fall back", row034.cells.allSatisfy { $0.shown.value == $0.usage && $0.shownWindow.value == $0.windowTokens })
+check("v0.3.4 days fall back", v034Solo.providers[0].accounts[0].shownDays.value == v034Solo.providers[0].accounts[0].days)
+check("v0.3.4 projects fall back", v034.projects.allSatisfy { $0.shown.value == $0.usage && $0.activeSessions == nil })
+check("v0.3.4 devices fall back", v034.team.devices.allSatisfy { $0.shown.value == $0.usage && !$0.burnEstimated && $0.limitations.isEmpty })
+check("v0.3.4 accounts fall back", v034.team.providers.allSatisfy { $0.accounts.allSatisfy { a in
+    a.shown.value == a.usage && a.noReading == nil && a.outside == nil && a.perDevice.allSatisfy { $0.shown.value == $0.usage }
+} })
+check("v0.3.4 team not estimated", !v034.team.estimated && v034.team.estimatedReason == nil && v034.team.heldBackBy.isEmpty)
+check("v0.3.4 forecast basis", v034.teamAccount(provider: "claude", label: "mira@studio.dev")?.quota?.main?.forecast?.basis == nil)
+equal("v0.3.4 attention", v034.attention.map(\.kind.rawValue), ["out", "out", "over", "error", "silent", "old"])
+
+/// Usage, or a share, of every period times f.
+func scaled(_ v: Any?, _ f: Double) -> Any {
+    guard let o = v as? [String: Any] else { return NSNull() }
+    return o.mapValues { x -> Any in (x as? NSNumber).map { f == 3 ? $0.intValue * 3 as Any : $0.doubleValue * f as Any } ?? NSNull() }
+}
+let v04 = try edited("team.json") { json in
+    var o = objects(stripped(json)) { o in
+        var o = o
+        if o["usage"] != nil { o["burn"] = scaled(o["usage"], 3) }
+        if let days = o["days"] as? [Int] { o["burn_days"] = days.map { $0 * 3 } }
+        if o["share"] != nil { o["burn_share"] = scaled(o["share"], 0.5) }
+        if let w = o["window_tokens"] as? Int { o["window_burn"] = w * 3 }
+        if o["path"] != nil, o["sessions"] != nil {
+            o["fresh"] = o["usage"]
+            o["active_sessions"] = ["today": 1, "7d": 2, "30d": 3, "90d": 4]
+        }
+        if o["homes"] != nil { o["covered_since"] = "2026-07-01T09:00:00Z" }
+        if o["matrix"] != nil {
+            o["estimated"] = true
+            o["held_back_by"] = ["leo-air"]
+            o["estimated_reason"] = "leo-air runs v0.3.0, which sends no weighted tokens: reinstall it with install.sh"
+        }
+        let device = o["os_user"] != nil ? o["device"] : o["cells"] != nil ? o["device_id"] : nil
+        if device as? String == leoAir {
+            o["burn_estimated"] = true
+            if o["os_user"] != nil { o["limitations"] = ["no_claude_quota"] }
+        }
+        if o["label"] as? String == "courier", o["os_user"] != nil {
+            o["replaced_by"] = "courier-2"
+            o["gap"] = ["seconds": 43200, "at": "2026-09-23T08:28:00Z"]
+        }
+        if o["label"] as? String == "leo@studio.dev", o["busiest"] != nil, (o["quota"] as? [String: Any])?["source"] as? String != "codex" {
+            o["no_reading"] = "leo-air runs v0.3.0: reinstall with install.sh"
+        }
+        if o["main"] as? Bool == true, o["forecast"] is [String: Any] {
+            o["forecast"] = (o["forecast"] as! [String: Any]).merging(["basis": "recent", "pace": 1.5]) { $1 }
+        }
+        return o
+    } as! [String: Any]
+    let attention = o["attention"] as! [[String: Any]]
+    o["attention"] = [attention[0],
+        ["kind": "tight", "provider": "claude", "account": "mira@studio.dev", "name": "mira", "resets_at": "2026-09-26T23:00:00Z", "percent": 88],
+        ["kind": "outside", "provider": "codex", "account": "mira@studio.dev", "name": "mira", "at": "2026-09-24T04:40:00Z", "percent": 12.4],
+        ["kind": "no_reading", "provider": "claude", "account": "leo@studio.dev", "name": "leo", "message": "leo-air runs v0.3.0: reinstall with install.sh"],
+        ["kind": "duplicate", "devices": ["courier"], "device_id": "d-3f9a1c2e7b5d", "message": "courier-2", "at": "2026-09-23T08:28:00Z"],
+        ["kind": "old", "devices": ["leo-air"], "message": "v0.4.0", "limitations": ["no_claude_quota"]],
+        ["kind": "someday", "message": "a kind from a later release"]]
+    return o
+}
+equal("v0.4 label", v04.tokenLabel, "weighted tokens")
+check("v0.4 tooltip", v04.tokenHelp.hasPrefix("Weighted tokens"))
+let row04 = v04.team.matrix.rows[0], col04 = v04.team.matrix.columns[0]
+equal("v0.4 row", [row04.shown.label, row04.shownShare.label, col04.shownWindow.label], ["weighted tokens", "weighted tokens", "weighted tokens"])
+equal("v0.4 row burn", row04.shown.value.week, row04.usage.week * 3)
+equal("v0.4 window burn", col04.shownWindow.value, col04.windowTokens * 3)
+equal("v0.4 cell burn", [row04.cells[0].shown.value.week, row04.cells[0].shownWindow.value], [row04.cells[0].usage.week * 3, row04.cells[0].windowTokens * 3])
+equal("v0.4 share", row04.shownShare.value.week, row04.share.week.map { $0 * 0.5 })
+let account04 = v04.providers[0].accounts[0]
+equal("v0.4 days", account04.shownDays.value, account04.days.map { $0 * 3 })
+equal("v0.4 days label", account04.shownDays.label, "weighted tokens")
+equal("v0.4 project", [v04.projects[0].shown.value.quarter, v04.projects[0].activeSessions?.week], [v04.projects[0].usage.quarter * 3, 2])
+equal("v0.4 covered since", v04.providers[0].coveredSince, time("2026-07-01T09:00:00Z"))
+let leo04 = v04.teamDevice(named: "leo-air")!, courier04 = v04.teamDevice(named: "courier")!
+check("v0.4 estimated device", leo04.burnEstimated && leo04.limitations == ["no_claude_quota"] && leo04.shown.value.week == leo04.usage.week * 3)
+check("v0.4 estimated row", v04.team.matrix.rows.filter(\.burnEstimated).map(\.device) == ["leo-air"])
+equal("v0.4 reinstalled device", [courier04.replacedBy, courier04.gap.map { "\($0.seconds)" }], ["courier-2", "43200"])
+equal("v0.4 estimated team", [v04.team.estimated ? "estimated" : "-", v04.team.heldBackBy.joined(), v04.team.estimatedReason ?? "-"],
+      ["estimated", "leo-air", "leo-air runs v0.3.0, which sends no weighted tokens: reinstall it with install.sh"])
+equal("v0.4 no reading", v04.teamAccount(provider: "claude", label: "leo@studio.dev")?.noReading, "leo-air runs v0.3.0: reinstall with install.sh")
+equal("v0.4 per device", v04.teamAccount(provider: "claude", label: "mira@studio.dev").map { a in a.perDevice.map { $0.shown.label } }?.first,
+      "weighted tokens")
+let forecast04 = v04.teamAccount(provider: "claude", label: "mira@studio.dev")?.quota?.main?.forecast
+equal("v0.4 forecast", [forecast04?.basis, forecast04?.pace.map { "\($0)" }], ["recent", "1.5"])
+equal("v0.4 attention", v04.attention.map(\.kind.rawValue), ["out", "tight", "outside", "no_reading", "duplicate", "old", "someday"])
+check("v0.4 kinds", v04.attention.map(\.kind) == [.out, .tight, .outside, .noReading, .duplicate, .old, .other("someday")])
+equal("v0.4 attention fields", [v04.attention[4].deviceId, v04.attention[5].limitations.first], ["d-3f9a1c2e7b5d", "no_claude_quota"])
+// Each new kind in the words of the report's ATTENTION line.
+let texts = v04.attention.map { AttentionText($0, report: v04, now: v04.generatedAt, timeZone: berlin) }
+equal("attention subjects", texts.map(\.subject), ["Claude mira · 5h", "Claude mira", "Codex mira", "Claude leo", "courier", "leo-air", ""])
+equal("attention texts", texts.dropFirst().map(\.detail), [
+    "~88% at reset Sun 01:00 at the last day's pace",
+    "+12 points in 9h, no team device spent",
+    "leo-air runs v0.3.0: reinstall with install.sh",
+    "reinstalled as courier-2: ai-usage team forget-device 3f9a1c2e",
+    "on v0.3.0 · cannot read Claude quota; reinstall with install.sh",
+    "a kind from a later release",
+])
+check("reinstall has no update alert", texts[5].alert == nil)
+// The pace a tight line names: this week's without the recent basis.
+let tightWeek = AttentionText(v034.attention[0], report: v034, now: v034.generatedAt, timeZone: berlin)
+equal("out text unchanged", tightWeek.detail, "back Thu 17:05 (in 1h 25m)")
+let chips04 = Chip.chips(v04)
+equal("v0.4 chips", chips04.map { "\($0.text) \($0.state) \($0.devices)" },
+      ["1 needs reinstall tight [\"leo-air\"]", "1 reinstalled unknown [\"courier\"]"])
+check("v0.4 chip kinds", chips04.map(\.kind) == [.reinstall, .duplicate])
+let calm04 = try edited("team.json") { json in
+    var o = json as! [String: Any]
+    o["attention"] = (o["attention"] as! [[String: Any]]).filter { !["out", "over"].contains($0["kind"] as? String) }
+        + [["kind": "tight", "provider": "claude", "account": "mira@studio.dev", "name": "mira", "resets_at": "2026-09-26T23:00:00Z", "percent": 88]]
+    return o
+}
+equal("calm verdict with a tight window", Verdict(calm04, now: calm04.generatedAt, timeZone: berlin).subline,
+      "Most room: Grok 7f3b9c21 · 94% · 1 tight")
+
 // The locator, on a made-up home.
 let fm = FileManager.default
 let tmp = fm.temporaryDirectory.appendingPathComponent("ai-usage-checks-\(ProcessInfo.processInfo.processIdentifier)")
