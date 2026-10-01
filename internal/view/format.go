@@ -112,8 +112,8 @@ func shownLabel(a *TeamAccount) string {
 // truncPath elides the middle of a path, which names it least: it keeps
 // the root with the first folder, and the last folder, then adds folders
 // from the head and the tail in turn while they fit, a side that does not
-// stopping. So "~/Downloads/ChatExport_Ёлочка/work/game/art/tests" becomes
-// "~/Downloads/ChatExport_Ёлочка/…/tests". When the first folder leaves no
+// stopping. So "~/Downloads/Sketchbook_Ёлочка/site/page/img/tests" becomes
+// "~/Downloads/Sketchbook_Ёлочка/…/tests". When the first folder leaves no
 // room, the path keeps just its root: "~/…/x"; then just the last folder,
 // and a last folder too long for that loses its own middle.
 func truncPath(p string, w int, ell string) string {
@@ -152,6 +152,50 @@ func truncPath(p string, w int, ell string) string {
 		return ell + "/" + last
 	}
 	return truncMid(p, w, ell)
+}
+
+// truncPaths is truncPath of each of paths, except that paths it shows
+// alike, as when the middle it elides is where they differ, are shown by
+// the start of their last folder, or else with more of their head, so that
+// they differ.
+func truncPaths(paths []string, w int, ell string) []string {
+	out := make([]string, len(paths))
+	same := map[string][]int{}
+	for i, p := range paths {
+		out[i] = truncPath(p, w, ell)
+		same[out[i]] = append(same[out[i]], i)
+	}
+	for _, is := range same {
+		if len(is) < 2 {
+			continue
+		}
+		// Each way to show them, until one shows each apart.
+		ways := []func(p string) string{func(p string) string {
+			last := p[strings.LastIndex(p, "/")+1:]
+			return truncEnd(ell+"/"+last, w, ell)
+		}}
+		for head := (w-width(ell))/2 + 1; head < w-width(ell); head++ {
+			ways = append(ways, func(p string) string {
+				if width(p) <= w {
+					return p
+				}
+				return prefix(p, head) + ell + suffix(p, w-width(ell)-head)
+			})
+		}
+		for _, way := range ways {
+			shown := map[string]bool{}
+			for _, i := range is {
+				shown[way(paths[i])] = true
+			}
+			if len(shown) == len(is) {
+				for _, i := range is {
+					out[i] = way(paths[i])
+				}
+				break
+			}
+		}
+	}
+	return out
 }
 
 // nameList fits as many whole names as it can, then says how many more.

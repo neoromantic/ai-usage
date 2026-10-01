@@ -66,6 +66,35 @@ func TestTruncPath(t *testing.T) {
 	}
 }
 
+// TestTruncPaths: paths that would elide alike are shown apart, by the
+// start of their last folder, else with more of their head.
+func TestTruncPaths(t *testing.T) {
+	for _, c := range []struct {
+		paths []string
+		w     int
+		want  []string
+	}{
+		{[]string{"~/work/old-drafts/acmeinc-pr101-review-2026-01-05", "~/work/old-drafts/acmeinc-pr107-review-2026-01-05", "~/src/app"}, 30,
+			[]string{"…/acmeinc-pr101-review-2026-0…", "…/acmeinc-pr107-review-2026-0…", "~/src/app"}},
+		// The last folders are alike too: more of the head.
+		{[]string{"~/same/deep/a1/proj-long-name", "~/same/deep/b2/proj-long-name"}, 16,
+			[]string{"~/same/deep/a…me", "~/same/deep/b…me"}},
+		// Paths elided apart stay as they are.
+		{[]string{"~/orca/workspaces/monorepo/fix-x", "~/orca/workspaces/monorepo/fix-y"}, 30,
+			[]string{"~/orca/workspaces/…/fix-x", "~/orca/workspaces/…/fix-y"}},
+	} {
+		got := truncPaths(c.paths, c.w, "…")
+		if !slices.Equal(got, c.want) {
+			t.Errorf("truncPaths(%q, %d) = %q, want %q", c.paths, c.w, got, c.want)
+		}
+		for _, s := range got {
+			if width(s) > c.w {
+				t.Errorf("%q is wider than %d", s, c.w)
+			}
+		}
+	}
+}
+
 // TestWidth measures text as a terminal draws it: emoji two columns wide,
 // in the Basic Multilingual Plane too, and a character with its modifiers
 // as one.

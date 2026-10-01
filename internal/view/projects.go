@@ -62,9 +62,10 @@ func (p *page) projects() []chunks {
 		head = append(head, p.align(chunks{p.muted(c.head)}, c.w, c.right)...)
 	}
 	out := []chunks{title, head}
+	shown := truncPaths(paths, pathW, g.ell)
 	for i := range ps {
 		line := chunks{p.space(2)}
-		line = append(line, p.left(p.plain(truncPath(paths[i], pathW, g.ell)), pathW)...)
+		line = append(line, p.left(p.plain(shown[i]), pathW)...)
 		for _, c := range cols {
 			line = append(line, p.space(2))
 			line = append(line, p.align(chunks{c.ink(c.cells[i], i, c.w)}, c.w, c.right)...)
