@@ -33,7 +33,7 @@ func TestForecastStates(t *testing.T) {
 		{13.2, StateUnder, 33},
 		{0, StateUnder, 0},
 	} {
-		w := readWindow(week7(c.used, reset), now, now)
+		w := readWindow(week7(c.used, reset), now, now, nil)
 		if w.State != c.state || w.Forecast == nil || w.Forecast.Percent != c.forecast {
 			t.Errorf("%v%% used: %s %+v, want %s at %v%%", c.used, w.State, w.Forecast, c.state, c.forecast)
 		}
@@ -46,7 +46,7 @@ func TestForecastStates(t *testing.T) {
 func TestForecastRunsOut(t *testing.T) {
 	start := now.Add(-2 * 24 * time.Hour)
 	reset := start.Add(week)
-	w := readWindow(week7(50, reset), now, now)
+	w := readWindow(week7(50, reset), now, now, nil)
 	// Half the window in two days: at that pace, full in four.
 	if w.State != StateOver || w.Forecast.Percent != 175 || w.Forecast.RunsOutAt == nil || !w.Forecast.RunsOutAt.Equal(start.Add(4*24*time.Hour)) {
 		t.Fatalf("forecast = %s %+v", w.State, w.Forecast)
@@ -55,11 +55,11 @@ func TestForecastRunsOut(t *testing.T) {
 		t.Fatalf("runs out at %v, after the reset %v", w.Forecast.RunsOutAt, reset)
 	}
 	// Out has no time to run out.
-	if w := readWindow(week7(100, reset), now, now); w.State != StateOut || w.Forecast.RunsOutAt != nil {
+	if w := readWindow(week7(100, reset), now, now, nil); w.State != StateOut || w.Forecast.RunsOutAt != nil {
 		t.Fatalf("out = %s %+v", w.State, w.Forecast)
 	}
 	// Just under the line has none either.
-	if w := readWindow(week7(20, reset), now, now); w.Forecast.RunsOutAt != nil {
+	if w := readWindow(week7(20, reset), now, now, nil); w.Forecast.RunsOutAt != nil {
 		t.Fatalf("ok runs out at %v", w.Forecast.RunsOutAt)
 	}
 }
@@ -70,7 +70,7 @@ func TestForecastRunsOutAtRoundedHundred(t *testing.T) {
 	// Half the week gone.
 	start := now.Add(-week / 2)
 	reset := start.Add(week)
-	w := readWindow(week7(50.2, reset), now, now)
+	w := readWindow(week7(50.2, reset), now, now, nil)
 	// 100.4%: 50.2% in 3.5 days, full in 3.5 × 100 ÷ 50.2 days, 40 minutes
 	// before the reset.
 	if w.State != StateOver || w.Forecast.Percent != 100 || w.Forecast.RunsOutAt == nil {
@@ -80,22 +80,22 @@ func TestForecastRunsOutAtRoundedHundred(t *testing.T) {
 		t.Fatalf("100.4%% runs out %v before the reset", d)
 	}
 	// 100% exactly has no time to run out before the reset.
-	if w := readWindow(week7(50, reset), now, now); w.State != StateOver || w.Forecast.Percent != 100 || w.Forecast.RunsOutAt != nil {
+	if w := readWindow(week7(50, reset), now, now, nil); w.State != StateOver || w.Forecast.Percent != 100 || w.Forecast.RunsOutAt != nil {
 		t.Fatalf("100%% = %s %+v", w.State, w.Forecast)
 	}
 	// 99.6% rounds to 100% as well, and does not run out.
-	if w := readWindow(week7(49.8, reset), now, now); w.State != StateOver || w.Forecast.Percent != 100 || w.Forecast.RunsOutAt != nil {
+	if w := readWindow(week7(49.8, reset), now, now, nil); w.State != StateOver || w.Forecast.Percent != 100 || w.Forecast.RunsOutAt != nil {
 		t.Fatalf("99.6%% = %s %+v", w.State, w.Forecast)
 	}
 }
 
 func TestForecastCapsAt999(t *testing.T) {
 	reset := now.Add(week - time.Hour)
-	if w := readWindow(week7(90, reset), now, now); w.State != StateOver || w.Forecast.Percent != MaxForecast {
+	if w := readWindow(week7(90, reset), now, now, nil); w.State != StateOver || w.Forecast.Percent != MaxForecast {
 		t.Fatalf("forecast = %s %+v", w.State, w.Forecast)
 	}
 	// At the very start of a window, any use is over.
-	if w := readWindow(week7(1, now.Add(week)), now, now); w.State != StateOver || w.Forecast.Percent != MaxForecast {
+	if w := readWindow(week7(1, now.Add(week)), now, now, nil); w.State != StateOver || w.Forecast.Percent != MaxForecast {
 		t.Fatalf("forecast at the start = %s %+v", w.State, w.Forecast)
 	}
 }
@@ -113,7 +113,7 @@ func TestForecastInTheFirstTenth(t *testing.T) {
 		{8, StateOver},
 		{100, StateOut},
 	} {
-		w := readWindow(week7(c.used, reset), now, now)
+		w := readWindow(week7(c.used, reset), now, now, nil)
 		if w.State != c.state {
 			t.Errorf("%v%% used in the first tenth: %s, want %s", c.used, w.State, c.state)
 		}
@@ -122,7 +122,7 @@ func TestForecastInTheFirstTenth(t *testing.T) {
 		}
 	}
 	// A tenth in, the forecast shows.
-	if w := readWindow(week7(3, now.Add(time.Duration(0.9*float64(week)))), now, now); w.State != StateUnder || w.Forecast.Percent != 30 {
+	if w := readWindow(week7(3, now.Add(time.Duration(0.9*float64(week)))), now, now, nil); w.State != StateUnder || w.Forecast.Percent != 30 {
 		t.Fatalf("a tenth in: %s %+v", w.State, w.Forecast)
 	}
 }
@@ -132,15 +132,15 @@ func TestForecastOfAStaleReading(t *testing.T) {
 	// and the reading is marked old.
 	at := now.Add(-24 * time.Hour)
 	reset := at.Add(time.Duration(0.6 * float64(week)))
-	w := readWindow(week7(62.8, reset), at, now)
+	w := readWindow(week7(62.8, reset), at, now, nil)
 	if !w.Stale || w.Reset || w.State != StateOver || w.Forecast.Percent != 157 || !w.ObservedAt.Equal(at) {
 		t.Fatalf("stale = %+v %+v", w, w.Forecast)
 	}
-	if w := readWindow(week7(62.8, reset), now.Add(-6*time.Hour), now); w.Stale {
+	if w := readWindow(week7(62.8, reset), now.Add(-6*time.Hour), now, nil); w.Stale {
 		t.Fatal("a reading 6 hours old is stale")
 	}
 	// A full window stays full until it resets.
-	if w := readWindow(week7(100, reset), at, now); w.Stale || w.State != StateOut {
+	if w := readWindow(week7(100, reset), at, now, nil); w.Stale || w.State != StateOut {
 		t.Fatalf("a full window read a day ago: %+v", w)
 	}
 }
@@ -148,13 +148,13 @@ func TestForecastOfAStaleReading(t *testing.T) {
 func TestForecastOfAWindowThatReset(t *testing.T) {
 	at := now.Add(-3 * 24 * time.Hour)
 	for _, pct := range []float64{100, 60, 0} {
-		w := readWindow(week7(pct, now.Add(-time.Minute)), at, now)
+		w := readWindow(week7(pct, now.Add(-time.Minute)), at, now, nil)
 		if !w.Reset || w.State != StateUnknown || w.Forecast != nil {
 			t.Errorf("%v%% before the reset: %+v", pct, w)
 		}
 	}
 	// Resetting exactly now counts as reset.
-	if w := readWindow(week7(60, now), at, now); !w.Reset {
+	if w := readWindow(week7(60, now), at, now, nil); !w.Reset {
 		t.Fatal("a window that resets now has not reset")
 	}
 }
@@ -165,16 +165,16 @@ func TestForecastNeedsTheWindow(t *testing.T) {
 		"no reset":  {Name: "7d", Percent: 50, Minutes: 10080},
 		"no length": {Name: "credits", Percent: 50, ResetsAt: &reset},
 	} {
-		if r := readWindow(w, now, now); r.State != StateUnknown || r.Forecast != nil {
+		if r := readWindow(w, now, now, nil); r.State != StateUnknown || r.Forecast != nil {
 			t.Errorf("%s: %s %+v", name, r.State, r.Forecast)
 		}
 	}
 	// Out is out without a forecast.
-	if r := readWindow(snapshot.Window{Name: "credits", Percent: 100}, now, now); r.State != StateOut {
+	if r := readWindow(snapshot.Window{Name: "credits", Percent: 100}, now, now, nil); r.State != StateOut {
 		t.Fatalf("full with no reset: %s", r.State)
 	}
 	// The length comes from the name when the harness gives none.
-	if r := readWindow(snapshot.Window{Name: "5h", Percent: 50, ResetsAt: tp(now.Add(150 * time.Minute))}, now, now); r.State != StateOver || r.Forecast.Percent != 100 {
+	if r := readWindow(snapshot.Window{Name: "5h", Percent: 50, ResetsAt: tp(now.Add(150 * time.Minute))}, now, now, nil); r.State != StateOver || r.Forecast.Percent != 100 {
 		t.Fatalf("5h by name: %s %+v", r.State, r.Forecast)
 	}
 }
@@ -225,7 +225,7 @@ func TestAccountStateIsTheWorstWindowThatLimits(t *testing.T) {
 		{"emptier 5h stays hidden", []snapshot.Window{five(5), week7(30, weekReset)}, StateOK, nil},
 		{"no windows", nil, StateUnknown, nil},
 	} {
-		ws, state := readQuota(readings(c.ws, now), now)
+		ws, state := readQuota(readings(c.ws, now), nil, now)
 		var rows []string
 		m := mainWindow(ws)
 		for _, w := range ws {

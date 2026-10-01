@@ -51,7 +51,7 @@ func TestBarTickFollowsTheForecast(t *testing.T) {
 	} {
 		// A week read now, with elapsed of it passed.
 		resets := now.Add(time.Duration((1 - c.elapsed) * float64(week)))
-		w := readWindow(snapshot.Window{Name: "7d", Percent: c.used, ResetsAt: &resets}, now, now)
+		w := readWindow(snapshot.Window{Name: "7d", Percent: c.used, ResetsAt: &resets}, now, now, nil)
 		if w.State != c.state {
 			t.Errorf("%v%% used at %v: state %q, want %q", c.used, c.elapsed, w.State, c.state)
 		}

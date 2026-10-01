@@ -336,7 +336,7 @@ func (m *merger) provider(p string) (TeamProvider, bool) {
 	for _, x := range accts {
 		x.ta.Link = cmp.Or(x.local, x.qLink)
 		if len(x.wins) > 0 {
-			x.ta.Quota = x.quota(p, m.now)
+			x.ta.Quota = x.quota(p, paceOf(m.in, p, x.ta.Label), m.now)
 			if mw := knownMain(x.ta.Quota); mw != nil {
 				if s, ok := x.wins[mw.Name].w.Start(); ok {
 					x.start, x.main = s, mw.Name
@@ -409,8 +409,8 @@ func (x *teamAccount) active(at *time.Time) {
 }
 
 // quota is the team account's reading: the newest reading of each window,
-// in the order the windows first came.
-func (x *teamAccount) quota(provider string, now time.Time) *Quota {
+// in the order the windows first came, at the pace its readings pts show.
+func (x *teamAccount) quota(provider string, pts []pacePoint, now time.Time) *Quota {
 	var rs []reading
 	newest := x.wins[x.order[0]]
 	for _, name := range x.order {
@@ -421,7 +421,7 @@ func (x *teamAccount) quota(provider string, now time.Time) *Quota {
 		}
 	}
 	var q *Quota
-	q, x.ta.State = quotaOf(Quota{Device: newest.dev, From: newest.from}, provider, rs, newest.at, now)
+	q, x.ta.State = quotaOf(Quota{Device: newest.dev, From: newest.from}, provider, rs, pts, newest.at, now)
 	return q
 }
 

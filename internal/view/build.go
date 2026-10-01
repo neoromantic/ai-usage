@@ -61,7 +61,7 @@ func Build(in Input) Report {
 		}
 		for _, a := range totals {
 			if a.Provider == p {
-				pv.Accounts = append(pv.Accounts, accountView(st, p, pv.Homes, a, now, loc))
+				pv.Accounts = append(pv.Accounts, accountView(st, p, pv.Homes, a, paceOf(in, p, a.Label), now, loc))
 			}
 		}
 		r.Providers = append(r.Providers, pv)
@@ -240,8 +240,9 @@ func fillLimits(q *Quota) {
 }
 
 // accountView is one of this device's accounts of provider, whose homes are
-// homes, without its name, which comes from the team.
-func accountView(st *state.State, provider string, homes []string, a collect.AccountTotals, now time.Time, loc *time.Location) Account {
+// homes, without its name, which comes from the team. Its windows go at the
+// pace their readings pts show.
+func accountView(st *state.State, provider string, homes []string, a collect.AccountTotals, pts []pacePoint, now time.Time, loc *time.Location) Account {
 	days := collect.DaysOf(a.Hours.Series(meter.Use.InOut), now)
 	acct := Account{
 		Label:        a.Label,
@@ -262,7 +263,7 @@ func accountView(st *state.State, provider string, homes []string, a collect.Acc
 		Projects:     []Project{},
 	}
 	if a.Quota != nil {
-		acct.Quota, acct.State = quotaOf(Quota{Source: a.Quota.Source, From: a.QuotaFrom}, provider, readings(a.Quota.Windows, a.Quota.At), a.Quota.At, now)
+		acct.Quota, acct.State = quotaOf(Quota{Source: a.Quota.Source, From: a.QuotaFrom}, provider, readings(a.Quota.Windows, a.Quota.At), pts, a.Quota.At, now)
 	}
 	if provider == "claude" && (a.Nulls > 0 || a.OverTracked > 0) {
 		acct.TranscriptGaps = &TranscriptGaps{NullSnapshots: a.Nulls, OverTracked: a.OverTracked}
@@ -295,15 +296,37 @@ func linkView(l *state.Link) *Link {
 }
 
 // quotaOf is q, a reading of provider's account whose newest window was read
-// at at, with its age and its windows rs as they read at now, and the
-// account's state.
-func quotaOf(q Quota, provider string, rs []reading, at, now time.Time) (*Quota, string) {
+// at at, with its age and its windows rs as they read at now, at the pace
+// the account's readings pts show, and the account's state.
+func quotaOf(q Quota, provider string, rs []reading, pts []pacePoint, at, now time.Time) (*Quota, string) {
 	q.ObservedAt = at.UTC()
 	q.AgeSeconds = int64(now.Sub(at).Seconds())
 	var state string
-	q.Windows, state = readQuota(withUnread(provider, rs), now)
+	q.Windows, state = readQuota(withUnread(provider, rs), pts, now)
 	q.Stale = slices.ContainsFunc(q.Windows, func(w Window) bool { return w.Stale })
 	return &q, state
+}
+
+// paceOf is the readings of provider's account label, however a device
+// spells it, that this device's samples and the team's reads hold: what the
+// pace of its windows goes by, beside their newest reading.
+func paceOf(in Input, provider, label string) []pacePoint {
+	k := collect.HistoryKey(provider, label)
+	var out []pacePoint
+	for _, s := range in.Samples {
+		for _, a := range s.Accounts {
+			if a.QuotaAt == nil || a.Provider != provider || collect.HistoryKey(a.Provider, a.Label) != k {
+				continue
+			}
+			for _, w := range a.Windows {
+				out = append(out, pacePoint{At: *a.QuotaAt, Window: w.Name, ResetsAt: w.ResetsAt, Percent: w.Percent})
+			}
+		}
+	}
+	for _, p := range in.Team.History[k] {
+		out = append(out, pacePoint{At: p.At, Window: p.Window, ResetsAt: p.ResetsAt, Percent: p.Percent})
+	}
+	return out
 }
 
 // projectView is a project's totals as the report shows them, in the local

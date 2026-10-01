@@ -16,8 +16,9 @@ import (
 const MaxForecast = 999
 
 // readWindow is a window read at `at` as the report sees it at now: how old
-// the reading is, whether the window reset since, and its forecast.
-func readWindow(w snapshot.Window, at, now time.Time) Window {
+// the reading is, whether the window reset since, and its forecast, at the
+// pace its readings pts show.
+func readWindow(w snapshot.Window, at, now time.Time, pts []pacePoint) Window {
 	win := Window{
 		Name:       w.Name,
 		Percent:    w.Percent,
@@ -33,7 +34,7 @@ func readWindow(w snapshot.Window, at, now time.Time) Window {
 		win.Reset = true
 		return win
 	}
-	win.Forecast = forecast(w, at)
+	win.Forecast = forecast(w, at, pts)
 	switch {
 	case w.Percent >= 100:
 		win.State = StateOut
@@ -46,39 +47,149 @@ func readWindow(w snapshot.Window, at, now time.Time) Window {
 	return win
 }
 
+// Forecast bases: the pace a forecast takes.
+const (
+	BasisWindow = "window"
+	BasisRecent = "recent"
+)
+
+// The pace of the recent readings is the least-squares slope of those over
+// slopeSpan before the reading, when they span slopeMin or more. A drop of
+// more than dropPoints between two readings of one period starts the series
+// again: the provider took use back.
+const (
+	slopeSpan  = 24 * time.Hour
+	slopeMin   = time.Hour
+	dropPoints = 2
+)
+
 // forecast is how full w will be at its reset if it is used from its
-// reading on at its average pace so far: used ÷ elapsed. There is none
-// without the window's length and reset time, and none in its first tenth
-// unless it is over already.
-func forecast(w snapshot.Window, at time.Time) *Forecast {
+// reading on at its pace: the faster of its average since it began, or
+// since its last reading at 0% after that, and the pace of its readings of
+// the last day, pts with the reading itself. There is none without the
+// window's length and reset time, and none in its first tenth unless it is
+// over already.
+func forecast(w snapshot.Window, at time.Time, pts []pacePoint) *Forecast {
 	start, ok := w.Start()
 	if !ok {
 		return nil
 	}
-	length := w.Length()
-	elapsed := float64(at.Sub(start)) / float64(length)
+	reset := *w.ResetsAt
+	elapsed := float64(at.Sub(start)) / float64(w.Length())
 	elapsed = min(max(elapsed, 0), 1)
 	used := max(w.Percent, 0)
-	pct := float64(MaxForecast)
-	if elapsed > 0 {
-		pct = min(math.Round(used/elapsed), MaxForecast)
-	} else if used == 0 {
-		pct = 0
+	series := paceSeries(w, at, pts)
+	// The average runs from the window's start, or from the last reading
+	// at 0% after it: a window left idle at first fills from there.
+	from := start
+	for _, p := range series {
+		if p.Percent <= 0 && p.At.After(from) {
+			from = p.At
+		}
 	}
-	if elapsed < 0.1 && pct < 100 {
+	left := reset.Sub(at).Hours()
+	f := &Forecast{Elapsed: elapsed, Basis: BasisWindow}
+	// avg is the forecast at the average pace: used ÷ the share of the time
+	// from `from` to the reset that had passed at the reading.
+	avg := float64(MaxForecast)
+	switch {
+	case used == 0:
+		avg = 0
+	case at.After(from):
+		avg = used / (float64(at.Sub(from)) / float64(reset.Sub(from)))
+		f.Pace = used / at.Sub(from).Hours()
+	}
+	raw := avg
+	if slope, ok := recentSlope(series, at); ok && used+slope*left > avg {
+		raw, f.Pace, f.Basis = used+slope*left, slope, BasisRecent
+	}
+	f.Percent = min(math.Round(raw), MaxForecast)
+	if elapsed < 0.1 && f.Percent < 100 {
 		return nil
 	}
-	f := &Forecast{Percent: pct, Elapsed: elapsed}
-	// It runs out before its reset when used ÷ elapsed is over 100% before
-	// it is rounded, so a forecast of 100.4% runs out too. At exactly 100%
-	// it runs out at its reset. With no time elapsed, the ratio is infinite.
-	if used > 0 && used < 100 && used/elapsed > 100 {
-		// At the same pace, used grows to 100 in 100/used of the time it
-		// took to reach used.
-		runs := start.Add(time.Duration(100 / used * float64(at.Sub(start))))
-		f.RunsOutAt = timePtr(runs)
+	// It runs out before its reset when the forecast is over 100% before it
+	// is rounded, so a forecast of 100.4% runs out too. At exactly 100% it
+	// runs out at its reset. With no time elapsed, the pace is infinite.
+	if used > 0 && used < 100 && raw > 100 {
+		var runs time.Time
+		if f.Basis == BasisRecent {
+			runs = at.Add(time.Duration((100 - used) / f.Pace * float64(time.Hour)))
+		} else {
+			// At the same pace, used grows to 100 in 100/used of the time
+			// it took to reach used.
+			runs = from.Add(time.Duration(100 / used * float64(at.Sub(from))))
+		}
+		if runs.Before(reset) {
+			f.RunsOutAt = timePtr(runs)
+		}
 	}
 	return f
+}
+
+// pacePoint is one reading of a window, from this device's samples or the
+// team's reads.
+type pacePoint struct {
+	At       time.Time
+	Window   string
+	ResetsAt *time.Time
+	Percent  float64
+}
+
+// paceSeries is the readings of w's current period up to its reading at at,
+// that reading included, oldest first and one per time, from the last drop
+// of more than dropPoints on: those of pts of the same window that reset
+// when it does, give or take a minute.
+func paceSeries(w snapshot.Window, at time.Time, pts []pacePoint) []pacePoint {
+	var out []pacePoint
+	for _, p := range pts {
+		if p.Window == w.Name && p.ResetsAt != nil && p.ResetsAt.Sub(*w.ResetsAt).Abs() <= time.Minute && p.At.Before(at) {
+			out = append(out, p)
+		}
+	}
+	out = append(out, pacePoint{At: at, Window: w.Name, ResetsAt: w.ResetsAt, Percent: w.Percent})
+	slices.SortStableFunc(out, func(a, b pacePoint) int { return a.At.Compare(b.At) })
+	// Of readings at one time, the last added counts.
+	out = slices.Clip(out)
+	for i := len(out) - 1; i > 0; i-- {
+		if out[i].At.Equal(out[i-1].At) {
+			out = slices.Delete(out, i-1, i)
+		}
+	}
+	for i := len(out) - 1; i > 0; i-- {
+		if out[i].Percent < out[i-1].Percent-dropPoints {
+			return out[i:]
+		}
+	}
+	return out
+}
+
+// recentSlope is the pace of the readings of the slopeSpan before at, in
+// points an hour, at least 0: the least-squares slope of percent over time.
+// It is false when they span less than slopeMin.
+func recentSlope(series []pacePoint, at time.Time) (float64, bool) {
+	var ps []pacePoint
+	for _, p := range series {
+		if !p.At.Before(at.Add(-slopeSpan)) {
+			ps = append(ps, p)
+		}
+	}
+	if len(ps) < 2 || ps[len(ps)-1].At.Sub(ps[0].At) < slopeMin {
+		return 0, false
+	}
+	var mx, my float64
+	for _, p := range ps {
+		mx += p.At.Sub(at).Hours()
+		my += p.Percent
+	}
+	n := float64(len(ps))
+	mx, my = mx/n, my/n
+	var sxy, sxx float64
+	for _, p := range ps {
+		x := p.At.Sub(at).Hours() - mx
+		sxy += x * (p.Percent - my)
+		sxx += x * x
+	}
+	return max(sxy/sxx, 0), true
 }
 
 // forecastState is the band a forecast falls in.
@@ -209,14 +320,14 @@ func readings(ws []snapshot.Window, at time.Time) []reading {
 	return out
 }
 
-// readQuota reads every window, marks the main one and those that limit the
+// readQuota reads every window at the pace its readings among pts show, marks the main one and those that limit the
 // account, and gives the state of the account: the worst state of the
 // windows that limit it.
-func readQuota(rs []reading, now time.Time) ([]Window, string) {
+func readQuota(rs []reading, pts []pacePoint, now time.Time) ([]Window, string) {
 	out := make([]Window, 0, len(rs))
 	m := mainIndex(rs)
 	for i, r := range rs {
-		win := readWindow(r.Window, r.At, now)
+		win := readWindow(r.Window, r.At, now, pts)
 		if r.Unread {
 			win = Window{Name: r.Name, Minutes: r.Minutes, ObservedAt: r.At.UTC(), State: StateUnknown, Unread: true}
 		}
