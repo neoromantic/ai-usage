@@ -2,6 +2,7 @@ package view
 
 import (
 	"cmp"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -179,10 +180,37 @@ func (m *merger) teamDevice(d snapshot.Doc) *TeamDevice {
 		Limitations:      limitations(d.CollectorVersion),
 	}
 	for _, s := range d.Sources {
-		dev.Sources = append(dev.Sources, Source{Provider: s.Provider, Status: s.Status, Error: strPtr(m.open(s.Error))})
+		src := Source{Provider: s.Provider, Status: s.Status, Error: strPtr(m.open(s.Error))}
+		if msg, ok := legacyNoQuota(d.CollectorVersion, src); ok {
+			src.Status, src.Error = "ok", strPtr(msg)
+		}
+		dev.Sources = append(dev.Sources, src)
 	}
 	dev.Error = deviceError(*dev)
 	return dev
+}
+
+// claudeTooOld is how a release before collect.ExtSince says the Claude
+// Code it ran cannot cache the usage.
+var claudeTooOld = regexp.MustCompile(`Claude Code (\S+) does not cache the usage; update it to (\S+) or later`)
+
+// legacyNoQuota is, for a source of a device on a release before
+// collect.ExtSince that failed only because it could not read the Claude
+// quota, that problem as this release says it, action first. Such a
+// release made it the source's error; this one keeps the source ok, and
+// shows it as the subscription's reason for having no reading.
+func legacyNoQuota(version string, s Source) (string, bool) {
+	if s.Provider != "claude" || s.Error == nil || s.Status == "ok" || !selfupdate.Newer(collect.ExtSince, version) {
+		return "", false
+	}
+	msg := *s.Error
+	if m := claudeTooOld.FindStringSubmatch(msg); m != nil {
+		return "update Claude Code to " + m[2] + " or newer (it runs " + m[1] + ")", true
+	}
+	if i := strings.Index(msg, "claude /usage: nonessential traffic is off"); i >= 0 {
+		return msg[i:], true
+	}
+	return "", false
 }
 
 // lastErrors are a device doc's last error and update error, printable.
@@ -377,6 +405,9 @@ func deviceError(d TeamDevice) *string {
 		return strPtr(s.Provider + ": " + s.Status)
 	}
 	if d.LastError != nil && (d.LastSuccessAt == nil || d.CollectedAt.After(*d.LastSuccessAt)) {
+		if _, ok := legacyNoQuota(d.CollectorVersion, Source{Provider: "claude", Status: "error", Error: d.LastError}); ok {
+			return nil
+		}
 		return d.LastError
 	}
 	return nil

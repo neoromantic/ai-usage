@@ -294,6 +294,10 @@ func TestNoReadingSaysWhy(t *testing.T) {
 		{"one reads quota", []snapshot.Doc{holder("d-abox-device", "abox", "v0.2.2", nil), holder("d-bbox-device", "bbox", "v1.2.0", failing)},
 			"quota read timed out on bbox", "quota read timed out on bbox"},
 		{"nothing known", []snapshot.Doc{holder("d-abox-device", "abox", "v1.2.0", nil)}, "<nil>", "<nil>"},
+		// A release before v0.4.0 failed the source for it.
+		{"an old Claude Code", []snapshot.Doc{holder("d-abox-device", "abox", "v0.3.4", &state.Source{Status: "partial",
+			Error: "~/.claude: claude /usage: Claude Code 2.1.42 does not cache the usage; update it to 2.1.208 or later (no cache)"})},
+			"update Claude Code to 2.1.208 or newer (it runs 2.1.42) on abox", "<nil>"},
 	} {
 		r := withTeam(t, f, c.docs...)
 		if got := deref(findTeamAccount(t, r, "claude", "ann@acme.dev").NoReading); got != c.claude {
@@ -302,6 +306,14 @@ func TestNoReadingSaysWhy(t *testing.T) {
 		if got := deref(findTeamAccount(t, r, "codex", "sam@mail.test").NoReading); got != c.codex {
 			t.Errorf("%s, codex: %q, want %q", c.name, got, c.codex)
 		}
+	}
+	// Nor is it the device's error, though its last run's error says it.
+	old := holder("d-abox-device", "abox", "v0.3.4", &state.Source{Status: "partial", Error: "claude /usage: Claude Code 2.1.42 does not cache the usage; update it to 2.1.208 or later"})
+	old.LastError = f.key.Seal("claude: claude /usage: Claude Code 2.1.42 does not cache the usage; update it to 2.1.208 or later")
+	old.LastSuccessAt = now.Add(-time.Hour)
+	old.Sources = slices.DeleteFunc(old.Sources, func(s snapshot.Source) bool { return s.Provider != "claude" })
+	if dv := withTeam(t, f, old).Team.Devices[1]; dv.Error != nil || dv.Sources[0].Status != "ok" {
+		t.Errorf("an old Claude Code on a v0.3.4 device: error %q, sources %+v", deref(dv.Error), dv.Sources)
 	}
 	// A reading, however old, is no missing one.
 	st := emptyState()
