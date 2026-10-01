@@ -201,6 +201,7 @@ func TestForgetDeviceForgetsItsRelease(t *testing.T) {
 	at := time.Now().UTC().Add(-30 * 24 * time.Hour)
 	b, err := json.Marshal(collect.TeamCache{PulledAt: time.Now().UTC(), Team: fp, Known: map[string]collect.Known{
 		"d-leoair-0003":   {Version: "v0.3.0", First: at, Last: at},
+		"d-leoair-0042":   {Version: "v0.3.0", First: at, Last: at},
 		"d-srv1-a4c2e917": {Version: "v0.3.4", First: at, Last: at},
 	}})
 	if err != nil {
@@ -210,10 +211,16 @@ func TestForgetDeviceForgetsItsRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	// ATTENTION names a device by the start of its id after "d-".
-	if r := a.run("", "team", "forget-device", "d-"); r.code != 2 || !strings.Contains(r.stderr, "starts the ids of 2 devices: d-leoair-0003, d-srv1-a4c2e917") {
-		t.Fatalf("forget-device d-: exit %d, %q", r.code, r.stderr)
+	if r := a.run("", "team", "forget-device", "d-leoair-00"); r.code != 2 || !strings.Contains(r.stderr, "starts the ids of 2 devices: d-leoair-0003, d-leoair-0042") {
+		t.Fatalf("forget-device d-leoair-00: exit %d, %q", r.code, r.stderr)
 	}
-	a.ok("team", "forget-device", "leoair-0")
+	// A start shorter than ATTENTION prints names no device, even one alone.
+	for _, short := range []string{"", "d-", "s", "d-srv1"} {
+		if r := a.run("", "team", "forget-device", short); r.code != 2 || !strings.Contains(r.stderr, "too short to name a device") {
+			t.Fatalf("forget-device %q: exit %d, %q", short, r.code, r.stderr)
+		}
+	}
+	a.ok("team", "forget-device", "leoair-0003")
 	c := teamCache(t, a)
 	if _, ok := c.Known["d-leoair-0003"]; ok || c.Known["d-srv1-a4c2e917"].Version != "v0.3.4" {
 		t.Fatalf("known after forget = %+v", c.Known)

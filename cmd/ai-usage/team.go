@@ -58,9 +58,15 @@ func cmdTeam(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 	}
 }
 
+// minIDStart is the shortest start of a device id that names it: what
+// ATTENTION prints. A shorter one, typed by mistake, could remove a
+// teammate.
+const minIDStart = 8
+
 // cachedDevice is the device id arg names. ATTENTION names a device by the
 // start of its id after "d-", as 3f9a1c2e: such a start of exactly one id the
-// cached team read holds is that id. Any other arg is an id itself.
+// cached team read holds is that id, when it is at least minIDStart long.
+// Any other arg is an id itself.
 func cachedDevice(d state.Dir, arg string) (string, error) {
 	c, err := collect.LoadTeamCache(d)
 	if err != nil {
@@ -76,11 +82,15 @@ func cachedDevice(d state.Dir, arg string) (string, error) {
 	if ids[arg] {
 		return arg, nil
 	}
+	start := strings.TrimPrefix(arg, "d-")
 	var match []string
 	for id := range ids {
-		if strings.HasPrefix(strings.TrimPrefix(id, "d-"), strings.TrimPrefix(arg, "d-")) {
+		if strings.HasPrefix(strings.TrimPrefix(id, "d-"), start) {
 			match = append(match, id)
 		}
+	}
+	if len(match) > 0 && len(start) < minIDStart {
+		return "", usageError(strconv.Quote(arg) + " is too short to name a device: give its id, or the " + strconv.Itoa(minIDStart) + " characters ATTENTION prints")
 	}
 	switch len(match) {
 	case 0:
