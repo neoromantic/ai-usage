@@ -1,10 +1,18 @@
 package view
 
-import "github.com/neoromantic/ai-usage/internal/selfupdate"
+import (
+	"time"
 
-// health is how the collection, the relay, and the update are doing. Each
-// takes the first status that applies, else ok.
-func health(c Collector) []Health {
+	"github.com/neoromantic/ai-usage/internal/selfupdate"
+)
+
+// staleTeamRead is how old the last read of the team gets before the header
+// warns: three of the reads scheduled runs make every 20 minutes.
+const staleTeamRead = 3 * 20 * time.Minute
+
+// health is how the collection, the relay, and the update are doing at now.
+// Each takes the first status that applies, else ok.
+func health(c Collector, now time.Time) []Health {
 	coll := Health{Item: HealthCollection, Status: HealthOK, State: LevelOK, At: timeOf(c.LastSuccessAt)}
 	switch {
 	case c.LastRunAt == nil:
@@ -15,8 +23,11 @@ func health(c Collector) []Health {
 		coll.Status, coll.State = CollectionUnscheduled, LevelWarn
 	}
 
+	// The relay is as fresh as the older of the last push and the last
+	// read: what the team sees of this device, or what this device sees of
+	// the team.
 	rl := c.Relay
-	relay := Health{Item: HealthRelay, Status: HealthOK, State: LevelOK, At: timeOf(rl.LastPushAt)}
+	relay := Health{Item: HealthRelay, Status: HealthOK, State: LevelOK, At: older(rl.LastPushAt, rl.LastPullAt)}
 	switch {
 	case rl.URL == nil:
 		relay.Status, relay.State, relay.At = RelayNone, LevelOff, nil
@@ -24,6 +35,8 @@ func health(c Collector) []Health {
 		relay.Status, relay.State = RelayFailing, LevelError
 	case rl.Pending || rl.LastPushAt == nil:
 		relay.Status, relay.State = RelayPending, LevelWarn
+	case c.Team != "" && (rl.LastPullAt == nil || now.Sub(*rl.LastPullAt) > staleTeamRead):
+		relay.Status, relay.State = RelayStale, LevelWarn
 	}
 
 	up := c.Update
@@ -41,4 +54,15 @@ func health(c Collector) []Health {
 		update.Status, update.State, update.Release = UpdateAvailable, LevelWarn, up.Latest
 	}
 	return []Health{coll, relay, update}
+}
+
+// older is the older of two times, either of which can be missing, or nil.
+func older(a, b *time.Time) *time.Time {
+	switch {
+	case a == nil:
+		return timeOf(b)
+	case b == nil || a.Before(*b):
+		return timeOf(a)
+	}
+	return timeOf(b)
 }

@@ -38,7 +38,7 @@ func TestMatrixRest(t *testing.T) {
 // on claude, codex and grok, where grok burns the most.
 func gridTeam() Report {
 	r := Report{GeneratedAt: now, Collector: Collector{Version: "v1.2.3", DeviceLabel: "bot-0"}}
-	r.Collector.Health = health(r.Collector)
+	r.Collector.Health = health(r.Collector, now)
 	cols := []Column{
 		{Provider: "claude", Label: "ann@acme.dev", Name: "ann", State: StateOK},
 		{Provider: "claude", Label: "kim@corp.test", Name: "kim", State: StateOK},

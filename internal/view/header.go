@@ -124,7 +124,8 @@ func (p *page) healthText(h Health) (long, short string) {
 			return "relay failing", "relay failing"
 		case RelayPending:
 			return "relay pending", "relay pending"
-		case HealthOK:
+		case HealthOK, RelayStale:
+			// A stale read says so by its dot.
 			return "relay " + since(h.At), "relay " + ago(h.At)
 		}
 	case HealthUpdate:

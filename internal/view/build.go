@@ -47,7 +47,7 @@ func Build(in Input) Report {
 		Providers: []Provider{},
 		Projects:  []Project{},
 	}
-	r.Collector.Health = health(r.Collector)
+	r.Collector.Health = health(r.Collector, now)
 
 	loc := cmp.Or(in.Loc, time.Local)
 	totals := collect.Totals(st, in.Folders)
@@ -93,7 +93,7 @@ func Build(in Input) Report {
 // every period, as that release showed them.
 func Fill(r *Report) {
 	if r.Collector.Health == nil {
-		r.Collector.Health = health(r.Collector)
+		r.Collector.Health = health(r.Collector, r.GeneratedAt)
 	}
 	for i := range r.Team.Devices {
 		d := &r.Team.Devices[i]

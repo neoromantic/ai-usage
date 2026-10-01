@@ -62,11 +62,23 @@ func TestHealth(t *testing.T) {
 			"collection ok ok 11:53 -", "relay ok ok 11:54 -", "update unchecked off - -"}},
 		{"available", func(c *Collector) { c.Update.Latest = strPtr("v1.3.0") }, []string{
 			"collection ok ok 11:53 -", "relay ok ok 11:54 -", "update available warn 10:00 v1.3.0"}},
+		// The relay is as fresh as the older of the last push and read, and
+		// a team read older than three scheduled reads is a warning.
+		{"team read lately", func(c *Collector) { c.Team, c.Relay.LastPullAt = "qmvrtzpa", tp(now.Add(-50*time.Minute)) }, []string{
+			"collection ok ok 11:53 -", "relay ok ok 11:10 -", "update ok ok 10:00 -"}},
+		{"team read long ago", func(c *Collector) { c.Team, c.Relay.LastPullAt = "qmvrtzpa", tp(now.Add(-61*time.Minute)) }, []string{
+			"collection ok ok 11:53 -", "relay stale warn 10:59 -", "update ok ok 10:00 -"}},
+		{"team never read", func(c *Collector) { c.Team = "qmvrtzpa" }, []string{
+			"collection ok ok 11:53 -", "relay stale warn 11:54 -", "update ok ok 10:00 -"}},
+		{"read without a team", func(c *Collector) { c.Relay.LastPullAt = tp(now.Add(-2 * time.Hour)) }, []string{
+			"collection ok ok 11:53 -", "relay ok ok 10:00 -", "update ok ok 10:00 -"}},
+		{"failing beats stale", func(c *Collector) { c.Team, c.Relay.LastError = "qmvrtzpa", strPtr("HTTP 503") }, []string{
+			"collection ok ok 11:53 -", "relay failing error 11:54 -", "update ok ok 10:00 -"}},
 	} {
 		col := ok()
 		c.change(&col)
 		var got []string
-		for _, h := range health(col) {
+		for _, h := range health(col, now) {
 			got = append(got, str(h))
 		}
 		if strings.Join(got, "\n") != strings.Join(c.want, "\n") {
@@ -80,7 +92,7 @@ func TestHealth(t *testing.T) {
 func TestHeaderShowsTheReportsHealth(t *testing.T) {
 	r := Report{GeneratedAt: now}
 	r.Collector = Collector{DeviceLabel: "box", Version: "v1.2.3", LastRunAt: tp(now), LastSuccessAt: tp(now), Schedule: Schedule{Registered: true}}
-	r.Collector.Health = health(r.Collector)
+	r.Collector.Health = health(r.Collector, now)
 	for _, c := range []struct {
 		busy string
 		want string
@@ -91,6 +103,32 @@ func TestHeaderShowsTheReportsHealth(t *testing.T) {
 		h := sgr.ReplaceAllString(Render(r, Options{Width: 100, Loc: time.UTC, Busy: c.busy}).Header, "")
 		if !strings.HasSuffix(h, c.want) {
 			t.Errorf("busy %q: header %q, want it to end in %q", c.busy, h, c.want)
+		}
+	}
+}
+
+// The header's relay age is the older of the last push and the last team
+// read, and its dot turns yellow once the read is over an hour old.
+func TestHeaderRelayAgeIsTheOlderOfPushAndPull(t *testing.T) {
+	for _, c := range []struct {
+		pulled time.Duration
+		want   string
+		state  string
+	}{
+		{40 * time.Minute, "● relay 40m ago", LevelOK},
+		{2 * time.Hour, "● relay 2h ago", LevelWarn},
+	} {
+		r := Report{GeneratedAt: now}
+		r.Collector = Collector{DeviceLabel: "annbook", Version: "v1.2.3", Team: "qmvrtzpa", LastRunAt: tp(now), LastSuccessAt: tp(now),
+			Schedule: Schedule{Registered: true}, Update: Update{CheckedAt: tp(now), Latest: strPtr("v1.2.3")},
+			Relay: Relay{URL: strPtr("https://relay.example.com"), LastPushAt: tp(now.Add(-5 * time.Minute)), LastPullAt: tp(now.Add(-c.pulled))}}
+		r.Collector.Health = health(r.Collector, now)
+		if h := r.Collector.Health[1]; h.State != c.state {
+			t.Errorf("read %v ago: relay %+v, want %s", c.pulled, h, c.state)
+		}
+		h := sgr.ReplaceAllString(Render(r, Options{Width: 100, Loc: time.UTC}).Header, "")
+		if !strings.Contains(h, c.want+"  ") {
+			t.Errorf("read %v ago: header %q, want %q", c.pulled, h, c.want)
 		}
 	}
 }

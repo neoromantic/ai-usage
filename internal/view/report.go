@@ -97,6 +97,7 @@ const (
 	RelayNone    = "none"    // no relay is set
 	RelayFailing = "failing" // the last push to the relay, or read from it, failed
 	RelayPending = "pending" // the newest snapshot has not reached the relay
+	RelayStale   = "stale"   // the team was last read over an hour ago
 
 	UpdateDev       = "dev"       // a build from source, which does not update itself
 	UpdateStaged    = "staged"    // a newer release is installed; the next run uses it
@@ -120,8 +121,8 @@ type Health struct {
 	Status string `json:"status"`
 	State  string `json:"state"`
 	// At is when the collector last collected, or when its last run failed;
-	// when this device last reached the relay; or when it last checked for a
-	// release.
+	// the older of when this device last pushed to the relay and last read
+	// the team from it; or when it last checked for a release.
 	At *time.Time `json:"at"`
 	// Release is the staged release, or the one available.
 	Release *string `json:"release"`
