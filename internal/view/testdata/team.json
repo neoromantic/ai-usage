@@ -74,19 +74,27 @@
       "provider": "claude",
       "account": "ann@acme.dev",
       "name": "ann",
-      "reading_age_seconds": 86820,
       "at": "2026-09-23T22:17:36Z",
       "resets_at": "2026-09-26T22:00:00Z",
-      "percent": 174
+      "percent": 174,
+      "reading_age_seconds": 86820
     },
     {
       "kind": "over",
       "provider": "codex",
       "account": "sam@mail.test",
       "name": "sam",
-      "at": "2026-09-26T03:54:22Z",
+      "at": "2026-09-26T00:01:00Z",
       "resets_at": "2026-09-28T17:12:00Z",
-      "percent": 157
+      "percent": 165
+    },
+    {
+      "kind": "outside",
+      "provider": "codex",
+      "account": "lee@corp.test",
+      "name": "lee",
+      "at": "2026-09-22T18:38:00Z",
+      "percent": 25
     },
     {
       "kind": "error",
@@ -96,10 +104,27 @@
       "message": "codex: app-server exited without answering"
     },
     {
+      "kind": "no_reading",
+      "provider": "claude",
+      "account": "kim@corp.test",
+      "name": "kim",
+      "message": "/opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update it or put the newer one first on PATH on Mac.localdomain"
+    },
+    {
+      "kind": "duplicate",
+      "devices": [
+        "Mac.localdomain"
+      ],
+      "device_id": "d-e1f3a5c7b9d1e3f5a7c9b1d3",
+      "at": "2026-09-20T09:12:00Z",
+      "message": "Mac.localdomain"
+    },
+    {
       "kind": "old",
       "devices": [
         "Mac.localdomain",
-        "MacBook-Pro-Kim"
+        "MacBook-Pro-Kim",
+        "ci-runner-eu-west-build-pool-node-0042ab"
       ],
       "message": "v1.4.2"
     }
@@ -143,7 +168,9 @@
                 "forecast": {
                   "percent": 80,
                   "elapsed": 0.5,
-                  "runs_out_at": null
+                  "runs_out_at": null,
+                  "basis": "window",
+                  "pace": 16.0
                 }
               },
               {
@@ -160,7 +187,9 @@
                 "forecast": {
                   "percent": 174,
                   "elapsed": 0.384,
-                  "runs_out_at": "2026-09-23T22:17:36Z"
+                  "runs_out_at": "2026-09-23T22:17:36Z",
+                  "basis": "window",
+                  "pace": 1.0385
                 }
               },
               {
@@ -177,7 +206,9 @@
                 "forecast": {
                   "percent": 190,
                   "elapsed": 0.5258,
-                  "runs_out_at": null
+                  "runs_out_at": null,
+                  "basis": "window",
+                  "pace": 1.1321
                 }
               }
             ]
@@ -280,7 +311,9 @@
                 "forecast": {
                   "percent": 0,
                   "elapsed": 0.2,
-                  "runs_out_at": null
+                  "runs_out_at": null,
+                  "basis": "window",
+                  "pace": 0.0
                 }
               },
               {
@@ -297,7 +330,9 @@
                 "forecast": {
                   "percent": 140,
                   "elapsed": 0.7165,
-                  "runs_out_at": null
+                  "runs_out_at": null,
+                  "basis": "window",
+                  "pace": 0.8308
                 }
               }
             ]
@@ -452,7 +487,9 @@
                 "forecast": {
                   "percent": 20,
                   "elapsed": 0.2,
-                  "runs_out_at": null
+                  "runs_out_at": null,
+                  "basis": "window",
+                  "pace": 4.0
                 }
               },
               {
@@ -469,7 +506,9 @@
                 "forecast": {
                   "percent": 81,
                   "elapsed": 0.1476,
-                  "runs_out_at": null
+                  "runs_out_at": null,
+                  "basis": "window",
+                  "pace": 0.4839
                 }
               }
             ]
@@ -2043,7 +2082,9 @@
                   "forecast": {
                     "percent": 80,
                     "elapsed": 0.5,
-                    "runs_out_at": null
+                    "runs_out_at": null,
+                    "basis": "window",
+                    "pace": 16.0
                   }
                 },
                 {
@@ -2060,7 +2101,9 @@
                   "forecast": {
                     "percent": 174,
                     "elapsed": 0.384,
-                    "runs_out_at": "2026-09-23T22:17:36Z"
+                    "runs_out_at": "2026-09-23T22:17:36Z",
+                    "basis": "window",
+                    "pace": 1.0385
                   }
                 },
                 {
@@ -2077,7 +2120,9 @@
                   "forecast": {
                     "percent": 190,
                     "elapsed": 0.5258,
-                    "runs_out_at": null
+                    "runs_out_at": null,
+                    "basis": "window",
+                    "pace": 1.1321
                   }
                 }
               ]
@@ -2216,7 +2261,9 @@
                   "forecast": {
                     "percent": 0,
                     "elapsed": 0.2,
-                    "runs_out_at": null
+                    "runs_out_at": null,
+                    "basis": "window",
+                    "pace": 0.0
                   }
                 },
                 {
@@ -2233,7 +2280,9 @@
                   "forecast": {
                     "percent": 140,
                     "elapsed": 0.7165,
-                    "runs_out_at": null
+                    "runs_out_at": null,
+                    "basis": "window",
+                    "pace": 0.8308
                   }
                 }
               ]
@@ -2298,7 +2347,9 @@
                   "forecast": {
                     "percent": 33,
                     "elapsed": 0.6,
-                    "runs_out_at": null
+                    "runs_out_at": null,
+                    "basis": "window",
+                    "pace": 6.6667
                   }
                 },
                 {
@@ -2313,9 +2364,11 @@
                   "reset": false,
                   "state": "over",
                   "forecast": {
-                    "percent": 157,
+                    "percent": 165,
                     "elapsed": 0.2668,
-                    "runs_out_at": "2026-09-26T03:54:22Z"
+                    "runs_out_at": "2026-09-26T00:01:00Z",
+                    "basis": "recent",
+                    "pace": 1.0
                   }
                 }
               ]
@@ -2390,7 +2443,9 @@
                   "forecast": {
                     "percent": 20,
                     "elapsed": 0.2,
-                    "runs_out_at": null
+                    "runs_out_at": null,
+                    "basis": "window",
+                    "pace": 4.0
                   }
                 },
                 {
@@ -2407,7 +2462,9 @@
                   "forecast": {
                     "percent": 81,
                     "elapsed": 0.1476,
-                    "runs_out_at": null
+                    "runs_out_at": null,
+                    "basis": "window",
+                    "pace": 0.4839
                   }
                 }
               ]
@@ -2465,7 +2522,10 @@
             },
             "burn_estimated": true,
             "no_reading": null,
-            "outside": null
+            "outside": {
+              "points": 25,
+              "since": "2026-09-22T18:38:00Z"
+            }
           },
           {
             "label": "unknown",

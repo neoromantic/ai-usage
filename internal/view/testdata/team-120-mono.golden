@@ -1,12 +1,13 @@
 [1mai-usage[m · annbook · team qmvrtzpa                                  ● collected 7m ago  ● relay 7m ago  ● up to date
 
 [1mATTENTION[m
-[7m OUT   [m codex ann@acme.dev   back Fri 17:09, in 1d 23h
-[7m OUT   [m claude ann · Fable   back Sun 01:00, in 3d 7h
-[7m OVER  [m claude ann@acme.dev  runs out ~Thu 01:17 at this week's pace, 2d 23h before reset · reading 1d old
-[7m OVER  [m codex sam@mail.test  runs out ~Sat 06:54 at this week's pace, 2d 13h before reset
-[7m ERROR [m Mac.localdomain      codex: app-server exited without answering
-[7m OLD   [m 2 devices on v1.4.0  Mac.localdomain, MacBook-Pro-Kim · latest v1.4.2
+[7m OUT     [m codex ann@acme.dev   back Fri 17:09, in 1d 23h
+[7m OUT     [m claude ann · Fable   back Sun 01:00, in 3d 7h
+[7m OVER    [m claude ann@acme.dev  runs out ~Thu 01:17 at this week's pace, 2d 23h before reset · reading 1d old
+[7m OVER    [m codex sam@mail.test  runs out ~Sat 03:01 at the last day's pace, 2d 17h before reset
+[7m OUTSIDE [m codex lee@corp.test  +25 points in 20h, no team device spent
+[7m ERROR   [m Mac.localdomain      codex: app-server exited without answering
+ +3 more
 
 [1mSUBSCRIPTIONS[m  7 · 2 out · 1 over · 3 no reading
 
@@ -17,7 +18,7 @@
 
   [1mCODEX[m
 ● ann@acme.dev   pro         ━━━━━━━━━━━━━━━━━╋━━━━━━    0%  1d 23h Fri 17:09         out   2  annbook            1h
-  sam@mail.test  prolite     ━━━━━━╋━━━──────────────   58%  5d 2h  Mon 20:12   157% over   1  MacBook-Pro-Kim    3h
+  sam@mail.test  prolite     ━━━━━━╋━━━──────────────   58%  5d 2h  Mon 20:12   165% over   1  MacBook-Pro-Kim    3h
 ● lee@corp.test  pro         ━━━┃────────────────────   88%  5d 22h Tue 16:30      81% ok  11  srv1              34m
   unknown                    ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  Mac.localdomain   16m
 

@@ -1,13 +1,15 @@
 ai-usage · sam-air · team fp4xk2n5                            ● collected 8m ago  ● no relay  ● v1.4.3 available
 
 ATTENTION
- OVER   claude sam · 5h        runs out ~Wed 18:27 at this window's pace, 12m before reset
- UNDER  codex sam@example.com  leaves ~73% unused at this week's pace, resets Fri 12:00, in 1d 18h
+ OVER   claude sam · 5h         runs out ~Wed 18:27 at this window's pace, 12m before reset
+ TIGHT  claude sam@example.com  ~95% at reset Sat 12:00 at the last day's pace
+ OLD    1 device on v1.4.2      sam-air · latest v1.4.3
+ UNDER  codex sam@example.com   leaves ~73% unused at this week's pace, resets Fri 12:00, in 1d 18h
 
 SUBSCRIPTIONS  5 · 1 over · 2 no reading
 
   CLAUDE               PLAN       THIS WEEK                 LEFT  RESETS             AT RESET  DEVICES      LAST
-● sam@example.com      pro        ━━━━━━━━━━━━━─┃─────────   45%  2d 18h Sat 12:00  91% tight   1  sam-air    8m
+● sam@example.com      pro        ━━━━━━━━━━━━━─┃─────────   45%  2d 18h Sat 12:00  95% tight   1  sam-air    8m
     5h                            ━━━━━━━━━━━━━━━━━━╋─────   20%  1h 2m  Wed 18:40  104% over
 
   CODEX

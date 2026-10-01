@@ -55,20 +55,35 @@
   },
   "attention": [
     {
+      "kind": "over",
       "provider": "claude",
       "account": "sam@example.com",
       "name": "sam",
       "window": "5h",
-      "kind": "over",
       "at": "2026-09-23T15:27:30Z",
       "resets_at": "2026-09-23T15:40:00Z",
       "percent": 104
     },
     {
+      "kind": "tight",
+      "provider": "claude",
+      "account": "sam@example.com",
+      "name": "sam",
+      "resets_at": "2026-09-26T09:00:00Z",
+      "percent": 95
+    },
+    {
+      "kind": "old",
+      "devices": [
+        "sam-air"
+      ],
+      "message": "v1.4.3"
+    },
+    {
+      "kind": "under",
       "provider": "codex",
       "account": "sam@example.com",
       "name": "sam",
-      "kind": "under",
       "resets_at": "2026-09-25T09:00:00Z",
       "percent": 27
     }
@@ -110,7 +125,9 @@
                 "forecast": {
                   "percent": 104,
                   "elapsed": 0.7667,
-                  "runs_out_at": "2026-09-23T15:27:30Z"
+                  "runs_out_at": "2026-09-23T15:27:30Z",
+                  "basis": "window",
+                  "pace": 20.8696
                 }
               },
               {
@@ -125,9 +142,11 @@
                 "reset": false,
                 "state": "tight",
                 "forecast": {
-                  "percent": 91,
+                  "percent": 95,
                   "elapsed": 0.6042,
-                  "runs_out_at": null
+                  "runs_out_at": null,
+                  "basis": "recent",
+                  "pace": 0.6
                 }
               },
               {
@@ -144,7 +163,9 @@
                 "forecast": {
                   "percent": 0,
                   "elapsed": 0.6042,
-                  "runs_out_at": null
+                  "runs_out_at": null,
+                  "basis": "window",
+                  "pace": 0.0
                 }
               }
             ]
@@ -253,7 +274,9 @@
                 "forecast": {
                   "percent": 71,
                   "elapsed": 0.4196,
-                  "runs_out_at": null
+                  "runs_out_at": null,
+                  "basis": "window",
+                  "pace": 0.4255
                 }
               }
             ]
@@ -408,7 +431,9 @@
                 "forecast": {
                   "percent": 6,
                   "elapsed": 0.5,
-                  "runs_out_at": null
+                  "runs_out_at": null,
+                  "basis": "window",
+                  "pace": 1.2
                 }
               },
               {
@@ -425,7 +450,9 @@
                 "forecast": {
                   "percent": 27,
                   "elapsed": 0.747,
-                  "runs_out_at": null
+                  "runs_out_at": null,
+                  "basis": "window",
+                  "pace": 0.1594
                 }
               }
             ]
@@ -1303,7 +1330,9 @@
                   "forecast": {
                     "percent": 104,
                     "elapsed": 0.7667,
-                    "runs_out_at": "2026-09-23T15:27:30Z"
+                    "runs_out_at": "2026-09-23T15:27:30Z",
+                    "basis": "window",
+                    "pace": 20.8696
                   }
                 },
                 {
@@ -1318,9 +1347,11 @@
                   "reset": false,
                   "state": "tight",
                   "forecast": {
-                    "percent": 91,
+                    "percent": 95,
                     "elapsed": 0.6042,
-                    "runs_out_at": null
+                    "runs_out_at": null,
+                    "basis": "recent",
+                    "pace": 0.6
                   }
                 },
                 {
@@ -1337,7 +1368,9 @@
                   "forecast": {
                     "percent": 0,
                     "elapsed": 0.6042,
-                    "runs_out_at": null
+                    "runs_out_at": null,
+                    "basis": "window",
+                    "pace": 0.0
                   }
                 }
               ]
@@ -1407,7 +1440,9 @@
                   "forecast": {
                     "percent": 71,
                     "elapsed": 0.4196,
-                    "runs_out_at": null
+                    "runs_out_at": null,
+                    "basis": "window",
+                    "pace": 0.4255
                   }
                 }
               ]
@@ -1472,7 +1507,9 @@
                   "forecast": {
                     "percent": 6,
                     "elapsed": 0.5,
-                    "runs_out_at": null
+                    "runs_out_at": null,
+                    "basis": "window",
+                    "pace": 1.2
                   }
                 },
                 {
@@ -1489,7 +1526,9 @@
                   "forecast": {
                     "percent": 27,
                     "elapsed": 0.747,
-                    "runs_out_at": null
+                    "runs_out_at": null,
+                    "basis": "window",
+                    "pace": 0.1594
                   }
                 }
               ]

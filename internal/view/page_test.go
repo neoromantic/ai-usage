@@ -2,6 +2,7 @@ package view
 
 import (
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -49,7 +50,7 @@ func bodyLine(t *testing.T, p Page, from string, match func(text string) bool) s
 
 func TestPageAttentionIsCut(t *testing.T) {
 	// The team fixture with a silent device and an unused window as well,
-	// 8 lines of ATTENTION.
+	// 11 lines of ATTENTION.
 	r := loadReport(t, "team")
 	since := time.Date(2026, 9, 21, 11, 2, 0, 0, time.UTC)
 	resets := time.Date(2026, 9, 29, 13, 30, 0, 0, time.UTC)
@@ -58,17 +59,17 @@ func TestPageAttentionIsCut(t *testing.T) {
 		Attention{Kind: AttentionSilent, Devices: []string{"bot-e"}, At: &since},
 		Attention{Kind: AttentionUnder, Provider: "codex", Account: "lee@corp.test", Name: "lee", ResetsAt: &resets, Percent: &pct})
 	static := pageSection(Render(r, Options{Width: 160, Loc: sampleZone}), "ATTENTION")
-	if len(static) != 1+attentionLines+1 || strings.TrimSpace(static[len(static)-1]) != "+2 more" {
+	if len(static) != 1+attentionLines+1 || strings.TrimSpace(static[len(static)-1]) != "+5 more" {
 		t.Errorf("static ATTENTION is not cut at %d lines:\n%s", attentionLines, strings.Join(static, "\n"))
 	}
 	p := Render(r, Options{Width: 160, Loc: sampleZone, Interactive: true})
 	all := pageSection(p, "ATTENTION")
-	if len(all) != 1+8 {
+	if len(all) != 1+11 {
 		t.Fatalf("the interactive view does not show every line:\n%s", strings.Join(all, "\n"))
 	}
 	for _, want := range []string{
-		" SILENT  bot-e                no report since Mon 14:02, 2d 3h ago",
-		" UNDER   codex lee@corp.test  leaves ~67% unused at this week's pace, resets Tue 16:30, in 5d 22h",
+		" SILENT      bot-e                      no report since Mon 14:02, 2d 3h ago",
+		" UNDER       codex lee@corp.test        leaves ~67% unused at this week's pace, resets Tue 16:30, in 5d 22h",
 	} {
 		found := false
 		for _, l := range all {
@@ -95,6 +96,11 @@ func TestPageSilentDevice(t *testing.T) {
 			d.Silent, d.Error, d.CollectedAt = true, &msg, since
 		}
 	}
+	// Beside the fixture's OUT, OVER, and ERROR lines, whose badges and
+	// subjects leave it this room.
+	r.Attention = slices.DeleteFunc(r.Attention, func(a Attention) bool {
+		return a.Kind != AttentionOut && a.Kind != AttentionOver && a.Kind != AttentionError
+	})
 	r.Attention = append(r.Attention, Attention{Kind: AttentionSilent, Devices: []string{"bot-e"}, At: &since, Message: msg})
 	for w, want := range map[int]string{
 		80:  " SILENT  bot-e                no report since Mon 14:02, 2d 3h ago",
@@ -123,12 +129,12 @@ func TestPageOverLine(t *testing.T) {
 	r := loadReport(t, "team")
 	for w, want := range map[int][]string{
 		80: {
-			" OVER   claude ann@acme.dev  runs out ~Thu 01:17, 2d 23h before reset",
-			" OVER   codex sam@mail.test  runs out ~Sat 06:54, 2d 13h before reset",
+			" OVER     claude ann@acme.dev  runs out ~Thu 01:17, 2d 23h before reset",
+			" OVER     codex sam@mail.test  runs out ~Sat 03:01, 2d 17h before reset",
 		},
 		100: {
-			" OVER   claude ann@acme.dev  runs out ~Thu 01:17, 2d 23h before reset · reading 1d old",
-			" OVER   codex sam@mail.test  runs out ~Sat 06:54 at this week's pace, 2d 13h before reset",
+			" OVER     claude ann@acme.dev  runs out ~Thu 01:17, 2d 23h before reset · reading 1d old",
+			" OVER     codex sam@mail.test  runs out ~Sat 03:01 at the last day's pace, 2d 17h before reset",
 		},
 	} {
 		lines := pageSection(Render(r, Options{Width: w, Loc: sampleZone}), "ATTENTION")
@@ -210,7 +216,7 @@ func TestPageOldLine(t *testing.T) {
 			}
 		}
 		for _, w := range []int{80, 100, 120} {
-			lines := pageSection(Render(r, Options{Width: w, Loc: sampleZone}), "ATTENTION")
+			lines := pageSection(Render(r, Options{Width: w, Loc: sampleZone, Interactive: true}), "ATTENTION")
 			line := lines[len(lines)-1]
 			m := names.FindStringSubmatch(line)
 			if m == nil || (m[1] == "old releases") != mixed {
