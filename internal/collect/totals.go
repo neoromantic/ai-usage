@@ -2,6 +2,7 @@ package collect
 
 import (
 	"cmp"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -57,7 +58,8 @@ type usage struct {
 	// Burn is the hours weighed, each part by the weights of the provider
 	// and account that spent it.
 	Burn map[int64]int64
-	// Active is when each of the sessions was last active.
+	// Active is when each of the sessions was last active, within its
+	// hours.
 	Active []time.Time
 	// Nulls counts the sessions' replies that end without a final token
 	// count, and OverTracked the Claude sessions whose own count has over
@@ -82,7 +84,13 @@ func (u *usage) add(s *state.Session, hours meter.Hours, burn map[int64]int64, l
 		}
 		u.Burn[h] += n
 	}
-	u.Active = append(u.Active, s.Updated)
+	// Active when it last grew, though no later than its newest hour: a
+	// harness that dates a session by when it was read leaves it there.
+	at, newest := last, slices.Max(slices.Collect(maps.Keys(hours)))
+	if end := time.Unix((newest+1)*3600, 0); at.IsZero() || !at.Before(end) {
+		at = time.Unix(newest*3600+1800, 0)
+	}
+	u.Active = append(u.Active, at.UTC())
 	u.Nulls += s.Nulls
 	if overTracked(s) {
 		u.OverTracked++

@@ -151,3 +151,19 @@ func TestCoverageAfterMigration(t *testing.T) {
 		t.Errorf("migrated totals = %+v", a.Tokens)
 	}
 }
+
+// A session is active when it last grew, no later than its newest hour: a
+// harness that dates a session by when it was read does not make it active
+// in a period it spent nothing in.
+func TestSessionIsActiveWithinItsHours(t *testing.T) {
+	spent := logs.HourOf(t0.Add(-72 * time.Hour))
+	st := &state.State{LastRunAt: t0, Accounts: map[string]*state.Account{}, Sessions: map[string]*state.Session{
+		state.Key("grok", "g1"): {Provider: "grok", Project: "/work/app", Updated: t0,
+			By:   map[string]snapshot.Tokens{"ann@acme.dev": {Input: 100}},
+			Last: map[string]time.Time{"ann@acme.dev": t0},
+			U:    meter.Hours{spent: {Input: 100}}},
+	}}
+	if a := totalsFor(t, st, "grok", "ann@acme.dev"); len(a.Active) != 1 || !a.Active[0].Equal(logs.HourStart(spent).Add(30*time.Minute)) {
+		t.Fatalf("active = %v, want in the hour it spent in", a.Active)
+	}
+}
