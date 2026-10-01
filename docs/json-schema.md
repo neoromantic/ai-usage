@@ -60,7 +60,7 @@ A `health` entry:
 | `item` | string | `collection`, `relay`, or `update` |
 | `status` | string | the first status in the table below that applies to the item |
 | `state` | string | how the item is: `ok`; `warn`, it needs a look; `error`, it fails; `off`, it is not in use or has not run; `info`, news. The console's header colors the item's dot by it: green, yellow, red, gray, and blue |
-| `at` | time | for `collection`, `last_success_at`, or with `failed` `last_error_at`, and `null` with `never`; for `relay`, `relay.last_push_at`, and `null` with `none`; for `update`, `update.checked_at` |
+| `at` | time | for `collection`, `last_success_at`, or with `failed` `last_error_at`, and `null` with `never`; for `relay`, the older of `relay.last_push_at` and `relay.last_pull_at`, and `null` with `none`; for `update`, `update.checked_at` |
 | `release` | string | with `staged`, `update.staged`; with `available`, `update.latest`; `null` with any other status |
 
 | `item` | `status` | `state` | When |
@@ -72,6 +72,7 @@ A `health` entry:
 | `relay` | `none` | `off` | `relay.url` is `null` |
 | `relay` | `failing` | `error` | `relay.last_error` is set |
 | `relay` | `pending` | `warn` | `relay.pending` is `true`, or `relay.last_push_at` is `null` |
+| `relay` | `stale` | `warn` | the device has a team, and `relay.last_pull_at` is `null` or over an hour old, three of the reads scheduled runs make |
 | `relay` | `ok` | `ok` | otherwise |
 | `update` | `dev` | `off` | `version` is not a release such as `v1.2.3`, so the collector does not update itself |
 | `update` | `staged` | `info` | `update.staged` is set |
@@ -82,18 +83,22 @@ A `health` entry:
 
 ### attention
 
-Each entry is one thing that needs attention, from the team's view of each subscription and device. The report lists them most urgent first, by `kind` in the order of this table; within a kind, the earliest `at` first, which for an `over` without `at` is its `resets_at`, the lowest forecast first for `under`, and by device for `error`. The fields that apply depend on the kind; the others are absent.
+Each entry is one thing that needs attention, from the team's view of each subscription and device. The report lists them most urgent first, by `kind` in the order of this table; within a kind, the earliest `at` first, which for an `over` without `at` is its `resets_at`, the highest `percent` first for `tight` and `outside`, the lowest forecast first for `under`, and by device for `error`. The fields that apply depend on the kind; the others are absent. A reader should skip a kind it does not know.
 
 | `kind` | When | Fields |
 | --- | --- | --- |
 | `out` | a window of a subscription is at 100% | `provider`, `account`, `name`, `window`; `at` is when it resets |
-| `over` | a window of a subscription will run out by its reset, at its pace so far | `provider`, `account`, `name`, `window`; `at` is when it runs out, absent when it runs out at its reset, `resets_at` when it resets, `percent` its forecast |
-| `error` | a device's collector or one of its tools fails; on this device, also a run a bug stopped before it could report, its relay, or its update check; on an `old` device that is not silent, its update check | `devices` names the device; `message` is the error, which starts with `relay` or `update` when it is theirs |
-| `silent` | a device has not reported for a day, with or without an error in its last report | `devices` names the device; `at` is when it last reported; `message` is the error it last reported, if it had one |
-| `old` | devices run an older release than the team's newest | `devices` lists every one of them; `message` is the newest release; `at` is the earliest `behind_since` among those that have reported for 7 hours since it and are not `silent`, absent when none has |
+| `over` | a window of a subscription will run out by its reset, at its pace | `provider`, `account`, `name`, `window`; `at` is when it runs out, absent when it runs out at its reset, `resets_at` when it resets, `percent` its forecast |
+| `tight` | a window of a subscription logged in on this device will end its reset in the `tight` state | `provider`, `account`, `name`, `window`; `resets_at` is when it resets, `percent` its forecast |
+| `outside` | a subscription has `outside` set: a window filled while no team device spent on it | `provider`, `account`, `name`; `at` is when it began to rise, `percent` how many points it rose |
+| `error` | a device's collector or one of its tools fails; on this device, also a run a bug stopped before it could report, its relay, or its update check; on an `old` device that is not silent, its update check. A quota that could not be read is not an error | `devices` names the device; `message` is the error, which starts with `relay` or `update` when it is theirs |
+| `no_reading` | a subscription with weighted tokens in the last 7 days has `no_reading` set | `provider`, `account`, `name`; `message` is the reason, with what to do |
+| `silent` | a device has not reported for a day, with or without an error in its last report, and no other device took its place | `devices` names the device; `at` is when it last reported; `message` is the error it last reported, if it had one |
+| `duplicate` | a device has `replaced_by` set: it was reinstalled, and its old record stays on the relay | `devices` names the device; `device_id` is its id, for `ai-usage team forget-device`, which takes its first 8 hex digits too; `message` is the label of the device that replaced it; `at` is when it last reported |
+| `old` | devices run an older release than the team's newest | `devices` lists every one of them; `message` is the newest release; `at` is the earliest `behind_since` among those that have reported for 7 hours since it and are not `silent`, absent when none has. Devices whose release has `limitations` have an entry of their own, first, with those in `limitations`: they need a reinstall. A `duplicate` device is not counted |
 | `under` | past half of a subscription's main window, its forecast is under 50% | `provider`, `account`, `name`; `resets_at` is when it resets, `percent` its forecast |
 
-A window is one with `limits`: the account's main one, or one that limits it more. An `out`, `over`, or `under` entry has `reading_age_seconds` when its window's reading is stale.
+A window is one with `limits`: the account's main one, or one that limits it more. An `over`, `tight`, or `under` entry has `reading_age_seconds` when its window's reading is stale, and an `out` entry when its reading is over 6 hours old, as the provider can reset a full window early.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -103,11 +108,13 @@ A window is one with `limits`: the account's main one, or one that limits it mor
 | `name` | string | the account's short name |
 | `window` | string | the window's name, when it is not the account's main one |
 | `devices` | list of strings | the names of the devices it is about |
+| `device_id` | string | a `duplicate` device's id |
 | `at` | time | as the table says for each kind |
 | `resets_at` | time | when the window resets |
-| `percent` | number | the window's forecast at its reset |
+| `percent` | number | the window's forecast at its reset, or the points an `outside` window rose |
 | `reading_age_seconds` | number | how old the reading is, when it is stale |
-| `message` | string | an error's text, the error a silent device last reported, or the newest release |
+| `message` | string | an error's text, the error a silent device last reported, why a subscription has no reading, the device that replaced a duplicate, or the newest release |
+| `limitations` | list of strings | what the releases of the devices of an `old` entry cannot do, as a team device's `limitations` says |
 
 ### providers
 
@@ -174,17 +181,19 @@ A window:
 | `reset` | bool | the window has reset since it was read, so how full it is now is not known; its `state` is `unknown` and `forecast` is `null` |
 | `unread` | bool | a Claude 5-hour or weekly window the newest reading does not cover, because a request refused for a full window reads that window alone. Its `percent` is 0, `resets_at` and `forecast` are `null`, and its `state` is `unknown`. Absent when `false` |
 | `state` | string | see [states](#states) |
-| `forecast` | object | how full the window will be at its reset if it is used from now on at its average pace so far; see below. `null` when the length or the reset time is unknown, when it has reset, and in its first tenth unless it is over already |
+| `forecast` | object | how full the window will be at its reset if it is used from now on at its pace; see below. `null` when the length or the reset time is unknown, when it has reset, and in its first tenth unless it is over already |
 
 `forecast`:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `percent` | number | `percent` divided by `elapsed`, as a whole percent up to `999`. Over 100 means demand is larger than the quota: the window runs out before it resets |
+| `percent` | number | the window's `percent` plus `pace` times the hours from the reading to the reset, as a whole percent up to `999`. With the `window` pace from the window's start, that is `percent` divided by `elapsed`. Over 100 means demand is larger than the quota: the window runs out before it resets |
 | `elapsed` | number | the share of the window that had passed at the reading, from 0 to 1. The window began at `resets_at` minus its length, which is `minutes`, else the length its name starts with, such as `5h` or `7d` |
-| `runs_out_at` | time | when the window reaches 100% at that pace, when the window's `percent` divided by `elapsed` is over 100 before it is rounded and the window is not full yet; `null` otherwise. A forecast of exactly 100 runs out at the reset, and has none |
+| `runs_out_at` | time | when the window reaches 100% at that pace, when the forecast is over 100 before it is rounded and the window is not full yet; `null` otherwise. A forecast of exactly 100 runs out at the reset, and has none |
+| `basis` | string | the pace taken: `window`, the average since the window began, or since its last reading at 0% after that; or `recent`, the least-squares slope of its readings of the last 24 hours, when they span an hour or more and it is faster. A report from an earlier release has none: read it as `window` |
+| `pace` | number | that pace, in percent of the window an hour |
 
-The pace is the average since the window began, nights and weekends included, so one busy hour does not raise an alarm, and it follows a change of pace slowly.
+The readings are this device's samples and the team's reads of the last 2 days, of the same window and reset, and the reading itself; a drop of more than 2 points between two starts them again. The average includes nights and weekends, so one busy hour does not raise an alarm, and the recent pace catches a window that fills faster.
 
 #### States
 
@@ -325,6 +334,7 @@ A cell:
 - `update_error` and `behind_since` on a team device, so that the team can see why a device does not update itself, and for how long it has not. An `error` entry in `attention` for an `old` device whose update check fails, and `at` on the `old` entry. No field changed meaning, so the version stays 4.
 - `collector.health`, how the collection, the relay, and the update are doing, and `limits` on a window, which says the window limits the account. A report from an earlier release has neither: read a missing `health` as `[]` and a missing `limits` as `false`, and then only the main windows as limiting. `ai-usage report --from` fills both in for such a report, as this release makes them. No field changed meaning, so the version stays 4.
 - `not_updating` on a team device, so that each device the `old` entry in `attention` counts is marked. A report from an earlier release does not have it; `ai-usage report --from` fills it in from `old`, `silent`, `collected_at`, and `behind_since`. No field changed meaning, so the version stays 4.
+- `basis` and `pace` on a forecast, which may now follow the last day's readings, the `tight`, `outside`, `no_reading`, and `duplicate` kinds in `attention`, with `device_id` and `limitations` on an entry, `reading_age_seconds` on an `out` entry with an old reading, and the `stale` relay status, whose `at`, like `ok`'s, is now the older of the last push and pull. A reader that skips kinds and statuses it does not know reads the rest as before, so the version stays 4.
 - `folders` on a project. A project is now a git repository, with its subfolders and linked worktrees, where each working folder was one; `path` is the project's folder, and `folders` says how many working folders count under it. A report from an earlier release has a project for each working folder and no `folders`: read a missing one as `1`, as `ai-usage report --from` fills it in. Every field keeps its type, and a project's numbers still sum its sessions, so the version stays 4.
 
 ## Example
