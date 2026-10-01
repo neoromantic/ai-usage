@@ -298,11 +298,11 @@ func (d *device) fail(provider, msg string) {
 	d.st.Sources[provider] = src
 }
 
-// mixes is how a harness's tokens split by kind, in parts of a session's
-// hour. Claude Code sends little fresh input, reads about 25 times its output
-// back from cache, and writes 1.5 times its output to cache, three fifths of
-// it kept an hour. Codex reads about 30 times its fresh input from cache, and
-// writes little. Grok reads less from cache. Hermes bills to Codex here.
+// mixes is how each harness's tokens split by kind, in proportion. Claude
+// Code sends little fresh input, reads about 25 times its output back from
+// cache, and writes 1.5 times its output to cache, three fifths of it kept an
+// hour. Codex reads about 30 times its fresh input from cache and counts no
+// cache writes. Grok reads less from cache. Hermes bills to Codex here.
 var mixes = map[string]meter.Use{
 	"claude": {Input: 3, Output: 120, CacheRead: 3000, CacheWrite: 180, CacheWrite1h: 108},
 	"codex":  {Input: 30, Output: 10, CacheRead: 900},
