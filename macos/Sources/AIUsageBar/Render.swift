@@ -32,8 +32,8 @@ enum Renderer {
                 states.append(("limits-expanded", { $0.tab = .limits }, { $0.expanded = key }))
             }
             if report.solo {
-                if let p = report.providers.first(where: { $0.accounts.contains { $0.usage.quarter > 0 } }),
-                   let a = p.accounts.first(where: { $0.usage.quarter > 0 }) {
+                if let p = report.providers.first(where: { $0.accounts.contains { $0.shown.value.quarter > 0 } }),
+                   let a = p.accounts.first(where: { $0.shown.value.quarter > 0 }) {
                     states.append(("usage-expanded", { $0.tab = .usage }, { $0.expanded = "solo:\(p.provider)/\(a.label)" }))
                 }
             } else {

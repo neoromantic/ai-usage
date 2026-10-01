@@ -19,7 +19,7 @@ struct ProjectsView: View {
     var body: some View {
         let all = report.projects
         let projects = store.showAllProjects ? all : Array(all.prefix(Self.shown))
-        let top = all.map { $0.usage[store.period] }.max() ?? 0
+        let top = all.map { $0.shown.value[store.period] }.max() ?? 0
         VStack(alignment: .leading, spacing: 0) {
             if projects.isEmpty {
                 Text("No projects on this Mac yet.")
@@ -89,9 +89,9 @@ private struct ProjectRow: View {
                     Text(parts.name).lineLimit(1).truncationMode(.middle)
                 }
                 .frame(width: Metrics.name, alignment: .leading)
-                TokenBar(value: p.usage[period], top: top)
+                TokenBar(value: p.shown.value[period], top: top)
                     .padding(.horizontal, Metrics.gap)
-                TokensValue(tokens: p.usage[period])
+                TokensValue(tokens: p.shown.value[period])
                 // An age, not a countdown as Limits has in this column.
                 Text(p.lastActiveAt.map(activeAgo) ?? Format.none)
                     .font(.callout)
@@ -108,8 +108,11 @@ private struct ProjectRow: View {
                 DetailLine("Folder", Format.tilde(p.path, home: home) + (p.folders > 1 ? " · \(p.folders) folders" : ""),
                            help: p.folders > 1 ? "Counts \(p.folders) folders: the repository, its subfolders and worktrees" : Format.tilde(p.path, home: home))
                 let via = (p.providers ?? []).map(Format.provider).joined(separator: ", ")
-                DetailLine("Sessions", "\(p.sessions)" + (via.isEmpty ? "" : " · \(via)"))
-                PeriodsLine(usage: p.usage)
+                // The sessions active in the period, where the report counts
+                // them, else those with tokens in 90 days.
+                let sessions = p.activeSessions.map { "\($0[period]) in \(period.title.lowercased())" } ?? "\(p.sessions)"
+                DetailLine("Sessions", sessions + (via.isEmpty ? "" : " · \(via)"), help: "\(p.sessions) with tokens in 90 days")
+                PeriodsLine(tokens: p.shown)
             }
         }
     }
@@ -125,7 +128,7 @@ private struct ProjectRow: View {
         let p = project
         let parts = Format.pathParts(p.path, home: home)
         var s = parts.name + (parts.folder.isEmpty ? "" : " in \(parts.folder)")
-        s += ", \(Format.spokenMillions(p.usage[store.period])) tokens in \(store.period.title.lowercased())"
+        s += ", \(Format.spokenMillions(p.shown.value[store.period])) \(p.shown.label) in \(store.period.title.lowercased())"
         if let t = p.lastActiveAt { s += ", active \(Format.ago(t, now: now))" }
         return s
     }

@@ -65,16 +65,26 @@ struct UsageTotal: View {
 
     var body: some View {
         let p = store.period
+        let label = report.tokenLabel
         if report.solo {
-            TotalRow(title: "Total", tokens: SoloUsage.accounts(report).reduce(0) { $0 + $1.account.usage[p] })
+            TotalRow(title: "Total", tokens: SoloUsage.accounts(report).reduce(0) { $0 + $1.account.shown.value[p] }, label: label)
         } else if let f = store.deviceFilter {
             let all = report.team.matrix.rows
             TotalRow(title: "Showing \(all.filter { f.devices.contains($0.device) }.count) of \(all.count)", tokens: nil)
         } else if store.usageMode == .subscriptions {
-            TotalRow(title: "Total", tokens: report.team.matrix.columns.reduce(0) { $0 + $1.usage[p] })
+            TotalRow(title: "Total", tokens: report.team.matrix.columns.reduce(0) { $0 + $1.shown.value[p] }, label: label,
+                     estimated: estimated)
         } else {
-            TotalRow(title: "Total", tokens: report.team.matrix.rows.reduce(0) { $0 + $1.usage[p] })
+            TotalRow(title: "Total", tokens: report.team.matrix.rows.reduce(0) { $0 + $1.shown.value[p] }, label: label,
+                     estimated: estimated)
         }
+    }
+
+    /// Why the team's weighted tokens are estimated, when they are.
+    private var estimated: String? {
+        let t = report.team
+        guard t.estimated else { return nil }
+        return t.estimatedReason ?? "Some devices' weighted tokens are estimated from their input and output"
     }
 }
 
@@ -140,7 +150,7 @@ private struct DeviceList: View {
         let p = store.period
         let all = report.team.matrix.rows
         let rows = store.deviceFilter.map { f in all.filter { f.devices.contains($0.device) } } ?? all
-        let top = all.map { $0.usage[p] }.max() ?? 0
+        let top = all.map { $0.shown.value[p] }.max() ?? 0
         VStack(alignment: .leading, spacing: 0) {
             ForEach(rows, id: \.deviceId) { r in
                 DeviceRow(row: r, device: report.team.devices.first { $0.device == r.deviceId }, top: top, report: report, now: now)
@@ -169,9 +179,10 @@ private struct DeviceRow: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .frame(width: Metrics.name, alignment: .leading)
-                    TokenBar(value: row.usage[p], top: top)
+                    TokenBar(value: row.shown.value[p], top: top)
                         .padding(.horizontal, Metrics.gap)
-                    TokensValue(tokens: row.usage[p])
+                    TokensValue(tokens: row.shown.value[p], estimated: row.burnEstimated)
+                        .help(row.burnEstimated ? report.team.estimatedReason ?? "Estimated from input and output" : "")
                 }
                 .frame(height: Metrics.row)
                 if let note {
@@ -197,9 +208,13 @@ private struct DeviceRow: View {
     /// What is wrong with the device, in a line under it.
     private var note: (text: String, color: Color, help: String)? {
         guard let d = device else { return nil }
-        let all = [d.error, d.lastError.map { "Last error: \($0)" }, d.updateError.map { "Update: \($0)" }].compactMap { $0 }
+        let all = [d.error, d.lastError.map { "Last error\(lastErrorAge(d)): \($0)" }, d.updateError.map { "Update: \($0)" }].compactMap { $0 }
         switch status {
         case .silent:
+            // A device another took the place of is that device now.
+            if let by = d.replacedBy {
+                return ("Reinstalled as \(by)", .secondary, ([AttentionText.forgetCommand(d.device)] + all).joined(separator: "\n"))
+            }
             let ago = d.collectedAt.map { Format.duration(now.timeIntervalSince($0)) }
             return (ago.map { "No report for \($0)" } ?? "Never reported", Palette.text("tight"), all.joined(separator: "\n"))
         case .error:
@@ -212,6 +227,13 @@ private struct DeviceRow: View {
             guard let e = d.updateError else { return nil }
             return ("Update: \(e)", .secondary, e)
         }
+    }
+
+    /// How long ago the last error was, where the report says when: of
+    /// this Mac, from its collector.
+    private func lastErrorAge(_ d: TeamDevice) -> String {
+        guard d.thisDevice, let at = report.collector.lastErrorAt else { return "" }
+        return " " + Format.ago(at, now: now)
     }
 
     /// When it last reported, on which release, its tools, which
@@ -233,7 +255,7 @@ private struct DeviceRow: View {
             if let used = accounts {
                 DetailLine("Accounts", used.text, help: used.help)
             }
-            PeriodsLine(usage: d.usage)
+            PeriodsLine(tokens: d.shown)
         }
     }
 
@@ -273,20 +295,22 @@ private struct DeviceRow: View {
         let p = store.period
         let cols = report.team.matrix.columns
         let items = row.cells.enumerated().compactMap { i, c -> (String, Int)? in
-            guard i < cols.count, c.usage[p] > 0 else { return nil }
-            return (columnName(cols[i]), c.usage[p])
+            guard i < cols.count, c.shown.value[p] > 0 else { return nil }
+            return (columnName(cols[i]), c.shown.value[p])
         }.sorted { $0.1 > $1.1 }.map { "\($0.0) \(Format.tokensM($0.1))" }
         guard !items.isEmpty else { return nil }
-        let share = row.share[p].map { "\(p.title): \(Format.share($0))% of the team" } ?? "\(p.title):"
+        let shared = row.shownShare
+        let share = "\(p.title), \(shared.label):" + (shared.value[p].map { " \(Format.share($0))% of the team" } ?? "")
         return (items.prefix(2).joined(separator: ", ") + (items.count > 2 ? " +\(items.count - 2)" : ""),
                 ([share] + items).joined(separator: "\n"))
     }
 
     private var spoken: String {
         let p = store.period
-        let share = row.share[p].map { ", \(Format.share($0))% of the team" } ?? ""
+        let share = row.shownShare.value[p].map { ", \(Format.share($0))% of the team" } ?? ""
+        let tokens = row.shown
         return [row.device, status.spoken].compactMap { $0 }.joined(separator: ", ")
-            + ", \(Format.spokenMillions(row.usage[p])) tokens in \(p.title.lowercased())" + share
+            + ", \(Format.spokenMillions(tokens.value[p])) \(tokens.label) in \(p.title.lowercased())" + share
             + (note.map { ", \($0.text)" } ?? "")
     }
 }
@@ -307,7 +331,7 @@ private struct ColumnList: View {
     var body: some View {
         let p = store.period
         let m = report.team.matrix
-        let top = m.columns.map { $0.usage[p] }.max() ?? 0
+        let top = m.columns.map { $0.shown.value[p] }.max() ?? 0
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(m.columns.enumerated()), id: \.offset) { i, c in
                 ColumnRow(index: i, column: c, matrix: m, top: top)
@@ -341,9 +365,9 @@ private struct ColumnRow: View {
                     .truncationMode(.middle)
                     .frame(width: Metrics.name, alignment: .leading)
                     .help(c.label ?? c.name)
-                TokenBar(value: c.usage[p], top: top)
+                TokenBar(value: c.shown.value[p], top: top)
                     .padding(.horizontal, Metrics.gap)
-                TokensValue(tokens: c.usage[p])
+                TokensValue(tokens: c.shown.value[p])
             }
             .frame(height: Metrics.row)
         } details: {
@@ -366,9 +390,9 @@ private struct ColumnRow: View {
     private var split: [(device: String, value: String)] {
         let p = store.period
         return matrix.rows.compactMap { r in
-            guard index < r.cells.count, r.cells[index].usage[p] > 0 else { return nil }
+            guard index < r.cells.count, r.cells[index].shown.value[p] > 0 else { return nil }
             let cell = r.cells[index]
-            return (r.device, "\(Format.tokensM(cell.usage[p])) · \(Format.share(cell.share[p]))%")
+            return (r.device, "\(Format.tokensM(cell.shown.value[p])) · \(Format.share(cell.shownShare.value[p]))%")
         }
     }
 
@@ -376,7 +400,7 @@ private struct ColumnRow: View {
         let p = store.period
         let c = column
         let state = !c.noQuota && Palette.loud(c.state) ? ", \(Palette.label(c.state).lowercased())" : ""
-        return columnName(c) + state + ", \(Format.spokenMillions(c.usage[p])) tokens in \(p.title.lowercased())"
+        return columnName(c) + state + ", \(Format.spokenMillions(c.shown.value[p])) \(c.shown.label) in \(p.title.lowercased())"
     }
 }
 
@@ -391,12 +415,12 @@ struct SoloUsage: View {
 
     /// The accounts with tokens in 90 days, by provider.
     static func accounts(_ r: Report) -> [(id: String, provider: String, account: Account)] {
-        r.providers.flatMap { p in p.accounts.filter { $0.usage.quarter > 0 }.map { ("\(p.provider)/\($0.label)", p.provider, $0) } }
+        r.providers.flatMap { p in p.accounts.filter { $0.shown.value.quarter > 0 }.map { ("\(p.provider)/\($0.label)", p.provider, $0) } }
     }
 
     var body: some View {
         let rows = Self.accounts(report)
-        let top = rows.map { Format.sparkline($0.account.days).max() ?? 0 }.max() ?? 0
+        let top = rows.map { Format.sparkline($0.account.shownDays.value).max() ?? 0 }.max() ?? 0
         VStack(alignment: .leading, spacing: 0) {
             if rows.isEmpty {
                 Text("No tokens on this Mac yet.")
@@ -432,14 +456,15 @@ private struct SoloRow: View {
                     .frame(width: Metrics.name, alignment: .leading)
                     .help(a.label)
                 ZStack {
-                    if !a.days.isEmpty {
-                        Sparkline(points: Format.sparkline(a.days), top: top)
-                            .help("Tokens a day, the last 14 days")
+                    let days = a.shownDays
+                    if !days.value.isEmpty {
+                        Sparkline(points: Format.sparkline(days.value), top: top)
+                            .help(days.label.prefix(1).uppercased() + days.label.dropFirst() + " a day, the last 14 days")
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, Metrics.gap)
-                TokensValue(tokens: a.usage[p])
+                TokensValue(tokens: a.shown.value[p])
             }
             .frame(height: Metrics.row)
         } details: {
@@ -449,13 +474,14 @@ private struct SoloRow: View {
                 ForEach(Array((report.teamAccount(provider: provider, label: a.label)?.linkedUsage ?? []).enumerated()), id: \.offset) { _, l in
                     DetailLine(Format.provider(l.provider), "\(l.sessions) sessions through it")
                 }
-                PeriodsLine(usage: a.usage)
+                PeriodsLine(tokens: a.shown)
             }
         }
     }
 
     private var spoken: String {
         let p = store.period
-        return "\(Format.provider(provider)) \(account.name), \(Format.spokenMillions(account.usage[p])) tokens in \(p.title.lowercased())"
+        let tokens = account.shown
+        return "\(Format.provider(provider)) \(account.name), \(Format.spokenMillions(tokens.value[p])) \(tokens.label) in \(p.title.lowercased())"
     }
 }

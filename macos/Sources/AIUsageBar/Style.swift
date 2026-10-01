@@ -346,14 +346,26 @@ struct DisclosureRow<Row: View, Details: View>: View {
 }
 
 /// The line over Usage and Projects, which stays put as the list under it
-/// scrolls: what they show on the left, the period on the right.
+/// scrolls: what they show on the left, the period on the right, and before
+/// it, dim, what the tokens are, where that fits.
 struct TopLine<Leading: View>: View {
+    @EnvironmentObject private var store: Store
     @ViewBuilder let leading: () -> Leading
 
     var body: some View {
         HStack(spacing: 8) {
             leading()
             Spacer(minLength: 8)
+            if let r = store.report {
+                ViewThatFits(in: .horizontal) {
+                    Text(r.tokenLabel)
+                        .font(.callout)
+                        .foregroundStyle(.tertiary)
+                        .fixedSize()
+                        .help(r.tokenHelp)
+                    Color.clear.frame(width: 0, height: 0)
+                }
+            }
             PeriodMenu()
         }
         .frame(height: 26)
@@ -397,7 +409,7 @@ struct PeriodMenu: View {
         OptionMenu(title: "Period", options: Period.allCases, selection: $store.period, name: \.title) {
             Text(store.period.title)
         }
-        .help("Input + output tokens, cache excluded")
+        .help(store.report?.tokenHelp ?? "")
     }
 }
 
@@ -413,10 +425,15 @@ struct TopTitle: View {
 }
 
 /// The total under a list of tokens, after a rule, pinned under the list.
+/// An estimated total has "~" before it, and the report's reason in a dim
+/// line under it.
 struct TotalRow: View {
     let title: String
     /// Nil for no total, as when the list is filtered.
     let tokens: Int?
+    /// What the tokens are, for VoiceOver.
+    var label = "tokens"
+    var estimated: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -425,7 +442,7 @@ struct TotalRow: View {
                 Text(title).foregroundStyle(.secondary)
                 Spacer()
                 if let tokens {
-                    Text(Format.tokensM(tokens))
+                    Text((estimated != nil && tokens > 0 ? "~" : "") + Format.tokensM(tokens))
                         .font(.callout.weight(.semibold))
                         .monospacedDigit()
                         .frame(width: Metrics.value, alignment: .trailing)
@@ -433,18 +450,32 @@ struct TotalRow: View {
             }
             .frame(height: Metrics.row)
             .padding(.horizontal, Metrics.inset)
+            if let estimated {
+                Text("~ " + estimated)
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(estimated)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Metrics.inset)
+                    .padding(.bottom, 6)
+            }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(tokens.map { "\(title): \(Format.spokenMillions($0)) tokens" } ?? title)
+        .accessibilityLabel((tokens.map { "\(title): \(Format.spokenMillions($0)) \(label)" } ?? title)
+            + (estimated.map { ", estimated: \($0)" } ?? ""))
     }
 }
 
 /// Tokens in whole millions as a row ends with them; the none mark is dim.
+/// An estimate has "~" before it.
 struct TokensValue: View {
     let tokens: Int
+    var estimated = false
 
     var body: some View {
-        Text(Format.tokensM(tokens))
+        Text((estimated && tokens > 0 ? "~" : "") + Format.tokensM(tokens))
             .font(.callout)
             .monospacedDigit()
             .foregroundStyle(tokens > 0 ? .primary : .tertiary)
@@ -497,9 +528,12 @@ struct DetailLine: View {
 
 /// Each period's tokens as a line of a detail grid: the numbers, with the
 /// periods under them, small, and the period Usage shows in full color.
+/// The tooltip says what the tokens are.
 struct PeriodsLine: View {
     @EnvironmentObject private var store: Store
-    let usage: Usage
+    let tokens: Measured<Usage>
+
+    private var usage: Usage { tokens.value }
 
     var body: some View {
         GridRow(alignment: .firstTextBaseline) {
@@ -518,8 +552,9 @@ struct PeriodsLine: View {
                     .frame(width: 64, alignment: .leading)
                 }
             }
+            .help(tokens.label.prefix(1).uppercased() + tokens.label.dropFirst())
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Period.allCases.map { "\($0.title) \(Format.spokenMillions(usage[$0]))" }.joined(separator: ", "))
+            .accessibilityLabel(tokens.label + ": " + Period.allCases.map { "\($0.title) \(Format.spokenMillions(usage[$0]))" }.joined(separator: ", "))
         }
     }
 }

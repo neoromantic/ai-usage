@@ -57,7 +57,8 @@ struct LimitsView: View {
 }
 
 /// The subscriptions of a provider with no window known now that limits
-/// them, in a line: "Not read: ann, bo". The tooltip says why of each.
+/// them, in a line: "Not read: ann, bo". The tooltip says why of each; the
+/// line says it too, as the report has it, when it is the only one.
 private struct NotRead: View {
     let provider: String
     let accounts: [TeamAccount]
@@ -65,21 +66,27 @@ private struct NotRead: View {
     let now: Date
 
     var body: some View {
+        let why = accounts.count == 1 ? accounts[0].noReading : nil
         (Text("Not read: ").foregroundColor(Color(nsColor: .tertiaryLabelColor))
-            + Text(accounts.map(\.name).joined(separator: ", ")).foregroundColor(.secondary))
+            + Text(accounts.map(\.name).joined(separator: ", ")).foregroundColor(.secondary)
+            + Text(why.map { " · \($0)" } ?? "").foregroundColor(Color(nsColor: .tertiaryLabelColor)))
             .font(.subheadline)
             .lineLimit(1)
             .truncationMode(.tail)
             .frame(height: Metrics.row - 6)
             .padding(.leading, Metrics.slot)
             .help(accounts.map(details).joined(separator: "\n"))
-            .accessibilityLabel("\(Format.provider(provider)), not read: " + accounts.map(\.name).joined(separator: ", "))
+            .accessibilityLabel("\(Format.provider(provider)), not read: " + accounts.map { a in a.name + (a.noReading.map { ", \($0)" } ?? "") }
+                .joined(separator: "; "))
     }
 
     /// "bo, Max: No reading; used on bo-air, 15h ago".
     private func details(_ a: TeamAccount) -> String {
         let why: String
-        if let q = a.quota, let w = q.main {
+        if let reason = a.noReading {
+            // The report knows why, and what to do.
+            why = reason
+        } else if let q = a.quota, let w = q.main {
             let read = [q.device.map { "on \($0)" }, w.observedAt.map { Format.ago($0, now: now) }].compactMap { $0 }.joined(separator: " ")
             why = (w.reset ? "Reset since the last reading" : w.unread == true ? "Not in the last reading" : "No reading")
                 + (read.isEmpty ? "" : ", read \(read)")
@@ -219,7 +226,7 @@ private struct LimitRow: View {
         if let m = line.unreadMain {
             return secondary(short(m) + (m.reset ? " reset since the last reading" : " not in the last reading"))
         }
-        guard let w = line.others.first else { return nil }
+        guard let w = line.others.first else { return outside }
         var text: Text
         if w.state == "out" {
             text = secondary(short(w) + " ") + Text("out").foregroundColor(Palette.text("out"))
@@ -234,6 +241,18 @@ private struct LimitRow: View {
             text = text + secondary(" · +\(line.others.count - 1)")
         }
         return text
+    }
+
+    /// A window that filled while the team spent next to nothing on it,
+    /// as the report's ATTENTION says it: "Outside · +12 points in 9h, no
+    /// team device spent".
+    private var outside: Text? {
+        guard let words = outsideWords else { return nil }
+        return Text("Outside").foregroundColor(Palette.text("tight")) + Text(" · " + words).foregroundColor(.secondary)
+    }
+
+    private var outsideWords: String? {
+        account.outside.map { "+\(Int($0.points.rounded())) points in \(Format.age($0.since, now: now)), no team device spent" }
     }
 
     // MARK: Details
@@ -305,6 +324,9 @@ private struct LimitRow: View {
             if w.state != "out", let f = w.forecast, f.percent > w.percent {
                 s += ", ~\(max(100 - Int(f.percent), 0))% left at its reset"
             }
+            if w.state != "out", w.forecast?.basis == "recent" {
+                s += ", at the last day's pace"
+            }
             if let at = w.resetsAt {
                 s += (w.state == "out" ? ", back " : ", resets ") + "\(clock(at)), in \(Format.duration(at.timeIntervalSince(now)))"
             }
@@ -338,12 +360,12 @@ private struct LimitRow: View {
     /// it was last used.
     private var perDevice: (text: String, help: String)? {
         let p = store.period
-        let used = account.perDevice.filter { $0.usage[p] > 0 }
+        let used = account.perDevice.filter { $0.shown.value[p] > 0 }
         guard !used.isEmpty else { return nil }
-        let items = used.map { "\($0.device) \(Format.tokensM($0.usage[p]))" }
+        let items = used.map { "\($0.device) \(Format.tokensM($0.shown.value[p]))" }
         let text = items.prefix(2).joined(separator: ", ") + (items.count > 2 ? " +\(items.count - 2)" : "")
         let last = account.lastActiveAt.map { "Last active \(Format.ago($0, now: now))" }
-        return (text, (["\(p.title):"] + items + [last].compactMap { $0 }).joined(separator: "\n"))
+        return (text, (["\(p.title), \(used[0].shown.label):"] + items + [last].compactMap { $0 }).joined(separator: "\n"))
     }
 
     /// "312 sessions through it on 9 devices".
@@ -379,6 +401,9 @@ private struct LimitRow: View {
         s += parts.joined(separator: ", ")
         if let m = line.unreadMain {
             s += "; \(short(m)) window not read"
+        }
+        if let o = outsideWords {
+            s += "; outside the team: \(o)"
         }
         for o in line.others {
             s += "; \(short(o)) window " + (o.state == "out"
