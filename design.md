@@ -29,7 +29,7 @@ The page at 160 columns is the example at the top of [README.md](README.md), whi
 
 ## Header
 
-One line: `ai-usage`, this device, the team, and on the right the collector's health: collection, relay, and update. Each item is a colored dot and a few words. A failure turns its dot red, and the error itself goes to ATTENTION.
+One line: `ai-usage`, this device, the team, and on the right the collector's health: collection, relay, and update. Each item is a colored dot and a few words. A failure turns its dot red, and the error itself goes to ATTENTION. The relay's age is the older of the last push and the last read of the team, and its dot turns yellow when the team was last read over an hour ago, three of the scheduled reads.
 
 ## ATTENTION
 
@@ -37,12 +37,18 @@ Shown only when something is wrong. At most 6 lines, then `+N more`; the interac
 
 | Badge | When | Says |
 | --- | --- | --- |
-| `OUT` | a window is at 100% | when it comes back |
-| `OVER` | a window will run out by its reset, at its pace so far | when it runs out, and how long before the reset |
-| `ERROR` | a device's collector or one of its harnesses fails, or the release check of a device on an older release | the device and the error |
+| `OUT` | a window is at 100% | when it comes back, and how old the reading is when it is over 6 hours old, as the provider can reset a window early |
+| `OVER` | a window will run out by its reset, at its pace | when it runs out, and how long before the reset |
+| `TIGHT` | a window of an account logged in on this device will end its reset 85% to 99% full | the forecast and the reset |
+| `OUTSIDE` | a window rose 5 points or more in the last day while no team device spent on it | how many points, in how long |
+| `ERROR` | a device's collector or one of its harnesses fails, or the release check of a device on an older release; a quota that could not be read is not an error | the device and the error |
+| `NO READING` | a subscription used in the last 7 days has no reading, for a known reason | the reason and what to do |
 | `SILENT` | a device has not reported for a day | since when, and the error it last reported, if any |
-| `OLD` | devices run an older release | all of them in one line, and, once one that is not silent has run its release for 7 hours without updating, for how long the longest has not updated |
+| `DUPLICATE` | a device was reinstalled, and its old record stays on the relay | the command that forgets the old record |
+| `OLD` | devices run an older release | all of them in one line, and, once one that is not silent has run its release for 7 hours without updating, for how long the longest has not updated; a release that cannot read the Claude quota or report update errors gets a line of its own that says so and asks for a reinstall |
 | `UNDER` | past half of an account's weekly window, its forecast is under 50% | how much of the window will go unused |
+
+Each line has forms from the longest to the shortest and takes the first that fits. What to do stays in the shortest, and a path or label is cut last.
 
 A badge is its word in reverse video, colored by its state. `UNDER` is a hint rather than a problem: that subscription has room for more work.
 
@@ -87,14 +93,16 @@ The used part takes the color of the forecast state. The track is faint, and the
 
 ### The forecast
 
-AT RESET is how full the window will be at its reset, if it is used from now on at its average pace so far. Over 100% means demand is larger than the quota: the window runs out before it resets.
+AT RESET is how full the window will be at its reset, if it is used from now on at its pace. Over 100% means demand is larger than the quota: the window runs out before it resets.
 
 - The window began at its reset time minus its length. The length comes from the harness, or from the window's name, such as `5h` or `7d`.
 - `elapsed` is the share of the window that had passed when the reading was taken.
-- The forecast is `used ÷ elapsed`, as a whole percent, up to `999%`.
-- It runs out at `start + (100 ÷ used) × (reading time − start)`, when the forecast is over 100% before it is rounded. At exactly 100% it runs out at its reset.
+- The readings of the pace are this device's samples and the team's reads of the last 2 days, and the reading itself: those of the same window that reset at the same time, give or take a minute, one per time. A drop of more than 2 points starts them again, as the provider took use back.
+- The average pace is `used ÷ hours`, from the window's start, or from its last reading at 0% after that: a window left idle at first fills from there. The recent pace is the least-squares slope of the readings of the last 24 hours, when they span an hour or more, and never below 0.
+- The pace is the faster of the two, and the forecast `used + pace × hours to the reset`, as a whole percent, up to `999%`. From the window's start with no faster recent pace, that is `used ÷ elapsed`. The JSON names the pace taken: `basis` is `window` or `recent`, and `pace` is in points an hour.
+- It runs out at `reading time + (100 − used) ÷ pace`, when the forecast is over 100% before it is rounded. At exactly 100% it runs out at its reset.
 - Before a tenth of the window has passed, the forecast is shown only when it is already over.
-- The average since the window began includes nights and weekends, so one busy hour does not raise an alarm. It follows a change of pace slowly. Giving the last day more weight is later work.
+- The average includes nights and weekends, so one busy hour does not raise an alarm, and the last day's pace catches a week that speeds up. A line forecast at the last day's pace says so.
 
 States:
 
