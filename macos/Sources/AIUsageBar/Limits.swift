@@ -66,18 +66,27 @@ private struct NotRead: View {
     let now: Date
 
     var body: some View {
-        let why = accounts.count == 1 ? accounts[0].noReading : nil
-        (Text("Not read: ").foregroundColor(Color(nsColor: .tertiaryLabelColor))
-            + Text(accounts.map(\.name).joined(separator: ", ")).foregroundColor(.secondary)
-            + Text(why.map { " · \($0)" } ?? "").foregroundColor(Color(nsColor: .tertiaryLabelColor)))
+        line
             .font(.subheadline)
             .lineLimit(1)
             .truncationMode(.tail)
             .frame(height: Metrics.row - 6)
             .padding(.leading, Metrics.slot)
             .help(accounts.map(details).joined(separator: "\n"))
-            .accessibilityLabel("\(Format.provider(provider)), not read: " + accounts.map { a in a.name + (a.noReading.map { ", \($0)" } ?? "") }
-                .joined(separator: "; "))
+            .accessibilityLabel(spoken)
+    }
+
+    private var line: Text {
+        let dim = Color(nsColor: .tertiaryLabelColor)
+        let names: Text = Text(accounts.map(\.name).joined(separator: ", ")).foregroundColor(.secondary)
+        let why: String? = accounts.count == 1 ? accounts[0].noReading : nil
+        let reason: Text = Text(why.map { " · \($0)" } ?? "").foregroundColor(dim)
+        return Text("Not read: ").foregroundColor(dim) + names + reason
+    }
+
+    private var spoken: String {
+        let each: [String] = accounts.map { a in a.name + (a.noReading.map { ", \($0)" } ?? "") }
+        return "\(Format.provider(provider)), not read: " + each.joined(separator: "; ")
     }
 
     /// "bo, Max: No reading; used on bo-air, 15h ago".
