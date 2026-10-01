@@ -69,23 +69,33 @@ func TestKnownOutlivesExpiredDocuments(t *testing.T) {
 	now := t0
 	day := 24 * time.Hour
 	gate := func(prev map[string]Known) (map[string]Known, Gate) {
-		known := knownAfter(prev, []snapshot.Doc{{Device: self, CollectorVersion: "v0.4.0", CollectedAt: now}}, self, now)
+		known := knownAfter(prev, []snapshot.Doc{{Device: self, CollectorVersion: "v0.4.0", CollectedAt: now}}, nil, self, now)
 		c := TeamCache{Team: fp, PulledAt: now, Known: known}
 		return known, ExtendedWire(c, fp, self, time.Time{}, now)
 	}
 	for _, c := range []struct {
-		name        string
-		first, last time.Duration
-		kept        bool
+		name               string
+		first, last, since time.Duration
+		kept               bool
 	}{
 		// Written for 10 days, so the relay kept it for 10 more.
-		{"expired", 20 * day, 10 * day, true},
-		{"forgotten", 20 * day, 2 * time.Hour, false},
-		{"forgotten within the shortest the relay keeps a document", 3 * day, 6 * day, false},
-		{"expired after the shortest", 3 * day, 7 * day, true},
-		{"expired long ago", 120 * day, 91 * day, false},
+		{"expired", 20 * day, 10 * day, 0, true},
+		{"forgotten", 20 * day, 2 * time.Hour, 0, false},
+		{"forgotten within the shortest the relay keeps a document", 3 * day, 6 * day, 0, false},
+		{"expired after the shortest", 3 * day, 7 * day, 0, true},
+		{"expired long ago", 120 * day, 91 * day, 0, false},
+		// Silent 8 days before this device first read it, and forgotten
+		// a day later: the relay, which stored it 60 days ago, would have
+		// kept it for 51 days after its last write.
+		{"silent, then forgotten", day, 9 * day, 60 * day, false},
+		{"silent, then expired", day, 9 * day, 12 * day, true},
 	} {
 		prev := map[string]Known{old: {Version: "v0.3.4", First: now.Add(-c.first), Last: now.Add(-c.last)}}
+		if c.since > 0 {
+			k := prev[old]
+			k.Since = now.Add(-c.since)
+			prev[old] = k
+		}
 		known, g := gate(prev)
 		if _, ok := known[old]; ok != c.kept {
 			t.Errorf("%s: kept = %v, want %v", c.name, ok, c.kept)
@@ -110,7 +120,7 @@ func TestKnownAfter(t *testing.T) {
 		"d-sambook-0002": {Version: "v0.4.0", First: now.Add(-24 * time.Hour), Last: now.Add(-time.Hour)},
 		self:             {Version: "v0.3.4", First: now.Add(-24 * time.Hour), Last: now.Add(-100 * 24 * time.Hour)},
 	}
-	got := knownAfter(prev, docs, self, now)
+	got := knownAfter(prev, docs, nil, self, now)
 	want := map[string]Known{
 		"d-srv1-a4c2e917": {Version: "v0.4.1", First: now.Add(-30 * 24 * time.Hour), Last: now.Add(-time.Hour)},
 		"d-sambook-0002":  {Version: "v0.4.0", First: now.Add(-24 * time.Hour), Last: now.Add(-time.Hour)},
@@ -123,10 +133,14 @@ func TestKnownAfter(t *testing.T) {
 			t.Errorf("%s: %+v, want %+v", id, g, k)
 		}
 	}
-	if k := knownAfter(nil, docs[1:2], self, now)["d-srv1-a4c2e917"]; !k.First.Equal(now) {
+	if k := knownAfter(nil, docs[1:2], nil, self, now)["d-srv1-a4c2e917"]; !k.First.Equal(now) {
 		t.Errorf("a device first found: %+v", k)
 	}
-	if k := knownAfter(nil, docs[:1], self, now); k != nil {
+	since := now.Add(-40 * 24 * time.Hour)
+	if k := knownAfter(nil, docs[1:2], map[string]time.Time{"d-srv1-a4c2e917": since}, self, now)["d-srv1-a4c2e917"]; !k.Since.Equal(since) {
+		t.Errorf("when the relay first stored it: %+v", k)
+	}
+	if k := knownAfter(nil, docs[:1], nil, self, now); k != nil {
 		t.Errorf("only this device: %+v", k)
 	}
 }

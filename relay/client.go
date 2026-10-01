@@ -29,6 +29,9 @@ type Client struct {
 type Device struct {
 	Body []byte
 	Doc  snapshot.Doc
+	// Since is when the relay first stored the device, or zero when it
+	// does not say.
+	Since time.Time
 }
 
 var errNoRelay = errors.New("relay is not configured")
@@ -133,12 +136,12 @@ func (c *Client) Pull(ctx context.Context) (PullResult, error) {
 		if i, ok := at[doc.Device]; ok {
 			out.Unverified++
 			if doc.CollectedAt.After(out.Devices[i].Doc.CollectedAt) {
-				out.Devices[i] = Device{Body: body, Doc: doc}
+				out.Devices[i] = Device{Body: body, Doc: doc, Since: d.Since}
 			}
 			continue
 		}
 		at[doc.Device] = len(out.Devices)
-		out.Devices = append(out.Devices, Device{Body: body, Doc: doc})
+		out.Devices = append(out.Devices, Device{Body: body, Doc: doc, Since: d.Since})
 	}
 	sort.Slice(out.Devices, func(i, j int) bool { return out.Devices[i].Doc.Device < out.Devices[j].Doc.Device })
 	return out, nil

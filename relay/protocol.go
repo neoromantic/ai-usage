@@ -84,4 +84,8 @@ type ListedDevice struct {
 	Device string `json:"device"`
 	Body   string `json:"body"`
 	Sig    string `json:"sig"`
+	// Since is when the relay first stored the device's record, which sets
+	// how long it keeps the record after its last write. A relay before
+	// v0.4.0 does not send it, and readers before v0.4.0 do not read it.
+	Since time.Time `json:"since,omitzero"`
 }

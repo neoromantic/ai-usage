@@ -89,6 +89,9 @@ type Known struct {
 	// snapshot's collected_at.
 	First time.Time `json:"first"`
 	Last  time.Time `json:"last"`
+	// Since is when the relay first stored the device, when the relay
+	// said so.
+	Since time.Time `json:"since,omitzero"`
 }
 
 // Behind is a device's release older than the team's newest, and its first
@@ -280,7 +283,9 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 	next := TeamCache{PulledAt: now, Team: o.Relay.Key.Fingerprint()}
 	// This device is as this run built it, whatever the relay holds for it.
 	seen := []snapshot.Doc{*doc}
+	since := map[string]time.Time{}
 	for _, d := range pulled.Devices {
+		since[d.Doc.Device] = d.Since
 		next.Bodies = append(next.Bodies, d.Body)
 		next.Docs = append(next.Docs, d.Doc)
 		if d.Doc.Device != device {
@@ -293,7 +298,7 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 		prev, known, after = nil, nil, now
 	}
 	next.Behind = behindSince(prev, seen, st.Update.Latest, after, now)
-	next.Known = knownAfter(known, next.Docs, device, now)
+	next.Known = knownAfter(known, next.Docs, since, device, now)
 	if cache.Team == next.Team {
 		next.History, next.Seen, next.Reads = cache.History, cache.Seen, cache.Reads
 	}
@@ -342,15 +347,16 @@ func keepReadError(st *state.State, c TeamCache) {
 }
 
 // knownAfter is prev after a read that found docs, leaving out self. A
-// device the read found takes its release and its newest collected_at. One
-// it did not find was either forgotten with `ai-usage team forget-device`
-// or went quiet until the relay let its document expire. The relay keeps a
-// document at least as long as its device has been writing, and First is no
-// earlier than the device's first write, so a device gone before its Last
-// plus that long was forgotten and is dropped. One gone later expired, and
-// is kept until the longest a document is kept after its Last: when it
-// comes back, it may still run that release.
-func knownAfter(prev map[string]Known, docs []snapshot.Doc, self string, now time.Time) map[string]Known {
+// device the read found takes its release, its newest collected_at and,
+// from since, when the relay first stored it. One it did not find was
+// either forgotten with `ai-usage team forget-device` or went quiet until
+// the relay let its document expire. The relay keeps a document as long as
+// its device has been writing, within bounds, from when it first stored it,
+// or from First, no earlier, when the relay does not say: a device gone
+// before its Last plus that long was forgotten and is dropped. One gone
+// later expired, and is kept until the longest a document is kept after its
+// Last: when it comes back, it may still run that release.
+func knownAfter(prev map[string]Known, docs []snapshot.Doc, since map[string]time.Time, self string, now time.Time) map[string]Known {
 	out := map[string]Known{}
 	for _, d := range docs {
 		if d.Device == self {
@@ -361,6 +367,9 @@ func knownAfter(prev map[string]Known, docs []snapshot.Doc, self string, now tim
 			k.First = now
 		}
 		k.Version = d.CollectorVersion
+		if s := since[d.Device]; !s.IsZero() {
+			k.Since = s.UTC()
+		}
 		if d.CollectedAt.After(k.Last) {
 			k.Last = d.CollectedAt
 		}
@@ -373,7 +382,11 @@ func knownAfter(prev map[string]Known, docs []snapshot.Doc, self string, now tim
 		if _, found := out[id]; found || id == self {
 			continue
 		}
-		ttl := min(max(k.Last.Sub(k.First), kept.MinRecordTTL), kept.RecordTTL)
+		from := k.First
+		if !k.Since.IsZero() {
+			from = k.Since
+		}
+		ttl := min(max(k.Last.Sub(from), kept.MinRecordTTL), kept.RecordTTL)
 		if now.Before(k.Last.Add(ttl)) || !now.Before(k.Last.Add(kept.RecordTTL)) {
 			continue
 		}

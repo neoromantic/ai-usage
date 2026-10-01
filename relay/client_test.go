@@ -50,6 +50,10 @@ func TestPublishPullRoundTrip(t *testing.T) {
 		if host, err := k.Open(d.Doc.DeviceLabel); err != nil || host != "host "+d.Doc.Device {
 			t.Errorf("%s: device label opens to %q, %v", d.Doc.Device, host, err)
 		}
+		// When the relay first stored the device.
+		if !d.Since.Equal(t0) {
+			t.Errorf("%s: since %v, want %v", d.Doc.Device, d.Since, t0)
+		}
 	}
 }
 

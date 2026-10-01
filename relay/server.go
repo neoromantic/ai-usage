@@ -314,7 +314,7 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) *ErrStatus {
 	out := ListResponse{Devices: []ListedDevice{}}
 	for _, dev := range devs {
 		rec := recs[dev]
-		out.Devices = append(out.Devices, ListedDevice{Device: dev, Body: encode(rec.Body), Sig: encode(rec.Sig)})
+		out.Devices = append(out.Devices, ListedDevice{Device: dev, Body: encode(rec.Body), Sig: encode(rec.Sig), Since: rec.Since.UTC()})
 	}
 	writeJSON(w, http.StatusOK, out)
 	return nil
