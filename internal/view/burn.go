@@ -36,17 +36,24 @@ func (m *merger) estimate(t *Team) {
 		return
 	}
 	g := collect.ExtendedWire(m.in.Team, m.in.Key.Fingerprint(), m.in.Config.Device, m.in.State.Relay.NoExtUntil, m.now)
-	type held struct{ label, version string }
-	var hs []held
+	// A device whose snapshot the relay no longer has is known by its id,
+	// and has not reported since its last one.
+	var hs []TeamDevice
 	for _, id := range g.HeldBack {
-		h := held{label: id, version: m.in.Team.Known[id].Version}
+		k := m.in.Team.Known[id]
+		h := TeamDevice{Device: id, Label: id, CollectorVersion: k.Version, CollectedAt: k.Last, Silent: true}
 		for _, dv := range m.devs {
 			if dv.dev.Device == id {
-				h = held{dv.dev.Label, dv.dev.CollectorVersion}
+				h = *dv.dev
 			}
 		}
 		hs = append(hs, h)
-		t.HeldBackBy = append(t.HeldBackBy, h.label)
+	}
+	// The busiest first, as the matrix lists them.
+	by := byBurn(Week, func(d TeamDevice) Usage { return d.Burn }, func(d TeamDevice) string { return d.Label })
+	slices.SortStableFunc(hs, by)
+	for _, h := range hs {
+		t.HeldBackBy = append(t.HeldBackBy, h.Label)
 	}
 	var reason string
 	switch {
@@ -54,10 +61,23 @@ func (m *merger) estimate(t *Team) {
 		reason = "the team was last read " + age(m.now.Sub(m.in.Team.PulledAt)) + " ago"
 	case g.Reason == collect.GateRejected:
 		reason = "the relay did not accept weighted days; trying again " + g.Until.In(m.loc()).Format("Jan 2 15:04")
+	case len(hs) == 1 && hs[0].Silent:
+		// It may never come back, as when it was reinstalled. The relay
+		// forgets a record for everyone, but only the device that forgets
+		// a record the relay let expire stops waiting for it.
+		h := hs[0]
+		reason = h.Label + " has not reported since " + h.CollectedAt.In(m.loc()).Format("Jan 2") + ": forget it with ai-usage team forget-device " + shortDevice(h.Device)
+		if !slices.ContainsFunc(m.devs, func(dv *device) bool { return dv.dev.Device == h.Device }) {
+			reason += " on each device"
+		}
 	case len(hs) == 1:
-		reason = hs[0].label + " runs " + hs[0].version + ": " + upgrade(hs[0].version)
+		reason = hs[0].Label + " runs " + hs[0].CollectorVersion + ": " + upgrade(hs[0].CollectorVersion)
 	case len(hs) > 1:
-		reason = strconv.Itoa(len(hs)) + " devices run releases before " + collect.ExtSince + ": " + firstNames(t.HeldBackBy, 3)
+		then := "they update themselves within 15 minutes"
+		if slices.ContainsFunc(hs, func(d TeamDevice) bool { return selfupdate.Newer("v0.2.5", d.CollectorVersion) }) {
+			then = "reinstall those before v0.2.5 with install.sh"
+		}
+		reason = strconv.Itoa(len(hs)) + " devices run releases before " + collect.ExtSince + ": " + then + " (" + firstNames(t.HeldBackBy, 3) + ")"
 	default:
 		// Every device reads the fields, and some have not sent them yet:
 		// their next runs do.

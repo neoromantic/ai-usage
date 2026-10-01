@@ -47,7 +47,19 @@ func TestTeamEstimatedReason(t *testing.T) {
 				legacyDoc(t, k, "d-cbox-device", "cbox", "v0.3.0"),
 				legacyDoc(t, k, "d-dbox-device", "dbox", "v0.3.1"),
 			}
-		}, nil, []string{"abox", "bbox", "cbox", "dbox"}, "4 devices run releases before v0.4.0: abox, bbox, cbox, …"},
+		}, nil, []string{"abox", "bbox", "cbox", "dbox"}, "4 devices run releases before v0.4.0: reinstall those before v0.2.5 with install.sh (abox, bbox, cbox, …)"},
+		{"several, the busiest first", func(k *team.Key) []snapshot.Doc {
+			busy := emptyState()
+			addAccount(busy, "codex", "bob", true, nil, 5000)
+			d := otherDoc(t, k, "d-cbox-device", "cbox", now.Add(-5*time.Minute), busy).Legacy()
+			d.CollectorVersion = "v0.3.0"
+			return []snapshot.Doc{legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4"), d}
+		}, nil, []string{"cbox", "abox"}, "2 devices run releases before v0.4.0: they update themselves within 15 minutes (cbox, abox)"},
+		{"one gone silent", func(k *team.Key) []snapshot.Doc {
+			d := legacyDoc(t, k, "d-abox1234-device", "abox", "v0.3.4")
+			d.CollectedAt = now.Add(-9 * 24 * time.Hour)
+			return []snapshot.Doc{d}
+		}, nil, []string{"abox"}, "abox has not reported since Aug 23: forget it with ai-usage team forget-device abox1234"},
 		{"refused", func(k *team.Key) []snapshot.Doc {
 			return []snapshot.Doc{legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4")}
 		}, func(f *fixture) { f.in.State.Relay.NoExtUntil = now.Add(2 * time.Hour) }, []string{"abox"},
@@ -96,7 +108,7 @@ func TestTeamEstimatedReason(t *testing.T) {
 	addAccount(other, "codex", "bob", true, nil, 100)
 	f.in.Team = collect.TeamCache{PulledAt: now, Team: f.key.Fingerprint(),
 		Docs:  []snapshot.Doc{otherDoc(t, f.key, "d-abox-device", "abox", now, other)},
-		Known: map[string]collect.Known{"d-gone-device": {Version: "v0.3.4"}}}
+		Known: map[string]collect.Known{"d-gone-device": {Version: "v0.3.4", Last: now.Add(-20 * 24 * time.Hour)}}}
 	r := Build(f.in)
 	if r.Team.Estimated || r.Team.EstimatedReason != nil || len(r.Team.HeldBackBy) != 0 {
 		t.Errorf("exact team: estimated %v, reason %v, held back by %v", r.Team.Estimated, deref(r.Team.EstimatedReason), r.Team.HeldBackBy)
@@ -104,10 +116,12 @@ func TestTeamEstimatedReason(t *testing.T) {
 	if bob := findTeamAccount(t, r, "codex", "bob"); bob.BurnEstimated || bob.Burn.Quarter == 0 {
 		t.Errorf("exact bob: %+v", bob)
 	}
-	// A device the cache knows but whose snapshot is gone is named by its id.
+	// A device the cache knows but whose snapshot is gone is named by its
+	// id, and each device that knows it forgets it.
+	f.in.Loc = time.UTC
 	f.in.Team.Docs = append(f.in.Team.Docs, legacyDoc(t, f.key, "d-bbox-device", "bbox", "v1.2.0"))
 	r = Build(f.in)
-	if want := "d-gone-device runs v0.3.4: it updates itself within 15 minutes"; deref(r.Team.EstimatedReason) != want {
+	if want := "d-gone-device has not reported since Aug 12: forget it with ai-usage team forget-device gone-dev on each device"; deref(r.Team.EstimatedReason) != want {
 		t.Errorf("a known device: %q, want %q", deref(r.Team.EstimatedReason), want)
 	}
 }
