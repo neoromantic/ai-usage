@@ -209,7 +209,11 @@ func TestForgetDeviceForgetsItsRelease(t *testing.T) {
 	if err := os.WriteFile(state.Dir(a.dir).TeamCacheFile(), b, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	a.ok("team", "forget-device", "d-leoair-0003")
+	// ATTENTION names a device by the start of its id after "d-".
+	if r := a.run("", "team", "forget-device", "d-"); r.code != 2 || !strings.Contains(r.stderr, "starts the ids of 2 devices: d-leoair-0003, d-srv1-a4c2e917") {
+		t.Fatalf("forget-device d-: exit %d, %q", r.code, r.stderr)
+	}
+	a.ok("team", "forget-device", "leoair-0")
 	c := teamCache(t, a)
 	if _, ok := c.Known["d-leoair-0003"]; ok || c.Known["d-srv1-a4c2e917"].Version != "v0.3.4" {
 		t.Fatalf("known after forget = %+v", c.Known)

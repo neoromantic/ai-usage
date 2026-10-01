@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
@@ -42,13 +45,51 @@ func cmdTeam(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 		if len(args) != 1 {
 			return usageError("team forget-device takes one device id")
 		}
-		if !snapshot.ValidDevice(args[0]) {
-			return usageError("not a device id: " + args[0])
+		id, err := cachedDevice(d, args[0])
+		if err != nil {
+			return err
 		}
-		return forgetDevice(ctx, d, args[0], stdout, stderr)
+		if !snapshot.ValidDevice(id) {
+			return usageError("not a device id: " + id)
+		}
+		return forgetDevice(ctx, d, id, stdout, stderr)
 	default:
 		return usageError("unknown team command " + sub)
 	}
+}
+
+// cachedDevice is the device id arg names. ATTENTION names a device by the
+// start of its id after "d-", as 3f9a1c2e: such a start of exactly one id the
+// cached team read holds is that id. Any other arg is an id itself.
+func cachedDevice(d state.Dir, arg string) (string, error) {
+	c, err := collect.LoadTeamCache(d)
+	if err != nil {
+		return "", err
+	}
+	ids := map[string]bool{}
+	for _, doc := range c.Docs {
+		ids[doc.Device] = true
+	}
+	for id := range c.Known {
+		ids[id] = true
+	}
+	if ids[arg] {
+		return arg, nil
+	}
+	var match []string
+	for id := range ids {
+		if strings.HasPrefix(strings.TrimPrefix(id, "d-"), strings.TrimPrefix(arg, "d-")) {
+			match = append(match, id)
+		}
+	}
+	switch len(match) {
+	case 0:
+		return arg, nil
+	case 1:
+		return match[0], nil
+	}
+	sort.Strings(match)
+	return "", usageError(arg + " starts the ids of " + strconv.Itoa(len(match)) + " devices: " + strings.Join(match, ", "))
 }
 
 func showTeam(d state.Dir, stdout io.Writer) error {
