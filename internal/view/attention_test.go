@@ -213,3 +213,157 @@ func TestFailedRunIsInAttention(t *testing.T) {
 		t.Fatalf("attention = %+v", r.Attention)
 	}
 }
+
+// subAccount is a team subscription with burn this week, read at at.
+func subAccount(label string, current bool, at time.Time, ws ...snapshot.Window) TeamAccount {
+	name, _, _ := strings.Cut(label, "@")
+	a := TeamAccount{Label: label, Name: name, Subscription: true, Current: current, Burn: Usage{Today: 1e6, Week: 4e6}, State: StateUnknown}
+	if len(ws) > 0 {
+		q := Quota{ObservedAt: at, AgeSeconds: int64(now.Sub(at).Seconds())}
+		q.Windows, a.State = readQuota(readings(ws, at), nil, now)
+		a.Quota = &q
+	}
+	return a
+}
+
+// newKindsReport is a team with an entry of every ATTENTION kind, and a
+// subscription whose label is 40 characters long.
+func newKindsReport() Report {
+	start := now.Add(-4 * 24 * time.Hour) // 4/7 of the week gone
+	weekly := func(pct float64) snapshot.Window { return week7(pct, start.Add(week)) }
+	long := "a-very-long-subscription-name@acme.dev" + "xy"
+	outside := subAccount("sam@mail.test", false, now, weekly(40))
+	outside.Outside = &Outside{Points: 25, Since: now.Add(-20 * time.Hour)}
+	noReading := subAccount(long, false, now)
+	noReading.NoReading = strPtr("annbook runs v0.2.0: reinstall with install.sh")
+	idle := subAccount("lee@mail.test", false, now)
+	idle.NoReading, idle.Burn = strPtr("not read on srv1"), Usage{} // not in use: no news
+	r := Report{GeneratedAt: now, Collector: Collector{Version: "v0.4.0", DeviceLabel: "annbook"}}
+	r.Team = Team{
+		PulledAt: tp(now), Latest: strPtr("v0.4.0"),
+		Providers: []TeamProvider{{Provider: "claude", Accounts: []TeamAccount{
+			subAccount("lee@corp.test", false, now.Add(-30*time.Hour), weekly(100)),
+			subAccount("bob@mail.test", false, now, weekly(80)),
+			subAccount("ann@acme.dev", true, now, weekly(52)),
+			subAccount("kim@mail.test", false, now, weekly(52)), // tight, but not logged in here
+			outside, noReading, idle,
+			subAccount("kim@corp.test", false, now, weekly(20)),
+		}}},
+		Devices: []TeamDevice{
+			{Device: "d-0a1b2c3d4e5f60718293a4b5", Label: "annbook", This: true, CollectorVersion: "v0.4.0", CollectedAt: now},
+			{Device: "d-3f9a1c2e5b7d9f1a3c5e7b9d", Label: "annbook", CollectorVersion: "v0.3.4", CollectedAt: now.Add(-3 * 24 * time.Hour),
+				Silent: true, Old: true, ReplacedBy: strPtr("annbook")},
+			{Device: "d-b01c1d2e3f4a5b6c7d8e9f10", Label: "bot-b", CollectorVersion: "v0.4.0", CollectedAt: now, Error: strPtr("codex: app-server exited without answering")},
+			{Device: "d-b02c1d2e3f4a5b6c7d8e9f20", Label: "bot-c", CollectorVersion: "v0.4.0", CollectedAt: now.Add(-30 * time.Hour), Silent: true},
+			{Device: "d-b00c1d2e3f4a5b6c7d8e9f00", Label: "bot-a", CollectorVersion: "v0.3.4", CollectedAt: now, Old: true},
+			{Device: "d-2f8a6c4e0b9d7f1a3c5e7b9d", Label: "srv1", CollectorVersion: "v0.2.0", CollectedAt: now, Old: true,
+				Limitations: []string{LimitNoClaudeQuota, LimitNoUpdateErrors}},
+		},
+	}
+	r.Attention = attention(r.Team, r.Collector, now)
+	return r
+}
+
+// Every kind in its place: what runs out, a tight window of one's own, one
+// someone outside the team fills, failures, a subscription in use with no
+// reading, silence, a reinstall's old record, old releases (the ones that
+// need a reinstall first), and what will be left unused.
+func TestAttentionOrderOfEveryKind(t *testing.T) {
+	r := newKindsReport()
+	var got []string
+	for _, a := range r.Attention {
+		got = append(got, strings.Join(strings.Fields(a.Kind+" "+a.Name+" "+strings.Join(a.Devices, ",")), " "))
+	}
+	want := []string{
+		"out lee", "over bob", "tight ann", "outside sam", "error bot-b",
+		"no_reading a-very-long-subscription-name", "silent bot-c", "duplicate annbook",
+		"old srv1", "old bot-a", "under kim",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("attention =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	out, dup, stuck, old := r.Attention[0], r.Attention[7], r.Attention[8], r.Attention[9]
+	if out.ReadingAge != 30*3600 {
+		t.Errorf("a stale OUT has no age: %+v", out)
+	}
+	if dup.DeviceID != "d-3f9a1c2e5b7d9f1a3c5e7b9d" || dup.Message != "annbook" {
+		t.Errorf("duplicate = %+v", dup)
+	}
+	if !reflect.DeepEqual(stuck.Limitations, []string{LimitNoClaudeQuota, LimitNoUpdateErrors}) || stuck.Message != "v0.4.0" || len(old.Limitations) != 0 {
+		t.Errorf("old = %+v, %+v", stuck, old)
+	}
+}
+
+// At 80 columns every ATTENTION line fits, beside a 40-character label,
+// and each new kind keeps what to do.
+func TestAttentionLinesAt80(t *testing.T) {
+	r := newKindsReport()
+	lines := pageSection(Render(r, Options{Width: 80, Loc: time.UTC, Interactive: true}), "ATTENTION")
+	if len(lines) != len(r.Attention)+1 {
+		t.Fatalf("ATTENTION =\n%s", strings.Join(lines, "\n"))
+	}
+	for _, l := range lines {
+		if width(l) > 80 {
+			t.Errorf("%d columns: %q", width(l), l)
+		}
+	}
+	squeeze := func(l string) string { return strings.Join(strings.Fields(l), " ") }
+	for i, want := range map[int]string{
+		1:  "OUT claude lee@corp.test back Fri 12:00, in 3d · reading 1d old",
+		3:  "TIGHT claude ann@acme.dev ~91% at reset Fri 12:00",
+		4:  "OUTSIDE claude sam@mail.test +25 points, no team device spent",
+		6:  "NO READING claude a-very-long-subscr… reinstall with install.sh",
+		8:  "DUPLICATE annbook ai-usage team forget-device 3f9a1c2e",
+		9:  "OLD 1 device on v0.2.0 reinstall with install.sh",
+		10: "OLD 1 device on v0.3.4 bot-a · latest v0.4.0",
+	} {
+		if got := squeeze(lines[i]); got != want {
+			t.Errorf("line %d = %q, want %q", i, got, want)
+		}
+	}
+	// A little more room cuts the reason before what to do.
+	mid := pageSection(Render(r, Options{Width: 86, Loc: time.UTC, Interactive: true}), "ATTENTION")
+	if !strings.HasSuffix(mid[6], "  annbook runs v…: reinstall with install.sh") {
+		t.Errorf("at 86, NO READING = %q", mid[6])
+	}
+	// With room, the fuller forms.
+	wide := pageSection(Render(r, Options{Width: 160, Loc: time.UTC, Interactive: true}), "ATTENTION")
+	for i, want := range map[int]string{
+		3: "TIGHT claude ann@acme.dev ~91% at reset Fri 12:00 at this week's pace",
+		4: "OUTSIDE claude sam@mail.test +25 points in 20h, no team device spent",
+		6: "NO READING claude a-very-long-subscripti… annbook runs v0.2.0: reinstall with install.sh",
+		8: "DUPLICATE annbook reinstalled as annbook: ai-usage team forget-device 3f9a1c2e",
+		9: "OLD 1 device on v0.2.0 srv1 · cannot read Claude quota; reinstall with install.sh",
+	} {
+		if got := squeeze(wide[i]); got != want {
+			t.Errorf("at 160, line %d = %q, want %q", i, got, want)
+		}
+	}
+}
+
+// A forecast at the last day's pace says so.
+func TestAttentionNamesTheRecentPace(t *testing.T) {
+	r := newKindsReport()
+	ann := &r.Team.Providers[0].Accounts[2]
+	ann.Quota.Windows[0].Forecast.Basis = BasisRecent
+	lines := pageSection(Render(r, Options{Width: 160, Loc: time.UTC, Interactive: true}), "ATTENTION")
+	if !strings.Contains(lines[3], "~91% at reset Fri 12:00 at the last day's pace") {
+		t.Fatalf("TIGHT = %q", lines[3])
+	}
+}
+
+// A harness that reads usage but no quota is not an ERROR: the
+// subscription in use has no reading, and says why.
+func TestQuotaOnlyProblemIsNoError(t *testing.T) {
+	st := emptyState()
+	f := newFixture(t, st)
+	other := emptyState()
+	other.Sources["claude"] = state.Source{Status: "ok", Error: "claude: quota not read: the usage request timed out"}
+	addAccount(other, "claude", "kim@corp.test", true, nil, 1000)
+	spend(other, "claude", "kim@corp.test", "/work/kim", 1000, now.Add(-2*time.Hour))
+	r := withTeam(t, f, otherDoc(t, f.key, "d-b01c1d2e3f4a5b6c7d8e9f10", "srv1", now, other))
+	want := []string{"no_reading  quota not read: the usage request timed out on srv1", "old srv1 v1.2.3"}
+	if got := attentionList(r); !reflect.DeepEqual(got, want) {
+		t.Fatalf("attention = %q, want %q", got, want)
+	}
+}
