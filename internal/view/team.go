@@ -616,9 +616,16 @@ func outside(ps []collect.Point, now time.Time) *Outside {
 		if len(cur) < 2 {
 			continue
 		}
-		rise, burned := last.Percent-cur[0].Percent, last.TeamBurn-cur[0].TeamBurn
+		rise := last.Percent - cur[0].Percent
 		if rise < outsideRise {
 			continue
+		}
+		// What the team burned is what it added between readings: a total
+		// that fell, as when a device that counted from its days starts
+		// counting from its own reading, takes nothing back.
+		var burned int64
+		for i := 1; i < len(cur); i++ {
+			burned += max(cur[i].TeamBurn-cur[i-1].TeamBurn, 0)
 		}
 		var perPoint []float64
 		for i := 1; i < len(w); i++ {

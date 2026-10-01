@@ -163,6 +163,19 @@ type Account struct {
 	Recent []Recent `json:"recent,omitempty"`
 }
 
+// SameReading says two accounts carry one quota reading: taken at the same
+// time, with the same windows. A borrowed reading is the same as the one it
+// was borrowed from.
+func SameReading(a, b Account) bool {
+	if a.QuotaAt == nil || b.QuotaAt == nil || !a.QuotaAt.Equal(*b.QuotaAt) {
+		return false
+	}
+	return slices.EqualFunc(a.Windows, b.Windows, func(w, v Window) bool {
+		same := w.ResetsAt == nil && v.ResetsAt == nil || w.ResetsAt != nil && v.ResetsAt != nil && w.ResetsAt.Equal(*v.ResetsAt)
+		return w.Name == v.Name && w.Percent == v.Percent && w.Minutes == v.Minutes && same
+	})
+}
+
 // Recent is an account's input plus output tokens on one device since a
 // quota window began.
 type Recent struct {

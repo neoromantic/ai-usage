@@ -92,7 +92,7 @@ func wireLink(accts []snapshot.Account, labels []string, i int) *Link {
 	link := &Link{Provider: a.QuotaFrom}
 	matches := 0
 	for j, b := range accts {
-		if b.Provider == a.QuotaFrom && sameReading(a, b) {
+		if b.Provider == a.QuotaFrom && snapshot.SameReading(a, b) {
 			link.Label = labels[j]
 			matches++
 		}
@@ -101,15 +101,6 @@ func wireLink(accts []snapshot.Account, labels []string, i int) *Link {
 		link.Label = ""
 	}
 	return link
-}
-
-func sameReading(a, b snapshot.Account) bool {
-	if a.QuotaAt == nil || b.QuotaAt == nil || !a.QuotaAt.Equal(*b.QuotaAt) {
-		return false
-	}
-	return slices.EqualFunc(a.Windows, b.Windows, func(w, v snapshot.Window) bool {
-		return w.Name == v.Name && w.Percent == v.Percent && w.Minutes == v.Minutes && sameTime(w.ResetsAt, v.ResetsAt)
-	})
 }
 
 // addLinked counts what account (provider, label) on one device spent

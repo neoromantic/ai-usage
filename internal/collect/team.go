@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/fsutil"
+	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
@@ -57,8 +59,9 @@ type Point struct {
 	Window   string     `json:"window"`
 	ResetsAt *time.Time `json:"resets_at,omitempty"`
 	Percent  float64    `json:"percent"`
-	// TeamBurn is what the devices holding the account had burned on it
-	// since the window began, as their documents in the read said.
+	// TeamBurn is what the team had burned on the account since the window
+	// began, as the documents in the read said: the devices holding it, with
+	// a reading of it or none, and the Hermes accounts that bill to it.
 	TeamBurn int64 `json:"team_burn"`
 }
 
@@ -413,36 +416,30 @@ func behindSince(prev map[string]Behind, docs []snapshot.Doc, checked string, af
 
 // historyAfter is prev with the newest quota reading that docs hold of each
 // account: a point per window of it, unless the window has a point as new.
-// Each point has what the devices holding the account burned on it in the
-// window's current period, as their documents say. Points older than
+// Each point has what the team burned on the account in the window's
+// current period, as the documents say: see burners. Points older than
 // historyKept are left out, and the oldest beyond maxHistory an account.
 func historyAfter(prev map[string][]Point, docs []snapshot.Doc, key *team.Key, now time.Time) map[string][]Point {
-	type held struct {
-		a    snapshot.Account
-		burn map[string]int64
-	}
-	byKey := map[string][]held{}
+	readings := map[string][]snapshot.Account{}
+	burned := map[string][]burner{}
 	for _, d := range docs {
+		for k, bs := range burners(d, key) {
+			burned[k] = append(burned[k], bs...)
+		}
 		for _, a := range d.Accounts {
-			label, err := key.Open(a.Label)
-			if err != nil {
-				continue
+			if label, err := key.Open(a.Label); err == nil && a.QuotaAt != nil && len(a.Windows) > 0 {
+				k := HistoryKey(a.Provider, label)
+				readings[k] = append(readings[k], a)
 			}
-			_, burn, _, _ := AccountBurn(a, a.Provider, label, d.CollectedAt)
-			k := HistoryKey(a.Provider, label)
-			byKey[k] = append(byKey[k], held{a, burn})
 		}
 	}
 	out := map[string][]Point{}
-	for k, hs := range byKey {
-		var newest snapshot.Account
-		for _, h := range hs {
-			if h.a.QuotaAt != nil && len(h.a.Windows) > 0 && (newest.QuotaAt == nil || h.a.QuotaAt.After(*newest.QuotaAt)) {
-				newest = h.a
+	for k, as := range readings {
+		newest := as[0]
+		for _, a := range as[1:] {
+			if a.QuotaAt.After(*newest.QuotaAt) {
+				newest = a
 			}
-		}
-		if newest.QuotaAt == nil {
-			continue
 		}
 		for _, w := range newest.Windows {
 			// The points are oldest first.
@@ -456,14 +453,9 @@ func historyAfter(prev map[string][]Point, docs []snapshot.Doc, key *team.Key, n
 				continue
 			}
 			p := Point{At: newest.QuotaAt.UTC(), Window: w.Name, ResetsAt: w.ResetsAt, Percent: w.Percent}
-			start, ok := w.Start()
-			for _, h := range hs {
-				for _, r := range h.a.Recent {
-					// A device's own reading may be of the window's
-					// last period.
-					if ok && r.Window == w.Name && r.Start.Sub(start).Abs() < time.Hour {
-						p.TeamBurn += h.burn[r.Window]
-					}
+			if start, ok := w.Start(); ok {
+				for _, b := range burned[k] {
+					p.TeamBurn += b.since(w.Name, start)
 				}
 			}
 			out[k] = append(out[k], p)
@@ -489,6 +481,124 @@ func historyAfter(prev map[string][]Point, docs []snapshot.Doc, key *team.Key, n
 		return nil
 	}
 	return out
+}
+
+// burner is what one account on one device doc burned, or the part of it
+// that billed to another account: its burn by UTC day, newest first, and
+// since each window of its reading began, as of collected.
+type burner struct {
+	days      []int64
+	recent    []snapshot.Recent
+	burn      map[string]int64
+	collected time.Time
+	// part is the share of it that counts, out of one.
+	part float64
+}
+
+// since is what b burned since start, the beginning of window: what the
+// device counted itself when its own reading of the window began then, else
+// its days from start's day on, which may count some of that day too many,
+// the same in every reading.
+func (b burner) since(window string, start time.Time) int64 {
+	n := DaysSince(b.days, start, b.collected)
+	for _, r := range b.recent {
+		// A device's own reading may be of the window's last period.
+		if r.Window == window && r.Start.Sub(start).Abs() < time.Hour {
+			n = b.burn[window]
+		}
+	}
+	return int64(math.Round(float64(n) * b.part))
+}
+
+// burners is, by HistoryKey, what each account of a device doc burned on
+// it: the account itself, whether or not the device has a reading of it,
+// and the Hermes accounts that billed to it. A Hermes account is shared
+// among the logins its account's Linked names, by what it burned through
+// each, else it bills whole to the account whose reading it borrowed.
+func burners(d snapshot.Doc, key *team.Key) map[string][]burner {
+	labels := make([]string, len(d.Accounts))
+	opened := make([]bool, len(d.Accounts))
+	for i, a := range d.Accounts {
+		l, err := key.Open(a.Label)
+		labels[i], opened[i] = l, err == nil
+	}
+	type login struct {
+		to   string
+		burn int64
+	}
+	through := map[string][]login{}
+	for i, a := range d.Accounts {
+		for _, u := range a.Linked {
+			l, err := key.Open(u.Label)
+			if err != nil || !opened[i] {
+				continue
+			}
+			k := HistoryKey(u.Provider, l)
+			through[k] = append(through[k], login{HistoryKey(a.Provider, labels[i]), meter.TokensBurn(u.Tokens, u.Provider, l)})
+		}
+	}
+	out := map[string][]burner{}
+	for i, a := range d.Accounts {
+		if !opened[i] {
+			continue
+		}
+		days, burn, _, _ := AccountBurn(a, a.Provider, labels[i], d.CollectedAt)
+		b := burner{days: days, recent: a.Recent, burn: burn, collected: d.CollectedAt, part: 1}
+		k := HistoryKey(a.Provider, labels[i])
+		out[k] = append(out[k], b)
+		logins := through[k]
+		var all int64
+		for _, l := range logins {
+			all += max(l.burn, 0)
+		}
+		if all <= 0 {
+			if to := borrowedFrom(d.Accounts, labels, opened, i); to != "" {
+				out[to] = append(out[to], b)
+			}
+			continue
+		}
+		for _, l := range logins {
+			if l.burn > 0 {
+				part := b
+				part.part = float64(l.burn) / float64(all)
+				out[l.to] = append(out[l.to], part)
+			}
+		}
+	}
+	return out
+}
+
+// borrowedFrom is the HistoryKey of the one account of a device doc whose
+// reading the i-th account borrowed, or "" when there is none, or several.
+func borrowedFrom(accts []snapshot.Account, labels []string, opened []bool, i int) string {
+	a := accts[i]
+	if a.QuotaFrom == "" {
+		return ""
+	}
+	var to string
+	for j, b := range accts {
+		if j == i || !opened[j] || b.Provider != a.QuotaFrom || !snapshot.SameReading(a, b) {
+			continue
+		}
+		if to != "" {
+			return ""
+		}
+		to = HistoryKey(b.Provider, labels[j])
+	}
+	return to
+}
+
+// DaysSince is the sum of days, a device's tokens by UTC day with index 0
+// the day of collected, from start's day on.
+func DaysSince(days []int64, start, collected time.Time) int64 {
+	if collected.Before(start) {
+		return 0
+	}
+	var n int64
+	for i := 0; i <= int(dayNumber(collected)-dayNumber(start)) && i < len(days); i++ {
+		n += days[i]
+	}
+	return n
 }
 
 // seenAfter is prev with when each of docs was collected, over the last

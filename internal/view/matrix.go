@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/collect"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
@@ -229,13 +230,5 @@ func (a devAccount) sinceStart(window string, start time.Time, collectedAt time.
 			return r.Tokens, r.Burn
 		}
 	}
-	n := int(collectedAt.Unix()/86400 - start.Unix()/86400)
-	sum := func(days []int64) int64 {
-		var t int64
-		for i := 0; i <= n && i < len(days); i++ {
-			t += days[i]
-		}
-		return t
-	}
-	return sum(a.days), sum(a.burnDays)
+	return collect.DaysSince(a.days, start, collectedAt), collect.DaysSince(a.burnDays, start, collectedAt)
 }

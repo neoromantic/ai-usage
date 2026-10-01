@@ -753,3 +753,53 @@ func TestHistoryAndSeenKeepTwoDays(t *testing.T) {
 		t.Fatalf("seen = %v", seen)
 	}
 }
+
+// A point's team burn counts every device that burned on the account: one
+// with no reading of its own, by its days since the window began, and the
+// Hermes accounts that bill to it, through the login Linked names or the
+// login whose reading they borrowed.
+func TestHistoryCountsEveryBurner(t *testing.T) {
+	key := mustKey(t)
+	reset := t0.Add(5 * 24 * time.Hour)
+	start := t0.Add(-2 * 24 * time.Hour)
+	reading := func(at time.Time, pct float64) (*time.Time, []snapshot.Window) {
+		return &at, []snapshot.Window{{Name: "7d", Percent: pct, ResetsAt: &reset}}
+	}
+	codex := key.Seal("sam@mail.test")
+	docs := func(i int64, at time.Time) []snapshot.Doc {
+		qa, ws := reading(at, float64(10+5*i))
+		holder := snapshot.Doc{Device: "d-annbook", CollectedAt: at, Accounts: []snapshot.Account{{
+			Provider: "codex", Label: codex, QuotaAt: qa, Windows: ws,
+			BurnDays: []int64{1000}, Recent: []snapshot.Recent{{Window: "7d", Start: start, Tokens: 100, Burn: 1000}},
+		}}}
+		// No reading of its own: 5M a read, today and the day before.
+		noReading := snapshot.Doc{Device: "d-srv1", CollectedAt: at, Accounts: []snapshot.Account{{
+			Provider: "codex", Label: codex, BurnDays: []int64{5_000_000 * i, 1_000_000},
+		}}}
+		// Hermes through the login Linked names, 2M a read.
+		bot := snapshot.Doc{Device: "d-bot1", CollectedAt: at, Accounts: []snapshot.Account{
+			{Provider: "codex", Label: codex, Linked: []snapshot.Linked{{Provider: "hermes", Label: key.Seal("openai-codex"), Sessions: 1, Tokens: snapshot.Tokens{Input: 10}}}},
+			{Provider: "hermes", Label: key.Seal("openai-codex"), BurnDays: []int64{2_000_000 * i}},
+		}}
+		// Hermes on the borrowed reading of the one Codex login, 3M a read.
+		bqa, bws := reading(at.Add(-time.Hour), 9)
+		borrowed := snapshot.Doc{Device: "d-bot2", CollectedAt: at, Accounts: []snapshot.Account{
+			{Provider: "codex", Label: codex, QuotaAt: bqa, Windows: bws},
+			{Provider: "hermes", Label: key.Seal("unknown"), QuotaAt: bqa, QuotaFrom: "codex", Windows: bws, BurnDays: []int64{3_000_000 * i}},
+		}}
+		return []snapshot.Doc{holder, noReading, bot, borrowed}
+	}
+	var h map[string][]Point
+	for i := range int64(3) {
+		at := t0.Add(time.Duration(i) * time.Hour)
+		h = historyAfter(h, docs(i, at), key, at)
+	}
+	k := HistoryKey("codex", "sam@mail.test")
+	var got []int64
+	for _, p := range h[k] {
+		got = append(got, p.TeamBurn)
+	}
+	if want := []int64{1_001_000, 11_001_000, 21_001_000}; !slices.Equal(got, want) {
+		t.Fatalf("team burn = %v, want %v", got, want)
+	}
+}

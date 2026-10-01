@@ -350,6 +350,7 @@ func TestOutside(t *testing.T) {
 		{"the team burned it", append(slices.Clone(usual), pt(h(-20), 30, 20_000_000), pt(h(-2), 45, 23_000_000)), nil},
 		{"no usual burn, none burned", []collect.Point{pt(h(-20), 10, 5), pt(h(-2), 20, 5)}, &Outside{Points: 10, Since: h(-20)}},
 		{"no usual burn, some burned", []collect.Point{pt(h(-20), 10, 5), pt(h(-2), 20, 6)}, nil},
+		{"burned after a fall", []collect.Point{pt(h(-20), 10, 5), pt(h(-10), 15, 3), pt(h(-2), 20, 4)}, nil},
 		{"older than a day", []collect.Point{pt(h(-30), 10, 5), pt(h(-2), 20, 5)}, nil},
 	} {
 		got := outside(c.ps, now)
