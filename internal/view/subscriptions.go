@@ -267,7 +267,7 @@ func (p *page) subLine(l subLayout, r subRow) chunks {
 	out = append(out, p.space(2))
 	if r.noReading != "" && !known(r.win) {
 		// Why there is no reading says more than a bar of none.
-		out = append(out, p.left(p.muted(truncEnd(r.noReading, l.bar, g.ell)), l.bar)...)
+		out = append(out, p.left(p.muted(cutReason(r.noReading, l.bar, g.ell)), l.bar)...)
 	} else {
 		out = append(out, p.bar(r.win, l.bar)...)
 	}

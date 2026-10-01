@@ -312,18 +312,19 @@ func TestAttentionLinesAt80(t *testing.T) {
 		1:  "OUT claude lee@corp.test back Fri 12:00, in 3d · reading 1d old",
 		3:  "TIGHT claude ann@acme.dev ~91% at reset Fri 12:00",
 		4:  "OUTSIDE claude sam@mail.test +25 points, no team device spent",
-		6:  "NO READING claude a-very-long-subscr… reinstall with install.sh",
+		6:  "NO READING claude a-very-long-subscr… on v0.2.0: reinstall with install.sh",
 		8:  "DUPLICATE annbook ai-usage team forget-device 3f9a1c2e",
-		9:  "OLD 1 device on v0.2.0 reinstall with install.sh",
+		9:  "OLD 1 device on v0.2.0 no Claude quota; reinstall",
 		10: "OLD 1 device on v0.3.4 bot-a · latest v0.4.0",
 	} {
 		if got := squeeze(lines[i]); got != want {
 			t.Errorf("line %d = %q, want %q", i, got, want)
 		}
 	}
-	// A little more room cuts the reason before what to do.
+	// A little more room shows the release and what to do; OLD names the
+	// device.
 	mid := pageSection(Render(r, Options{Width: 86, Loc: time.UTC, Interactive: true}), "ATTENTION")
-	if !strings.HasSuffix(mid[6], "  annbook runs v…: reinstall with install.sh") {
+	if !strings.HasSuffix(mid[6], "  on v0.2.0: reinstall with install.sh") {
 		t.Errorf("at 86, NO READING = %q", mid[6])
 	}
 	// With room, the fuller forms.

@@ -245,16 +245,31 @@ func (p *page) outsideForms(a Attention) []chunks {
 // comes after the first ": ", as in "annbook runs v0.2.0: reinstall with
 // install.sh", so a short line cuts what comes before it first.
 func (p *page) noReadingForms(a Attention, room int) []chunks {
-	ell := p.g.ell
 	msg := p.txt(a.Message)
 	out := p.forms(msg)
 	if head, act, ok := strings.Cut(msg, ": "); ok {
-		if left := room - width(": "+act); left >= 12 {
-			out = append(out, p.forms(truncEnd(head, left, ell)+": "+act)...)
+		if _, version, ok := strings.Cut(head, " runs "); ok {
+			// OLD names the device.
+			out = append(out, p.forms("on "+version+": "+act)...)
 		}
-		return append(out, p.forms(truncEnd(act, room, ell))...)
 	}
-	return append(out, p.forms(truncEnd(msg, room, ell))...)
+	return append(out, p.forms(cutReason(msg, room, p.g.ell))...)
+}
+
+// cutReason is a reason, "what: what to do", cut to w columns: what to do
+// stays whole while what is wrong keeps a few columns, and is cut last.
+func cutReason(msg string, w int, ell string) string {
+	if width(msg) <= w {
+		return msg
+	}
+	head, act, ok := strings.Cut(msg, ": ")
+	if !ok {
+		return truncEnd(msg, w, ell)
+	}
+	if left := w - width(": "+act); left >= 12 {
+		return truncEnd(head, left, ell) + ": " + act
+	}
+	return truncEnd(act, w, ell)
 }
 
 // duplicateForms is what to know about a device that was reinstalled: the
@@ -332,7 +347,7 @@ func (p *page) oldForms(a Attention, room int) []chunks {
 	list := func(tail string) string { return nameList(names, max(room-width(tail), 12), g.ell) + tail }
 	if lack, short := limitText(a.Limitations); lack != "" {
 		const fix = "; reinstall with install.sh"
-		return p.forms(list(g.sep+lack+fix), lack+fix, short+fix, strings.TrimPrefix(fix, "; "))
+		return p.forms(list(g.sep+lack+fix), lack+fix, short+fix, short+"; reinstall", strings.TrimPrefix(fix, "; "))
 	}
 	if a.At != nil && p.now.Sub(*a.At) >= BehindAfter {
 		up := ""
