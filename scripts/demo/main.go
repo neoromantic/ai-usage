@@ -16,6 +16,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -31,7 +32,7 @@ import (
 var now = time.Date(2026, 9, 24, 13, 40, 0, 0, time.UTC)
 
 const (
-	latest = "v0.3.3"
+	latest = "v0.4.0"
 	relay  = "https://relay.example.com"
 	week   = 7 * 24 * time.Hour
 )
@@ -125,9 +126,13 @@ func teamReport() view.Report {
 	mira.account("claude", "mira@studio.dev", "max", true, now.Add(-3*time.Minute),
 		window("5h", 100, 5*time.Hour, time.Hour+25*time.Minute),
 		window("7d", 58, week, 2*24*time.Hour+9*time.Hour+20*time.Minute))
+	// Her Claude week filled faster over the last day than before: at that
+	// pace it runs out, though at the week's it would not.
+	mira.runs("claude", "mira@studio.dev", "7d",
+		run{22 * time.Hour, 36}, run{16 * time.Hour, 42}, run{10 * time.Hour, 47}, run{4 * time.Hour, 53})
 	mira.account("codex", "mira@studio.dev", "pro", true, now.Add(-3*time.Minute),
 		window("5h", 9, 5*time.Hour, 4*time.Hour+5*time.Minute),
-		window("7d", 41, week, 3*24*time.Hour+7*time.Hour))
+		window("7d", 47, week, 3*24*time.Hour+7*time.Hour))
 	mira.account("grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64", "SuperGrok", true, now.Add(-3*time.Minute),
 		window("7d", 6, week, 5*24*time.Hour+2*time.Hour))
 	mira.webWorktrees()
@@ -139,8 +144,10 @@ func teamReport() view.Report {
 	mira.workTo(now.Add(-2*24*time.Hour), "grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64", "/Users/mira/src/ml-playground", 0.7, 30)
 	mira.workTo(now.Add(-4*24*time.Hour), "claude", "mira@studio.dev", "/Users/mira/dotfiles", 0.3, 90)
 
-	// leo runs an older release, and his Codex app fails to answer.
-	leo := newDevice(rng, "d-demo-leo", "leo-air", "leo", "/Users/leo", "v0.3.0", now.Add(-11*time.Minute), "claude", "codex")
+	// leo runs a release from before weighted tokens, so his snapshot has
+	// only input plus output and the team estimates his burn from them. His
+	// Codex app fails to answer.
+	leo := newDevice(rng, "d-demo-leo", "leo-air", "leo", "/Users/leo", "v0.3.4", now.Add(-11*time.Minute), "claude", "codex")
 	leo.account("claude", "leo@studio.dev", "max", true, now.Add(-11*time.Minute),
 		window("5h", 18, 5*time.Hour, 3*time.Hour+50*time.Minute),
 		window("7d", 26, week, 4*24*time.Hour+2*time.Hour))
@@ -163,10 +170,7 @@ func teamReport() view.Report {
 	srv.work("claude", "mira@studio.dev", "/srv/orbit/review", 5, 60)
 	srv.hermes("bots@studio.dev", 6, 60)
 
-	var docs []snapshot.Doc
-	for _, d := range []*device{leo, srv} {
-		docs = append(docs, d.doc(key))
-	}
+	docs := []snapshot.Doc{leo.doc(key).Legacy(), srv.doc(key)}
 	bots := []struct {
 		name   string
 		perDay float64
@@ -187,7 +191,13 @@ func teamReport() view.Report {
 		bot.hermes("bots@studio.dev", b.perDay, 60)
 		docs = append(docs, bot.doc(key))
 	}
-	return mira.report(&collect.TeamCache{PulledAt: now.Add(-3 * time.Minute), Team: key.Fingerprint(), Docs: docs})
+	// The reads found each device on the release its snapshot names, since
+	// the first read of the quarter.
+	known := map[string]collect.Known{}
+	for _, d := range docs {
+		known[d.Device] = collect.Known{Version: d.CollectorVersion, First: now.Add(-90 * 24 * time.Hour), Last: d.CollectedAt}
+	}
+	return mira.report(&collect.TeamCache{PulledAt: now.Add(-3 * time.Minute), Team: key.Fingerprint(), Docs: docs, Known: known})
 }
 
 // device is one made-up machine and the ledger its collector keeps. Its
@@ -201,6 +211,7 @@ type device struct {
 	st             *state.State
 	folders        collect.Folders
 	spread         map[string][]string
+	samples        []state.Sample
 }
 
 func newDevice(rng *rand.Rand, id, host, user, home, version string, at time.Time, providers ...string) *device {
@@ -258,6 +269,28 @@ func (d *device) account(provider, label, plan string, current bool, readAt time
 	}
 }
 
+// run is a reading of a window, ago before now.
+type run struct {
+	ago     time.Duration
+	percent float64
+}
+
+// runs adds the device's runs that read window name of provider's account
+// label before its last reading, oldest first: what the forecast's pace of
+// the last day goes by.
+func (d *device) runs(provider, label, name string, runs ...run) {
+	a := d.st.Accounts[state.Key(provider, label)]
+	i := slices.IndexFunc(a.Quota.Windows, func(w snapshot.Window) bool { return w.Name == name })
+	for _, r := range runs {
+		at := now.Add(-r.ago)
+		w := a.Quota.Windows[i]
+		w.Percent = r.percent
+		d.samples = append(d.samples, state.Sample{At: at, Accounts: []state.SampleAccount{
+			{Provider: provider, Label: label, QuotaAt: &at, Windows: []snapshot.Window{w}},
+		}})
+	}
+}
+
 // fail makes a harness fail on the device.
 func (d *device) fail(provider, msg string) {
 	src := d.st.Sources[provider]
@@ -265,9 +298,31 @@ func (d *device) fail(provider, msg string) {
 	d.st.Sources[provider] = src
 }
 
-// work spends about perDay million input and output tokens a day on project
-// over the last days days, up to the device's last run: in working hours,
-// less at weekends, with a day off now and then, one session a day.
+// mixes is how a harness's tokens split by kind, in parts of a session's
+// hour. Claude Code sends little fresh input, reads about 25 times its output
+// back from cache, and writes 1.5 times its output to cache, three fifths of
+// it kept an hour. Codex reads about 30 times its fresh input from cache, and
+// writes little. Grok reads less from cache. Hermes bills to Codex here.
+var mixes = map[string]meter.Use{
+	"claude": {Input: 3, Output: 120, CacheRead: 3000, CacheWrite: 180, CacheWrite1h: 108},
+	"codex":  {Input: 30, Output: 10, CacheRead: 900},
+	"grok":   {Input: 60, Output: 15, CacheRead: 600},
+	"hermes": {Input: 30, Output: 10, CacheRead: 900},
+}
+
+// use is an hour of provider's tokens, billed to label, that burns about n
+// weighted tokens.
+func use(provider, label string, n int64) meter.Use {
+	mix := mixes[provider]
+	k := float64(n) / float64(mix.Burn(meter.WeightsOf(provider, label)))
+	part := func(m int64) int64 { return int64(float64(m) * k) }
+	return meter.Use{Input: part(mix.Input), Output: part(mix.Output), CacheRead: part(mix.CacheRead),
+		CacheWrite: part(mix.CacheWrite), CacheWrite1h: part(mix.CacheWrite1h)}
+}
+
+// work burns about perDay million weighted tokens a day on project over the
+// last days days, up to the device's last run: in working hours, less at
+// weekends, with a day off now and then, one session a day.
 func (d *device) work(provider, label, project string, perDay float64, days int) {
 	d.spend(d.at, provider, label, project, perDay, days, nil)
 }
@@ -308,7 +363,7 @@ func (d *device) spend(until time.Time, provider, label, project string, perDay 
 				break
 			}
 			n := int64(perDay * 1e6 / 12 * weight * (0.3 + 1.4*d.rng.Float64()))
-			s.U.Add(at, meter.Use{Input: n * 93 / 100, Output: n - n*93/100, CacheRead: n * 11, CacheWrite: n / 3})
+			s.U.Add(at, use(provider, label, n))
 			s.Updated = at
 		}
 		if len(s.U) == 0 {
@@ -344,7 +399,7 @@ func (d *device) report(tc *collect.TeamCache) view.Report {
 	in := view.Input{
 		Version: d.version, RelayURL: relay, Config: cfg, State: d.st, Key: key,
 		Doc:      collect.BuildDoc(d.st, key, cfg, d.host, d.user, d.version, d.at),
-		Hostname: d.host, OSUser: d.user, Now: now, Folders: d.folders,
+		Hostname: d.host, OSUser: d.user, Now: now, Folders: d.folders, Samples: d.samples,
 	}
 	if tc != nil {
 		in.Team = *tc
