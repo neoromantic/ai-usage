@@ -97,7 +97,10 @@ func (c *card) statusIdentity(dir string) {
 	}
 }
 
-// statusRun is the last run, the last success and the last error.
+// statusRun is the last run, the last success and the last error, with how
+// long ago it was. An error saved without its time, as by a release before
+// the time was kept, has none to show; one older than the last success is
+// muted.
 func (c *card) statusRun() {
 	col := c.r.Collector
 	switch {
@@ -113,13 +116,20 @@ func (c *card) statusRun() {
 	} else {
 		c.kv("last success", c.ok(), c.stamp(col.LastSuccessAt), nil)
 	}
+	msg := ""
+	if col.LastError != nil {
+		msg = *col.LastError
+		if col.LastErrorAt != nil {
+			msg = c.stamp(col.LastErrorAt) + ": " + msg
+		}
+	}
 	switch {
 	case col.LastError == nil:
 		c.kv("last error", info, "none", lipgloss.BrightBlack)
 	case failed(col):
-		c.kv("last error", c.fail(), c.stamp(col.LastErrorAt)+": "+*col.LastError, lipgloss.Red)
+		c.kv("last error", c.fail(), msg, lipgloss.Red)
 	default:
-		c.kv("last error", info, c.stamp(col.LastErrorAt)+": "+*col.LastError, lipgloss.BrightBlack)
+		c.kv("last error", info, msg, lipgloss.BrightBlack)
 	}
 }
 

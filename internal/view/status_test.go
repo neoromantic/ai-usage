@@ -96,6 +96,13 @@ func TestCollectorSection(t *testing.T) {
 		}
 	}
 
+	// An error saved without its time says no time, not "never".
+	f.in.State.LastErrorAt = time.Time{}
+	if status := StatusText(Build(f.in), "", Options{Width: 80, Loc: time.UTC}); !strings.Contains(status, "\nlast error      claude: 2 malformed lines\n") {
+		t.Fatalf("an error without its time:\n%s", status)
+	}
+	f.in.State.LastErrorAt = now.Add(-time.Hour)
+
 	// After `schedule remove`, status still says how to register again.
 	saved := f.in.State.Schedule.Error
 	f.in.State.Schedule.Error = "removed by `ai-usage schedule remove`"
