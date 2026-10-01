@@ -46,6 +46,8 @@ enum Renderer {
                     (.errors, "usage-filtered", "Devices with errors"),
                     (.silent, "usage-filtered-silent", "Devices not reporting"),
                     (.notUpdating, "usage-filtered-not-updating", "Devices not updating"),
+                    (.reinstall, "usage-filtered-reinstall", "Devices to reinstall"),
+                    (.duplicate, "usage-filtered-reinstalled", "Devices reinstalled"),
                 ]
                 for (kind, name, title) in filters {
                     guard let chip = Chip.chips(report).first(where: { $0.kind == kind }) else { continue }

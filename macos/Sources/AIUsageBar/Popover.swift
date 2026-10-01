@@ -348,11 +348,14 @@ private struct VerdictButton: View {
         }
     }
 
-    /// Every out and over entry in a sentence of its own.
+    /// Every entry about a subscription that asks for something, in a
+    /// sentence of its own, under the word the report's ATTENTION gives it.
     private var help: String {
-        report.attention.filter { $0.kind == .out || $0.kind == .over }.map { a in
+        let kinds: [Attention.Kind: String] = [.out: "out", .over: "over", .tight: "tight", .outside: "outside", .noReading: "no reading"]
+        return report.attention.compactMap { a -> String? in
+            guard let word = kinds[a.kind] else { return nil }
             let t = AttentionText(a, report: report, now: store.now)
-            return "\(t.subject): \(a.kind == .out ? "out" : "over") · \(t.detail)"
+            return "\(t.subject): \(word) · \(t.detail)"
         }.joined(separator: "\n")
     }
 }
@@ -642,6 +645,8 @@ private struct ChipRow: View {
         case .errors: title = "Devices with errors"
         case .silent: title = "Devices not reporting"
         case .notUpdating: title = "Devices not updating"
+        case .reinstall: title = "Devices to reinstall"
+        case .duplicate: title = "Devices reinstalled"
         case .health, .collector:
             StatusMenu.show(store, entries: chip.entries)
             return
@@ -666,7 +671,7 @@ private struct ChipRow: View {
             return "Could not read the report: \(store.refreshError ?? "")"
         case .health(let item, _):
             return c.health.first { $0.item == item }.map { HealthLine($0, c, now: store.now).help } ?? ""
-        case .errors, .silent, .collector:
+        case .errors, .silent, .collector, .reinstall, .duplicate:
             return chip.entries.map { a in
                 let t = AttentionText(a, report: report, now: store.now)
                 return "\(t.subject): \(t.detail)"
@@ -724,66 +729,6 @@ private struct ChipButton: View {
         .accessibilityLabel(chip.text)
         .accessibilityValue(chosen ? "chosen" : "")
         .accessibilityHint(chosen ? "Shows every device" : help)
-    }
-}
-
-/// What an attention entry is about and what to know, in a sentence.
-struct AttentionText {
-    var subject = ""
-    /// What asks for something, first: how long the devices on an older
-    /// release have not updated.
-    var alert: String?
-    var detail = ""
-
-    init(_ a: Attention, report r: Report, now: Date) {
-        let clock = { (t: Date) in Format.clock(t, now: now) }
-        let from = { (t: Date) in Format.duration(abs(t.timeIntervalSince(now))) }
-        let stale = a.readingAgeSeconds.map { " · reading \(Format.duration(TimeInterval($0))) old" } ?? ""
-        let devices = a.devices ?? []
-        switch a.kind {
-        case .out, .over, .under:
-            let account = a.provider.flatMap { r.teamAccount(provider: $0, label: a.account ?? "") }
-            subject = Format.provider(a.provider ?? "") + " " + (a.name ?? a.account ?? "")
-            if let w = a.window {
-                subject += " · " + (account?.quota?.shortName(w) ?? w)
-            }
-        default:
-            subject = devices.joined(separator: ", ")
-        }
-        switch a.kind {
-        case .out:
-            detail = (a.at.map { "back \(clock($0)) (in \(from($0)))" } ?? "until its reset") + stale
-        case .over:
-            if let at = a.at, let reset = a.resetsAt, reset.timeIntervalSince(at) >= 60 {
-                detail = (at > now ? "runs out" : "ran out") + " ~\(clock(at)), \(Format.duration(reset.timeIntervalSince(at))) before its reset"
-                    + " · resets \(clock(reset))" + stale
-            } else {
-                detail = "runs out at its reset" + stale
-            }
-        case .under:
-            let unused = a.percent.map { "~\(max(100 - Int($0), 0))% would go unused" } ?? "some would go unused"
-            detail = unused + (a.resetsAt.map { " · resets \(clock($0))" } ?? "") + stale
-        case .error:
-            detail = a.message ?? "failing"
-        case .silent:
-            detail = a.at.map { "no report since \(clock($0)) (\(from($0)) ago)" } ?? "no report for a day"
-            if let m = a.message {
-                detail += " · last error: \(m)"
-            }
-        case .old:
-            let versions = Set(devices.compactMap { r.teamDevice(named: $0)?.collectorVersion }).sorted()
-            let latest = a.message.map { "latest \($0)" } ?? "a newer release is out"
-            detail = devices.count == 1 && versions.count == 1
-                ? "on \(versions[0]) · \(latest)"
-                : "\(devices.count) devices on " + (versions.count == 1 ? versions[0] : "older releases") + " · \(latest)"
-            // The report sets the time once a device has had the runs to
-            // update and has not.
-            if let at = a.at {
-                alert = "Not updated for " + (devices.count > 1 ? "up to " : "") + from(at)
-            }
-        case .other:
-            detail = a.message ?? ""
-        }
     }
 }
 

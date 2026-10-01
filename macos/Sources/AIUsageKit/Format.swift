@@ -177,6 +177,85 @@ extension Report {
     }
 }
 
+/// What a list shows of an item's tokens, and the words for them: the
+/// weighted tokens where the report has them, else, from an ai-usage before
+/// v0.4.0, input plus output. It only picks the field the report sent.
+public struct Measured<Value: Sendable>: Sendable {
+    public let value: Value
+    /// `TokenLabel.weighted` or `TokenLabel.inOut`.
+    public let label: String
+
+    /// Burn when the report sent it, else usage.
+    public init(_ burn: Value?, else usage: Value) {
+        (value, label) = burn.map { ($0, TokenLabel.weighted) } ?? (usage, TokenLabel.inOut)
+    }
+}
+
+/// The words for what a token count is.
+public enum TokenLabel {
+    public static let weighted = "weighted tokens"
+    public static let inOut = "tokens in+out"
+}
+
+extension Account {
+    public var shown: Measured<Usage> { Measured(burn, else: usage) }
+    /// Tokens a day, newest first.
+    public var shownDays: Measured<[Int]> { Measured(burnDays, else: days) }
+}
+
+extension Project {
+    public var shown: Measured<Usage> { Measured(burn, else: usage) }
+}
+
+extension TeamDevice {
+    public var shown: Measured<Usage> { Measured(burn, else: usage) }
+}
+
+extension TeamAccount {
+    public var shown: Measured<Usage> { Measured(burn, else: usage) }
+}
+
+extension TeamAccount.PerDevice {
+    public var shown: Measured<Usage> { Measured(burn, else: usage) }
+}
+
+extension Matrix.Column {
+    public var shown: Measured<Usage> { Measured(burn, else: usage) }
+    /// The team's tokens since the main window began.
+    public var shownWindow: Measured<Int> { Measured(windowBurn, else: windowTokens) }
+}
+
+extension Matrix.Row {
+    public var shown: Measured<Usage> { Measured(burn, else: usage) }
+    /// The device's part of the team's tokens.
+    public var shownShare: Measured<Share> { Measured(burnShare, else: share) }
+}
+
+extension Matrix.Cell {
+    public var shown: Measured<Usage> { Measured(burn, else: usage) }
+    public var shownWindow: Measured<Int> { Measured(windowBurn, else: windowTokens) }
+    /// The device's part of the column's tokens.
+    public var shownShare: Measured<Share> { Measured(burnShare, else: share) }
+}
+
+extension Report {
+    /// The words for the tokens the report's lists show: those of its
+    /// devices, else of its projects, else of this device's accounts. A
+    /// report comes from one release, which sends burn everywhere or
+    /// nowhere.
+    public var tokenLabel: String {
+        let first = team.matrix.rows.first?.shown ?? projects.first?.shown ?? providers.lazy.flatMap(\.accounts).first?.shown
+        return first?.label ?? TokenLabel.inOut
+    }
+
+    /// What the tokens are, in a sentence for a tooltip.
+    public var tokenHelp: String {
+        tokenLabel == TokenLabel.weighted
+            ? "Weighted tokens: every kind of token, weighed by its API price against input; a proxy for quota, not its formula"
+            : "Input + output tokens, cache excluded"
+    }
+}
+
 extension TeamAccount {
     /// The known window that limits the account with the least left: the
     /// main one, or another the report marks with `limits`. The first wins

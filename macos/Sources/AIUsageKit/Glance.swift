@@ -99,6 +99,12 @@ public struct Verdict: Equatable, Sendable {
         if let room {
             parts.append("Most room: \(Format.provider(room.provider)) \(room.account.name) · \(Format.left(room.window))")
         }
+        // A window of this Mac's that ends nearly full comes before the
+        // ones left mostly unused.
+        let tight = r.attention.filter { $0.kind == .tight }.count
+        if tight > 0 {
+            parts.append("\(tight) tight")
+        }
         let under = r.attention.filter { $0.kind == .under }.count
         if under > 0 {
             parts.append("\(under) underused")
@@ -111,8 +117,9 @@ public struct Verdict: Equatable, Sendable {
 
 /// A small button under the verdict for a problem that is not about a
 /// subscription: the report that could not be read, a part of the
-/// collector that fails, and devices that fail, stopped reporting, or no
-/// longer update themselves. Subscriptions have the verdict and their rows.
+/// collector that fails, and devices that fail, stopped reporting, no
+/// longer update themselves, need a reinstall, or were reinstalled.
+/// Subscriptions have the verdict and their rows.
 public struct Chip: Equatable, Sendable {
     public enum Kind: Equatable, Sendable {
         /// The last refresh failed while an older report shows.
@@ -123,6 +130,11 @@ public struct Chip: Equatable, Sendable {
         case silent
         /// Devices on an older release that do not update themselves.
         case notUpdating
+        /// Devices whose release cannot do something, such as read Claude's
+        /// quota: they need a reinstall.
+        case reinstall
+        /// Devices that were reinstalled, whose old record stays.
+        case duplicate
         /// With this Mac alone, its errors and silence in one.
         case collector
     }
@@ -207,16 +219,32 @@ public struct Chip: Equatable, Sendable {
                                 state: "tight", entries: silent))
             }
         }
+        // The devices whose release lacks something have an old entry of
+        // their own, first; a reinstall is their fix, whether or not they
+        // update themselves.
+        let lacking = of(.old).filter { !$0.limitations.isEmpty }
+        if !lacking.isEmpty {
+            let n = devices(lacking).count
+            out.append(Chip(.reinstall, n == 1 ? "1 needs reinstall" : "\(n) need reinstall", short: "\(n)",
+                            symbol: "arrow.down.circle.fill", state: "tight", entries: lacking))
+        }
         // A device on an older release that updates itself is lag after a
         // release, not a problem: only those the report says do not update
         // themselves get a chip.
-        if let old = of(.old).first {
-            let all = old.devices ?? []
+        let old = of(.old).filter(\.limitations.isEmpty)
+        if let first = old.first {
+            let all = devices(old)
             let stuck = all.filter { r.teamDevice(named: $0)?.notUpdating == true }
             if !stuck.isEmpty {
                 out.append(Chip(.notUpdating, "\(stuck.count) not updating", short: "\(stuck.count)", symbol: "arrow.up.circle.fill",
-                                state: "tight", entries: [old], devices: stuck, updating: all.count - stuck.count))
+                                state: "tight", entries: [first], devices: stuck, updating: all.count - stuck.count))
             }
+        }
+        let duplicate = of(.duplicate)
+        if !duplicate.isEmpty {
+            let n = devices(duplicate).count
+            out.append(Chip(.duplicate, "\(n) reinstalled", short: "\(n)", symbol: "square.on.square", state: "unknown",
+                            entries: duplicate))
         }
         return out
     }
@@ -303,5 +331,110 @@ public struct ProjectSection: Sendable {
             }
         }
         return out
+    }
+}
+
+/// What an attention entry is about and what to know, in a sentence. The
+/// kinds since v0.4.0 say it in the words of the report's ATTENTION lines,
+/// in their fullest form.
+public struct AttentionText: Sendable {
+    public var subject = ""
+    /// What asks for something, first: how long the devices on an older
+    /// release have not updated.
+    public var alert: String?
+    public var detail = ""
+
+    public init(_ a: Attention, report r: Report, now: Date, timeZone: TimeZone = .current) {
+        let clock = { (t: Date) in Format.clock(t, now: now, timeZone: timeZone) }
+        let from = { (t: Date) in Format.duration(abs(t.timeIntervalSince(now))) }
+        let stale = a.readingAgeSeconds.map { " · reading \(Format.duration(TimeInterval($0))) old" } ?? ""
+        let devices = a.devices ?? []
+        switch a.kind {
+        case .out, .over, .tight, .under, .outside, .noReading:
+            let account = a.provider.flatMap { r.teamAccount(provider: $0, label: a.account ?? "") }
+            subject = Format.provider(a.provider ?? "") + " " + (a.name ?? a.account ?? "")
+            if let w = a.window {
+                subject += " · " + (account?.quota?.shortName(w) ?? w)
+            }
+        default:
+            subject = devices.joined(separator: ", ")
+        }
+        switch a.kind {
+        case .out:
+            detail = (a.at.map { "back \(clock($0)) (in \(from($0)))" } ?? "until its reset") + stale
+        case .over:
+            if let at = a.at, let reset = a.resetsAt, reset.timeIntervalSince(at) >= 60 {
+                detail = (at > now ? "runs out" : "ran out") + " ~\(clock(at)), \(Format.duration(reset.timeIntervalSince(at))) before its reset"
+                    + " · resets \(clock(reset))" + stale
+            } else {
+                detail = "runs out at its reset" + stale
+            }
+        case .tight:
+            let at = "~\(Int(a.percent ?? 0))% at reset" + (a.resetsAt.map { " " + clock($0) } ?? "")
+            detail = at + " at \(Self.pace(a, r)) pace" + stale
+        case .outside:
+            let points = "+\(Int((a.percent ?? 0).rounded())) points"
+            detail = points + (a.at.map { " in " + Format.age($0, now: now) } ?? "") + ", no team device spent"
+        case .under:
+            let unused = a.percent.map { "~\(max(100 - Int($0), 0))% would go unused" } ?? "some would go unused"
+            detail = unused + (a.resetsAt.map { " · resets \(clock($0))" } ?? "") + stale
+        case .error:
+            detail = a.message ?? "failing"
+        case .noReading:
+            detail = a.message ?? "no reading"
+        case .silent:
+            detail = a.at.map { "no report since \(clock($0)) (\(from($0)) ago)" } ?? "no report for a day"
+            if let m = a.message {
+                detail += " · last error: \(m)"
+            }
+        case .duplicate:
+            detail = "reinstalled as " + (a.message ?? "another device")
+            if let id = a.deviceId {
+                detail += ": " + Self.forgetCommand(id)
+            }
+        case .old:
+            let versions = Set(devices.compactMap { r.teamDevice(named: $0)?.collectorVersion }).sorted()
+            let on = devices.count == 1 && versions.count == 1
+                ? "on \(versions[0])"
+                : "\(devices.count) devices on " + (versions.count == 1 ? versions[0] : "older releases")
+            if let lack = Self.lack(a.limitations) {
+                detail = on + " · " + lack + "; reinstall with install.sh"
+                return
+            }
+            detail = on + " · " + (a.message.map { "latest \($0)" } ?? "a newer release is out")
+            // The report sets the time once a device has had the runs to
+            // update and has not.
+            if let at = a.at {
+                alert = "Not updated for " + (devices.count > 1 ? "up to " : "") + from(at)
+            }
+        case .other:
+            detail = a.message ?? ""
+        }
+    }
+
+    /// The command that forgets a reinstalled device's old record, with
+    /// the first 8 hex digits of its id.
+    public static func forgetCommand(_ id: String) -> String {
+        let hex = id.hasPrefix("d-") ? id.dropFirst(2) : Substring(id)
+        return "ai-usage team forget-device " + hex.prefix(8)
+    }
+
+    /// The first of a release's limitations in words, as the report's
+    /// ATTENTION line says it.
+    public static func lack(_ limitations: [String]) -> String? {
+        if limitations.contains("no_claude_quota") { return "cannot read Claude quota" }
+        if limitations.contains("no_update_errors") { return "does not report update errors" }
+        return nil
+    }
+
+    /// The pace a tight line forecasts at: the last day's, when the
+    /// forecast takes it, else the week's, or the window's when it is not a
+    /// week long.
+    private static func pace(_ a: Attention, _ r: Report) -> String {
+        let q = a.provider.flatMap { r.teamAccount(provider: $0, label: a.account ?? "") }?.quota
+        let named = a.window.map { name in q?.windows.first { $0.name == name } }
+        guard let w = named ?? q?.main else { return "this week's" }
+        if w.forecast?.basis == "recent" { return "the last day's" }
+        return (w.minutes ?? (w.name == "7d" ? 10080 : 0)) == 10080 ? "this week's" : "this window's"
     }
 }

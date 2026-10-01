@@ -149,6 +149,10 @@ extension Array: AbsentValue {
     public static var absent: [Element] { [] }
 }
 
+extension Optional: AbsentValue {
+    public static var absent: Wrapped? { nil }
+}
+
 extension KeyedDecodingContainer {
     public func decode<Value>(_: Absent<Value>.Type, forKey key: Key) throws -> Absent<Value> {
         Absent(wrappedValue: try decodeIfPresent(Value.self, forKey: key) ?? .absent)
@@ -156,11 +160,38 @@ extension KeyedDecodingContainer {
 }
 
 public struct Attention: Decodable, Sendable {
-    public enum Kind: String, Decodable, Sendable {
-        case out, over, error, silent, old, under, other
+    /// The kinds, most urgent first, as the report orders them.
+    public enum Kind: Hashable, Decodable, Sendable {
+        case out, over, tight, outside, error, noReading, silent, duplicate, old, under
+        /// A kind this app does not know, by its name: a later ai-usage
+        /// can add one within schema version 4.
+        case other(String)
+
+        private static let known: [Kind] = [.out, .over, .tight, .outside, .error, .noReading, .silent, .duplicate, .old, .under]
+
+        public init(rawValue: String) {
+            self = Self.known.first { $0.rawValue == rawValue } ?? .other(rawValue)
+        }
 
         public init(from decoder: Decoder) throws {
-            self = Kind(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .other
+            self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
+        }
+
+        /// The kind's name in the report.
+        public var rawValue: String {
+            switch self {
+            case .out: return "out"
+            case .over: return "over"
+            case .tight: return "tight"
+            case .outside: return "outside"
+            case .error: return "error"
+            case .noReading: return "no_reading"
+            case .silent: return "silent"
+            case .duplicate: return "duplicate"
+            case .old: return "old"
+            case .under: return "under"
+            case .other(let name): return name
+            }
         }
     }
 
@@ -175,6 +206,12 @@ public struct Attention: Decodable, Sendable {
     public let percent: Double?
     public let readingAgeSeconds: Int?
     public let message: String?
+    /// A duplicate's device id, the one `ai-usage team forget-device`
+    /// takes.
+    @Absent public var deviceId: String?
+    /// What the releases of the devices of an old entry cannot do, such as
+    /// `no_claude_quota`: they need a reinstall.
+    @Absent public var limitations: [String]
 }
 
 public struct Provider: Decodable, Sendable {
@@ -182,6 +219,8 @@ public struct Provider: Decodable, Sendable {
     public let status: String
     public let error: String?
     public let homes: [String]
+    /// The first hour this device's ledger holds the provider's tokens for.
+    @Absent public var coveredSince: Date?
     public let accounts: [Account]
 }
 
@@ -199,7 +238,24 @@ public struct Account: Decodable, Sendable {
     /// Tokens per UTC day on this device, newest first, up to 90 days;
     /// empty from an ai-usage that does not say.
     @Absent public var days: [Int]
+    /// Weighted tokens in this device's local periods, and per local day,
+    /// newest first; nil from an ai-usage that does not say.
+    @Absent public var burn: Usage?
+    @Absent public var burnDays: [Int]?
+    /// Input, cache writes, and output in the same periods.
+    @Absent public var fresh: Usage?
+    /// Where a Claude account's transcripts miss tokens; nil when they miss
+    /// none.
+    @Absent public var transcriptGaps: TranscriptGaps?
     public let lastActiveAt: Date?
+}
+
+/// Replies of an account's Claude sessions whose transcript ends without a
+/// final count, and sessions whose Claude Code count has over twice the
+/// output of their transcripts.
+public struct TranscriptGaps: Decodable, Sendable {
+    public let nullSnapshots: Int
+    public let overTracked: Int
 }
 
 public struct Link: Decodable, Sendable {
@@ -252,10 +308,17 @@ public struct Forecast: Decodable, Sendable {
     public let percent: Double
     public let elapsed: Double
     public let runsOutAt: Date?
+    /// The pace the forecast takes: "window", the average since the window
+    /// began, or "recent", the last day's where that is faster; nil from an
+    /// ai-usage that does not say.
+    @Absent public var basis: String?
+    /// That pace, in percent of the window an hour.
+    @Absent public var pace: Double?
 }
 
-/// Input plus output tokens in the report's four periods.
-public struct Usage: Decodable, Sendable {
+/// Tokens in the report's four periods: input plus output as `usage`,
+/// weighted tokens as `burn`.
+public struct Usage: Decodable, Equatable, Sendable {
     public let today: Int
     public let week: Int
     public let month: Int
@@ -276,7 +339,7 @@ public struct Usage: Decodable, Sendable {
 }
 
 /// A part of a whole in percent, in each period; nil where the whole is none.
-public struct Share: Decodable, Sendable {
+public struct Share: Decodable, Equatable, Sendable {
     public let today: Double?
     public let week: Double?
     public let month: Double?
@@ -327,13 +390,27 @@ public struct Project: Decodable, Sendable {
     @Absent public var folders: Int
     public let sessions: Int
     public let usage: Usage
+    @Absent public var burn: Usage?
+    @Absent public var fresh: Usage?
+    /// The project's sessions last active in each period.
+    @Absent public var activeSessions: Counts?
     public let providers: [String]?
     public let lastActiveAt: Date?
 }
 
+/// A count in each of the report's periods.
+public typealias Counts = Usage
+
 public struct Team: Decodable, Sendable {
     public let pulledAt: Date?
     public let latestVersion: String?
+    /// The burn of some device is estimated from its input and output, as
+    /// a release before v0.4.0 sends none. HeldBackBy are the devices whose
+    /// release keeps this one from sending its own, and EstimatedReason
+    /// says why, and what to do, in a line.
+    @Absent public var estimated: Bool
+    @Absent public var heldBackBy: [String]
+    @Absent public var estimatedReason: String?
     public let devices: [TeamDevice]
     public let providers: [TeamProvider]
     public let matrix: Matrix
@@ -359,6 +436,21 @@ public struct TeamDevice: Decodable, Sendable {
     /// that does not say.
     @Absent public var notUpdating: Bool
     public let usage: Usage
+    @Absent public var burn: Usage?
+    @Absent public var burnEstimated: Bool
+    /// The longest time in the last 2 days the device did not report, when
+    /// over an hour.
+    @Absent public var gap: Gap?
+    /// The label of the device that reinstalled this one.
+    @Absent public var replacedBy: String?
+    /// What the device's release cannot do: `no_claude_quota`,
+    /// `no_update_errors`.
+    @Absent public var limitations: [String]
+
+    public struct Gap: Decodable, Sendable {
+        public let seconds: Int
+        public let at: Date
+    }
 
     public struct Source: Decodable, Sendable {
         public let provider: String
@@ -391,13 +483,28 @@ public struct TeamAccount: Decodable, Sendable {
     public let lastActiveAt: Date?
     public let perDevice: [PerDevice]
     public let linkedUsage: [LinkedUsage]
+    @Absent public var burn: Usage?
+    @Absent public var burnEstimated: Bool
+    /// Why the subscription has no reading of its main window, with what to
+    /// do, when that is known.
+    @Absent public var noReading: String?
+    /// A window that filled in the last day while the team spent next to
+    /// nothing on it.
+    @Absent public var outside: Outside?
 
     public struct PerDevice: Decodable, Sendable {
         public let device: String
         public let current: Bool
         public let sessions: Int
         public let usage: Usage
+        @Absent public var burn: Usage?
         public let lastActiveAt: Date?
+    }
+
+    /// How many points a window rose since when.
+    public struct Outside: Decodable, Sendable {
+        public let points: Double
+        public let since: Date
     }
 
     public struct LinkedUsage: Decodable, Sendable {
@@ -422,6 +529,8 @@ public struct Matrix: Decodable, Sendable {
         public let percent: Double?
         public let usage: Usage
         public let windowTokens: Int
+        @Absent public var burn: Usage?
+        @Absent public var windowBurn: Int?
     }
 
     public struct Row: Decodable, Sendable {
@@ -430,11 +539,17 @@ public struct Matrix: Decodable, Sendable {
         public let cells: [Cell]
         public let usage: Usage
         public let share: Share
+        @Absent public var burn: Usage?
+        @Absent public var burnShare: Share?
+        @Absent public var burnEstimated: Bool
     }
 
     public struct Cell: Decodable, Sendable {
         public let usage: Usage
         public let windowTokens: Int
         public let share: Share
+        @Absent public var burn: Usage?
+        @Absent public var windowBurn: Int?
+        @Absent public var burnShare: Share?
     }
 }
