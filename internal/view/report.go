@@ -145,29 +145,39 @@ const (
 // on Kind.
 type Attention struct {
 	Kind string `json:"kind"`
-	// Provider, Account, and Name are the account of an out, over, or under
-	// window: its label and its short name.
+	// Provider, Account, and Name are the account of an out, over, tight,
+	// under, or outside window, or of a subscription with no reading: its
+	// label and its short name.
 	Provider string `json:"provider,omitempty"`
 	Account  string `json:"account,omitempty"`
 	Name     string `json:"name,omitempty"`
 	// Window names the window when it is not the account's main one.
 	Window string `json:"window,omitempty"`
-	// Devices is the device of an error or silence, or every device on an
-	// old release.
+	// Devices is the device of an error, silence, or duplicate, or every
+	// device on an old release.
 	Devices []string `json:"devices,omitempty"`
+	// DeviceID is a duplicate's device id, the one to forget.
+	DeviceID string `json:"device_id,omitempty"`
 	// At is when an out window resets, when an over window runs out before
-	// its reset, when a silent device last reported, or the earliest
-	// BehindSince of old devices that do not update themselves.
+	// its reset, when an outside window began to rise, when a silent or
+	// duplicate device last reported, or the earliest BehindSince of old
+	// devices that do not update themselves.
 	At *time.Time `json:"at,omitempty"`
-	// ResetsAt is when an over or under window resets.
+	// ResetsAt is when an over, tight, or under window resets.
 	ResetsAt *time.Time `json:"resets_at,omitempty"`
-	// Percent is an over or under window's forecast at its reset.
+	// Percent is an over, tight, or under window's forecast at its reset,
+	// or how many points an outside window rose.
 	Percent *float64 `json:"percent,omitempty"`
 	// ReadingAge is how old the reading is, in seconds, when it is stale.
 	ReadingAge int64 `json:"reading_age_seconds,omitempty"`
 	// Message is an error's text, the error a silent device last reported,
-	// or the newest release for old devices.
+	// why a subscription has no reading, the label of the device that
+	// replaced a duplicate, or the newest release for old devices.
 	Message string `json:"message,omitempty"`
+	// Limitations are what the releases of old devices cannot do, as in
+	// TeamDevice.Limitations; such devices need a reinstall, and have an
+	// entry of their own.
+	Limitations []string `json:"limitations,omitempty"`
 }
 
 type Provider struct {

@@ -58,9 +58,10 @@ func TestAttention(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("attention =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
-	// A full window stays full until it resets, so its age is no news.
+	// A full window stays full until it resets, but the provider can reset
+	// it early: a reading older than StaleAfter says how old it is.
 	fable := r.Attention[0]
-	if fable.At == nil || !fable.At.Equal(start.Add(week)) || fable.ReadingAge != 0 || fable.Account != "sam@mail.test" {
+	if fable.At == nil || !fable.At.Equal(start.Add(week)) || fable.ReadingAge != 30*3600 || fable.Account != "sam@mail.test" {
 		t.Fatalf("fable = %+v", fable)
 	}
 	over := r.Attention[2]

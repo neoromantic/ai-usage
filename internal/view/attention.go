@@ -9,11 +9,16 @@ import (
 )
 
 // attentionOrder is the kinds, most urgent first.
-var attentionOrder = []string{AttentionOut, AttentionOver, AttentionError, AttentionSilent, AttentionOld, AttentionUnder}
+var attentionOrder = []string{
+	AttentionOut, AttentionOver, AttentionTight, AttentionOutside, AttentionError,
+	AttentionNoReading, AttentionSilent, AttentionDuplicate, AttentionOld, AttentionUnder,
+}
 
 // attention is what needs attention now, most urgent first: windows that
-// are out or will run out, devices that fail or are silent, devices on an
-// older release, and windows past half that will be left mostly unused.
+// are out, will run out, or will end nearly full, windows someone outside
+// the team fills, devices that fail, subscriptions in use with no reading,
+// devices that are silent or were reinstalled, devices on an older
+// release, and windows past half that will be left mostly unused.
 func attention(t Team, c Collector, now time.Time) []Attention {
 	out := append(append([]Attention{}, quotaAttention(t, now)...), deviceAttention(t, c)...)
 	sort.SliceStable(out, func(i, j int) bool {
@@ -25,6 +30,11 @@ func attention(t Team, c Collector, now time.Time) []Attention {
 		case AttentionOut, AttentionOver, AttentionSilent:
 			if ta, tb := when(a), when(b); !sameTime(ta, tb) {
 				return before(ta, tb)
+			}
+		case AttentionTight, AttentionOutside:
+			// The fuller forecast, or the bigger rise, first.
+			if *a.Percent != *b.Percent {
+				return *a.Percent > *b.Percent
 			}
 		case AttentionUnder:
 			if *a.Percent != *b.Percent {
@@ -39,23 +49,45 @@ func attention(t Team, c Collector, now time.Time) []Attention {
 }
 
 // quotaAttention is the subscription windows that are out or will run out,
-// and the main windows past half that will be left mostly unused.
+// those of an account logged in here that will end nearly full, the main
+// windows past half that will be left mostly unused, the subscriptions
+// someone outside the team fills, and those in use with no reading.
 func quotaAttention(t Team, now time.Time) []Attention {
 	var out []Attention
 	for _, p := range t.Providers {
 		for _, a := range p.Accounts {
-			if !a.Subscription || a.Quota == nil {
+			if !a.Subscription {
+				continue
+			}
+			of := Attention{Provider: p.Provider, Account: a.Label, Name: a.Name}
+			if a.Outside != nil {
+				at := of
+				pts := a.Outside.Points
+				at.Kind, at.At, at.Percent = AttentionOutside, timePtr(a.Outside.Since), &pts
+				out = append(out, at)
+			}
+			// A reading that does not come says nothing new while the
+			// subscription is not used.
+			if a.NoReading != nil && a.Burn.Week > 0 {
+				at := of
+				at.Kind, at.Message = AttentionNoReading, *a.NoReading
+				out = append(out, at)
+			}
+			if a.Quota == nil {
 				continue
 			}
 			for _, w := range a.Quota.Windows {
 				if !w.Limits {
 					continue
 				}
-				at := Attention{Provider: p.Provider, Account: a.Label, Name: a.Name}
+				at := of
 				if !w.Main {
 					at.Window = w.Name
 				}
-				if w.Stale {
+				// A full window is not stale, as it stays full until it
+				// resets, but the provider can reset it early: an old
+				// reading of it says how old too.
+				if w.Stale || w.State == StateOut && now.Sub(w.ObservedAt) > StaleAfter {
 					at.ReadingAge = int64(now.Sub(w.ObservedAt).Seconds())
 				}
 				switch {
@@ -63,6 +95,10 @@ func quotaAttention(t Team, now time.Time) []Attention {
 					at.Kind, at.At = AttentionOut, w.ResetsAt
 				case w.State == StateOver:
 					at.Kind, at.At, at.ResetsAt = AttentionOver, w.Forecast.RunsOutAt, w.ResetsAt
+				case w.State == StateTight && a.Current:
+					// Only one's own account: another's is its user's to
+					// watch.
+					at.Kind, at.ResetsAt = AttentionTight, w.ResetsAt
 				case w.State == StateUnder && w.Main && w.Forecast.Elapsed >= 0.5:
 					at.Kind, at.ResetsAt = AttentionUnder, w.ResetsAt
 				default:
@@ -79,15 +115,19 @@ func quotaAttention(t Team, now time.Time) []Attention {
 	return out
 }
 
-// deviceAttention is the failing, silent, and old devices. This device's
-// failed run, relay, and update check are errors of this device, and
-// another's failed update check is its error while it is old.
+// deviceAttention is the failing, silent, reinstalled, and old devices.
+// This device's failed run, relay, and update check are errors of this
+// device, and another's failed update check is its error while it is old.
+// A reinstalled device's old record is a duplicate, not a silent or old
+// device: forgetting it is all there is to do.
 func deviceAttention(t Team, c Collector) []Attention {
 	var out []Attention
-	var old []string
-	var behind *time.Time
+	var stuck, old []TeamDevice
 	for _, d := range t.Devices {
 		switch {
+		case d.ReplacedBy != nil:
+			out = append(out, Attention{Kind: AttentionDuplicate, Devices: []string{d.Label}, DeviceID: d.Device, Message: *d.ReplacedBy, At: timePtr(d.CollectedAt)})
+			continue
 		case d.Silent:
 			// A silent device's error is the one it last reported, not what
 			// fails on it now.
@@ -109,18 +149,45 @@ func deviceAttention(t Team, c Collector) []Attention {
 		if d.Old && d.UpdateError != nil && !d.Silent {
 			out = append(out, Attention{Kind: AttentionError, Devices: []string{d.Label}, Message: sourceError("update", *d.UpdateError)})
 		}
-		if d.Old {
-			old = append(old, d.Label)
+		switch {
+		case d.Old && len(d.Limitations) > 0:
+			stuck = append(stuck, d)
+		case d.Old:
+			old = append(old, d)
+		}
+	}
+	if t.Latest != nil {
+		// The devices whose release cannot do something come first: they
+		// need a reinstall.
+		out = append(out, oldAttention(stuck, *t.Latest)...)
+		out = append(out, oldAttention(old, *t.Latest)...)
+	}
+	return out
+}
+
+// oldAttention is the one entry for devices on an older release than
+// latest, with what their releases cannot do, or none.
+func oldAttention(ds []TeamDevice, latest string) []Attention {
+	if len(ds) == 0 {
+		return nil
+	}
+	at := Attention{Kind: AttentionOld, Message: latest}
+	var behind *time.Time
+	for _, d := range ds {
+		at.Devices = append(at.Devices, d.Label)
+		for _, l := range d.Limitations {
+			if !slices.Contains(at.Limitations, l) {
+				at.Limitations = append(at.Limitations, l)
+			}
 		}
 		if notUpdating(d) && (behind == nil || d.BehindSince.Before(*behind)) {
 			behind = d.BehindSince
 		}
 	}
-	if len(old) > 0 && t.Latest != nil {
-		sort.Strings(old)
-		out = append(out, Attention{Kind: AttentionOld, Devices: old, Message: *t.Latest, At: timeOf(behind)})
-	}
-	return out
+	sort.Strings(at.Devices)
+	sort.Strings(at.Limitations)
+	at.At = timeOf(behind)
+	return []Attention{at}
 }
 
 // notUpdating is an old device that does not update itself: it has

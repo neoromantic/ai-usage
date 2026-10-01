@@ -319,8 +319,10 @@ func TestRefusalReading(t *testing.T) {
 		}
 	}
 	out := map[string]string{}
+	// The refusals are 10 hours old: the provider can reset a window early,
+	// so OUT says how old they are.
 	for _, a := range r.Attention {
-		if a.Kind != AttentionOut || a.ReadingAge != 0 {
+		if a.Kind != AttentionOut || a.ReadingAge != 10*3600 {
 			t.Fatalf("attention = %+v", r.Attention)
 		}
 		out[a.Account] = a.Window

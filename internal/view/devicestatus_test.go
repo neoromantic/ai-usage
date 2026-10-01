@@ -324,14 +324,14 @@ func TestStatusNoteUpdate(t *testing.T) {
 	old := func() string {
 		t.Helper()
 		r.Attention = attention(r.Team, r.Collector, r.GeneratedAt)
-		got := pageSection(Render(r, Options{Width: 120}), "ATTENTION")
+		got := pageSection(Render(r, Options{Width: 120, Interactive: true}), "ATTENTION")
 		if i := slices.IndexFunc(got, func(l string) bool { return strings.HasPrefix(l, " OLD ") }); i >= 0 {
 			return got[i]
 		}
 		t.Fatalf("no OLD in ATTENTION:\n%s", strings.Join(got, "\n"))
 		return ""
 	}
-	if got := old(); got != " OLD    3 devices on old releases  Mac.localdomain, MacBook-Pro-Kim +1 · latest v1.4.2 · not updated for up to 1d" {
+	if got := old(); got != " OLD         3 devices on old releases  Mac.localdomain, MacBook-Pro-Kim +1 · latest v1.4.2 · not updated for up to 1d" {
 		t.Errorf("OLD: %q", got)
 	}
 	// A silent device is silent: OLD does not count its days.
