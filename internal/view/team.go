@@ -122,7 +122,7 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 	t.Matrix = matrix(t.Providers, m.byProv, m.devs)
 	m.replaced()
 	for _, dv := range m.devs {
-		dv.dev.Gap = gapOf(m.in.Team.Seen[dv.dev.Device], dv.collectedAt, now)
+		dv.dev.Gap = gapOf(m.in.Team.Seen[dv.dev.Device], m.in.Team.Reads, dv.collectedAt, now, dv.dev.This)
 		t.Devices = append(t.Devices, *dv.dev)
 	}
 	slices.SortFunc(t.Devices, func(a, b TeamDevice) int {
@@ -509,9 +509,13 @@ const (
 
 // gapOf is the longest time within gapKept of now that a device did not
 // report, over the times the team's reads found it reporting, seen, and its
-// snapshot collected at collected, until now, when that is over gapMin. With
-// no times seen there is nothing to go by, and it is nil.
-func gapOf(seen []time.Time, collected, now time.Time) *Gap {
+// snapshot collected at collected, until now, when that is over gapMin.
+// With no times seen there is nothing to go by, and it is nil. Only what
+// this device's reads, at reads, saw of a gap counts: a read between two
+// reports found the device still at the first, while a gap with no read in
+// it, as when this laptop slept, may have had reports this device never
+// read. This device itself, own, knows its gaps whole.
+func gapOf(seen, reads []time.Time, collected, now time.Time, own bool) *Gap {
 	cut := now.Add(-gapKept)
 	var ts []time.Time
 	for _, t := range append(slices.Clone(seen), collected) {
@@ -529,6 +533,16 @@ func gapOf(seen []time.Time, collected, now time.Time) *Gap {
 		next := now
 		if i+1 < len(ts) {
 			next = ts[i+1]
+		}
+		if !own {
+			// Up to the last read that still found the device at t.
+			until := t
+			for _, r := range reads {
+				if r.After(until) && (r.Before(next) || i+1 == len(ts) && !r.After(next)) {
+					until = r
+				}
+			}
+			next = until
 		}
 		if d := next.Sub(t); d > best {
 			best, at = d, t

@@ -712,6 +712,9 @@ func TestTeamReadsRememberReadingsAndReports(t *testing.T) {
 	if !reflect.DeepEqual(res.Team.Seen, want) {
 		t.Fatalf("seen = %v", res.Team.Seen)
 	}
+	if !reflect.DeepEqual(res.Team.Reads, want[self]) {
+		t.Fatalf("reads = %v", res.Team.Reads)
+	}
 	cache, err := LoadTeamCache(o.Dir)
 	if err != nil || !reflect.DeepEqual(cache.Seen, want) || len(cache.History[k]) != 2 {
 		t.Fatalf("saved cache: %+v, %v", cache, err)

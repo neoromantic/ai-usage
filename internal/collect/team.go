@@ -50,6 +50,10 @@ type TeamCache struct {
 	// documents the reads found over the last historyKept, oldest first: when
 	// a device reported, between the reads.
 	Seen map[string][]time.Time `json:"seen,omitempty"`
+	// Reads is when this device read the team over the last historyKept,
+	// oldest first: how much of the time between two reports of a device
+	// the reads saw.
+	Reads []time.Time `json:"reads,omitempty"`
 }
 
 // Point is one window of an account's quota reading, as a team read found
@@ -291,10 +295,11 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 	next.Behind = behindSince(prev, seen, st.Update.Latest, after, now)
 	next.Known = knownAfter(known, next.Docs, device, now)
 	if cache.Team == next.Team {
-		next.History, next.Seen = cache.History, cache.Seen
+		next.History, next.Seen, next.Reads = cache.History, cache.Seen, cache.Reads
 	}
 	next.History = historyAfter(next.History, seen, o.Relay.Key, now)
 	next.Seen = seenAfter(next.Seen, seen, now)
+	next.Reads = timesAfter(next.Reads, now, now)
 	next.ReadError = readError(pulled)
 	*cache = next
 	if err := saveTeamCache(o.Dir, next); err != nil {
@@ -611,15 +616,8 @@ func seenAfter(prev map[string][]time.Time, docs []snapshot.Doc, now time.Time) 
 	for _, d := range docs {
 		out[d.Device] = append(out[d.Device], d.CollectedAt.UTC())
 	}
-	cut := now.Add(-historyKept)
 	for id, ts := range out {
-		ts = slices.DeleteFunc(ts, func(t time.Time) bool { return t.Before(cut) })
-		slices.SortFunc(ts, time.Time.Compare)
-		ts = slices.CompactFunc(ts, time.Time.Equal)
-		if len(ts) > maxSeenPerDev {
-			ts = ts[len(ts)-maxSeenPerDev:]
-		}
-		if len(ts) == 0 {
+		if ts = timesAfter(ts, time.Time{}, now); len(ts) == 0 {
 			delete(out, id)
 			continue
 		}
@@ -629,4 +627,24 @@ func seenAfter(prev map[string][]time.Time, docs []snapshot.Doc, now time.Time) 
 		return nil
 	}
 	return out
+}
+
+// timesAfter is ts with t, unless t is zero, sorted and without repeats,
+// over the last historyKept of now and at most maxSeenPerDev of them.
+func timesAfter(ts []time.Time, t, now time.Time) []time.Time {
+	ts = slices.Clone(ts)
+	if !t.IsZero() {
+		ts = append(ts, t.UTC())
+	}
+	cut := now.Add(-historyKept)
+	ts = slices.DeleteFunc(ts, func(t time.Time) bool { return t.Before(cut) })
+	slices.SortFunc(ts, time.Time.Compare)
+	ts = slices.CompactFunc(ts, time.Time.Equal)
+	if len(ts) > maxSeenPerDev {
+		ts = ts[len(ts)-maxSeenPerDev:]
+	}
+	if len(ts) == 0 {
+		return nil
+	}
+	return ts
 }

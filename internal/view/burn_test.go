@@ -303,28 +303,42 @@ func TestNoReadingSaysWhy(t *testing.T) {
 // until now, when that is over an hour.
 func TestGap(t *testing.T) {
 	m := func(n int) time.Time { return now.Add(time.Duration(n) * time.Minute) }
+	// This device read the team every 20 minutes over the last 12 hours.
+	var reads []time.Time
+	for n := -720; n <= 0; n += 20 {
+		reads = append(reads, m(n))
+	}
 	for _, c := range []struct {
 		name      string
 		seen      []time.Time
+		reads     []time.Time
 		collected time.Time
+		own       bool
 		want      *Gap
 	}{
-		{"none seen", nil, m(-5), nil},
-		{"a gap", []time.Time{m(-600), m(-585), m(-120)}, m(-5), &Gap{Seconds: 465 * 60, At: m(-585)}},
-		{"until now", []time.Time{m(-240)}, m(-180), &Gap{Seconds: 180 * 60, At: m(-180)}},
-		{"within an hour", []time.Time{m(-100), m(-45)}, m(-5), nil},
-		{"older than 48h", []time.Time{m(-60 * 60), m(-60)}, m(-5), nil},
+		{"none seen", nil, reads, m(-5), false, nil},
+		{"a gap", []time.Time{m(-600), m(-585), m(-120)}, reads, m(-5), false, &Gap{Seconds: 445 * 60, At: m(-585)}},
+		{"until now", []time.Time{m(-240)}, reads, m(-180), false, &Gap{Seconds: 180 * 60, At: m(-180)}},
+		{"within an hour", []time.Time{m(-100), m(-45)}, reads, m(-5), false, nil},
+		{"older than 48h", []time.Time{m(-60 * 60), m(-60)}, reads, m(-5), false, nil},
+		// This device read nothing for 9 hours, so the others' reports
+		// then are unknown, not missing.
+		{"no reads between", []time.Time{m(-600), m(-585), m(-45)}, []time.Time{m(-590), m(-40), m(0)}, m(-5), false, nil},
+		{"no reads at all", []time.Time{m(-600), m(-585)}, nil, m(-5), false, nil},
+		// This device knows when it ran.
+		{"own gap", []time.Time{m(-600), m(-585), m(-45)}, nil, m(-5), true, &Gap{Seconds: 540 * 60, At: m(-585)}},
 	} {
-		got := gapOf(c.seen, c.collected, now)
+		got := gapOf(c.seen, c.reads, c.collected, now, c.own)
 		if (got == nil) != (c.want == nil) || got != nil && *got != *c.want {
 			t.Errorf("%s: %+v, want %+v", c.name, got, c.want)
 		}
 	}
 	f := newFixture(t, emptyState())
 	f.in.Team = collect.TeamCache{PulledAt: now, Team: f.key.Fingerprint(),
-		Docs: []snapshot.Doc{otherDoc(t, f.key, "d-other-device", "otherbox", m(-5), emptyState())},
-		Seen: map[string][]time.Time{"d-other-device": {m(-600), m(-585), m(-120)}}}
-	if g := Build(f.in).Team.Devices[1].Gap; g == nil || g.Seconds != 465*60 {
+		Docs:  []snapshot.Doc{otherDoc(t, f.key, "d-other-device", "otherbox", m(-5), emptyState())},
+		Seen:  map[string][]time.Time{"d-other-device": {m(-600), m(-585), m(-120)}},
+		Reads: reads}
+	if g := Build(f.in).Team.Devices[1].Gap; g == nil || g.Seconds != 445*60 {
 		t.Errorf("otherbox gap %+v", g)
 	}
 }
