@@ -92,19 +92,29 @@ struct UsageTotal: View {
 
 /// How a device is, as the mark before its name shows it, the worst first.
 /// A device on an older release that updates itself is fine: that is lag
-/// after a release, and its details name the release.
+/// after a release, and its details name the release. A silent device that
+/// another took the place of was reinstalled.
 private enum DeviceStatus {
-    case silent, error, notUpdating, thisMac, fine
+    case replaced, silent, error, notUpdating, thisMac, fine
 
     init(_ d: TeamDevice?) {
         guard let d else { self = .fine; return }
         // A silent device's error is the one it last reported, as the
         // report's attention has it, not what fails on it now.
-        if d.silent { self = .silent } else if d.error != nil { self = .error } else if d.notUpdating { self = .notUpdating } else if d.thisDevice { self = .thisMac } else { self = .fine }
+        if d.silent {
+            self = d.replacedBy != nil ? .replaced : .silent
+        } else if d.error != nil {
+            self = .error
+        } else if d.notUpdating {
+            self = .notUpdating
+        } else {
+            self = d.thisDevice ? .thisMac : .fine
+        }
     }
 
     var spoken: String? {
         switch self {
+        case .replaced: return "reinstalled"
         case .silent: return "not reporting"
         case .error: return "error"
         case .notUpdating: return "not updating"
@@ -120,6 +130,7 @@ private struct DeviceMark: View {
     var body: some View {
         ZStack {
             switch status {
+            case .replaced: symbol("square.on.square", .secondary)
             case .error: symbol("xmark.circle.fill", Palette.text("out"))
             case .silent: symbol("antenna.radiowaves.left.and.right.slash", Palette.text("tight"))
             case .notUpdating: symbol("arrow.up.circle.fill", Palette.text("tight"))
@@ -210,11 +221,12 @@ private struct DeviceRow: View {
         guard let d = device else { return nil }
         let all = [d.error, d.lastError.map { "Last error\(lastErrorAge(d)): \($0)" }, d.updateError.map { "Update: \($0)" }].compactMap { $0 }
         switch status {
+        case .replaced:
+            // The device that took its place is this one now; its old
+            // record goes with a command.
+            let by = d.replacedBy ?? ""
+            return ("Reinstalled as \(by)", .secondary, ([AttentionText.forgetCommand(d.device)] + all).joined(separator: "\n"))
         case .silent:
-            // A device another took the place of is that device now.
-            if let by = d.replacedBy {
-                return ("Reinstalled as \(by)", .secondary, ([AttentionText.forgetCommand(d.device)] + all).joined(separator: "\n"))
-            }
             let ago = d.collectedAt.map { Format.duration(now.timeIntervalSince($0)) }
             return (ago.map { "No report for \($0)" } ?? "Never reported", Palette.text("tight"), all.joined(separator: "\n"))
         case .error:

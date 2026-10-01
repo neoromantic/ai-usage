@@ -445,7 +445,8 @@ struct TotalRow: View {
                     Text((estimated != nil && tokens > 0 ? "~" : "") + Format.tokensM(tokens))
                         .font(.callout.weight(.semibold))
                         .monospacedDigit()
-                        .frame(width: Metrics.value, alignment: .trailing)
+                        .fixedSize()
+                        .frame(minWidth: Metrics.value, alignment: .trailing)
                 }
             }
             .frame(height: Metrics.row)
@@ -475,12 +476,14 @@ struct TokensValue: View {
     var estimated = false
 
     var body: some View {
+        // An estimate's "~" may take the value past its column, to the left.
         Text((estimated && tokens > 0 ? "~" : "") + Format.tokensM(tokens))
             .font(.callout)
             .monospacedDigit()
             .foregroundStyle(tokens > 0 ? .primary : .tertiary)
             .lineLimit(1)
-            .frame(width: Metrics.value, alignment: .trailing)
+            .fixedSize()
+            .frame(minWidth: Metrics.value, alignment: .trailing)
     }
 }
 
