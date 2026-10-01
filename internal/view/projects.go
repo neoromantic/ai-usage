@@ -79,19 +79,20 @@ func (p *page) projects() []chunks {
 
 // projectsTitle is the title of PROJECTS in the period per, with since when
 // the ledger holds each provider of short. Where it is too wide, the
-// coverage goes first, then this device's label.
+// coverage goes first, the last provider's first, then this device's label.
 func (p *page) projectsTitle(per Period, short []string) chunks {
 	g := p.g
 	unit := "by " + per.String() + g.sep + "M weighted tokens"
 	label := p.txt(p.r.Collector.DeviceLabel) + g.sep
-	forms := []string{label + unit, unit}
-	if len(short) > 0 {
-		var since []string
-		for _, prov := range short {
-			since = append(since, prov+" since "+p.coveredSince(prov).In(p.loc).Format("Jan 2"))
-		}
-		forms = slices.Insert(forms, 0, label+unit+g.sep+strings.Join(since, g.sep))
+	var forms []string
+	var since []string
+	for _, prov := range short {
+		since = append(since, prov+" since "+p.coveredSince(prov).In(p.loc).Format("Jan 2"))
 	}
+	for n := len(since); n > 0; n-- {
+		forms = append(forms, label+unit+g.sep+strings.Join(since[:n], g.sep))
+	}
+	forms = append(forms, label+unit, unit)
 	lead := chunks{p.bold("PROJECTS"), p.plain("  ")}
 	for _, t := range forms {
 		if line := append(lead, p.muted(t)); line.width() <= p.w {

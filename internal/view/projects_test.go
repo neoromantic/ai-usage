@@ -144,4 +144,15 @@ func TestProjectsCoverage(t *testing.T) {
 			t.Errorf("label of %d: title %q, want %q", len(c.label), title, c.want)
 		}
 	}
+	// Of two providers short, the second's note goes first.
+	r.Providers[1].CoveredSince = tp(now.Add(-10 * 24 * time.Hour))
+	r.Collector.DeviceLabel = "annbook"
+	for w, want := range map[int]string{
+		100: "PROJECTS  annbook · by 7d · M weighted tokens · claude since Aug 12 · codex since Aug 22",
+		80:  "PROJECTS  annbook · by 7d · M weighted tokens · claude since Aug 12",
+	} {
+		if title := pageSection(Render(r, Options{Width: w, Loc: time.UTC}), "PROJECTS")[0]; title != want {
+			t.Errorf("two short at %d: title %q, want %q", w, title, want)
+		}
+	}
 }
