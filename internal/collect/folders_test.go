@@ -266,21 +266,21 @@ func TestFindProjectsLeavesPrivateFoldersUnread(t *testing.T) {
 // and one inside a folder stays its own. Codex chats make one project.
 func TestFindProjectsRollsUpFolders(t *testing.T) {
 	home := tree(t,
-		"Downloads/ChatExport_Ёлочка/work/game/lpc/.git/HEAD=x",
-		"Downloads/ChatExport_Ёлочка/work/game/art/tests",
+		"Downloads/Sketchbook_Ёлочка/site/page/lib/.git/HEAD=x",
+		"Downloads/Sketchbook_Ёлочка/site/page/img/tests",
 		"Documents/Codex/2026-09-01/fix-bug",
 		"notes/tool/.git/HEAD=x",
 		"notes/tool/cmd",
 	)
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	chat := "Downloads/ChatExport_Ёлочка"
+	book := "Downloads/Sketchbook_Ёлочка"
 	cases := [][2]string{
 		{".", "."},
 		{"Downloads", "Downloads"},
-		{chat, chat},
-		{chat + "/work/game/art/tests", chat},
-		{chat + "/work/game", chat},
+		{book, book},
+		{book + "/site/page/img/tests", book},
+		{book + "/site/page", book},
 		{"Downloads/Квакша/sub/deeper", "Downloads/Квакша"},
 		{"Documents/Codex/2026-09-01/fix-bug", "Documents/Codex"},
 		{"Documents/Codex/2026-09-02/notes", "Documents/Codex"},

@@ -44,11 +44,11 @@ func TestTruncPath(t *testing.T) {
 		{"/opt/build/agents/workspace/project", 30, "/opt/build/…/workspace/project"},
 		// The middle goes, not the folder after the first that names the
 		// project; folders come from the head and the tail in turn.
-		{"~/Downloads/ChatExport_Ёлочка/work/game/art/tests", 37, "~/Downloads/ChatExport_Ёлочка/…/tests"},
-		{"~/Downloads/ChatExport_Ёлочка/work/game/art/tests", 42, "~/Downloads/ChatExport_Ёлочка/…/art/tests"},
-		{"~/Downloads/ChatExport_Ёлочка/work/game/art/tests", 47, "~/Downloads/ChatExport_Ёлочка/work/…/art/tests"},
+		{"~/Downloads/Sketchbook_Ёлочка/site/page/img/tests", 37, "~/Downloads/Sketchbook_Ёлочка/…/tests"},
+		{"~/Downloads/Sketchbook_Ёлочка/site/page/img/tests", 42, "~/Downloads/Sketchbook_Ёлочка/…/img/tests"},
+		{"~/Downloads/Sketchbook_Ёлочка/site/page/img/tests", 47, "~/Downloads/Sketchbook_Ёлочка/site/…/img/tests"},
 		// A side that does not fit stops; the other goes on.
-		{"~/Downloads/ChatExport_Ёлочка/work/game/art/tests", 36, "~/Downloads/…/work/game/art/tests"},
+		{"~/Downloads/Sketchbook_Ёлочка/site/page/img/tests", 36, "~/Downloads/…/site/page/img/tests"},
 		// Wide runes count two columns.
 		{"~/src/日本語のプロジェクト/lib/core/main", 33, "~/src/日本語のプロジェクト/…/main"},
 		{"~/src/日本語のプロジェクト/lib/core/main", 32, "~/src/…/lib/core/main"},
