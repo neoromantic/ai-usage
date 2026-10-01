@@ -463,3 +463,60 @@ func TestServedBy(t *testing.T) {
 		}
 	}
 }
+
+// An ai-usage before v0.4.0 that runs after this one keys an auxiliary
+// route's part apart, finds it missing and counts it again. Merging what it
+// saved adds no more than the log grew, so the next read finds the session
+// as the log has it.
+func TestAuxPartAnOlderAiUsageCountedAgainIsNotKept(t *testing.T) {
+	const id = "20260801_090000_b7d1f3a0"
+	k := state.Key("hermes", id)
+	dir := state.Dir(t.TempDir())
+	at := t0.Add(-2 * time.Hour)
+	in := func(n int64) snapshot.Tokens { return snapshot.Tokens{Input: n} }
+	parts := map[string]snapshot.Tokens{"anthropic": in(1100), "auto": in(550)}
+	st := state.NewState()
+	attribute(st, "hermes", hermesSess(id, "anthropic", at, parts), "anthropic", false, at, map[string]snapshot.Tokens{})
+	st.LastRunAt = at
+	if err := dir.SaveState(st); err != nil {
+		t.Fatal(err)
+	}
+
+	// The older ai-usage keeps both parts apart, and adds the auxiliary one.
+	older := state.NewState()
+	older.Ledger = 0
+	older.LastRunAt = at.Add(time.Hour)
+	older.Sessions[k] = &state.Session{
+		Provider: "hermes", Project: "/work/agent", Updated: at, Seen: in(1650),
+		By:    map[string]snapshot.Tokens{"anthropic": in(1650), "auto": in(550)},
+		Parts: parts,
+		Hours: map[int64]int64{logs.HourOf(at): 2200},
+	}
+	b, err := json.Marshal(older)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dir.StateFile(), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, err = dir.LoadState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Damage == "" {
+		t.Fatal("the older ai-usage's state was not merged")
+	}
+
+	growth := map[string]snapshot.Tokens{}
+	if g := attribute(st, "hermes", hermesSess(id, "anthropic", at, parts), "anthropic", false, t0, growth); len(g) != 0 {
+		t.Fatalf("growth = %+v", g)
+	}
+	e := st.Sessions[k]
+	var by snapshot.Tokens
+	for _, t := range e.By {
+		by = by.Add(t)
+	}
+	if by != in(1650) || e.U.Sum() != meter.FromTokens(in(1650)) {
+		t.Fatalf("by = %+v, hours = %v; the log holds 1650", e.By, e.U)
+	}
+}

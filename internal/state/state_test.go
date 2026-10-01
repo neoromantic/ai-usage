@@ -544,3 +544,45 @@ func TestAnOlderWriterAfterANewerLedgerKeepsItsCopy(t *testing.T) {
 		t.Fatalf("state.json.last changed to %q", b)
 	}
 }
+
+// TestMergeGrowsASplitSessionByNoMoreThanItsLog: an older ai-usage that
+// keys an auxiliary route's part apart counts it again. The accounts grow
+// by what the log grew, in proportion, and no more.
+func TestMergeGrowsASplitSessionByNoMoreThanItsLog(t *testing.T) {
+	d := tempDir(t)
+	ran := time.Date(2026, 9, 1, 12, 20, 0, 0, time.UTC)
+	h := hourOf(ran)
+	k := Key("hermes", "e4f1c9a2")
+	in := func(n int64) snapshot.Tokens { return snapshot.Tokens{Input: n} }
+	last := NewState()
+	last.LastRunAt = ran
+	last.Sessions[k] = &Session{
+		Provider: "hermes", Updated: ran, Seen: in(1650),
+		By: map[string]snapshot.Tokens{"anthropic": in(1650)}, Parts: map[string]snapshot.Tokens{"anthropic": in(1650)},
+		U: meter.Hours{h: {Input: 1650}},
+	}
+	// The log grew by 100, and the older ai-usage added the 550 of the
+	// auxiliary part again.
+	cur := &State{LastRunAt: ran.Add(time.Hour), Sessions: map[string]*Session{k: {
+		Provider: "hermes", Updated: ran.Add(time.Hour), Seen: in(1750),
+		By:    map[string]snapshot.Tokens{"anthropic": in(1650), "auto": in(650)},
+		Parts: map[string]snapshot.Tokens{"anthropic": in(1200), "auto": in(550)},
+		Hours: map[int64]int64{h + 1: 650},
+	}}}
+	olderWriter(t, d, last, cur)
+	st, err := d.LoadState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := st.Sessions[k]
+	if want := map[string]snapshot.Tokens{"anthropic": in(1650), "auto": in(100)}; !reflect.DeepEqual(got.By, want) {
+		t.Fatalf("by = %v, want %v", got.By, want)
+	}
+	if want := (meter.Hours{h: {Input: 1650}, h + 1: {Input: 100}}); !reflect.DeepEqual(got.U, want) {
+		t.Fatalf("U = %v, want %v", got.U, want)
+	}
+	// The parts stay as the older ai-usage last saw the log.
+	if !reflect.DeepEqual(got.Parts, cur.Sessions[k].Parts) || got.Seen != in(1750) {
+		t.Fatalf("parts = %v, seen %v", got.Parts, got.Seen)
+	}
+}

@@ -8,9 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -397,6 +400,21 @@ func mergeSession(s, old *Session, from int64, ran time.Time) {
 			grown = grown.Add(g)
 		}
 	}
+	if s.Parts != nil {
+		// A log split by account grew by what its parts' sum did. An
+		// older ai-usage that keeps a part on an auxiliary route apart
+		// from the main route this one billed it to counts that part
+		// again, so the accounts grow by no more than the log.
+		growth, grown = capGrowth(growth, meter.FromTokens(s.Seen.Growth(old.Seen)))
+		by := map[string]snapshot.Tokens{}
+		for l, t := range old.By {
+			by[l] = t
+		}
+		for l, g := range growth {
+			by[l] = by[l].Add(g.Tokens())
+		}
+		s.By = by
+	}
 	u := old.U.Clone()
 	if old.UB == nil {
 		u = meter.AddHours(u, meter.Spread(grown, shape))
@@ -419,6 +437,56 @@ func mergeSession(s, old *Session, from int64, ran time.Time) {
 	s.U = u
 	s.Side, s.Nulls, s.Rederive = old.Side, old.Nulls, old.Rederive
 	s.Hours, s.ByHours = nil, nil
+}
+
+// capGrowth is growth, by account, with each kind of token cut to limit's
+// in proportion to what each account grew by, and its sum.
+func capGrowth(growth map[string]meter.Use, limit meter.Use) (map[string]meter.Use, meter.Use) {
+	labels := slices.Sorted(maps.Keys(growth))
+	kinds := []func(*meter.Use) *int64{
+		func(u *meter.Use) *int64 { return &u.Input },
+		func(u *meter.Use) *int64 { return &u.Output },
+		func(u *meter.Use) *int64 { return &u.CacheRead },
+		func(u *meter.Use) *int64 { return &u.CacheWrite },
+		func(u *meter.Use) *int64 { return &u.CacheWrite1h },
+	}
+	out := map[string]meter.Use{}
+	for _, l := range labels {
+		out[l] = growth[l]
+	}
+	for _, kind := range kinds {
+		var sum int64
+		for _, l := range labels {
+			g := growth[l]
+			sum += *kind(&g)
+		}
+		lim := *kind(&limit)
+		if sum <= lim {
+			continue
+		}
+		// Shares that add up to lim, in whole tokens.
+		var upTo, prev int64
+		for _, l := range labels {
+			g, u := growth[l], out[l]
+			upTo += *kind(&g)
+			next := int64(math.Round(float64(lim) * float64(upTo) / float64(sum)))
+			*kind(&u), prev = next-prev, next
+			out[l] = u
+		}
+	}
+	var all meter.Use
+	for l, u := range out {
+		if u.CacheWrite1h > u.CacheWrite {
+			u.CacheWrite1h = u.CacheWrite
+		}
+		if u.Zero() {
+			delete(out, l)
+			continue
+		}
+		out[l] = u
+		all = all.Add(u)
+	}
+	return out, all
 }
 
 // sinceHour is the hours from the hour with key first on.
