@@ -27,7 +27,7 @@ let team = try Report.decode(Data(contentsOf: demo.appendingPathComponent("team.
 let solo = try Report.decode(Data(contentsOf: demo.appendingPathComponent("solo.json")))
 equal("team schema", team.schemaVersion, 4)
 equal("team generated_at", team.generatedAt, time("2026-09-24T13:40:00Z"))
-equal("team attention", team.attention.map(\.kind.rawValue), ["out", "out", "over", "error", "silent", "old"])
+equal("team attention", team.attention.map(\.kind.rawValue), ["out", "out", "over", "over", "tight", "error", "silent", "old"])
 equal("team devices", team.team.devices.count, 12)
 equal("team providers", team.team.providers.map(\.provider), ["claude", "codex", "grok", "hermes"])
 equal("team matrix", [team.team.matrix.columns.count, team.team.matrix.rows.count], [6, 12])
@@ -133,7 +133,7 @@ equal("spoken durations", spokenSeconds.map { Format.spokenDuration($0) },
 equal("sparkline", Format.sparkline([5, 4, 3]), Array(repeating: 0, count: 11) + [3, 4, 5])
 let days = solo.providers[0].accounts[0].days
 equal("sparkline of a report", Format.sparkline(days), Array(days.prefix(14).reversed()))
-equal("days", [days.count, days.first ?? 0], [90, 17_750_013])
+equal("days", [days.count, days.first ?? 0], [90, 1_805_817])
 // Whole millions and whole percents, as the console prints them.
 for (n, want) in [(0, "–"), (-5, "–"), (1, "<1"), (999_999, "<1"), (1_000_000, "1"), (1_499_999, "1"), (1_500_000, "2"),
                   (603_000_000, "603"), (1_658_119_321, "1658")] {
@@ -188,8 +188,8 @@ equal("migration", [MenuBarShows.migrated(showPercent: false, shows: nil), MenuB
 // The verdict: the first out entry, else the first over one, with how
 // many more there are; else the subscription with the most room.
 let teamVerdict = Verdict(team, now: team.generatedAt, timeZone: berlin)
-equal("team verdict", [teamVerdict.title, teamVerdict.subline], ["Claude mira · 5h is out", "Back in 1h 25m · Thu 17:05 · +2 more"])
-check("team verdict opens its account", teamVerdict.kind == .out && teamVerdict.more == 2 && teamVerdict.provider == "claude" && teamVerdict.label == "mira@studio.dev")
+equal("team verdict", [teamVerdict.title, teamVerdict.subline], ["Claude mira · 5h is out", "Back in 1h 25m · Thu 17:05 · +3 more"])
+check("team verdict opens its account", teamVerdict.kind == .out && teamVerdict.more == 3 && teamVerdict.provider == "claude" && teamVerdict.label == "mira@studio.dev")
 let soloVerdict = Verdict(solo, now: solo.generatedAt, timeZone: berlin)
 equal("solo verdict", [soloVerdict.title, soloVerdict.subline],
       ["Claude mira · Fable runs out ~Thu 23:55", "2d 1h before its reset · +1 more"])
@@ -198,7 +198,7 @@ equal("solo verdict compact", [soloVerdict.compactTitle, soloVerdict.compactSubl
 check("solo verdict is over", soloVerdict.kind == .over)
 let calm = try edited("team.json") { json in
     var o = json as! [String: Any]
-    o["attention"] = (o["attention"] as! [[String: Any]]).filter { !["out", "over"].contains($0["kind"] as? String) }
+    o["attention"] = (o["attention"] as! [[String: Any]]).filter { !["out", "over", "tight"].contains($0["kind"] as? String) }
     return o
 }
 let calmVerdict = Verdict(calm, now: calm.generatedAt, timeZone: berlin)
@@ -286,7 +286,7 @@ check("v0.3.4 accounts fall back", v034.team.providers.allSatisfy { $0.accounts.
 } })
 check("v0.3.4 team not estimated", !v034.team.estimated && v034.team.estimatedReason == nil && v034.team.heldBackBy.isEmpty)
 check("v0.3.4 forecast basis", v034.teamAccount(provider: "claude", label: "mira@studio.dev")?.quota?.main?.forecast?.basis == nil)
-equal("v0.3.4 attention", v034.attention.map(\.kind.rawValue), ["out", "out", "over", "error", "silent", "old"])
+equal("v0.3.4 attention", v034.attention.map(\.kind.rawValue), ["out", "out", "over", "over", "tight", "error", "silent", "old"])
 
 /// Usage, or a share, of every period times f.
 func scaled(_ v: Any?, _ f: Double) -> Any {
@@ -375,7 +375,7 @@ equal("attention texts", texts.dropFirst().map(\.detail), [
     "+12 points in 9h, no team device spent",
     "leo-air runs v0.3.0: reinstall with install.sh",
     "reinstalled as courier-2: ai-usage team forget-device 3f9a1c2e",
-    "on v0.3.0 · cannot read Claude quota; reinstall with install.sh",
+    "on v0.3.4 · cannot read Claude quota; reinstall with install.sh",
     "a kind from a later release",
 ])
 check("reinstall has no update alert", texts[5].alert == nil)
@@ -388,7 +388,7 @@ equal("v0.4 chips", chips04.map { "\($0.text) \($0.state) \($0.devices)" },
 check("v0.4 chip kinds", chips04.map(\.kind) == [.reinstall, .duplicate])
 let calm04 = try edited("team.json") { json in
     var o = json as! [String: Any]
-    o["attention"] = (o["attention"] as! [[String: Any]]).filter { !["out", "over"].contains($0["kind"] as? String) }
+    o["attention"] = (o["attention"] as! [[String: Any]]).filter { !["out", "over", "tight"].contains($0["kind"] as? String) }
         + [["kind": "tight", "provider": "claude", "account": "mira@studio.dev", "name": "mira", "resets_at": "2026-09-26T23:00:00Z", "percent": 88]]
     return o
 }
