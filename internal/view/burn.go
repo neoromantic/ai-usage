@@ -151,10 +151,14 @@ func (m *merger) heldBackReason(h TeamDevice) string {
 // update themselves.
 func (m *merger) heldBackSteps(hs []TeamDevice) string {
 	by := make([][]string, stepSelf+1)
+	var forget []TeamDevice
 	silent := false
 	for _, h := range hs {
 		st := m.heldBackStep(h)
 		by[st] = append(by[st], h.Label)
+		if st == stepForget {
+			forget = append(forget, h)
+		}
 		silent = silent || st == stepSelf && h.Silent
 	}
 	var steps []string
@@ -164,8 +168,8 @@ func (m *merger) heldBackSteps(hs []TeamDevice) string {
 	if ns := by[stepRebuild]; len(ns) > 0 {
 		steps = append(steps, "build "+firstNames(ns, 3)+" again from source")
 	}
-	if ns := by[stepForget]; len(ns) > 0 {
-		steps = append(steps, "forget "+firstNames(ns, 3)+" with ai-usage team forget-device")
+	if len(forget) > 0 {
+		steps = append(steps, m.forgetStep(forget))
 	}
 	if ns := by[stepUpdate]; len(ns) > 0 {
 		steps = append(steps, "run ai-usage update on "+firstNames(ns, 3)+", whose update fails")
@@ -185,6 +189,28 @@ func (m *merger) heldBackSteps(hs []TeamDevice) string {
 		steps = append(steps, "the other "+strconv.Itoa(len(ns))+" update themselves "+then)
 	}
 	return strings.Join(steps, "; ")
+}
+
+// forgetStep is how to forget the held-back devices hs, which may never
+// report again: by the id the command takes, on each device when the relay
+// no longer has a record of one, as heldBackReason says for one alone.
+func (m *merger) forgetStep(hs []TeamDevice) string {
+	out := "forget " + hs[0].Label + " with ai-usage team forget-device " + shortDevice(hs[0].Device)
+	if len(hs) > 1 {
+		var ns []string
+		for _, h := range hs {
+			if n := shortDevice(h.Device); h.Label == h.Device {
+				ns = append(ns, n)
+			} else {
+				ns = append(ns, h.Label+" ("+n+")")
+			}
+		}
+		out = "forget " + firstNames(ns, 3) + " with ai-usage team forget-device ID"
+	}
+	if slices.ContainsFunc(hs, m.gone) {
+		out += " on each device"
+	}
+	return out
 }
 
 // firstNames is up to n of names, and an ellipsis for the rest.

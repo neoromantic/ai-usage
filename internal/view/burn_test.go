@@ -69,7 +69,7 @@ func TestTeamEstimatedReason(t *testing.T) {
 			away.CollectedAt = now.Add(-2 * 24 * time.Hour)
 			return []snapshot.Doc{gone, failing, away, legacyDoc(t, k, "d-dbox-device", "dbox", "v0.2.4")}
 		}, nil, []string{"bbox", "cbox", "dbox", "abox"},
-			"4 devices run releases before v0.4.0: reinstall dbox with install.sh; forget abox with ai-usage team forget-device; run ai-usage update on bbox, whose update fails; cbox updates itself when it next runs"},
+			"4 devices run releases before v0.4.0: reinstall dbox with install.sh; forget abox with ai-usage team forget-device abox-dev; run ai-usage update on bbox, whose update fails; cbox updates itself when it next runs"},
 		{"several, the busiest first", func(k *team.Key) []snapshot.Doc {
 			busy := emptyState()
 			addAccount(busy, "codex", "bob", true, nil, 5000)
@@ -165,6 +165,14 @@ func TestTeamEstimatedReason(t *testing.T) {
 	r = Build(f.in)
 	if want := "d-gone-device has not reported since Aug 12: forget it with ai-usage team forget-device gone-dev on each device"; deref(r.Team.EstimatedReason) != want {
 		t.Errorf("a known device: %q, want %q", deref(r.Team.EstimatedReason), want)
+	}
+	// Several to forget are each named with their id.
+	silent := legacyDoc(t, f.key, "d-cbox1234-device", "cbox", "v0.3.4")
+	silent.CollectedAt = now.Add(-9 * 24 * time.Hour)
+	f.in.Team.Docs = append(f.in.Team.Docs, silent)
+	r = Build(f.in)
+	if want := "2 devices run releases before v0.4.0: forget cbox (cbox1234), gone-dev with ai-usage team forget-device ID on each device"; deref(r.Team.EstimatedReason) != want {
+		t.Errorf("several to forget: %q, want %q", deref(r.Team.EstimatedReason), want)
 	}
 }
 
