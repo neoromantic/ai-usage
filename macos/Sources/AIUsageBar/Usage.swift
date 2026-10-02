@@ -241,10 +241,10 @@ private struct DeviceRow: View {
         }
     }
 
-    /// How long ago the last error was, where the report says when: of
-    /// this Mac, from its collector.
+    /// How long ago the last error was, where the report says when: from
+    /// the device, or for this Mac from its collector.
     private func lastErrorAge(_ d: TeamDevice) -> String {
-        guard d.thisDevice, let at = report.collector.lastErrorAt else { return "" }
+        guard let at = d.lastErrorAt ?? (d.thisDevice ? report.collector.lastErrorAt : nil) else { return "" }
         return " " + Format.ago(at, now: now)
     }
 

@@ -318,6 +318,7 @@ let v04 = try edited("team.json") { json in
         if o["label"] as? String == "courier", o["os_user"] != nil {
             o["replaced_by"] = "courier-2"
             o["gap"] = ["seconds": 43200, "at": "2026-09-23T08:28:00Z"]
+            o["last_error_at"] = "2026-09-23T08:20:00Z"
         }
         if o["label"] as? String == "leo@studio.dev", o["busiest"] != nil, (o["quota"] as? [String: Any])?["source"] as? String != "codex" {
             o["no_reading"] = "leo-air runs v0.3.0: reinstall with install.sh"
@@ -354,6 +355,8 @@ let leo04 = v04.teamDevice(named: "leo-air")!, courier04 = v04.teamDevice(named:
 check("v0.4 estimated device", leo04.burnEstimated && leo04.limitations == ["no_claude_quota"] && leo04.shown.value.week == leo04.usage.week * 3)
 check("v0.4 estimated row", v04.team.matrix.rows.filter(\.burnEstimated).map(\.device) == ["leo-air"])
 equal("v0.4 reinstalled device", [courier04.replacedBy, courier04.gap.map { "\($0.seconds)" }], ["courier-2", "43200"])
+equal("v0.4 last error at", courier04.lastErrorAt, time("2026-09-23T08:20:00Z"))
+check("v0.3.4 last error at", v034.teamDevice(named: "courier")?.lastErrorAt == nil)
 equal("v0.4 estimated team", [v04.team.estimated ? "estimated" : "-", v04.team.heldBackBy.joined(), v04.team.estimatedReason ?? "-"],
       ["estimated", "leo-air", "leo-air runs v0.3.0, which sends no weighted tokens: reinstall it with install.sh"])
 equal("v0.4 no reading", v04.teamAccount(provider: "claude", label: "leo@studio.dev")?.noReading, "leo-air runs v0.3.0: reinstall with install.sh")

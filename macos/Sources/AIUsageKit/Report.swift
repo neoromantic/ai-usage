@@ -426,6 +426,8 @@ public struct TeamDevice: Decodable, Sendable {
     public let ageSeconds: Int
     public let lastSuccessAt: Date?
     public let lastError: String?
+    /// When the last error happened. Nil from an ai-usage before v0.4.0.
+    @Absent public var lastErrorAt: Date?
     public let updateError: String?
     public let sources: [Source]
     public let error: String?
