@@ -415,7 +415,7 @@ func guideReport() Report {
 func TestGuideNotes(t *testing.T) {
 	has := func(g, s string) bool { return strings.Contains(strings.Join(strings.Fields(g), " "), s) }
 	const (
-		weights = "weighted tokens: input 1, output 5 (codex 8), cache write 1.25–2, cache read 0.1–0.25, from API prices; a proxy for quota, not its formula"
+		weights = "weighted tokens: input 1, output 5 (codex 8), cache write 1–2, cache read 0.1–0.25, from API prices; a proxy for quota, not its formula"
 		grok    = "name grok a4c2e917 for the team: ai-usage alias grok:a4c2e917 NAME"
 		utc     = "USAGE and PROJECTS count your local days and rolling 7/30/90 days; team tables count UTC days, as devices send them"
 		cleanup = `Claude Code deletes transcripts after 30 days: set "cleanupPeriodDays": 90 in ~/.claude/settings.json to keep 90D whole`
@@ -434,6 +434,25 @@ func TestGuideNotes(t *testing.T) {
 	}
 	if !has(Guide(r, "cron", Options{Width: 80, Loc: time.UTC, ASCII: true}), strings.ReplaceAll(weights, "–", "-")) {
 		t.Error("the ASCII guide's weights are not in ASCII")
+	}
+
+	// Estimated team totals: the guide repeats why, cut to the width with
+	// what to do kept.
+	est := guideReport()
+	est.Team.Estimated = true
+	why := "2 devices run releases before v0.4.0: they update themselves within 15 minutes (leoair, srv1)"
+	est.Team.EstimatedReason = &why
+	g = Guide(est, "cron", Options{Width: 80, Loc: time.UTC})
+	if !has(g, "~ team totals estimated: 2 devices run") || !has(g, "they update themselves within 15 minutes (leoair, srv1)") {
+		t.Errorf("the guide of estimated totals lacks why:\n%s", g)
+	}
+	for _, l := range strings.Split(g, "\n") {
+		if w := ansi.StringWidth(l); w > 80 {
+			t.Errorf("a line of %d cells: %q", w, l)
+		}
+	}
+	if has(Guide(r, "cron", Options{Width: 80, Loc: time.UTC}), "team totals estimated") {
+		t.Error("the guide says totals are estimated when they are not")
 	}
 
 	// A team of one device is this device alone.

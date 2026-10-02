@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"charm.land/lipgloss/v2"
 
@@ -44,6 +45,10 @@ func Guide(r Report, scheduler string, o Options) string {
 	for _, s := range guideNotes(r) {
 		c.para(chunks{c.plain("  ")}, s, nil)
 	}
+	if r.Team.Estimated && r.Team.EstimatedReason != nil {
+		c.para(chunks{c.plain("  ")}, g.silent+" team totals estimated: "+strings.ReplaceAll(*r.Team.EstimatedReason, "…", g.ell),
+			lipgloss.BrightBlack)
+	}
 	if s := transcriptNote(r); s != "" {
 		c.emit(chunks{c.plain("  "), c.ink(truncEnd(s, c.w-2, g.ell), lipgloss.BrightBlack, false)})
 	}
@@ -72,7 +77,7 @@ func weightsNote(ascii bool) string {
 	if ascii {
 		to = "-"
 	}
-	return "weighted tokens: input 1, output 5 (codex 8), cache write 1.25" + to + "2, cache read 0.1" + to + "0.25, " +
+	return "weighted tokens: input 1, output 5 (codex 8), cache write 1" + to + "2, cache read 0.1" + to + "0.25, " +
 		"from API prices; a proxy for quota, not its formula"
 }
 
