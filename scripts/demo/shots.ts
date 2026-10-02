@@ -19,6 +19,8 @@ const out = join(root, "docs/demo");
 const tmp = mkdtempSync(join(tmpdir(), "ai-usage-shots-"));
 const bin = join(tmp, "ai-usage");
 const session = "ai-usage-shots";
+// The release the demo's devices run, as latest in scripts/demo/main.go.
+const release = "v0.4.0";
 const tmuxSocket = "ai-usage-shots";
 
 type Theme = "dark" | "light";
@@ -75,10 +77,10 @@ const shots: Shot[] = [
     typed: "curl -fsSL https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.sh | sh",
     shell: `printf '%s\n' 'ai-usage install: downloading ai-usage_darwin_arm64' \
       'ai-usage install: downloading ai-usage_darwin_app.zip' \
-      'ai-usage install: installed v0.3.3 to /Users/mira/.local/bin/ai-usage' \
+      'ai-usage install: installed ${release} to /Users/mira/.local/bin/ai-usage' \
       'ai-usage install: first run: collecting and registering with the system scheduler'
       go run ./scripts/demo guide 110
-      printf '%s\n' 'ai-usage install: installed the menu bar app, AI Usage 0.3.3, to /Users/mira/Applications/AI Usage.app' \
+      printf '%s\n' 'ai-usage install: installed the menu bar app, AI Usage ${release.slice(1)}, to /Users/mira/Applications/AI Usage.app' \
       'ai-usage install: the app is in the menu bar; it starts at login and updates with ai-usage'`,
     social: true,
   },

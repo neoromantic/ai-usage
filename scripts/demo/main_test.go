@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -80,4 +81,15 @@ func teamWindow(r view.Report, provider, label, name string) *view.Window {
 		}
 	}
 	return nil
+}
+
+// The install shot installs the release the demo's devices run.
+func TestShotsInstallTheDemosRelease(t *testing.T) {
+	b, err := os.ReadFile("shots.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `const release = "` + latest + `";`; !strings.Contains(string(b), want) {
+		t.Errorf("shots.ts does not say %s", want)
+	}
 }

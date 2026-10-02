@@ -1113,8 +1113,8 @@
         "90d": 156
       },
       "providers": [
-        "codex",
-        "claude"
+        "claude",
+        "codex"
       ],
       "last_active_at": "2026-09-24T13:20:00Z"
     },
