@@ -44,7 +44,7 @@ func (m Model) helpLines() []string {
 		{g("—", "-"), "no forecast: no reading, or too early in the window"},
 		{g("●", "*"), "this device, or an account logged in on it"},
 		{g("×", "x"), "a device that fails, or a harness that fails in VIA"},
-		{"~", "a silent device, or a reading older than 6 hours"},
+		{"~", "a silent device, a reading 6h+ old, or an estimated total"},
 		{g("↓", "v"), "a device on an older release, or that release in VERSION"},
 		{g("·", "."), "nothing"},
 		{g("‹ ›", "[ ]"), "the chosen option"},
