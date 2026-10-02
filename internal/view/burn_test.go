@@ -48,7 +48,28 @@ func TestTeamEstimatedReason(t *testing.T) {
 				legacyDoc(t, k, "d-cbox-device", "cbox", "v0.3.0"),
 				legacyDoc(t, k, "d-dbox-device", "dbox", "v0.3.1"),
 			}
-		}, nil, []string{"abox", "bbox", "cbox", "dbox"}, "4 devices run releases before v0.4.0: reinstall those before v0.2.5 with install.sh (abox, bbox, cbox, …)"},
+		}, nil, []string{"abox", "bbox", "cbox", "dbox"}, "4 devices run releases before v0.4.0: reinstall bbox with install.sh; the other 3 update themselves within 15 minutes"},
+		// Only the old one is named to reinstall, though the others are busier.
+		{"several, one to reinstall", func(k *team.Key) []snapshot.Doc {
+			busy := func(device, host string) snapshot.Doc {
+				st := emptyState()
+				addAccount(st, "codex", "bob", true, nil, 5000)
+				d := otherDoc(t, k, device, host, now.Add(-5*time.Minute), st).Legacy()
+				d.CollectorVersion = "v0.3.4"
+				return d
+			}
+			return []snapshot.Doc{busy("d-abox-device", "abox"), busy("d-bbox-device", "bbox"), legacyDoc(t, k, "d-cbox-device", "cbox", "v0.2.0")}
+		}, nil, []string{"abox", "bbox", "cbox"}, "3 devices run releases before v0.4.0: reinstall cbox with install.sh; the other 2 update themselves within 15 minutes"},
+		{"several, each its own way", func(k *team.Key) []snapshot.Doc {
+			gone := legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4")
+			gone.CollectedAt = now.Add(-9 * 24 * time.Hour)
+			failing := legacyDoc(t, k, "d-bbox-device", "bbox", "v0.3.4")
+			failing.LastError = k.Seal(snapshot.UpdateLine + "download failed")
+			away := legacyDoc(t, k, "d-cbox-device", "cbox", "v0.3.4")
+			away.CollectedAt = now.Add(-2 * 24 * time.Hour)
+			return []snapshot.Doc{gone, failing, away, legacyDoc(t, k, "d-dbox-device", "dbox", "v0.2.4")}
+		}, nil, []string{"bbox", "cbox", "dbox", "abox"},
+			"4 devices run releases before v0.4.0: reinstall dbox with install.sh; forget abox with ai-usage team forget-device; run ai-usage update on bbox, whose update fails; cbox updates itself when it next runs"},
 		{"several, the busiest first", func(k *team.Key) []snapshot.Doc {
 			busy := emptyState()
 			addAccount(busy, "codex", "bob", true, nil, 5000)
@@ -61,6 +82,17 @@ func TestTeamEstimatedReason(t *testing.T) {
 			d.CollectedAt = now.Add(-9 * 24 * time.Hour)
 			return []snapshot.Doc{d}
 		}, nil, []string{"abox"}, "abox has not reported since Aug 23: forget it with ai-usage team forget-device abox1234"},
+		// A laptop off for a weekend comes back, and updates itself.
+		{"one away", func(k *team.Key) []snapshot.Doc {
+			d := legacyDoc(t, k, "d-abox1234-device", "abox", "v0.3.4")
+			d.CollectedAt = now.Add(-2 * 24 * time.Hour)
+			return []snapshot.Doc{d}
+		}, nil, []string{"abox"}, "abox has not reported since Aug 30: it updates itself when it next runs"},
+		{"one whose update fails", func(k *team.Key) []snapshot.Doc {
+			d := legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4")
+			d.LastError = k.Seal(snapshot.UpdateLine + "download failed")
+			return []snapshot.Doc{d}
+		}, nil, []string{"abox"}, "abox runs v0.3.4: its update fails; run ai-usage update on it"},
 		{"refused", func(k *team.Key) []snapshot.Doc {
 			return []snapshot.Doc{legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4")}
 		}, func(f *fixture) { f.in.State.Relay.NoExtUntil = now.Add(2 * time.Hour) }, []string{"abox"},
@@ -97,6 +129,12 @@ func TestTeamEstimatedReason(t *testing.T) {
 		}
 		if bob := findTeamAccount(t, r, "codex", "bob"); !bob.BurnEstimated || bob.Burn.Quarter == 0 {
 			t.Errorf("%s: bob %+v", c.name, bob)
+		}
+		// At 80 columns the legend keeps what to do first.
+		if c.name == "several, one to reinstall" {
+			if l := Render(r, Options{Width: 80, Loc: time.UTC}).Legend; !strings.Contains(l, ": reinstall cbox with install.sh") {
+				t.Errorf("%s: legend at 80 columns %q", c.name, l)
+			}
 		}
 	}
 

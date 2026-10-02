@@ -251,7 +251,7 @@ The report's list is sorted by `burn` in `7d`, in whole millions as the console 
 | `latest_version` | string | the newest collector release any device in the team runs, or the newest this device's update check saw, whichever is newer |
 | `estimated` | bool | the weighted tokens of some device are estimated: a release before v0.4.0 sends none, so they are worked out from its input and output, at the ratio its 90 days' tokens give. Such devices have `burn_estimated` |
 | `held_back_by` | list of strings | the devices whose release keeps this device from sending its own weighted days: until every device the team knows runs v0.4.0 or later, each device sends the snapshot an older release reads, without them |
-| `estimated_reason` | string | why totals are estimated, with what to do, in a line, such as `leo-air runs v0.3.4: it updates itself within 15 minutes`, `3 devices run releases before v0.4.0: …`, a device that `has not reported since …: forget it with ai-usage team forget-device …`, or `the team was last read 4h ago`; `null` when `estimated` is `false` |
+| `estimated_reason` | string | why totals are estimated, with what to do, in a line, such as `leo-air runs v0.3.4: it updates itself within 15 minutes`, `3 devices run releases before v0.4.0: reinstall old-mini with install.sh; the other 2 update themselves within 15 minutes`, a device that `has not reported since …: forget it with ai-usage team forget-device …`, or `the team was last read 4h ago`; `null` when `estimated` is `false` |
 | `devices` | list | one entry per device; see below |
 | `providers` | list | `{provider, accounts}` with each account summed across devices; see below |
 | `matrix` | object | every device against every subscription; see [matrix](#matrix) |

@@ -9,6 +9,7 @@ import (
 	"github.com/neoromantic/ai-usage/internal/collect"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
+	"github.com/neoromantic/ai-usage/relay"
 )
 
 // accountBurn is what account a, whose opened label is label, burned on the
@@ -61,23 +62,10 @@ func (m *merger) estimate(t *Team) {
 		reason = "the team was last read " + age(m.now.Sub(m.in.Team.PulledAt)) + " ago"
 	case g.Reason == collect.GateRejected:
 		reason = "the relay did not accept weighted days; trying again " + g.Until.In(m.loc()).Format("Jan 2 15:04")
-	case len(hs) == 1 && hs[0].Silent:
-		// It may never come back, as when it was reinstalled. The relay
-		// forgets a record for everyone, but only the device that forgets
-		// a record the relay let expire stops waiting for it.
-		h := hs[0]
-		reason = h.Label + " has not reported since " + h.CollectedAt.In(m.loc()).Format("Jan 2") + ": forget it with ai-usage team forget-device " + shortDevice(h.Device)
-		if !slices.ContainsFunc(m.devs, func(dv *device) bool { return dv.dev.Device == h.Device }) {
-			reason += " on each device"
-		}
 	case len(hs) == 1:
-		reason = hs[0].Label + " runs " + hs[0].CollectorVersion + ": " + upgrade(hs[0].CollectorVersion)
+		reason = m.heldBackReason(hs[0])
 	case len(hs) > 1:
-		then := "they update themselves within 15 minutes"
-		if slices.ContainsFunc(hs, func(d TeamDevice) bool { return selfupdate.Newer("v0.2.5", d.CollectorVersion) }) {
-			then = "reinstall those before v0.2.5 with install.sh"
-		}
-		reason = strconv.Itoa(len(hs)) + " devices run releases before " + collect.ExtSince + ": " + then + " (" + firstNames(t.HeldBackBy, 3) + ")"
+		reason = strconv.Itoa(len(hs)) + " devices run releases before " + collect.ExtSince + ": " + m.heldBackSteps(hs)
 	default:
 		// Every device reads the fields, and some have not sent them yet:
 		// their next runs do.
@@ -95,14 +83,99 @@ func (m *merger) estimate(t *Team) {
 	t.EstimatedReason = strPtr(reason)
 }
 
-// upgrade is what a device on version does to send burn: a release that
-// updates itself does so within a run, and one before v0.2.5, which cannot
-// say its update failed, is reinstalled.
-func upgrade(version string) string {
-	if selfupdate.Newer("v0.2.5", version) {
-		return "reinstall with install.sh"
+// What a device that holds back weighted days does to send them: it is
+// forgotten, reinstalled, updated by hand, or updates itself.
+const (
+	stepForget = iota
+	stepReinstall
+	stepUpdate
+	stepSelf
+)
+
+// heldBackStep is what held-back device h does to send weighted days. A
+// device the relay no longer has a record of, or that has not reported for
+// as long as the relay keeps the least of records, may never come back, as
+// when it was reinstalled. A release before v0.2.5, which cannot say its
+// update failed, is reinstalled; a later one whose update fails is updated
+// by hand.
+func (m *merger) heldBackStep(h TeamDevice) int {
+	switch {
+	case m.gone(h) || h.ReplacedBy != nil || m.now.Sub(h.CollectedAt) > relay.DefaultLimits().MinRecordTTL:
+		return stepForget
+	case selfupdate.Newer("v0.2.5", h.CollectorVersion):
+		return stepReinstall
+	case h.NotUpdating || h.UpdateError != nil:
+		return stepUpdate
 	}
-	return "it updates itself within 15 minutes"
+	return stepSelf
+}
+
+// gone says the relay no longer has a record of device h.
+func (m *merger) gone(h TeamDevice) bool {
+	return !slices.ContainsFunc(m.devs, func(dv *device) bool { return dv.dev.Device == h.Device })
+}
+
+// heldBackReason is why the one held-back device h holds back weighted
+// days, and what it takes.
+func (m *merger) heldBackReason(h TeamDevice) string {
+	runs := h.Label + " runs " + h.CollectorVersion + ": "
+	switch m.heldBackStep(h) {
+	case stepForget:
+		// The relay forgets a record for everyone, but only the device
+		// that forgets a record the relay let expire stops waiting for it.
+		out := h.Label + " has not reported since " + h.CollectedAt.In(m.loc()).Format("Jan 2") + ": forget it with ai-usage team forget-device " + shortDevice(h.Device)
+		if m.gone(h) {
+			out += " on each device"
+		}
+		return out
+	case stepReinstall:
+		return runs + "reinstall with install.sh"
+	case stepUpdate:
+		return runs + "its update fails; run ai-usage update on it"
+	}
+	if h.Silent {
+		return h.Label + " has not reported since " + h.CollectedAt.In(m.loc()).Format("Jan 2") + ": it updates itself when it next runs"
+	}
+	return runs + "it updates itself within 15 minutes"
+}
+
+// heldBackSteps is what the held-back devices hs, more than one, take:
+// those to reinstall first, so the action a short line keeps names them,
+// then those to forget, those to update by hand, and the rest, which
+// update themselves.
+func (m *merger) heldBackSteps(hs []TeamDevice) string {
+	by := make([][]string, stepSelf+1)
+	silent := false
+	for _, h := range hs {
+		st := m.heldBackStep(h)
+		by[st] = append(by[st], h.Label)
+		silent = silent || st == stepSelf && h.Silent
+	}
+	var steps []string
+	if ns := by[stepReinstall]; len(ns) > 0 {
+		steps = append(steps, "reinstall "+firstNames(ns, 3)+" with install.sh")
+	}
+	if ns := by[stepForget]; len(ns) > 0 {
+		steps = append(steps, "forget "+firstNames(ns, 3)+" with ai-usage team forget-device")
+	}
+	if ns := by[stepUpdate]; len(ns) > 0 {
+		steps = append(steps, "run ai-usage update on "+firstNames(ns, 3)+", whose update fails")
+	}
+	ns := by[stepSelf]
+	then, it := "within 15 minutes", "within 15 minutes"
+	if silent {
+		then, it = "when they next run", "when it next runs"
+	}
+	switch {
+	case len(ns) == 0:
+	case len(steps) == 0:
+		steps = append(steps, "they update themselves "+then+" ("+firstNames(ns, 3)+")")
+	case len(ns) == 1:
+		steps = append(steps, ns[0]+" updates itself "+it)
+	default:
+		steps = append(steps, "the other "+strconv.Itoa(len(ns))+" update themselves "+then)
+	}
+	return strings.Join(steps, "; ")
 }
 
 // firstNames is up to n of names, and an ellipsis for the rest.

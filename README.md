@@ -337,7 +337,7 @@ A key cannot be revoked. To shut someone out, start a new team and join the rema
 
 In the team view, token counts add up across machines. Quota percentages do not: an account's quota is the newest reading any machine has for it.
 
-While any machine in the team runs a release before v0.4.0, every machine sends the snapshot such a release reads, without weighted tokens, so that none drops out of its view. The team's weighted tokens are then estimated from input and output, marked `~`, and the legend names the machines holding them back and what to do: releases from v0.2.5 on update themselves within 15 minutes, and older ones need `install.sh` again. A retired machine on an old release holds them back until `ai-usage team forget-device` forgets it.
+While any machine in the team runs a release before v0.4.0, every machine sends the snapshot such a release reads, without weighted tokens, so that none drops out of its view. The team's weighted tokens are then estimated from input and output, marked `~`, and the legend names the machines holding them back and what to do: releases from v0.2.5 on update themselves within 15 minutes, or take `ai-usage update` where that fails, and older ones need `install.sh` again. A retired machine on an old release, or one silent for over a week, holds them back until `ai-usage team forget-device` forgets it.
 
 ![DEVICES × SUBSCRIPTIONS for a made-up team: twelve machines, most of them bots, against six subscriptions, in millions of weighted tokens over 7 days](docs/demo/social/team-matrix.png)
 
