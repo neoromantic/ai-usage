@@ -29,7 +29,7 @@ ai-usage is one small binary for macOS, Linux, and Windows. The system scheduler
 
 ## Highlights
 
-- **Every subscription on one page.** Claude Code and the Claude app's agent-mode sessions, Codex from its CLI, the ChatGPT app, or an IDE extension, Grok, and Hermes. Each account shows its 5-hour, weekly, and per-model windows, and its tokens today and over 7, 30, and 90 days.
+- **Every subscription on one page.** Claude Code and the Claude app's agent-mode sessions, Codex from its CLI, the ChatGPT app, or an IDE extension, Grok, and Hermes. Each account shows its 5-hour, weekly, and per-model windows, and its tokens today and over 7, 30, and 90 days, weighed by what the API charges for each kind.
 - **A forecast, not just a percentage.** Each window says how full it will be at its reset at your pace, the average since it began or the last day's when that is faster: `over`, `tight`, `ok`, or `under`. An `over` window says when it runs out.
 - **ATTENTION, only when something is wrong.** A full window, one that will run out before its reset, a machine whose tool fails or that stopped reporting, an old release, a subscription nobody uses.
 - **The whole team.** Laptops, servers, and bots in containers, every machine against every subscription, with each one's share. A colleague joins with one command. See [Teams](#teams).
@@ -85,73 +85,77 @@ The team in the picture is made up. [docs/demo](docs/demo) has its report and mo
 ai-usage · annbook · team qmvrtzpa                                  ● collected 7m ago  ● relay 7m ago  ● up to date
 
 ATTENTION
- OUT    codex ann@acme.dev   back Fri 17:09, in 1d 23h
- OUT    claude ann · Fable   back Sun 01:00, in 3d 7h
- OVER   claude ann@acme.dev  runs out ~Thu 01:17 at this week's pace, 2d 23h before reset · reading 1d old
- OVER   codex sam@mail.test  runs out ~Sat 06:54 at this week's pace, 2d 13h before reset
- ERROR  Mac.localdomain      codex: app-server exited without answering
- OLD    2 devices on v1.4.0  Mac.localdomain, MacBook-Pro-Kim · latest v1.4.2
+ OUT      codex ann@acme.dev   back Fri 17:09, in 1d 23h
+ OUT      claude ann · Fable   back Sun 01:00, in 3d 7h
+ OVER     claude ann@acme.dev  runs out ~Thu 01:17 at this week's pace, 2d 23h before reset · reading 1d old
+ OVER     codex sam@mail.test  runs out ~Sat 03:01 at the last day's pace, 2d 17h before reset
+ OUTSIDE  codex lee@corp.test  +25 points in 20h, no team device spent
+ ERROR    Mac.localdomain      codex: app-server exited without answering
+ +3 more
 
 SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
 
-  CLAUDE         PLAN        THIS WEEK                 LEFT  RESETS              AT RESET  USERS                LAST
+  CLAUDE         PLAN        THIS WEEK                 LEFT  RESETS              AT RESET  DEVICES              LAST
 ● ann@acme.dev   max         ━━━━━━━━━╋━━━━━━────────  ~33%  3d 7h  Sun 01:00  ~174% over   2  annbook            7m
     Fable                    ━━━━━━━━━━━━╋━━━━━━━━━━━    0%  3d 7h  Sun 01:00         out
-  kim@corp.test  max         ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  Mac.localdomain    1h
+  kim@corp.test  max         update it or put the ne…     ?                             —   1  Mac.localdomain    1h
 
   CODEX
 ● ann@acme.dev   pro         ━━━━━━━━━━━━━━━━━╋━━━━━━    0%  1d 23h Fri 17:09         out   2  annbook            1h
-  sam@mail.test  prolite     ━━━━━━╋━━━──────────────   58%  5d 2h  Mon 20:12   157% over   1  MacBook-Pro-Kim    3h
-● lee@corp.test  pro         ━━━┃────────────────────   88%  5d 22h Tue 16:30      81% ok  10  srv1              34m
+  sam@mail.test  prolite     ━━━━━━╋━━━──────────────   58%  5d 2h  Mon 20:12   165% over   1  MacBook-Pro-Kim    3h
+● lee@corp.test  pro         ━━━┃────────────────────   88%  5d 22h Tue 16:30      81% ok  11  srv1              34m
   unknown                    ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  Mac.localdomain   16m
 
   GROK
 ● a4c2e917       SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  annbook           11h
 
-DEVICES × SUBSCRIPTIONS  13 · 7d · M tokens in+out                   ‹usage›  status   ‹tokens›  share
-                   CLAUDE ──────────  CODEX ─────────────────────────────  GROK ───  NO QUOTA
-                        ann      kim       ann      sam      lee  unknown  a4c2e917    hermes     TOTAL
-  srv1                    2        ·        12        ·      240        ·         ·         8       262
-● annbook                19        ·       180        ·        ·        ·         3         ·       202
-× Mac.localdomain         ·       10         ·        ·        ·       95         ·         ·       105
-↓ MacBook-Pro-Kim         ·        ·         ·       60        ·        ·         ·         ·        60
-  bot-a                   ·        ·         ·        ·       30        ·         ·         ·        30
-  bot-b                   ·        ·         ·        ·       25        ·         ·         1        26
-  bot-c                   ·        ·         ·        ·       16        ·         ·        <1        17
-  bot-d                   ·        ·         ·        ·       12        ·         ·         ·        12
-  bot-e                   ·        ·         ·        ·        9        ·         ·         ·         9
-  bot-f                   ·        ·         ·        ·        7        ·         ·         ·         7
-  bot-g                   ·        ·         ·        ·        4        ·         ·         ·         4
-  bot-h                   ·        ·         ·        ·        2        ·         ·         ·         2
-  bot-i                   ·        ·         ·        ·       <1        ·         ·         ·        <1
-  TOTAL                  21       10       192       60      345       95         3        10       736
+DEVICES × SUBSCRIPTIONS  15 · 7d UTC · M weighted tokens                  ‹usage›  status   ‹tokens›  share
+                        CODEX ─────────────────────────────  CLAUDE ──────────  GROK ───  NO QUOTA
+                             lee      ann  unknown      sam       ann      kim  a4c2e917    hermes     TOTAL
+  srv1                      1080       53        ·        ·        25        ·         ·        49      1207
+● annbook                      ·      810        ·        ·       230        ·        17         ·      1057
+× Mac.localdomain              ·        ·      427        ·         ·      125         ·         ·       551
+↓ MacBook-Pro-Kim              ·        ·        ·      269         ·        ·         ·         ·       269
+  bot-a                      135        ·        ·        ·         ·        ·         ·         ·       135
+  bot-b                      113        ·        ·        ·         ·        ·         ·         7       119
+  bot-c                       72        ·        ·        ·         ·        ·         ·         4        76
+  bot-d                       54        ·        ·        ·         ·        ·         ·         ·        54
+  bot-e                       41        ·        ·        ·         ·        ·         ·         ·        41
+  bot-f                       32        ·        ·        ·         ·        ·         ·         ·        32
+  bot-g                       18        ·        ·        ·         ·        ·         ·         ·        18
+↓ ci-runner-eu-west-b…        18        ·        ·        ·         ·        ·         ·         ·       ~18
+  bot-h                        9        ·        ·        ·         ·        ·         ·         ·         9
+  bot-i                        2        ·        ·        ·         ·        ·         ·         ·         2
+~ Mac.localdomain              ·        ·        ·        ·         ·        ·         ·         ·         ·
+  TOTAL                     1572      863      427      269       256      125        17        59     ~3586
 
-PROJECTS  annbook · by 7d · M tokens in+out
-  PROJECT                                            7D  90D  SESS  VIA            LAST
-  ~/src/acme/app                                    118  420    43  codex, claude    1h
-  ~/Vault                                            43  130    56  codex            3h
-  ~/src/site                                         18   62     6  codex            2d
-  ~/src/ai-usage                                     11   11     3  claude, grok     7m
-  ~/src/acme/os                                       4   12     3  claude, grok    11h
-  ~/src/acme/relay                                    3    9     2  codex            1d
-  ~/dotfiles                                          2    5     4  codex, claude    4d
-  ~/scratch                                           1    3     5  claude           5d
-  ~/src/acme/landing                                 <1    7     2  codex            6d
-  ~/Library/…/Documents/Notes/Projects/2026          <1    2     1  claude           6d
+PROJECTS  annbook · by 7d · M weighted tokens · claude since Sep 2
+  PROJECT                                            7D   90D  SESS  VIA            LAST
+  ~/src/acme/app                                    975  3465    14  codex, claude    1h
+  ~/Vault                                           194   585    18  codex            3h
+  ~/src/ai-usage                                     98    98     1  claude, grok     7m
+  ~/src/site                                         82   279     2  codex            2d
+  ~/src/acme/os                                      36   105     1  claude, grok    11h
+  ~/dotfiles                                         17    41     1  codex, claude    4d
+  ~/scratch                                          17    36     1  claude           5d
+  ~/src/acme/relay                                   14    41     1  codex            1d
+  ~/Library/Mobile Documents/…/Notes/Projects/2026    7    24     1  claude           6d
+  ~/src/acme/landing                                  4    32     1  codex            6d
   + 4 more
 
-━ used  ─ left  ┃╋ even use  ┈ no reading  ~ stale  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
+━ used  ─ left  ┃╋ even use  ┈ no reading  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
+~ stale/estimated: ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it updates itself within 15 minutes
 ```
 
 </details>
 
 The header names this machine and the team, and says whether collection, the relay, and self-update are healthy; when one of them fails, its error is in ATTENTION. The relay's age is the older of the last push and the last read of the team, and its dot turns yellow once the team was last read over an hour ago. ATTENTION appears only when something is wrong: a subscription that is out, or will run out by its reset at its pace; one logged in on this machine that will end its window nearly full; one whose window fills while no team machine spends on it; a machine whose collector or one of its tools fails, or that has not reported for a day; a subscription in use with no reading; a reinstalled machine's old record; machines on an older release; and a subscription past half its window that will be left mostly unused.
 
-SUBSCRIPTIONS has one row per Claude, Codex, and Grok account, grouped by tool, the worst first. The bar is the weekly window: the heavy line is what has been used, and the tick how much would be used by now if the window were spent evenly. LEFT is what is left, RESETS when it resets, and AT RESET how full it will be then at its average pace since the window began, or since it was last at 0%, or at the pace of the last day's readings when that is faster: `over` at 100% or more, which means it runs out by its reset, `tight` from 85%, `ok` from 50%, and `under` below that. A window that limits the account more than the weekly one, such as a model's window or a full 5-hour window, gets an indented row of its own. `~` marks a reading over 6 hours old, unless the window is full, since a full window stays full until it resets. `?` marks an account with no reading, a window that has reset since it was read, or a Claude 5-hour or weekly window that a refused request did not read. USERS counts the machines that used the account in this window and names the busiest. Hermes is a tool, not a subscription: what it spends through a Codex or Grok login counts as that login's use.
+SUBSCRIPTIONS has one row per Claude, Codex, and Grok account, grouped by tool, the worst first. The bar is the weekly window: the heavy line is what has been used, and the tick how much would be used by now if the window were spent evenly. LEFT is what is left, RESETS when it resets, and AT RESET how full it will be then at its average pace since the window began, or since it was last at 0%, or at the pace of the last day's readings when that is faster: `over` at 100% or more, which means it runs out by its reset, `tight` from 85%, `ok` from 50%, and `under` below that. A window that limits the account more than the weekly one, such as a model's window or a full 5-hour window, gets an indented row of its own. `~` marks a reading over 6 hours old, unless the window is full, since a full window stays full until it resets. `?` marks an account with no reading, a window that has reset since it was read, or a Claude 5-hour or weekly window that a refused request did not read. DEVICES counts the machines that used the account in this window and names the busiest. Hermes is a tool, not a subscription: what it spends through a Codex or Grok login counts as that login's use.
 
 ![One developer's subscriptions: at this week's pace Claude runs out on Saturday, 12 hours before its reset, and its model window tonight; Codex has 78% left, and SuperGrok will leave most of its week unused](docs/demo/social/solo-forecast.png)
 
-DEVICES × SUBSCRIPTIONS is every machine against every subscription, in millions of input plus output tokens over the last 7 days, cache left out. NO QUOTA holds the tokens no subscription covers, such as Hermes on an API key. The section has a second view, status: a row per machine with its user, its release, how long ago it reported, the tools it reads, its tokens today and over 7, 30, and 90 days, and a note of what is wrong with it, such as an error, an update to install, or why it does not update itself. `--devices` prints that view. With only this machine, the section is USAGE instead: a row per subscription, with today, 7 days, 30 days, and 90 days. PROJECTS lists this machine's top projects over every account; `--projects` lists all of them. A project is a git repository, with its subfolders and worktrees, those Claude Code and Codex make included; a folder outside any repository is a project of its own. A dim legend at the bottom explains only the marks on screen.
+DEVICES × SUBSCRIPTIONS is every machine against every subscription, in millions of weighted tokens over the last 7 UTC days. A weighted token weighs each kind of token by what the provider's API charges for it against input: Claude's output 5, a cache read 0.1, and a cache write 1.25, or 2 when it is kept an hour; Codex's output 8 and a cache read 0.1; Grok's output 5 and a cache read 0.25. So a session that rereads a large cache shows more than its input and output, and less than every token counted alike. It is a proxy for how much quota a session uses, not the provider's formula. NO QUOTA holds the tokens no subscription covers, such as Hermes on an API key. Columns that do not fit fold into REST, so each row's cells add up to its TOTAL. A machine on a release before v0.4.0 sends no weighted tokens, so its are estimated from its input and output: `~` marks its TOTAL and the team's, and the legend says why and what to do. The section has a second view, status: a row per machine with its user, its release, how long ago it reported, the tools it reads, its tokens today and over 7, 30, and 90 days, and a note of what is wrong with it, such as an error, an update to install, or why it does not update itself. `--devices` prints that view. With only this machine, the section is USAGE instead: a row per subscription, with today, 7 days, 30 days, and 90 days. PROJECTS lists this machine's top projects over every account; `--projects` lists all of them. A project is a git repository, with its subfolders and worktrees, those Claude Code and Codex make included; a folder outside any repository counts under the nearest folder above it that the tools worked in, and is a project of its own when there is none, never reaching up to the home folder, Downloads and folders like it, or a temporary folder. USAGE and PROJECTS count this machine's local days, and 7, 30, and 90 days as rolling hours, while the team's tables count UTC days, as machines send them, so this machine's own row there can differ. Where the ledger holds less than 90 days of a tool, as when Claude Code deleted older transcripts, the PROJECTS title says since when. A dim legend at the bottom explains only the marks on screen.
 
 ![The status view of DEVICES: each machine's user, release, when it last reported, the tools it reads, its tokens, and what is wrong with it](docs/demo/social/devices-status.png)
 
@@ -279,7 +283,7 @@ The first run:
 - generates a new team key, unless the installer joined a team, so an install starts as a team of one
 - registers with the scheduler: a line in your crontab on Linux, a launch agent on macOS, a task named `ai-usage` in Task Scheduler on Windows
 - collects and prints the report
-- prints a short guide under the report: which scheduler now collects every 15 minutes, or what to do when none could be registered; what the team and the relay see; and the commands worth knowing, with how to invite a colleague, how to pause the system scheduler's runs, and how to uninstall
+- prints a short guide under the report: which scheduler now collects every 15 minutes, or what to do when none could be registered; what the team and the relay see; what a weighted token weighs; when it applies, that the team's tables count UTC days, that the ledger holds less than 90 days of Claude, or why the team's totals are estimated; and the commands worth knowing, with how to invite a colleague, how to pause the system scheduler's runs, and how to uninstall
 
 The guide is printed once. When the scheduler collected first, or the first run you started used `--json`, the guide comes with the next `ai-usage` that prints text; `ai-usage report` never prints it.
 
@@ -327,13 +331,15 @@ To add a machine to your team:
 2. On the new machine, install with `AI_USAGE_TEAM_KEY` as shown above, or run `ai-usage team join` and paste the key.
 3. Make sure both machines use the same relay: `ai-usage relay show`.
 
-Joining saves the previous key as `team.key.previous`, drops the cached team, and asks the relay, if one is set, to remove this machine from the old team. `ai-usage team` lists the team's machines. `ai-usage team forget-device ID` removes a retired machine's snapshot from the relay and from this machine's team view; ID can be the start of the id that ATTENTION shows for a reinstalled machine's old record, as `3f9a1c2e`. A snapshot that is not updated expires on its own: after 90 days, or sooner for a machine that has reported for less time than that, but never sooner than 7 days after its last update.
+Joining saves the previous key as `team.key.previous`, drops the cached team, and asks the relay, if one is set, to remove this machine from the old team. `ai-usage team` lists the team's machines. `ai-usage team forget-device ID` removes a retired machine's snapshot from the relay and from this machine's team view; ID can be the start of the id, at least the 8 characters that ATTENTION shows for a reinstalled machine's old record, as `3f9a1c2e`. A snapshot that is not updated expires on its own: after 90 days, or sooner for a machine that has reported for less time than that, but never sooner than 7 days after its last update.
 
 A key cannot be revoked. To shut someone out, start a new team and join the remaining machines to it: on one machine, move `team.key` out of the state folder, run `ai-usage` to generate a new key, and give that key to the others.
 
 In the team view, token counts add up across machines. Quota percentages do not: an account's quota is the newest reading any machine has for it.
 
-![DEVICES × SUBSCRIPTIONS for a made-up team: twelve machines, most of them bots, against six subscriptions, in millions of tokens over 7 days](docs/demo/social/team-matrix.png)
+While any machine in the team runs a release before v0.4.0, every machine sends the snapshot such a release reads, without weighted tokens, so that none drops out of its view. The team's weighted tokens are then estimated from input and output, marked `~`, and the legend names the machines holding them back and what to do: releases from v0.2.5 on update themselves within 15 minutes, and older ones need `install.sh` again. A retired machine on an old release holds them back until `ai-usage team forget-device` forgets it.
+
+![DEVICES × SUBSCRIPTIONS for a made-up team: twelve machines, most of them bots, against six subscriptions, in millions of weighted tokens over 7 days](docs/demo/social/team-matrix.png)
 
 A machine goes by its host name; a Mac goes by the local host name in Sharing settings, which does not change with the network. `ai-usage name set NAME` gives it another, and the team sees it after the machine's next run.
 
@@ -449,7 +455,7 @@ The collector runs in a container as on any Linux machine: install it inside, as
 
 ## JSON for agents
 
-`ai-usage --json` and `ai-usage report --json` print the report as JSON with `"schema_version": 4`. A field changes meaning only with a new schema version.
+`ai-usage --json` and `ai-usage report --json` print the report as JSON with `"schema_version": 4`. A field changes meaning only with a new schema version. `usage` and `days` count input plus output tokens; `burn` and `burn_days` beside them count weighted tokens, which the page shows.
 
 ![ai-usage --json through jq: each subscription's tool, short name, and state](docs/demo/social/json.png)
 
@@ -459,14 +465,17 @@ collector   version, device, team, last run, last success, last error,
             relay, schedule, and update state, and health[] as the header shows it
 attention[] out, over, tight, outside, error, no_reading, silent, duplicate, old, under: the account or devices, when, and why
 providers[] claude, codex, grok, hermes: status (ok, partial, error, skipped), error, homes,
-            accounts[]: label, name, home, plan, state (out, over, tight, ok, under, unknown),
-                        quota with from and windows[] (percent, resets_at, main, limits, stale,
-                        reset, state, forecast), link, sessions, tokens, usage (today, 7d, 30d, 90d),
-                        days[], linked_usage[], last_active_at, projects[]
-projects[]  this machine's projects over every account, with usage and providers
-team        pulled_at, latest_version, devices[] (error, silent, old, usage), providers[] with
-            accounts summed across devices (name, alias, state, quota, usage, users, busiest,
-            per_device[], linked_usage[]), and matrix (columns[], rows[] with share, of cells with share)
+            covered_since, accounts[]: label, name, home, plan, state (out, over, tight, ok,
+                        under, unknown), quota with from and windows[] (percent, resets_at, main,
+                        limits, stale, reset, state, forecast with basis and pace), link, sessions,
+                        tokens, usage (today, 7d, 30d, 90d), burn, fresh, days[], burn_days[],
+                        linked_usage[], last_active_at, projects[]
+projects[]  this machine's projects over every account, with usage, burn, active_sessions, and providers
+team        pulled_at, latest_version, estimated, held_back_by, estimated_reason,
+            devices[] (error, silent, old, usage, burn, gap, replaced_by, limitations), providers[]
+            with accounts summed across devices (name, alias, state, quota, usage, burn, users,
+            busiest, no_reading, outside, per_device[], linked_usage[]), and matrix (columns[],
+            rows[] with share and burn_share, of cells with share and burn_share)
 ```
 
 `ai-usage status --json` prints `schema_version`, `collector`, and `sources[]`. Every field is described in [docs/json-schema.md](docs/json-schema.md).
@@ -488,7 +497,7 @@ In plain text, so the relay can check the shape:
 - the team fingerprint, the device id (random), and the collector version
 - provider names, plan names, and whether an account is logged in
 - quota window names, percentages, and reset times
-- session and token counts, tokens per day and since each quota window began, and timestamps
+- session and token counts, tokens and weighted tokens per day and since each quota window began, and timestamps
 - each tool's status: ok, partial, error, or skipped
 
 So the relay's operator can see how many machines a team has, which tools and plans they use, how much, and when, but not who, on which machine, or in which project. The operator also sees the IP addresses that connect, which the relay keeps in rate-limit counters for up to a day.
