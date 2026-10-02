@@ -238,7 +238,7 @@ Links are resolved, so a folder reached through one is the same folder. On macOS
 | `burn` | object | weighted tokens in each local period |
 | `fresh` | object | input, cache writes, and output in each local period |
 | `active_sessions` | object | the sessions last active in each local period, `today`, `7d`, `30d`, and `90d`, by the hours they spent in; `sessions` counts those with tokens in the last 90 days |
-| `providers` | list of strings | the tools that used the project, most tokens first; only in the report's `projects` |
+| `providers` | list of strings | the tools that used the project, most weighted tokens first; only in the report's `projects` |
 | `last_active_at` | time | the newest session activity in the project |
 
 The report's list is sorted by `burn` in `7d`, in whole millions as the console shows it, then by `burn` in `90d`, then by path.

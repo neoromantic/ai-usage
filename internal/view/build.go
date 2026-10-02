@@ -306,6 +306,7 @@ func accountView(st *state.State, provider string, homes []string, a collect.Acc
 	for _, pr := range a.Projects {
 		acct.Projects = append(acct.Projects, projectView(pr, now, loc))
 	}
+	sortProjects(acct.Projects, Week)
 	return acct
 }
 

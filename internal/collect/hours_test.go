@@ -72,8 +72,9 @@ func TestHoursFollowTheSession(t *testing.T) {
 	if got := SinceStart(inOut(ann.Hours), t0.Add(-day)); got != 150 {
 		t.Errorf("since a day ago = %d, want 150", got)
 	}
+	// Codex first: Claude's tokens are mostly cache reads, which weigh little.
 	ps := Projects(st, nil)
-	if len(ps) != 1 || ps[0].Sessions != 2 || !reflect.DeepEqual(ps[0].Providers, []string{"claude", "codex"}) || DaysOf(inOut(ps[0].Hours), t0)[2] != 200 {
+	if len(ps) != 1 || ps[0].Sessions != 2 || !reflect.DeepEqual(ps[0].Providers, []string{"codex", "claude"}) || DaysOf(inOut(ps[0].Hours), t0)[2] != 200 {
 		t.Errorf("projects = %+v", ps)
 	}
 }

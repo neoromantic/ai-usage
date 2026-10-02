@@ -41,8 +41,8 @@ type ProjectTotals struct {
 	Path    string
 	Folders int
 	usage
-	// Providers are the harnesses that used the project, most tokens first.
-	// Only Projects fills it.
+	// Providers are the harnesses that used the project, most weighted
+	// tokens first. Only Projects fills it.
 	Providers []string
 }
 
@@ -213,7 +213,9 @@ func Projects(st *state.State, f Folders) []ProjectTotals {
 		if byProvider[p.Path] == nil {
 			byProvider[p.Path] = map[string]int64{}
 		}
-		byProvider[p.Path][s.Provider] += hours.Sum().Total()
+		for _, n := range burn {
+			byProvider[p.Path][s.Provider] += n
+		}
 	}
 	out := ps.list()
 	for i := range out {

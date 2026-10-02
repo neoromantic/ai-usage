@@ -67,6 +67,14 @@ func TestProjectsSortByPeriod(t *testing.T) {
 	if r.Projects[0].Path != "/p/month" {
 		t.Fatalf("by 30d first = %s", r.Projects[0].Path)
 	}
+	// An account's own projects follow the same order, not their totals.
+	got = nil
+	for _, p := range findAccount(t, r, "codex", "ann").Projects {
+		got = append(got, p.Path)
+	}
+	if want := []string{"/p/recent", "/p/quarter"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("account's projects = %v", got)
+	}
 }
 
 // keys lists a JSON object's field names, and those of every element of each
