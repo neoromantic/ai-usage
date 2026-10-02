@@ -166,6 +166,10 @@ func (p *page) attentionText(a Attention, room int) []chunks {
 	case AttentionUnder:
 		return p.underForms(a)
 	case AttentionError:
+		if a.At != nil {
+			// How long ago, while the whole error fits beside it.
+			return p.forms(p.txt(a.Message)+p.g.sep+age(p.now.Sub(*a.At))+" ago", p.txt(a.Message))
+		}
 		return p.forms(p.txt(a.Message))
 	case AttentionNoReading:
 		return p.noReadingForms(a, room)

@@ -3,6 +3,7 @@ package view
 import (
 	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -414,5 +415,36 @@ func TestOutside(t *testing.T) {
 		History: map[string][]collect.Point{collect.HistoryKey("codex", "sam@mail.test"): {pt(h(-20), 30, 7), pt(h(-2), 45, 7)}}}
 	if o := findTeamAccount(t, Build(f.in), "codex", "sam@mail.test").Outside; o == nil || o.Points != 15 {
 		t.Errorf("sam outside %+v", o)
+	}
+}
+
+// A teammate's last error says when it happened, from v0.4.0 on, and
+// ATTENTION and its note say how long ago.
+func TestTeamDeviceLastErrorAt(t *testing.T) {
+	f := newFixture(t, emptyState())
+	at := now.Add(-3 * time.Hour)
+	d := otherDoc(t, f.key, "d-abox-device", "abox", now.Add(-time.Minute), emptyState())
+	d.LastError, d.LastErrorAt, d.LastSuccessAt = f.key.Seal("codex: rate limit read timed out"), &at, now.Add(-5*time.Hour)
+	r := withTeam(t, f, d)
+	dv := r.Team.Devices[1]
+	if dv.LastErrorAt == nil || !dv.LastErrorAt.Equal(at) || deref(dv.Error) != "codex: rate limit read timed out" {
+		t.Fatalf("device = %+v", dv)
+	}
+	var found bool
+	for _, a := range r.Attention {
+		if a.Kind == AttentionError && a.At != nil && a.At.Equal(at) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("attention = %+v", r.Attention)
+	}
+	lines := strings.Join(pageSection(Render(r, Options{Width: 120, Loc: time.UTC, Interactive: true}), "ATTENTION"), "\n")
+	if !strings.Contains(lines, "codex: rate limit read timed out · 3h ago") {
+		t.Errorf("ATTENTION:\n%s", lines)
+	}
+	// A release before v0.4.0 does not say when.
+	if r := withTeam(t, f, d.Legacy()); r.Team.Devices[1].LastErrorAt != nil {
+		t.Errorf("legacy: %v", r.Team.Devices[1].LastErrorAt)
 	}
 }

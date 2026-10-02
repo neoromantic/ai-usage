@@ -137,7 +137,7 @@ func deviceAttention(t Team, c Collector) []Attention {
 			}
 			out = append(out, at)
 		case d.Error != nil:
-			out = append(out, Attention{Kind: AttentionError, Devices: []string{d.Label}, Message: *d.Error})
+			out = append(out, Attention{Kind: AttentionError, Devices: []string{d.Label}, Message: *d.Error, At: errorAt(d)})
 		}
 		if d.This {
 			for _, e := range collectorErrors(c, d.CollectedAt) {

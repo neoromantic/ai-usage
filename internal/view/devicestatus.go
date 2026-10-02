@@ -398,7 +398,11 @@ func (p *page) deviceNote(d TeamDevice, w int) chunks {
 		}
 		return fit(append([]chunk{p.muted(last)}, silence...)...)
 	case d.Error != nil:
-		return fit(p.paint(p.txt(*d.Error), p.th.Out, false, false))
+		err := p.paint(p.txt(*d.Error), p.th.Out, false, false)
+		if at := errorAt(d); at != nil {
+			return fit(p.paint(err.text+g.sep+age(p.now.Sub(*at))+" ago", p.th.Out, false, false), err)
+		}
+		return fit(err)
 	case d.Old && d.UpdateError != nil:
 		return update(color(p.th.Out), "update failing", "update")
 	case d.Old && p.r.Team.Latest != nil:

@@ -175,6 +175,7 @@ func (m *merger) teamDevice(d snapshot.Doc) *TeamDevice {
 		LastSuccessAt:    timePtr(d.LastSuccessAt),
 		LastError:        lastErr,
 		UpdateError:      updateErr,
+		LastErrorAt:      lastErrorAt(lastErr, d.LastErrorAt),
 		Sources:          []Source{},
 		Silent:           m.now.Sub(d.CollectedAt) > collect.SilentAfter,
 		Limitations:      limitations(d.CollectorVersion),
@@ -221,6 +222,24 @@ func (m *merger) lastErrors(d snapshot.Doc, this bool) (lastErr, updateErr *stri
 		updateErr = strPtr(snapshot.Printable(update))
 	}
 	return strPtr(snapshot.Printable(last)), updateErr
+}
+
+// lastErrorAt is when a device's last error, lastErr, happened, when its
+// snapshot says.
+func lastErrorAt(lastErr *string, at *time.Time) *time.Time {
+	if lastErr == nil || at == nil {
+		return nil
+	}
+	return timePtr(*at)
+}
+
+// errorAt is when what fails on a device happened: when its last run's
+// error did, when that is its error and its collector says.
+func errorAt(d TeamDevice) *time.Time {
+	if d.Error != nil && d.LastError != nil && *d.Error == *d.LastError {
+		return d.LastErrorAt
+	}
+	return nil
 }
 
 // account is the team account of provider and label, made when it is new.

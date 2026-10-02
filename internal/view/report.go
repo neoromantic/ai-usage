@@ -161,8 +161,9 @@ type Attention struct {
 	DeviceID string `json:"device_id,omitempty"`
 	// At is when an out window resets, when an over window runs out before
 	// its reset, when an outside window began to rise, when a silent or
-	// duplicate device last reported, or the earliest BehindSince of old
-	// devices that do not update themselves.
+	// duplicate device last reported, when a device's last error happened,
+	// when its collector says, or the earliest BehindSince of old devices
+	// that do not update themselves.
 	At *time.Time `json:"at,omitempty"`
 	// ResetsAt is when an over, tight, or under window resets.
 	ResetsAt *time.Time `json:"resets_at,omitempty"`
@@ -406,6 +407,9 @@ type TeamDevice struct {
 	AgeSeconds       int64      `json:"age_seconds"`
 	LastSuccessAt    *time.Time `json:"last_success_at"`
 	LastError        *string    `json:"last_error"`
+	// LastErrorAt is when the last error happened, as a collector from
+	// v0.4.0 on says, and nil before.
+	LastErrorAt *time.Time `json:"last_error_at"`
 	// UpdateError is why the device's last release check failed, while no
 	// newer release waits for its next run. It is nil for this device, whose
 	// own update the header shows, and for a collector that does not say.

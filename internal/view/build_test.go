@@ -208,7 +208,7 @@ providers.covered_since providers.error providers.homes providers.provider provi
 schema_version
 team team.devices team.devices.age_seconds team.devices.behind_since team.devices.burn team.devices.burn.30d team.devices.burn.7d team.devices.burn.90d team.devices.burn.today
 team.devices.burn_estimated team.devices.collected_at team.devices.collector_version
-team.devices.device team.devices.error team.devices.gap team.devices.label team.devices.last_error team.devices.last_success_at
+team.devices.device team.devices.error team.devices.gap team.devices.label team.devices.last_error team.devices.last_error_at team.devices.last_success_at
 team.devices.limitations team.devices.not_updating team.devices.old team.devices.os_user team.devices.replaced_by
 team.devices.silent team.devices.sources team.devices.sources.error team.devices.sources.provider
 team.devices.sources.status team.devices.this_device team.devices.update_error team.devices.usage team.devices.usage.30d team.devices.usage.7d
