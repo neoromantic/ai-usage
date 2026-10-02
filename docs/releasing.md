@@ -9,15 +9,17 @@ git tag -a v1.2.3 -m v1.2.3
 git push origin v1.2.3
 ```
 
+Notes for a release go in `docs/releases/v1.2.3.md`, named after the tag and committed before it is pushed. They are written for the people who install it: what changed for them, what to do about it, and what it does not do yet, with made-up names only, since the repository is public.
+
 The workflow then:
 
 1. on Linux, runs `go vet ./...` and `go test ./...`, and checks that the Linux amd64 binary reports the tag as its version
 2. on macOS, runs `go vet ./...`, `go test ./...`, and the menu bar app's checks, `xcrun swift run AIUsageChecks` in `macos/`
 3. builds the seven release files with `.github/scripts/dist.sh`
 4. checks that the macOS arm64 binary reports the tag as its version; that `checksums.txt` lists seven files that match it; and that the app in `ai-usage_darwin_app.zip` reports the tag without its `v`, is built for both CPUs, and has a signature that verifies
-5. creates the release as a draft with generated notes, uploads the files, and then publishes it
+5. creates the release as a draft, uploads the files, and then publishes it. Its notes are `docs/releases/<tag>.md`, when that file exists, followed by GitHub's generated notes, which link the changes since the last release
 
-The draft step keeps `releases/latest` from pointing at a release whose files are still uploading. The installers download from `releases/latest/download/`, and running collectors take the tag `releases/latest` redirects to and download from `releases/download/<tag>/`. If the workflow fails after the draft exists, rerun it: it replaces the files and publishes.
+The draft step keeps `releases/latest` from pointing at a release whose files are still uploading. The installers download from `releases/latest/download/`, and running collectors take the tag `releases/latest` redirects to and download from `releases/download/<tag>/`. If the workflow fails after the draft exists, rerun it: it replaces the files and publishes, and keeps the notes the draft was created with; change them with `gh release edit <tag> --notes-file docs/releases/<tag>.md`.
 
 Release builds check at every scheduled run, so every collector installs the release within about 15 minutes of its publication and runs it from the run after. On a Mac, the same check brings the menu bar app to the release, and the app restarts into it. A relay change the release needs must be deployed before then; see [Connect collectors to your relay](relay.md#connect-collectors-to-your-relay). A release a collector downloads and cannot install, for example one that does not start on its machine, is downloaded there again only after 6 hours, and so is a menu bar app that does not install, so fix it with a new tag, which collectors install at their next run.
 

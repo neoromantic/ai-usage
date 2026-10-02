@@ -76,6 +76,9 @@ jobs:
         run: |
           flags=()
           if [[ $TAG == *-* ]]; then flags+=(--prerelease); fi
+          # Notes written for the tag go above the generated ones, which link
+          # the changes since the last release.
+          if [[ -f docs/releases/$TAG.md ]]; then flags+=(--notes-file "docs/releases/$TAG.md"); fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             # A rerun: replace the files, then make sure the release is out.
             gh release upload "$TAG" dist/* --clobber
