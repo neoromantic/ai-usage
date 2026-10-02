@@ -306,6 +306,15 @@ func (p *page) fitColumns(cols []gridCol, lead, restW, totalW int) (shown, folde
 	return shown, folded, x + after(len(folded) > 0)
 }
 
+// ownUnit is the unit of this device's own tables, PROJECTS and USAGE:
+// weighted tokens, or input plus output in a report saved before burn.
+func (p *page) ownUnit() string {
+	if p.r.inOut {
+		return "M tokens in+out"
+	}
+	return "M weighted tokens"
+}
+
 // gridTitle is the matrix's title line: its name, the count of its rows,
 // the period in UTC days and the unit, and the pills of its views and
 // modes, ending at edge.
@@ -491,7 +500,7 @@ func (p *page) usage() []chunks {
 		}
 		return line
 	}
-	out := []chunks{{p.bold("USAGE"), p.plain("  "), p.muted(p.txt(p.r.Collector.DeviceLabel) + g.sep + "M weighted tokens")}}
+	out := []chunks{{p.bold("USAGE"), p.plain("  "), p.muted(p.txt(p.r.Collector.DeviceLabel) + g.sep + p.ownUnit())}}
 	for i, r := range rows {
 		if i == 0 || rows[i-1].group != r.group {
 			out = append(out, nil)

@@ -89,8 +89,9 @@ func Build(in Input) Report {
 // devices that do not update themselves. A report that has them keeps them.
 //
 // A report saved before burn has its input plus output as burn, the team's
-// marked estimated, and its sessions of 90 days as the sessions active in
-// every period, as that release showed them.
+// marked estimated and this device's titled in tokens in+out, and its
+// sessions of 90 days as the sessions active in every period, as that
+// release showed them.
 func Fill(r *Report) {
 	if r.Collector.Health == nil {
 		r.Collector.Health = health(r.Collector, r.GeneratedAt)
@@ -105,8 +106,11 @@ func Fill(r *Report) {
 			a := &r.Providers[i].Accounts[j]
 			fillLimits(a.Quota)
 			fillFolders(a.Projects)
-			if fillBurn(&a.Burn, a.Usage) && len(a.BurnDays) == 0 {
-				a.BurnDays = a.Days
+			if fillBurn(&a.Burn, a.Usage) {
+				r.inOut = true
+				if len(a.BurnDays) == 0 {
+					a.BurnDays = a.Days
+				}
 			}
 		}
 	}
@@ -134,7 +138,7 @@ func fillOldBurn(r *Report) {
 		}
 	}
 	for _, p := range projects {
-		fillBurn(&p.Burn, p.Usage)
+		r.inOut = fillBurn(&p.Burn, p.Usage) || r.inOut
 		if p.Active == (Counts{}) && p.Sessions > 0 {
 			p.Active = Counts{Today: p.Sessions, Week: p.Sessions, Month: p.Sessions, Quarter: p.Sessions}
 		}

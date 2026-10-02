@@ -39,6 +39,11 @@ type Report struct {
 	// PROJECTS shows them by 7d: the most burn first.
 	Projects []Project `json:"projects"`
 	Team     Team      `json:"team"`
+
+	// inOut says Fill gave this device's accounts or projects their input
+	// plus output as burn, from a report saved before burn, so PROJECTS
+	// and USAGE name that unit.
+	inOut bool
 }
 
 type Collector struct {

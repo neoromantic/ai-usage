@@ -83,7 +83,7 @@ func (p *page) projects() []chunks {
 // coverage goes first, the last provider's first, then this device's label.
 func (p *page) projectsTitle(per Period, short []string) chunks {
 	g := p.g
-	unit := "by " + per.String() + g.sep + "M weighted tokens"
+	unit := "by " + per.String() + g.sep + p.ownUnit()
 	label := p.txt(p.r.Collector.DeviceLabel) + g.sep
 	var forms []string
 	var since []string

@@ -436,6 +436,33 @@ func TestFillGivesAnEarlierReportBurn(t *testing.T) {
 	if !r.Team.Estimated || r.Team.EstimatedReason == nil || !strings.Contains(*r.Team.EstimatedReason, "before v0.4.0") {
 		t.Errorf("team estimated %v, reason %v", r.Team.Estimated, r.Team.EstimatedReason)
 	}
+	// This device's own tables say their tokens are input plus output.
+	single := loadReport(t, "single")
+	for i := range single.Providers {
+		for j := range single.Providers[i].Accounts {
+			single.Providers[i].Accounts[j].Burn = Usage{}
+		}
+	}
+	for i := range single.Projects {
+		single.Projects[i].Burn = Usage{}
+	}
+	Fill(&single)
+	for _, c := range []struct {
+		r          Report
+		sec, title string
+	}{
+		{r, "PROJECTS", "M tokens in+out"},
+		{single, "PROJECTS", "M tokens in+out"},
+		{single, "USAGE", "M tokens in+out"},
+		{loadReport(t, "team"), "PROJECTS", "M weighted tokens"},
+		{loadReport(t, "single"), "USAGE", "M weighted tokens"},
+	} {
+		sec := pageSection(Render(c.r, Options{Width: 160, Loc: time.UTC}), c.sec)
+		if len(sec) == 0 || !strings.Contains(sec[0], c.title) {
+			t.Errorf("%s titled %q, want %q", c.sec, sec, c.title)
+		}
+	}
+
 	// A list the release did not save is an empty one.
 	var old Report
 	if err := json.Unmarshal([]byte(`{"providers":[{"accounts":[{"label":"x"}]}],"team":{"devices":[{"device":"d"}]}}`), &old); err != nil {
