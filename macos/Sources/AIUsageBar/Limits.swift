@@ -334,7 +334,7 @@ private struct LimitRow: View {
                 s += ", ~\(max(100 - Int(f.percent), 0))% left at its reset"
             }
             if w.state != "out", w.forecast?.basis == "recent" {
-                s += ", at the last day's pace"
+                s += ", at \(w.recentPace) pace"
             }
             if let at = w.resetsAt {
                 s += (w.state == "out" ? ", back " : ", resets ") + "\(clock(at)), in \(Format.duration(at.timeIntervalSince(now)))"

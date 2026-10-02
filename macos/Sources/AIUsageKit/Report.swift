@@ -301,6 +301,26 @@ public struct Quota: Decodable, Sendable {
         /// How full the window is now is known: it has not reset since it was
         /// read, and the reading covers it.
         public var known: Bool { !reset && unread != true }
+
+        /// The window's length in minutes, from its minutes or else a name
+        /// such as "5h" or "7d"; nil when neither says.
+        public var length: Int? {
+            if let m = minutes, m > 0 { return m }
+            guard let unit = name.last, let n = Int(name.dropLast()), n > 0 else { return nil }
+            switch unit {
+            case "m": return n
+            case "h": return n * 60
+            case "d": return n * 1440
+            default: return nil
+            }
+        }
+
+        /// The recent pace in words, as the report says it: the last day's,
+        /// or the recent one in a window shorter than a day, whose readings
+        /// go back only to its reset.
+        public var recentPace: String {
+            (length ?? 10080) < 1440 ? "the recent" : "the last day's"
+        }
     }
 }
 

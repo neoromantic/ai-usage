@@ -379,6 +379,21 @@ equal("attention texts", texts.dropFirst().map(\.detail), [
     "a kind from a later release",
 ])
 check("reinstall has no update alert", texts[5].alert == nil)
+// A 5h window forecast at its recent pace says the recent, as the report does.
+let tight5h = try edited("team.json") { json in
+    var o = objects(json) { o in
+        var o = o
+        if o["name"] as? String == "5h", o["percent"] != nil, o["state"] != nil {
+            o["forecast"] = ["percent": 95, "elapsed": 0.5, "basis": "recent", "pace": 10]
+        }
+        return o
+    } as! [String: Any]
+    o["attention"] = [["kind": "tight", "provider": "claude", "account": "mira@studio.dev", "name": "mira", "window": "5h", "resets_at": "2026-09-24T12:00:00Z", "percent": 95]]
+    return o
+}
+let tight5hText = AttentionText(tight5h.attention[0], report: tight5h, now: tight5h.generatedAt, timeZone: berlin)
+check("5h tight line at the recent pace", tight5hText.detail.hasSuffix(" at the recent pace"))
+equal("5h window's recent pace", tight5h.teamAccount(provider: "claude", label: "mira@studio.dev")?.quota?.windows.first { $0.name == "5h" }?.recentPace, "the recent")
 // The pace a tight line names: this week's without the recent basis.
 let tightWeek = AttentionText(v034.attention[0], report: v034, now: v034.generatedAt, timeZone: berlin)
 equal("out text unchanged", tightWeek.detail, "back Thu 17:05 (in 1h 25m)")

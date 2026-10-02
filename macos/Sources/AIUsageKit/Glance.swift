@@ -427,14 +427,14 @@ public struct AttentionText: Sendable {
         return nil
     }
 
-    /// The pace a tight line forecasts at: the last day's, when the
+    /// The pace a tight line forecasts at: the recent one, when the
     /// forecast takes it, else the week's, or the window's when it is not a
     /// week long.
     private static func pace(_ a: Attention, _ r: Report) -> String {
         let q = a.provider.flatMap { r.teamAccount(provider: $0, label: a.account ?? "") }?.quota
         let named = a.window.map { name in q?.windows.first { $0.name == name } }
         guard let w = named ?? q?.main else { return "this week's" }
-        if w.forecast?.basis == "recent" { return "the last day's" }
+        if w.forecast?.basis == "recent" { return w.recentPace }
         return (w.minutes ?? (w.name == "7d" ? 10080 : 0)) == 10080 ? "this week's" : "this window's"
     }
 }
