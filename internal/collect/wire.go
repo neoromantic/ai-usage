@@ -15,6 +15,18 @@ import (
 // device sends them only while the whole team reads them.
 const ExtSince = "v0.4.0"
 
+// legacyDev is the version a build from source of a release before ExtSince
+// reports. One from ExtSince on reports "devel", which does not parse as a
+// release either.
+const legacyDev = "dev"
+
+// BeforeExt says a collector of version runs a release before ExtSince, or
+// is a build from source of one. Any other version that is not a release,
+// such as a later build from source's, counts as new.
+func BeforeExt(version string) bool {
+	return version == legacyDev || selfupdate.Newer(ExtSince, version)
+}
+
 // Why the gate is closed.
 const (
 	GateTeam     = "team"     // the cached read is of another team, or of none
@@ -43,7 +55,7 @@ type Gate struct {
 // is of this team, at most gateReadAge old, the relay has not refused the
 // fields since noExtUntil was set, and every other device the read found or
 // still remembers in Known runs ExtSince or later. A development build
-// counts as new. Documents the read left out, as not verified or from a
+// counts as new, unless BeforeExt tells it is one of an older release. Documents the read left out, as not verified or from a
 // newer release, do not close it: no reader of this team's documents sent
 // them.
 func ExtendedWire(c TeamCache, fingerprint, self string, noExtUntil, now time.Time) Gate {
@@ -69,9 +81,7 @@ func ExtendedWire(c TeamCache, fingerprint, self string, noExtUntil, now time.Ti
 func heldBack(c TeamCache, self string) []string {
 	var out []string
 	add := func(device, version string) {
-		// Newer is false for a version that does not parse, such as a
-		// development build's.
-		if device != self && selfupdate.Newer(ExtSince, version) {
+		if device != self && BeforeExt(version) {
 			out = append(out, device)
 		}
 	}

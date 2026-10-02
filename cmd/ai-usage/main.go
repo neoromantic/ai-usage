@@ -22,8 +22,11 @@ import (
 )
 
 // Set at release build time with -ldflags "-X main.version=v1.2.3 -X main.defaultRelay=https://…".
+// A build from source reports "devel": the team tells it from one of a release
+// before v0.4.0, which reported "dev" and reads none of the snapshot fields
+// v0.4.0 added.
 var (
-	version      = "dev"
+	version      = "devel"
 	defaultRelay = ""
 )
 

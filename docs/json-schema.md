@@ -31,7 +31,7 @@ Conventions:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `version` | string | the collector version, such as `v1.2.3`, or `dev` for a build from source |
+| `version` | string | the collector version, such as `v1.2.3`, or `devel` for a build from source (`dev` before v0.4.0) |
 | `device` | string | this device's id, `d-` and 24 hex digits, made on the first run |
 | `device_label` | string | the name this device goes by in the team: one set with `ai-usage name set` or `AI_USAGE_NAME`, else the host name |
 | `os_user` | string | the OS user name |

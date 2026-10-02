@@ -522,7 +522,7 @@ On macOS, the check also keeps the [menu bar app](#menu-bar-app) at the binary's
 
 The checksum guards against a broken download. It does not protect against a compromised release, since both files come from the same place.
 
-A binary built from source reports version `dev`. It never updates itself and never registers with the scheduler on its own; run `ai-usage schedule install` for that.
+A binary built from source reports version `devel` (`dev` before v0.4.0). It never updates itself and never registers with the scheduler on its own; run `ai-usage schedule install` for that.
 
 ## Uninstall
 

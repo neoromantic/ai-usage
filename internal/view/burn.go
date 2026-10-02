@@ -84,10 +84,12 @@ func (m *merger) estimate(t *Team) {
 }
 
 // What a device that holds back weighted days does to send them: it is
-// forgotten, reinstalled, updated by hand, or updates itself.
+// forgotten, reinstalled, built again from source, updated by hand, or
+// updates itself.
 const (
 	stepForget = iota
 	stepReinstall
+	stepRebuild
 	stepUpdate
 	stepSelf
 )
@@ -97,13 +99,15 @@ const (
 // as long as the relay keeps the least of records, may never come back, as
 // when it was reinstalled. A release before v0.2.5, which cannot say its
 // update failed, is reinstalled; a later one whose update fails is updated
-// by hand.
+// by hand. A build from source never updates itself.
 func (m *merger) heldBackStep(h TeamDevice) int {
 	switch {
 	case m.gone(h) || h.ReplacedBy != nil || m.now.Sub(h.CollectedAt) > relay.DefaultLimits().MinRecordTTL:
 		return stepForget
 	case selfupdate.Newer("v0.2.5", h.CollectorVersion):
 		return stepReinstall
+	case selfupdate.Dev(h.CollectorVersion):
+		return stepRebuild
 	case h.NotUpdating || h.UpdateError != nil:
 		return stepUpdate
 	}
@@ -130,6 +134,8 @@ func (m *merger) heldBackReason(h TeamDevice) string {
 		return out
 	case stepReinstall:
 		return runs + "reinstall with install.sh"
+	case stepRebuild:
+		return h.Label + " runs a build from source before " + collect.ExtSince + ": build it again"
 	case stepUpdate:
 		return runs + "its update fails; run ai-usage update on it"
 	}
@@ -141,7 +147,7 @@ func (m *merger) heldBackReason(h TeamDevice) string {
 
 // heldBackSteps is what the held-back devices hs, more than one, take:
 // those to reinstall first, so the action a short line keeps names them,
-// then those to forget, those to update by hand, and the rest, which
+// then those to build again, to forget, to update by hand, and the rest, which
 // update themselves.
 func (m *merger) heldBackSteps(hs []TeamDevice) string {
 	by := make([][]string, stepSelf+1)
@@ -154,6 +160,9 @@ func (m *merger) heldBackSteps(hs []TeamDevice) string {
 	var steps []string
 	if ns := by[stepReinstall]; len(ns) > 0 {
 		steps = append(steps, "reinstall "+firstNames(ns, 3)+" with install.sh")
+	}
+	if ns := by[stepRebuild]; len(ns) > 0 {
+		steps = append(steps, "build "+firstNames(ns, 3)+" again from source")
 	}
 	if ns := by[stepForget]; len(ns) > 0 {
 		steps = append(steps, "forget "+firstNames(ns, 3)+" with ai-usage team forget-device")

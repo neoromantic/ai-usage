@@ -120,7 +120,7 @@ func TestCollectOfflineThenViews(t *testing.T) {
 		t.Fatalf("--quiet printed %q", out)
 	}
 	r := d.report()
-	if r.SchemaVersion != view.SchemaVersion || r.Collector.Version != "dev" || r.Collector.Device != d.config().Device {
+	if r.SchemaVersion != view.SchemaVersion || r.Collector.Version != "devel" || r.Collector.Device != d.config().Device {
 		t.Fatalf("collector = %+v", r.Collector)
 	}
 	if r.Collector.Relay.URL != nil || r.Collector.LastSuccessAt == nil {

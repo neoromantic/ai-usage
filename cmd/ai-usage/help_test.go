@@ -35,7 +35,7 @@ func TestVersionHelpAndUsageErrors(t *testing.T) {
 	hermetic(t)
 	d := newDevice(t)
 	for _, args := range [][]string{{"version"}, {"-version"}, {"--version"}} {
-		if out := d.ok(args...); out != "dev\n" {
+		if out := d.ok(args...); out != "devel\n" {
 			t.Fatalf("%v printed %q", args, out)
 		}
 	}

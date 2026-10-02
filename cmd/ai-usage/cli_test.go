@@ -85,7 +85,7 @@ func hermetic(t *testing.T) {
 		hostname, osUser = saved.hostname, saved.osUser
 		collectOnce, sleepCtx = saved.collectOnce, saved.sleepCtx
 	})
-	version, defaultRelay, clock = "dev", "", time.Now
+	version, defaultRelay, clock = "devel", "", time.Now
 	// A CI runner's host name can be long enough to change the layout.
 	hostname = func() string { return "test-host" }
 	osUser = func() string { return "tester" }

@@ -219,7 +219,7 @@ var claudeTooOld = regexp.MustCompile(`Claude Code (\S+) does not cache the usag
 // holds no such problem, or version is no such release. rest is what else
 // msg holds, joined again.
 func legacyNoQuota(version, label, msg string) (note, reason, rest string) {
-	if !selfupdate.Newer(collect.ExtSince, version) {
+	if !collect.BeforeExt(version) {
 		return "", "", msg
 	}
 	parts := strings.Split(msg, "; ")

@@ -88,6 +88,9 @@ func TestTeamEstimatedReason(t *testing.T) {
 			d.CollectedAt = now.Add(-2 * 24 * time.Hour)
 			return []snapshot.Doc{d}
 		}, nil, []string{"abox"}, "abox has not reported since Aug 30: it updates itself when it next runs"},
+		{"one built from source", func(k *team.Key) []snapshot.Doc {
+			return []snapshot.Doc{legacyDoc(t, k, "d-abox-device", "abox", "dev")}
+		}, nil, []string{"abox"}, "abox runs a build from source before v0.4.0: build it again"},
 		{"one whose update fails", func(k *team.Key) []snapshot.Doc {
 			d := legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4")
 			d.LastError = k.Seal(snapshot.UpdateLine + "download failed")
