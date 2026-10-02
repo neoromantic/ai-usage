@@ -54,9 +54,9 @@ func (p *page) attention() []chunks {
 	if len(as) == 0 {
 		return nil
 	}
-	more := 0
+	var hidden []Attention
 	if !p.o.Interactive && len(as) > attentionLines {
-		as, more = as[:attentionLines], len(as)-attentionLines
+		as, hidden = as[:attentionLines], as[attentionLines:]
 	}
 	badgeW, subjW := 0, 0
 	subjects := make([]chunks, len(as))
@@ -84,10 +84,33 @@ func (p *page) attention() []chunks {
 		}
 		out = append(out, append(line, text.cut(room, p.g.ell)...))
 	}
-	if more > 0 {
-		out = append(out, chunks{p.space(1), p.muted("+" + strconv.Itoa(more) + " more")})
+	if len(hidden) > 0 {
+		out = append(out, chunks{p.space(1), p.muted(p.moreText(hidden))})
 	}
 	return out
+}
+
+// moreText counts the ATTENTION lines the static page does not show, by
+// kind where that fits, so a NO READING under them is still named.
+func (p *page) moreText(hidden []Attention) string {
+	more := "+" + strconv.Itoa(len(hidden)) + " more"
+	n := map[string]int{}
+	var kinds []string
+	for _, a := range hidden {
+		if n[a.Kind] == 0 {
+			kinds = append(kinds, a.Kind)
+		}
+		n[a.Kind]++
+	}
+	var parts []string
+	for _, k := range kinds {
+		word, _ := p.badgeOf(k)
+		parts = append(parts, strconv.Itoa(n[k])+" "+strings.ToLower(word))
+	}
+	if long := more + ": " + strings.Join(parts, ", "); width(long) < p.w {
+		return long
+	}
+	return more
 }
 
 // subject is what an ATTENTION line is about: an account and its window, a

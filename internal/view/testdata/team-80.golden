@@ -7,7 +7,7 @@ ATTENTION
  OVER     codex sam@mail.test  runs out ~Sat 03:01, 2d 17h before reset
  OUTSIDE  codex lee@corp.test  +25 points in 20h, no team device spent
  ERROR    Mac.localdomain      codex: app-server exited without answering
- +3 more
+ +3 more: 1 no reading, 1 duplicate, 1 old
 
 SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
 

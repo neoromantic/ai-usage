@@ -33,7 +33,7 @@ One line: `ai-usage`, this device, the team, and on the right the collector's he
 
 ## ATTENTION
 
-Shown only when something is wrong. At most 6 lines, then `+N more`; the interactive view shows all. One line each, most urgent first:
+Shown only when something is wrong. At most 6 lines, then `+N more`, with how many of each kind where that fits, so a NO READING under it is still named; the interactive view shows all. One line each, most urgent first:
 
 | Badge | When | Says |
 | --- | --- | --- |

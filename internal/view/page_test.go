@@ -59,7 +59,8 @@ func TestPageAttentionIsCut(t *testing.T) {
 		Attention{Kind: AttentionSilent, Devices: []string{"bot-e"}, At: &since},
 		Attention{Kind: AttentionUnder, Provider: "codex", Account: "lee@corp.test", Name: "lee", ResetsAt: &resets, Percent: &pct})
 	static := pageSection(Render(r, Options{Width: 160, Loc: sampleZone}), "ATTENTION")
-	if len(static) != 1+attentionLines+1 || strings.TrimSpace(static[len(static)-1]) != "+5 more" {
+	// What is cut is counted by kind, so a NO READING is still named.
+	if len(static) != 1+attentionLines+1 || strings.TrimSpace(static[len(static)-1]) != "+5 more: 1 no reading, 1 duplicate, 1 old, 1 silent, 1 under" {
 		t.Errorf("static ATTENTION is not cut at %d lines:\n%s", attentionLines, strings.Join(static, "\n"))
 	}
 	p := Render(r, Options{Width: 160, Loc: sampleZone, Interactive: true})
