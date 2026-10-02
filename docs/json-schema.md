@@ -11,7 +11,8 @@ Conventions:
 - Lists are `[]` when empty, never `null`.
 - Percentages run from 0 to 100, except a forecast, which can pass 100.
 - `tokens` has the four counts the tools record over the last 90 days. `usage`, `days`, and `window_tokens` count input plus output tokens only, cache left out.
-- Days are UTC days. A `usage` object has four periods, each ending with the report's UTC day: `today`, `7d`, `30d`, and `90d`, the last that many UTC days up to and including it.
+- `burn`, `burn_days`, and `window_burn` count weighted tokens: every kind of token, each weighed by what the provider's API charges for it against an input token. Claude weighs output 5, a cache read 0.1, and a cache write 1.25, or 2 when it is kept an hour; Codex weighs output 8 and a cache read 0.1; Grok weighs output 5 and a cache read 0.25. A cache write counts as input where a provider does not price it apart. A Hermes call takes the weights of the provider its account is named after, and Claude's when it names none. Weighted tokens are a proxy for how much quota a session uses, not the provider's quota formula. The console shows them, as `M weighted tokens`. `fresh` counts input, cache writes, and output, unweighted.
+- Periods. Team objects count UTC days, as devices send them: a `usage` or a team object's `burn` has four periods, each ending with the report's UTC day: `today`, `7d`, `30d`, and `90d`, the last that many UTC days up to and including it, and `days` are UTC days. This device's own accounts and projects count their `burn`, `fresh`, and `active_sessions` in local periods: `today` is the hours since local midnight, and `7d`, `30d`, and `90d` the last 168, 720, and 2160 hours, ending with the current hour; their `burn_days` are local days. So this device's own numbers can differ from its row in the team's.
 - A `state` is one of `out`, `over`, `tight`, `ok`, `under`, and `unknown`; see [states](#states).
 
 ## Report
@@ -23,7 +24,7 @@ Conventions:
 | `collector` | object | this collector's health; see [collector](#collector) |
 | `attention` | list | what needs attention now, most urgent first; see [attention](#attention) |
 | `providers` | list | one entry each for `claude`, `codex`, `grok`, and `hermes`, in that order; see [providers](#providers) |
-| `projects` | list | this device's projects over every account, most tokens in the last 7 days first; see [projects](#projects) |
+| `projects` | list | this device's projects over every account, most weighted tokens in the last 7 days first; see [projects](#projects) |
 | `team` | object | every device in the team, this one included; see [team](#team) |
 
 ### collector
@@ -124,6 +125,7 @@ A window is one with `limits`: the account's main one, or one that limits it mor
 | `status` | string | `ok`; `partial` when something failed but some data was read; `error` when nothing could be read; `skipped` when the tool is not installed |
 | `error` | string | what failed, joined with `; ` |
 | `homes` | list of strings | the data folders read |
+| `covered_since` | time | the start of the first hour this device's ledger holds the tool's tokens for; `null` when it holds none. Before it the report knows nothing of them, so a `90d` that starts earlier counts less than was spent. Claude Code deletes its transcripts after 30 days unless `cleanupPeriodDays` says otherwise |
 | `accounts` | list | every account seen on this device for this tool; see below |
 
 An account is one login. After you switch accounts, the previous one stays, with the tokens it used and the last quota reported for it.
@@ -142,9 +144,13 @@ An account is one login. After you switch accounts, the previous one stays, with
 | `tokens` | object | tokens in the last 90 days; see below |
 | `usage` | object | input plus output tokens on this device in each period |
 | `days` | list of numbers | input plus output tokens on this device per UTC day, newest first: the first is the report's UTC day, the next the day before, and so on, for up to 90 days. Trailing zeros are left out |
+| `burn` | object | weighted tokens on this device in each local period |
+| `fresh` | object | input, cache writes, and output on this device in each local period |
+| `burn_days` | list of numbers | weighted tokens on this device per local day, newest first: the first is the report's local day, for up to 90 days. Trailing zeros are left out |
+| `transcript_gaps` | object | where a Claude account's transcripts miss tokens over the last 90 days: `null_snapshots`, the replies whose transcript ends without a final token count, and `over_tracked`, the sessions whose Claude Code count has over twice the output of their transcripts. ai-usage uses Claude Code's own count where it wrote one. Absent for other tools, and when both are 0 |
 | `linked_usage` | list | `{provider, sessions, tokens}` for each other tool assumed to bill through this account, such as Hermes on this Codex login; `[]` when none. These tokens are that tool's and are not in `tokens` |
 | `last_active_at` | time | the newest session activity that used this account |
-| `projects` | list | `{path, folders, sessions, tokens, usage, last_active_at}` per project, this account's part only, most tokens first; see [projects](#projects) |
+| `projects` | list | `{path, folders, sessions, tokens, usage, burn, fresh, active_sessions, last_active_at}` per project, this account's part only, most weighted tokens first; see [projects](#projects) |
 
 A Hermes account is named after the billing provider it used, such as `openai-codex`, `xai-oauth`, `anthropic`, or `openrouter`. Its tokens include Hermes' auxiliary calls, such as title generation, compression, and vision, under the provider each call billed. An auxiliary call on a fallback route, which Hermes records with no provider, goes to the `unknown` account.
 
@@ -226,10 +232,13 @@ Links are resolved, so a folder reached through one is the same folder. On macOS
 | `sessions` | number | sessions in the last 90 days |
 | `tokens` | object | tokens in the last 90 days |
 | `usage` | object | input plus output tokens in each period |
+| `burn` | object | weighted tokens in each local period |
+| `fresh` | object | input, cache writes, and output in each local period |
+| `active_sessions` | object | the sessions last active in each local period, `today`, `7d`, `30d`, and `90d`, by the hours they spent in; `sessions` counts those with tokens in the last 90 days |
 | `providers` | list of strings | the tools that used the project, most tokens first; only in the report's `projects` |
 | `last_active_at` | time | the newest session activity in the project |
 
-The report's list is sorted by `usage` in `7d`, then `90d`, then by path.
+The report's list is sorted by `burn` in `7d`, in whole millions as the console shows it, then by `burn` in `90d`, then by path.
 
 ### team
 
@@ -237,6 +246,9 @@ The report's list is sorted by `usage` in `7d`, then `90d`, then by path.
 | --- | --- | --- |
 | `pulled_at` | time | when the team was read from the relay; `null` if it has not been, in which case the lists hold this device only |
 | `latest_version` | string | the newest collector release any device in the team runs, or the newest this device's update check saw, whichever is newer |
+| `estimated` | bool | the weighted tokens of some device are estimated: a release before v0.4.0 sends none, so they are worked out from its input and output, at the ratio its 90 days' tokens give. Such devices have `burn_estimated` |
+| `held_back_by` | list of strings | the devices whose release keeps this device from sending its own weighted days: until every device the team knows runs v0.4.0 or later, each device sends the snapshot an older release reads, without them |
+| `estimated_reason` | string | why totals are estimated, with what to do, in a line, such as `leo-air runs v0.3.4: it updates itself within 15 minutes`, `3 devices run releases before v0.4.0: …`, a device that `has not reported since …: forget it with ai-usage team forget-device …`, or `the team was last read 4h ago`; `null` when `estimated` is `false` |
 | `devices` | list | one entry per device; see below |
 | `providers` | list | `{provider, accounts}` with each account summed across devices; see below |
 | `matrix` | object | every device against every subscription; see [matrix](#matrix) |
@@ -254,6 +266,7 @@ A device:
 | `age_seconds` | number | the snapshot's age |
 | `last_success_at` | time | its last run without an error |
 | `last_error` | string | its last error |
+| `last_error_at` | time | when that error happened; `null` from a collector before v0.4.0 |
 | `update_error` | string | why its last release check failed, without IP addresses, while no newer release waits for its next run. It reaches the team one run after the check, and `null` for this device, whose own is `collector.update.error`, and for a collector before this field |
 | `sources` | list | `{provider, status, error}` for each tool on that device |
 | `error` | string | what fails on the device now: a tool's error, named after its provider, else the last run's error when it is newer than the last success; `null` when nothing does |
@@ -262,6 +275,11 @@ A device:
 | `behind_since` | time | for an `old` device, its first run on the release it runs that this device's reads of the team found while a newer one was out, made since the read before, so that time it did not run, as a laptop asleep, does not count. The device has not updated itself for at least that long; once it has reported for 7 hours since, it had the runs to. `null` otherwise, until a read finds such a run, and once the device has not reported for a day, until it reports again |
 | `not_updating` | bool | an `old` device that does not update itself: it has reported for 7 hours since its `behind_since` and is not `silent`. These are the devices behind the `old` entry's `at` in `attention` |
 | `usage` | object | its input plus output tokens in each period, over every account. A device's days count from the UTC day it collected on, so one that last reported three days ago adds nothing to `today` |
+| `burn` | object | its weighted tokens in each period, as `usage` counts them |
+| `burn_estimated` | bool | `burn` is estimated from its input and output, as its release sends no weighted tokens |
+| `gap` | object | `{seconds, at}`: the longest time in the last 2 days this device's reads of the team did not find the device's snapshot growing, when over an hour, and when it began; `null` otherwise. For another device, only time this device was reading the team counts: a stretch ends at this device's last read before that device reported again |
+| `replaced_by` | string | the label of the device that reinstalled this one: the same name and OS user, reporting while this one is silent; `null` otherwise |
+| `limitations` | list of strings | what its release cannot do: `no_claude_quota` before v0.2.3, and `no_update_errors` before v0.2.5 |
 
 A team account. Each provider's accounts are in the order the report lists them: the worst `state` first (`out`, `over`, `tight`, `ok`, `under`, then `unknown`), ties to the one with less left of its main window, then by label.
 
@@ -280,8 +298,12 @@ A team account. Each provider's accounts are in the order the report lists them:
 | `users` | number | how many devices have tokens on the account since its main window began, or in the last 7 days when it has none, what linked accounts spent through it included |
 | `busiest` | string | the name of the one of those devices with the most tokens; `null` when there is none |
 | `last_active_at` | time | the newest activity on the account on any device, what Hermes spent through it included. A device whose Hermes spent through several logins gives each one its newest activity, since its snapshot does not say which login that went through |
-| `per_device` | list | `{device, device_id, current, sessions, tokens, usage, last_active_at}` for each device that has the account, `device` as `host (user)`; most tokens first, then by `device` |
+| `per_device` | list | `{device, device_id, current, sessions, tokens, usage, burn, last_active_at}` for each device that has the account, `device` as `host (user)`; most weighted tokens in `7d` first, then in `90d`, then by `device` |
 | `linked_usage` | list | `{provider, label, devices, sessions, tokens}` for each account of another tool that spent through this one on any device, as each device counted it session by session, summed across devices, with the devices it ran on; `[]` when none. These tokens are that account's and are not in `tokens` |
+| `burn` | object | the account's own weighted tokens, summed across devices |
+| `burn_estimated` | bool | some of `burn` is estimated, from a device whose release sends no weighted tokens |
+| `no_reading` | string | why a subscription has no reading of its main window, with what to do, such as `leo-air runs v0.3.0: reinstall with install.sh`, when that is known; `null` otherwise |
+| `outside` | object | `{points, since}`: the main window rose `points` since `since`, in the last day, while the team spent next to nothing on it, so someone outside the team uses it; `null` otherwise |
 
 ### matrix
 
@@ -289,8 +311,8 @@ Who spends what: each device against each subscription, and the tokens that have
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `columns` | list | the subscriptions, grouped by provider in the order of `team.providers` and their accounts, then one column per provider for the tokens with no quota; see below |
-| `rows` | list | the devices, the most tokens in the last 7 days first, then by name; see below |
+| `columns` | list | the subscriptions, grouped by provider, the group with the most weighted tokens in `7d` first, and within it the subscription with the most first; then one column per provider for the tokens with no quota, in the same order. Ties go to `90d`, then to the name; see below |
+| `rows` | list | the devices, the most weighted tokens in `7d` first, then in `90d`, then by name; see below |
 
 A column:
 
@@ -304,6 +326,7 @@ A column:
 | `percent` | number | how full the subscription's main window is, when that is known and it has not reset since; `null` otherwise |
 | `usage` | object | the team's input plus output tokens on it in each period, what Hermes spent through the login included |
 | `window_tokens` | number | the team's input plus output tokens since the main window began, what Hermes spent through the login included |
+| `burn`, `window_burn` | | the same as weighted tokens |
 
 A row:
 
@@ -314,6 +337,8 @@ A row:
 | `cells` | list | one per column, in the order of `columns` |
 | `usage` | object | the device's tokens over every column, in each period |
 | `share` | object | the device's part of the team's tokens over every column, in percent, in each period; see the cell's `share`. The rows' shares add up to 100 |
+| `burn`, `burn_share` | | the same as weighted tokens |
+| `burn_estimated` | bool | the device's `burn` is estimated, as on its team device |
 
 A cell:
 
@@ -322,6 +347,7 @@ A cell:
 | `usage` | object | the device's input plus output tokens on the column in each period |
 | `window_tokens` | number | the device's input plus output tokens since the column's main window began |
 | `share` | object | the device's part of the column's tokens, in percent, in each period: `today`, `7d`, `30d`, and `90d`, as in `usage`. It is the cell's `usage` over the column's, so a column's shares add up to 100. A period's is `null` when the team spent nothing on the column in it. A device that spent none has `0`. It says how the tokens split, not how much of the quota the device used |
+| `burn`, `window_burn`, `burn_share` | | the same as weighted tokens |
 
 ## Changes from version 3
 
@@ -335,6 +361,7 @@ A cell:
 - `collector.health`, how the collection, the relay, and the update are doing, and `limits` on a window, which says the window limits the account. A report from an earlier release has neither: read a missing `health` as `[]` and a missing `limits` as `false`, and then only the main windows as limiting. `ai-usage report --from` fills both in for such a report, as this release makes them. No field changed meaning, so the version stays 4.
 - `not_updating` on a team device, so that each device the `old` entry in `attention` counts is marked. A report from an earlier release does not have it; `ai-usage report --from` fills it in from `old`, `silent`, `collected_at`, and `behind_since`. No field changed meaning, so the version stays 4.
 - `basis` and `pace` on a forecast, which may now follow the last day's readings, the `tight`, `outside`, `no_reading`, and `duplicate` kinds in `attention`, with `device_id` and `limitations` on an entry, `reading_age_seconds` on an `out` entry with an old reading, and the `stale` relay status, whose `at`, like `ok`'s, is now the older of the last push and pull. A reader that skips kinds and statuses it does not know reads the rest as before, so the version stays 4.
+- Weighted tokens, in v0.4.0: `burn` beside every `usage`, with `burn_days`, `window_burn`, and `burn_share` beside `days`, `window_tokens`, and `share`; `fresh` and `transcript_gaps` on this device's accounts, `fresh` and `active_sessions` on projects, and `covered_since` on a provider. On the team, `estimated`, `held_back_by`, and `estimated_reason`; `burn_estimated` on devices, accounts, and rows; and on a device `last_error_at`, `gap`, `replaced_by`, and `limitations`, and on an account `no_reading` and `outside`. This device's own `burn` counts local periods, as the conventions at the top say. Lists are now ordered by weighted tokens. No field changed meaning, so the version stays 4. A report from an earlier release has no weighted tokens: `ai-usage report --from` gives each object whose `burn` is all zero and `usage` is not its `usage` as `burn`, and its `days`, `share`, and `window_tokens` as `burn_days`, `burn_share`, and `window_burn`, marks the team devices, team accounts, and matrix rows it filled `burn_estimated` and the team `estimated`, with `estimated_reason` saying the report was saved by an earlier release, gives each project its `sessions` as `active_sessions` in every period, and titles this device's PROJECTS and USAGE in tokens in+out.
 - `folders` on a project. A project is now a git repository, with its subfolders and linked worktrees, where each working folder was one; `path` is the project's folder, and `folders` says how many working folders count under it. A report from an earlier release has a project for each working folder and no `folders`: read a missing one as `1`, as `ai-usage report --from` fills it in. Every field keeps its type, and a project's numbers still sum its sessions, so the version stays 4.
 
 ## Example
@@ -388,6 +415,7 @@ A shortened report from a team of two:
       "status": "ok",
       "error": null,
       "homes": ["/Users/ann/.claude"],
+      "covered_since": "2026-06-03T09:00:00Z",
       "accounts": [
         {
           "label": "ann@example.com",
@@ -435,6 +463,9 @@ A shortened report from a team of two:
           "tokens": { "input": 21000000, "output": 6800000, "cache_read": 610000000, "cache_write": 29000000 },
           "usage": { "today": 2100000, "7d": 25000000, "30d": 27800000, "90d": 27800000 },
           "days": [2100000, 5400000, 3900000, 0, 4200000, 6100000, 3300000, 2800000],
+          "burn": { "today": 11500000, "7d": 136900000, "30d": 152250000, "90d": 152250000 },
+          "fresh": { "today": 4290000, "7d": 51080000, "30d": 56800000, "90d": 56800000 },
+          "burn_days": [11500000, 29573000, 21359000, 0, 23002000, 33407000, 18073000, 15336000],
           "linked_usage": [],
           "last_active_at": "2026-09-01T11:40:00Z",
           "projects": [
@@ -444,6 +475,9 @@ A shortened report from a team of two:
               "sessions": 3,
               "tokens": { "input": 14000000, "output": 4200000, "cache_read": 480000000, "cache_write": 21000000 },
               "usage": { "today": 1500000, "7d": 16500000, "30d": 18200000, "90d": 18200000 },
+              "burn": { "today": 9000000, "7d": 99040000, "30d": 109250000, "90d": 109250000 },
+              "fresh": { "today": 3230000, "7d": 35540000, "30d": 39200000, "90d": 39200000 },
+              "active_sessions": { "today": 1, "7d": 3, "30d": 3, "90d": 3 },
               "last_active_at": "2026-09-01T11:40:00Z"
             }
           ]
@@ -461,6 +495,9 @@ A shortened report from a team of two:
       "sessions": 5,
       "tokens": { "input": 17000000, "output": 5100000, "cache_read": 530000000, "cache_write": 21000000 },
       "usage": { "today": 1500000, "7d": 19800000, "30d": 22100000, "90d": 22100000 },
+      "burn": { "today": 9000000, "7d": 111900000, "30d": 124450000, "90d": 124450000 },
+      "fresh": { "today": 3230000, "7d": 38840000, "30d": 43100000, "90d": 43100000 },
+      "active_sessions": { "today": 1, "7d": 5, "30d": 5, "90d": 5 },
       "providers": ["claude", "codex"],
       "last_active_at": "2026-09-01T11:40:00Z"
     }
@@ -468,6 +505,9 @@ A shortened report from a team of two:
   "team": {
     "pulled_at": "2026-09-01T12:02:00Z",
     "latest_version": "v1.3.0",
+    "estimated": false,
+    "held_back_by": [],
+    "estimated_reason": null,
     "devices": [
       {
         "device": "d-8e41d07c5a2b93f6e1d4c7a0",
@@ -479,6 +519,7 @@ A shortened report from a team of two:
         "age_seconds": 780,
         "last_success_at": "2026-09-01T11:51:00Z",
         "last_error": null,
+        "last_error_at": null,
         "update_error": null,
         "sources": [
           { "provider": "claude", "status": "ok", "error": null },
@@ -489,7 +530,12 @@ A shortened report from a team of two:
         "old": true,
         "behind_since": "2026-08-31T16:40:00Z",
         "not_updating": true,
-        "usage": { "today": 900000, "7d": 6100000, "30d": 21000000, "90d": 48000000 }
+        "usage": { "today": 900000, "7d": 6100000, "30d": 21000000, "90d": 48000000 },
+        "burn": { "today": 4280000, "7d": 29000000, "30d": 99860000, "90d": 228200000 },
+        "burn_estimated": false,
+        "gap": null,
+        "replaced_by": null,
+        "limitations": []
       }
     ],
     "providers": [
@@ -541,10 +587,15 @@ A shortened report from a team of two:
                 "sessions": 4,
                 "tokens": { "input": 3800000, "output": 1100000, "cache_read": 90000000, "cache_write": 4000000 },
                 "usage": { "today": 900000, "7d": 4200000, "30d": 4900000, "90d": 4900000 },
+                "burn": { "today": 4280000, "7d": 19970000, "30d": 23300000, "90d": 23300000 },
                 "last_active_at": "2026-09-01T11:50:00Z"
               }
             ],
-            "linked_usage": []
+            "linked_usage": [],
+            "burn": { "today": 4280000, "7d": 19970000, "30d": 23300000, "90d": 23300000 },
+            "burn_estimated": false,
+            "no_reading": null,
+            "outside": null
           }
         ]
       }
@@ -559,7 +610,9 @@ A shortened report from a team of two:
           "state": "over",
           "percent": 80,
           "usage": { "today": 2100000, "7d": 25000000, "30d": 27800000, "90d": 27800000 },
-          "window_tokens": 13500000
+          "window_tokens": 13500000,
+          "burn": { "today": 11500000, "7d": 136900000, "30d": 152250000, "90d": 152250000 },
+          "window_burn": 73930000
         },
         {
           "provider": "claude",
@@ -569,7 +622,9 @@ A shortened report from a team of two:
           "state": "ok",
           "percent": 40,
           "usage": { "today": 900000, "7d": 4200000, "30d": 4900000, "90d": 4900000 },
-          "window_tokens": 3600000
+          "window_tokens": 3600000,
+          "burn": { "today": 4280000, "7d": 19970000, "30d": 23300000, "90d": 23300000 },
+          "window_burn": 17120000
         }
       ],
       "rows": [
@@ -580,16 +635,25 @@ A shortened report from a team of two:
             {
               "usage": { "today": 2100000, "7d": 25000000, "30d": 27800000, "90d": 27800000 },
               "window_tokens": 13500000,
-              "share": { "today": 100, "7d": 100, "30d": 100, "90d": 100 }
+              "share": { "today": 100, "7d": 100, "30d": 100, "90d": 100 },
+              "burn": { "today": 11500000, "7d": 136900000, "30d": 152250000, "90d": 152250000 },
+              "window_burn": 73930000,
+              "burn_share": { "today": 100, "7d": 100, "30d": 100, "90d": 100 }
             },
             {
               "usage": { "today": 0, "7d": 0, "30d": 0, "90d": 0 },
               "window_tokens": 0,
-              "share": { "today": 0, "7d": 0, "30d": 0, "90d": 0 }
+              "share": { "today": 0, "7d": 0, "30d": 0, "90d": 0 },
+              "burn": { "today": 0, "7d": 0, "30d": 0, "90d": 0 },
+              "window_burn": 0,
+              "burn_share": { "today": 0, "7d": 0, "30d": 0, "90d": 0 }
             }
           ],
           "usage": { "today": 2100000, "7d": 25000000, "30d": 27800000, "90d": 27800000 },
-          "share": { "today": 70, "7d": 85.61643835616438, "30d": 85.01529051987767, "90d": 85.01529051987767 }
+          "share": { "today": 70, "7d": 85.61643835616438, "30d": 85.01529051987767, "90d": 85.01529051987767 },
+          "burn": { "today": 11500000, "7d": 136900000, "30d": 152250000, "90d": 152250000 },
+          "burn_share": { "today": 72.87705956907478, "7d": 87.26971377414419, "30d": 86.72742808318143, "90d": 86.72742808318143 },
+          "burn_estimated": false
         },
         {
           "device": "bo-laptop",
@@ -598,16 +662,25 @@ A shortened report from a team of two:
             {
               "usage": { "today": 0, "7d": 0, "30d": 0, "90d": 0 },
               "window_tokens": 0,
-              "share": { "today": 0, "7d": 0, "30d": 0, "90d": 0 }
+              "share": { "today": 0, "7d": 0, "30d": 0, "90d": 0 },
+              "burn": { "today": 0, "7d": 0, "30d": 0, "90d": 0 },
+              "window_burn": 0,
+              "burn_share": { "today": 0, "7d": 0, "30d": 0, "90d": 0 }
             },
             {
               "usage": { "today": 900000, "7d": 4200000, "30d": 4900000, "90d": 4900000 },
               "window_tokens": 3600000,
-              "share": { "today": 100, "7d": 100, "30d": 100, "90d": 100 }
+              "share": { "today": 100, "7d": 100, "30d": 100, "90d": 100 },
+              "burn": { "today": 4280000, "7d": 19970000, "30d": 23300000, "90d": 23300000 },
+              "window_burn": 17120000,
+              "burn_share": { "today": 100, "7d": 100, "30d": 100, "90d": 100 }
             }
           ],
           "usage": { "today": 900000, "7d": 4200000, "30d": 4900000, "90d": 4900000 },
-          "share": { "today": 30, "7d": 14.383561643835616, "30d": 14.984709480122325, "90d": 14.984709480122325 }
+          "share": { "today": 30, "7d": 14.383561643835616, "30d": 14.984709480122325, "90d": 14.984709480122325 },
+          "burn": { "today": 4280000, "7d": 19970000, "30d": 23300000, "90d": 23300000 },
+          "burn_share": { "today": 27.122940430925222, "7d": 12.730286225855806, "30d": 13.272571916818571, "90d": 13.272571916818571 },
+          "burn_estimated": false
         }
       ]
     }
