@@ -202,7 +202,7 @@ func rescue(ctx context.Context, d state.Dir, cause error, scheduled bool) {
 
 // scheduledPull is how old a team read a scheduled run keeps before it
 // reads the team again: every other run, so a teammate's change reaches the
-// menu bar within about 20 minutes.
+// menu bar within about half an hour.
 const scheduledPull = 20 * time.Minute
 
 // jitter is how long a scheduled run waits before it starts: the same for a

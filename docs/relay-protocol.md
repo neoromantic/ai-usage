@@ -28,7 +28,7 @@ Contents:
 | relay | checks each snapshot and keeps the latest one per device; returns all of a team's snapshots to a signed read |
 | reader | reads the team with a signed `GET`, verifies every snapshot, and opens the sealed strings |
 
-The reference `ai-usage` binary is both a collector and a reader: each run publishes its own snapshot, then reads the team. A scheduled run reads it only when its last read is an hour old.
+The reference `ai-usage` binary is both a collector and a reader: each run publishes its own snapshot, then reads the team. A scheduled run reads it only when its last read is 20 minutes old, which is every other run.
 
 Every member of a team holds the same private key. The relay never holds it. The relay sees the public key, the signatures, the plain fields of each snapshot, and the IP addresses that connect. It cannot read sealed strings, and it cannot forge or change a snapshot without readers noticing. It can withhold or delete a snapshot, or keep serving an older one.
 
@@ -184,7 +184,7 @@ It gives the same answer when the body equals the stored one byte for byte, with
 Reads every live snapshot of the team. Signed as in §5, with an empty device. Answers `200`:
 
 ```json
-{"devices":[{"device":"d-000102030405060708090a0b","body":"eyJ2Ijox…","sig":"JeCd6_i3…"}]}
+{"devices":[{"device":"d-000102030405060708090a0b","body":"eyJ2Ijox…","sig":"JeCd6_i3…","since":"2026-09-01T08:15:00Z"}]}
 ```
 
 | Member | Value |
@@ -193,6 +193,7 @@ Reads every live snapshot of the team. Signed as in §5, with an empty device. A
 | `device` | the device id the record is stored under |
 | `body` | the stored snapshot, byte for byte as it was sent, in base64url |
 | `sig` | the signature it was sent with, in base64url |
+| `since` | the record's *since* (§8.1), in UTC, in the form of §7.1 rule 8; absent from a relay before v0.4.0. A reader uses it to tell a device that was forgotten from one whose record expired (§8.3): the record lives `min(max(now − since, 7 days), 90 days)` after its last write. It is not signed, so a reader MUST NOT trust it for more than that |
 
 Every entry is 4/3 the size of its snapshot plus about 200 bytes, about 88 KB for a full 64 KB snapshot, so a full team of 50 devices is about 4.4 MB. Clients MUST accept a response of at least 5 MB; the reference client reads up to 8 MiB.
 
@@ -271,6 +272,7 @@ Every integer the document allows fits exactly in an IEEE 754 double, so readers
 | `collected_at` | time | required | when the snapshot was built. MUST NOT be `0001-01-01T00:00:00Z`; the relay rejects a time more than 10 minutes ahead of its clock |
 | `last_success_at` | time | required | the last collection that succeeded; `0001-01-01T00:00:00Z` when none has |
 | `last_error` | sealed | omitted when empty | the error of the last collection that failed, on one line. While the device's last release check failed and no newer release waits for its next run, the reference collector ends it with one more line: `update: ` and why, without IP addresses, in at most 160 bytes, so that the team can see why the device does not update itself. Only that line starts with a line break (`\n`), and a reader splits the text at the last `\nupdate: `. Shortened as §4 says, the text keeps its end, so that line stays whole. An older collector sends only the error, and an older reference reader shows the line break as a space. The member is the same, so readers of any version keep the snapshot |
+| `last_error_at` | time | omitted when empty | when the collection that failed with `last_error` ran. MUST come only with `last_error`, MUST NOT be `0001-01-01T00:00:00Z`, and MUST NOT be more than 5 minutes after `collected_at`. Added in v0.4.0; see §11 for when a collector sends it |
 | `accounts` | array of Account | required | at most 24 |
 | `sources` | array of Source | required | at most 12 |
 | `aliases` | array of Alias | omitted when empty | at most 48: the short names this device gave accounts, newest first. The newest one for an account, from any device in the team, names it everywhere |
@@ -296,6 +298,7 @@ The body as a whole MUST be at most 65536 bytes. The reference collector drops p
 | `projects` | array of Project | required | at most 12, the largest first |
 | `linked` | array of Linked | omitted when empty | at most 4 |
 | `days` | array of token count | omitted when empty | at most 90: the account's input plus output tokens on this device per UTC day, cache left out, newest first. The first entry is the UTC day of `collected_at`, the next the day before, and so on. Trailing zeros are left out; zeros between days are written as `0` |
+| `burn_days` | array of token count | omitted when empty | at most 90: the account's weighted tokens on this device per UTC day, laid out as `days` is. A weighted token weighs each kind of token by what the provider's API charges for it against input, as [json-schema.md](json-schema.md) lists. Added in v0.4.0; see §11 |
 | `recent` | array of Recent | omitted when empty | at most 8: the account's input plus output tokens on this device since each window of its reading began, for the windows whose start is known and which had not reset when the snapshot was taken |
 
 **Window**: one quota window as the tool reported it.
@@ -331,6 +334,7 @@ The body as a whole MUST be at most 65536 bytes. The reference collector drops p
 | `window` | plain | required, not empty | the window's `name` |
 | `start` | time | required | when the window's current period began: its `resets_at` minus its length. MUST NOT be `0001-01-01T00:00:00Z` |
 | `tokens` | token count | required | input plus output tokens since `start`, cache left out |
+| `burn` | token count | omitted when 0 | weighted tokens since `start`, as `burn_days` weighs them. Added in v0.4.0; see §11 |
 
 **Alias**: a short name for an account, set on one device for the whole team.
 
@@ -518,6 +522,10 @@ A relay rejects a member it does not know with `422`, and the reference reader d
 2. Collectors start sending it.
 
 A collector that sends a member its relay does not know gets `422`. The reference collector then keeps the snapshot pending and does not read the team either, so the device sees only itself until the relay is updated. A reader older than the member drops documents that carry it, so those devices drop out of its team view until it is updated too. A document without the member stays valid everywhere.
+
+The members v0.4.0 added, `last_error_at`, `burn_days`, and Recent's `burn`, are sent only where every reader of the team reads them. The reference collector sends them when its last team read is of this team, at most 3 hours old, and every other device it found, or still remembers, runs v0.4.0 or later; a development build counts as new. It remembers a device the read no longer finds for up to 90 days after its last report, so a laptop on an older release that sleeps for a week still holds the members back when it wakes. A device gone before the relay would have let its record expire, as `since` (§6.6) tells, was deleted, and is forgotten at once; `ai-usage team forget-device` forgets one on this device. Otherwise it sends the document without them, and its team estimates their values from `days` and `recent`. When its relay answers `422` to a document with them, it sends the document without them in the same run and does not send them again for 24 hours.
+
+One case remains: a device the team has never seen, installed with a release before v0.4.0, can read documents with the new members on its first run. It drops them, as any older reader drops a document it cannot decode, until it updates itself, within its next run, or the others' next team read closes the gate, within about half an hour. The installer always installs the newest release.
 
 ## 12. Security notes
 

@@ -200,7 +200,7 @@ Done, in short:
   - Snapshots expire 7 to 90 days after their last update.
   - Clients verify every document they pull and keep one per device. Text opened from a snapshot is shown without control characters.
   - A team read lists at most the device cap, the devices stored first, so racing first writes cannot make it too large to answer. The team's device set lives as long as its longest-lived record.
-  - A scheduled run publishes every time and reads the team once an hour; a run someone starts reads it every time. Reads carry the whole team, so this cuts the square term of the traffic by four.
+  - A scheduled run publishes every time and reads the team when its last read is 20 minutes old, which is every other run; a run someone starts reads it every time. Reads carry the whole team, so this halves the square term of the traffic, and a teammate's change reaches every device within about half an hour.
 - **Resilience**
   - An unreachable relay, or one that holds a newer snapshot for this device id, leaves the newest snapshot pending and is shown. The next run that reaches the relay sends it.
   - A damaged `state.json` is set aside as `state.json.bad` rather than stopping every run.
