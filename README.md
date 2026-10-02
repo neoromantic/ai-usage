@@ -317,7 +317,7 @@ The state folder is `~/Library/Application Support/ai-usage` on macOS, `$XDG_CON
 | `config.json` | this device's id, the relay, remembered and added homes, the `CLAUDE_CONFIG_DIR` value seen for them, which login each added Hermes home bills through, whether the schedule is off |
 | `team.key` | the team's private key; this is the secret |
 | `team.key.previous` | the key from before the last `team join` to another team; also a secret |
-| `state.json` | the last good readings, sessions, and health, and whether the guide is still to be printed |
+| `state.json` | the last good readings, sessions, and health, and whether the guide is still to be printed; one a later release saved is left as it is, and the run says to update |
 | `state.json.last` | a copy of the `state.json` this release last saved; a run whose `state.json` does not parse starts again from it |
 | `state.json.bad` | a `state.json` that did not parse, kept when a run started again from `state.json.last`, or from an empty state when that did not parse either |
 | `state.json.pre-v0.4` | the `state.json` a release before v0.4.0 saved, kept once for going back to it |
