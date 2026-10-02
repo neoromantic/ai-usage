@@ -134,10 +134,17 @@ func TestMatrixEstimated(t *testing.T) {
 			t.Errorf("width %d: legend %q", c.w, p.Legend)
 		}
 	}
-	long := strings.Repeat("x", 90)
+	// A reason too long for a line is cut, with what to do kept whole.
+	long := "bot-3 " + strings.Repeat("x", 90) + ": reinstall it with install.sh"
 	r.Team.EstimatedReason = &long
-	if p := Render(r, Options{Width: 80, Loc: time.UTC}); !strings.Contains(p.Legend, "~ estimated  ") && !strings.HasSuffix(p.Legend, "~ estimated") {
+	p := Render(r, Options{Width: 80, Loc: time.UTC})
+	if !strings.Contains(p.Legend, "~ estimated: bot-3 x") || !strings.HasSuffix(p.Legend, "…: reinstall it with install.sh") {
 		t.Errorf("a reason too long for the legend: %q", p.Legend)
+	}
+	for _, l := range strings.Split(p.Legend, "\n") {
+		if w := width(l); w > 79 {
+			t.Errorf("a legend line of %d cells: %q", w, l)
+		}
 	}
 }
 

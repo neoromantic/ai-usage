@@ -271,7 +271,11 @@ func cutReason(msg string, w int, ell string) string {
 		return truncEnd(msg, w, ell)
 	}
 	if left := w - width(": "+act); left >= 12 {
-		return truncEnd(head, left, ell) + ": " + act
+		head = truncEnd(head, left, ell)
+		if cut, ok := strings.CutSuffix(head, ell); ok {
+			head = strings.TrimRight(cut, " ") + ell
+		}
+		return head + ": " + act
 	}
 	return truncEnd(act, w, ell)
 }

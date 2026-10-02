@@ -62,5 +62,6 @@ PROJECTS  annbook · by 7d · M weighted tokens · claude since Sep 2
   ~/tmp                                               ·     1     ·  codex           40d
   /private/tmp/scratch                                ·     1     ·  claude          80d
 
-━ used  ─ left  ┃╋ even use  ┈ no reading  ~ stale/estimated
-? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
+━ used  ─ left  ┃╋ even use  ┈ no reading  ? unknown  — no forecast  ● here  × error  ↓ old
+· none  ‹› chosen
+~ stale/estimated: ci-runner-eu-west-build-pool-node-0042ab…: it updates itself within 15 minutes

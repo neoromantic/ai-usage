@@ -247,7 +247,8 @@ func (p *page) align(c chunks, w int, right bool) chunks {
 }
 
 // staleItem is the legend's item for ~: stale, estimated, or both; and,
-// when totals are estimated, the item with why, if that fits in a line.
+// when totals are estimated, the item with why, cut to a line with what to
+// do kept whole.
 func (p *page) staleItem(stale, estimated bool) (short, long string) {
 	g := p.g
 	if !estimated {
@@ -258,8 +259,8 @@ func (p *page) staleItem(stale, estimated bool) (short, long string) {
 		short = g.silent + " stale/estimated"
 	}
 	if r := p.r.Team.EstimatedReason; r != nil {
-		if s := short + ": " + p.txt(strings.ReplaceAll(*r, "…", g.ell)); width(s) <= p.w-1 {
-			long = s
+		if room := p.w - 1 - width(short+": "); room >= 12 {
+			long = short + ": " + cutReason(p.txt(strings.ReplaceAll(*r, "…", g.ell)), room, g.ell)
 		}
 	}
 	return short, long

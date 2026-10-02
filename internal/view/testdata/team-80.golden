@@ -59,5 +59,6 @@ PROJECTS  annbook · by 7d · M weighted tokens · claude since Sep 2
   ~/src/acme/landing                         4    32     1  codex            6d
   + 4 more
 
-━ used  ─ left  ┃╋ even use  ┈ no reading  ~ stale/estimated
-? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
+━ used  ─ left  ┃╋ even use  ┈ no reading  ? unknown  — no forecast  ● here
+× error  ↓ old  · none  ‹› chosen
+~ stale/estimated: ci-runner-eu-west-bui…: it updates itself within 15 minutes
