@@ -382,6 +382,7 @@ func TestAccountBurn(t *testing.T) {
 // of 90 days in every period.
 func TestFillGivesAnEarlierReportBurn(t *testing.T) {
 	r := loadReport(t, "team")
+	r.Collector.Version = "v0.3.4"
 	for i := range r.Providers {
 		for j := range r.Providers[i].Accounts {
 			a := &r.Providers[i].Accounts[j]
@@ -436,8 +437,10 @@ func TestFillGivesAnEarlierReportBurn(t *testing.T) {
 	if !r.Team.Estimated || r.Team.EstimatedReason == nil || !strings.Contains(*r.Team.EstimatedReason, "before v0.4.0") {
 		t.Errorf("team estimated %v, reason %v", r.Team.Estimated, r.Team.EstimatedReason)
 	}
-	// This device's own tables say their tokens are input plus output.
+	// This device's own tables say their tokens are input plus output. A
+	// development build's report with no burn anywhere is one too.
 	single := loadReport(t, "single")
+	single.Collector.Version = "dev"
 	for i := range single.Providers {
 		for j := range single.Providers[i].Accounts {
 			single.Providers[i].Accounts[j].Burn = Usage{}
@@ -446,7 +449,18 @@ func TestFillGivesAnEarlierReportBurn(t *testing.T) {
 	for i := range single.Projects {
 		single.Projects[i].Burn = Usage{}
 	}
+	for i := range single.Team.Devices {
+		single.Team.Devices[i].Burn = Usage{}
+	}
 	Fill(&single)
+	// A later release's account used only in the oldest UTC day's early
+	// hours has usage and no burn: that is no earlier report.
+	later := loadReport(t, "single")
+	later.Providers[0].Accounts[0].Burn = Usage{}
+	Fill(&later)
+	if b := later.Providers[0].Accounts[0].Burn; b != (Usage{}) {
+		t.Errorf("a later release's account given burn %+v", b)
+	}
 	for _, c := range []struct {
 		r          Report
 		sec, title string
@@ -456,6 +470,8 @@ func TestFillGivesAnEarlierReportBurn(t *testing.T) {
 		{single, "USAGE", "M tokens in+out"},
 		{loadReport(t, "team"), "PROJECTS", "M weighted tokens"},
 		{loadReport(t, "single"), "USAGE", "M weighted tokens"},
+		{later, "USAGE", "M weighted tokens"},
+		{later, "PROJECTS", "M weighted tokens"},
 	} {
 		sec := pageSection(Render(c.r, Options{Width: 160, Loc: time.UTC}), c.sec)
 		if len(sec) == 0 || !strings.Contains(sec[0], c.title) {

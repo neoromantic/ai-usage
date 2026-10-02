@@ -101,12 +101,13 @@ func Fill(r *Report) {
 		d.NotUpdating = d.NotUpdating || notUpdating(*d)
 	}
 	fillFolders(r.Projects)
+	old := savedBeforeBurn(r)
 	for i := range r.Providers {
 		for j := range r.Providers[i].Accounts {
 			a := &r.Providers[i].Accounts[j]
 			fillLimits(a.Quota)
 			fillFolders(a.Projects)
-			if fillBurn(&a.Burn, a.Usage) {
+			if old && fillBurn(&a.Burn, a.Usage) {
 				r.inOut = true
 				if len(a.BurnDays) == 0 {
 					a.BurnDays = a.Days
@@ -119,8 +120,34 @@ func Fill(r *Report) {
 			fillLimits(r.Team.Providers[i].Accounts[j].Quota)
 		}
 	}
-	fillOldBurn(r)
+	if old {
+		fillOldBurn(r)
+	}
 	listDefaults(r)
+}
+
+// savedBeforeBurn says report r was saved by a release before
+// collect.ExtSince, which has no burn: by its collector's version, or, from
+// a development build, by its having no burn anywhere. A later release can
+// leave an account with usage and no burn, as its usage counts UTC days and
+// its burn local ones: that one is not filled.
+func savedBeforeBurn(r *Report) bool {
+	if v := r.Collector.Version; selfupdate.Newer(v, "v0.0.0") {
+		return selfupdate.Newer(collect.ExtSince, v)
+	}
+	for _, p := range r.Providers {
+		for _, a := range p.Accounts {
+			if a.Burn != (Usage{}) {
+				return false
+			}
+		}
+	}
+	for _, d := range r.Team.Devices {
+		if d.Burn != (Usage{}) {
+			return false
+		}
+	}
+	return true
 }
 
 // fillOldBurn gives a report saved before burn its input plus output as
