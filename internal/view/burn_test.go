@@ -298,7 +298,11 @@ func TestNoReadingSaysWhy(t *testing.T) {
 		// A release before v0.4.0 failed the source for it.
 		{"an old Claude Code", []snapshot.Doc{holder("d-abox-device", "abox", "v0.3.4", &state.Source{Status: "partial",
 			Error: "~/.claude: claude /usage: Claude Code 2.1.42 does not cache the usage; update it to 2.1.208 or later (no cache)"})},
-			"update Claude Code to 2.1.208 or newer (it runs 2.1.42) on abox", "<nil>"},
+			"abox runs Claude Code 2.1.42: update it to 2.1.208 or newer", "<nil>"},
+		// With another problem, which stays its error.
+		{"an old Claude Code and more", []snapshot.Doc{holder("d-abox-device", "abox", "v0.3.4", &state.Source{Status: "partial",
+			Error: "~/.sam/.claude: permission denied; ~/.claude: claude /usage: Claude Code 2.1.42 does not cache the usage; update it to 2.1.208 or later (no cache)"})},
+			"abox runs Claude Code 2.1.42: update it to 2.1.208 or newer", "<nil>"},
 	} {
 		r := withTeam(t, f, c.docs...)
 		if got := deref(findTeamAccount(t, r, "claude", "ann@acme.dev").NoReading); got != c.claude {
@@ -315,6 +319,16 @@ func TestNoReadingSaysWhy(t *testing.T) {
 	old.Sources = slices.DeleteFunc(old.Sources, func(s snapshot.Source) bool { return s.Provider != "claude" })
 	if dv := withTeam(t, f, old).Team.Devices[1]; dv.Error != nil || dv.Sources[0].Status != "ok" {
 		t.Errorf("an old Claude Code on a v0.3.4 device: error %q, sources %+v", deref(dv.Error), dv.Sources)
+	}
+	// What else failed with it still does: in the source, then in the run.
+	old.Sources[0].Error = f.key.Seal("~/.sam/.claude: permission denied; claude /usage: Claude Code 2.1.42 does not cache the usage; update it to 2.1.208 or later")
+	if dv := withTeam(t, f, old).Team.Devices[1]; deref(dv.Error) != "claude: ~/.sam/.claude: permission denied" || dv.Sources[0].Status != "partial" {
+		t.Errorf("an old Claude Code and a home it could not read: error %q, sources %+v", deref(dv.Error), dv.Sources)
+	}
+	old.Sources[0].Error = f.key.Seal("claude /usage: Claude Code 2.1.42 does not cache the usage; update it to 2.1.208 or later")
+	old.LastError = f.key.Seal("claude: claude /usage: Claude Code 2.1.42 does not cache the usage; update it to 2.1.208 or later; samples: disk full")
+	if dv := withTeam(t, f, old).Team.Devices[1]; deref(dv.Error) != "samples: disk full" {
+		t.Errorf("an old Claude Code and a run that failed: error %q", deref(dv.Error))
 	}
 	// A reading, however old, is no missing one.
 	st := emptyState()

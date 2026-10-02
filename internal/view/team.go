@@ -68,6 +68,9 @@ type device struct {
 	collectedAt time.Time
 	shift       int
 	accts       []devAccount
+	// noQuota is why a release before collect.ExtSince read no Claude
+	// quota, as merger.noReading says it.
+	noQuota string
 }
 
 // merger merges the device docs into the team.
@@ -152,19 +155,21 @@ func (m *merger) open(s string) string { return snapshot.Printable(m.raw(s)) }
 
 // addDoc merges one device doc: the device, its aliases and its accounts.
 func (m *merger) addDoc(d snapshot.Doc) {
-	dev := m.teamDevice(d)
-	dv := &device{dev: dev, name: dev.Label + " (" + dev.OSUser + ")", collectedAt: d.CollectedAt, shift: dayShift(d.CollectedAt, m.now)}
+	dev, noQuota := m.teamDevice(d)
+	dv := &device{dev: dev, name: dev.Label + " (" + dev.OSUser + ")", collectedAt: d.CollectedAt, shift: dayShift(d.CollectedAt, m.now), noQuota: noQuota}
 	m.devs = append(m.devs, dv)
 	m.addAliases(d)
 	m.addAccounts(dv, d)
 }
 
-// teamDevice is a device doc's device, before its usage and release.
-func (m *merger) teamDevice(d snapshot.Doc) *TeamDevice {
+// teamDevice is a device doc's device, before its usage and release, and,
+// on a release before collect.ExtSince, why its Claude source read no quota,
+// as a subscription's reason for having no reading says it.
+func (m *merger) teamDevice(d snapshot.Doc) (dev *TeamDevice, noQuota string) {
 	label := m.open(d.DeviceLabel)
 	this := d.Device == m.in.Doc.Device
 	lastErr, updateErr := m.lastErrors(d, this)
-	dev := &TeamDevice{
+	dev = &TeamDevice{
 		Device:           d.Device,
 		Label:            label,
 		OSUser:           m.open(d.OSUser),
@@ -182,36 +187,68 @@ func (m *merger) teamDevice(d snapshot.Doc) *TeamDevice {
 	}
 	for _, s := range d.Sources {
 		src := Source{Provider: s.Provider, Status: s.Status, Error: strPtr(m.open(s.Error))}
-		if msg, ok := legacyNoQuota(d.CollectorVersion, src); ok {
-			src.Status, src.Error = "ok", strPtr(msg)
+		if s.Provider == "claude" && src.Error != nil && src.Status != "ok" {
+			note, reason, rest := legacyNoQuota(d.CollectorVersion, label, *src.Error)
+			switch {
+			case note == "":
+			case rest == "":
+				src.Status, src.Error = "ok", strPtr(note)
+			default:
+				// It failed for something else too: that stays its error.
+				src.Error = strPtr(rest)
+			}
+			noQuota = cmp.Or(noQuota, reason)
 		}
 		dev.Sources = append(dev.Sources, src)
 	}
 	dev.Error = deviceError(*dev)
-	return dev
+	return dev, noQuota
 }
 
 // claudeTooOld is how a release before collect.ExtSince says the Claude
 // Code it ran cannot cache the usage.
 var claudeTooOld = regexp.MustCompile(`Claude Code (\S+) does not cache the usage; update it to (\S+) or later`)
 
-// legacyNoQuota is, for a source of a device on a release before
-// collect.ExtSince that failed only because it could not read the Claude
-// quota, that problem as this release says it, action first. Such a
-// release made it the source's error; this one keeps the source ok, and
-// shows it as the subscription's reason for having no reading.
-func legacyNoQuota(version string, s Source) (string, bool) {
-	if s.Provider != "claude" || s.Error == nil || s.Status == "ok" || !selfupdate.Newer(collect.ExtSince, version) {
-		return "", false
+// legacyNoQuota splits msg, a source's or a run's error on a device named
+// label that runs version, a release before collect.ExtSince, into the
+// problem of reading no Claude quota and the rest. Such a release made that
+// problem an error, joined with "; " to any other; this one keeps the source
+// ok for it, and shows it as the subscription's reason for having no
+// reading. note is the problem as a source's error says it, action first,
+// and reason as that reason says it, with the device; both are "" when msg
+// holds no such problem, or version is no such release. rest is what else
+// msg holds, joined again.
+func legacyNoQuota(version, label, msg string) (note, reason, rest string) {
+	if !selfupdate.Newer(collect.ExtSince, version) {
+		return "", "", msg
 	}
-	msg := *s.Error
-	if m := claudeTooOld.FindStringSubmatch(msg); m != nil {
-		return "update Claude Code to " + m[2] + " or newer (it runs " + m[1] + ")", true
+	parts := strings.Split(msg, "; ")
+	var others []string
+	for i := 0; i < len(parts); i++ {
+		// The message of a Claude Code too old spans two parts.
+		if i+1 < len(parts) {
+			if m := claudeTooOld.FindStringSubmatch(parts[i] + "; " + parts[i+1]); m != nil {
+				if note == "" {
+					note = "update Claude Code to " + m[2] + " or newer (it runs " + m[1] + ")"
+					reason = label + " runs Claude Code " + m[1] + ": update it to " + m[2] + " or newer"
+				}
+				i++
+				continue
+			}
+		}
+		if j := strings.Index(parts[i], "claude /usage: nonessential traffic is off"); j >= 0 {
+			if note == "" {
+				note = parts[i][j:]
+				reason = note + " on " + label
+			}
+			continue
+		}
+		others = append(others, parts[i])
 	}
-	if i := strings.Index(msg, "claude /usage: nonessential traffic is off"); i >= 0 {
-		return msg[i:], true
+	if note == "" {
+		return "", "", msg
 	}
-	return "", false
+	return note, reason, strings.Join(others, "; ")
 }
 
 // lastErrors are a device doc's last error and update error, printable.
@@ -424,8 +461,13 @@ func deviceError(d TeamDevice) *string {
 		return strPtr(s.Provider + ": " + s.Status)
 	}
 	if d.LastError != nil && (d.LastSuccessAt == nil || d.CollectedAt.After(*d.LastSuccessAt)) {
-		if _, ok := legacyNoQuota(d.CollectorVersion, Source{Provider: "claude", Status: "error", Error: d.LastError}); ok {
-			return nil
+		// A release before collect.ExtSince failed its run for no Claude
+		// quota too: that is no error now.
+		if note, _, rest := legacyNoQuota(d.CollectorVersion, d.Label, *d.LastError); note != "" {
+			if rest == "" {
+				return nil
+			}
+			return strPtr(rest)
 		}
 		return d.LastError
 	}
@@ -631,6 +673,9 @@ func (m *merger) noReading(x *teamAccount) *string {
 		return strPtr(d.Label + " runs " + d.CollectorVersion + ": reinstall with install.sh")
 	}
 	for _, dv := range hs {
+		if x.provider == "claude" && dv.noQuota != "" {
+			return strPtr(dv.noQuota)
+		}
 		for _, s := range dv.dev.Sources {
 			if s.Provider == x.provider && s.Status == "ok" && s.Error != nil {
 				msg := strings.TrimPrefix(*s.Error, s.Provider+": ")
