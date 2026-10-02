@@ -3,6 +3,7 @@ package collect
 import (
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/meter"
@@ -21,10 +22,14 @@ const ExtSince = "v0.4.0"
 const legacyDev = "dev"
 
 // BeforeExt says a collector of version runs a release before ExtSince, or
-// is a build from source of one. Any other version that is not a release,
-// such as a later build from source's, counts as new.
+// is a build from source of one: one that reports legacyDev, or a version
+// with a suffix whose release is before ExtSince, as v0.0.0-local, which the
+// docs of those releases said to build by hand. Any other version that is
+// not a release, such as "devel", counts as new.
 func BeforeExt(version string) bool {
-	return version == legacyDev || selfupdate.Newer(ExtSince, version)
+	base, _, _ := strings.Cut(strings.TrimSpace(version), "-")
+	base, _, _ = strings.Cut(base, "+")
+	return version == legacyDev || selfupdate.Newer(ExtSince, base)
 }
 
 // Why the gate is closed.

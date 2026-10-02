@@ -49,15 +49,15 @@ Set the repository variable `AI_USAGE_RELAY_URL` (Settings, Secrets and variable
 `dist.sh` is what the workflow runs, from the repository's root:
 
 ```sh
-sh .github/scripts/dist.sh v0.0.0-local /tmp/ai-usage-dist
-TARGETS=linux/amd64 sh .github/scripts/dist.sh v0.0.0-local /tmp/ai-usage-dist
-TARGETS=darwin/app sh .github/scripts/dist.sh v0.0.0-local /tmp/ai-usage-dist
+sh .github/scripts/dist.sh v9.9.9-local /tmp/ai-usage-dist
+TARGETS=linux/amd64 sh .github/scripts/dist.sh v9.9.9-local /tmp/ai-usage-dist
+TARGETS=darwin/app sh .github/scripts/dist.sh v9.9.9-local /tmp/ai-usage-dist
 AI_USAGE_RELAY_URL=https://relay.example.com sh .github/scripts/dist.sh v1.2.3 /tmp/ai-usage-dist
 ```
 
 The target `darwin/app` is the menu bar app. It needs macOS with Xcode or the Command Line Tools; on another OS, `dist.sh` skips it and says so, and builds the six binaries.
 
-A version with a suffix, such as `v0.0.0-local`, counts as a development build: the binary never registers with the scheduler on its own and never updates itself, and self-update leaves an app of that version alone. Use one for anything you run by hand.
+A version with a suffix, such as `v9.9.9-local`, counts as a development build: the binary never registers with the scheduler on its own and never updates itself, and self-update leaves an app of that version alone. Use one for anything you run by hand. Give it a release of v0.4.0 or later before the suffix: the team takes a suffixed version before v0.4.0, such as the `v0.0.0-local` that earlier releases said to use, for a build of a release that drops the snapshot fields v0.4.0 added, and holds them back from every device until it is built again.
 
 To try an installer against local files, serve the folder and point the installer at it with `AI_USAGE_DOWNLOAD_URL`. CI does this on every push with `.github/scripts/install-smoke.sh`, on macOS, Linux, and Windows.
 

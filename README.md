@@ -579,7 +579,7 @@ The menu bar app builds on macOS with Xcode or the Command Line Tools, and runs 
 
 ```sh
 (cd macos && xcrun swift run AIUsageChecks)
-sh macos/build.sh v0.0.0-dev /tmp/ai-usage-app.zip
+sh macos/build.sh v9.9.9-dev /tmp/ai-usage-app.zip
 ditto -x -k /tmp/ai-usage-app.zip ~/Applications
 ```
 

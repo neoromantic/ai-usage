@@ -43,7 +43,7 @@ jobs:
           if ($errors) { $errors | Format-List | Out-String | Write-Host; exit 1 }
       # All but the menu bar app, which builds only on macOS; see app.
       - name: Cross-compile every release target
-        run: sh .github/scripts/dist.sh v0.0.0-ci "$RUNNER_TEMP/dist"
+        run: sh .github/scripts/dist.sh v9.9.9-ci "$RUNNER_TEMP/dist"
 
   # The menu bar app: its checks, then the release build of the bundle.
   app:
@@ -54,7 +54,7 @@ jobs:
         working-directory: macos
         run: xcrun swift run AIUsageChecks
       - name: Build
-        run: sh macos/build.sh v0.0.0-ci "$RUNNER_TEMP/app.zip"
+        run: sh macos/build.sh v9.9.9-ci "$RUNNER_TEMP/app.zip"
 
   # Windows builds and installs (see lint and install), but its unit tests are
   # not a release gate: Windows is not a supported collector host yet.

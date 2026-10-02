@@ -33,10 +33,11 @@ func TestExtendedWire(t *testing.T) {
 		{"a device on v0.2.0, silent for 80 days", cache(doc("d-sambook-0002", "v0.2.0", 80*24*time.Hour)), time.Time{},
 			Gate{HeldBack: []string{"d-sambook-0002"}, Reason: GateOld}},
 		{"this device on an old release", cache(doc(self, "v0.3.4", 0)), time.Time{}, Gate{Open: true}},
-		{"a development build", cache(doc("d-srv1-a4c2e917", "v0.0.0-dev", 0), doc("d-sambook-0002", "devel", 0)), time.Time{}, Gate{Open: true}},
-		// One from before v0.4.0 reports plain "dev".
-		{"a development build of an old release", cache(doc("d-sambook-0002", "dev", 0)), time.Time{},
-			Gate{HeldBack: []string{"d-sambook-0002"}, Reason: GateOld}},
+		{"a development build", cache(doc("d-srv1-a4c2e917", "v9.9.9-dev", 0), doc("d-sambook-0002", "devel", 0), doc("d-mbp-0003", "v0.4.0-local+dirty", 0)), time.Time{}, Gate{Open: true}},
+		// One from before v0.4.0 reports plain "dev", or the version it was
+		// built with, as v0.0.0-local, which the docs then said to use.
+		{"a development build of an old release", cache(doc("d-sambook-0002", "dev", 0), doc("d-srv1-a4c2e917", "v0.0.0-local", 0), doc("d-mbp-0003", "v0.3.4+dirty", 0)), time.Time{},
+			Gate{HeldBack: []string{"d-mbp-0003", "d-sambook-0002", "d-srv1-a4c2e917"}, Reason: GateOld}},
 		{"a read 4 hours old", TeamCache{Team: fp, PulledAt: now.Add(-4 * time.Hour)}, time.Time{}, Gate{Reason: GateStale}},
 		{"a read from the future", TeamCache{Team: fp, PulledAt: now.Add(time.Minute)}, time.Time{}, Gate{Reason: GateStale}},
 		{"no read yet", TeamCache{}, time.Time{}, Gate{Reason: GateTeam}},

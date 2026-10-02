@@ -50,7 +50,7 @@ if [ "$goos" = darwin ] && [ -z "${CI:-}" ]; then
 	done
 	PATH="$work/no-gui:$PATH"
 fi
-version=v0.0.0-smoke
+version=v9.9.9-smoke
 targets="$goos/$goarch"
 if [ "$goos" = darwin ]; then
 	targets="$targets darwin/app"
