@@ -69,12 +69,23 @@ func (p *page) legend() string {
 	add(s["old"], g.old+" old")
 	add(s["none"], g.none+" none")
 	add(s["chosen"], g.open+g.shut+" chosen")
-	// Why totals are estimated comes last, where it wraps onto a line of
-	// its own after the marks.
-	add(long != "", long)
-	if len(items) == 0 {
-		return ""
+	// Why totals are estimated goes on a line of its own after the marks.
+	var lines []string
+	if len(items) > 0 {
+		lines = p.legendLines(items)
 	}
+	if long != "" {
+		lines = append(lines, long)
+	}
+	for i, l := range lines {
+		lines[i] = chunks{p.muted(truncEnd(l, p.w, p.g.ell))}.String()
+	}
+	return strings.Join(lines, "\n")
+}
+
+// legendLines lays the legend's items out in as few lines as fit the width,
+// of even length.
+func (p *page) legendLines(items []string) []string {
 	wrap := func(limit int) []string { return wrapItems(items, "  ", limit, limit) }
 	widest := 0
 	for _, it := range items {
@@ -87,11 +98,7 @@ func (p *page) legend() string {
 	for limit > widest && len(wrap(limit-1)) == n {
 		limit--
 	}
-	lines := wrap(limit)
-	for i, l := range lines {
-		lines[i] = chunks{p.muted(truncEnd(l, p.w, p.g.ell))}.String()
-	}
-	return strings.Join(lines, "\n")
+	return wrap(limit)
 }
 
 // chunk is a run of text in one style. A chunk with no style is written as
