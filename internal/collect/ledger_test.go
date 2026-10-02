@@ -336,6 +336,37 @@ func TestFoldedSubAgentCountedTwiceIsTakenBack(t *testing.T) {
 	}
 }
 
+// A release before v0.4.0 run again after a sub-agent was folded reads the
+// family without it, and makes the sub-agent a session of its own again: the
+// family's count drops to its own while its share keeps the sub-agent's. The
+// next fold takes the family's count from its share, so the sub-agent's
+// tokens, counted there already, are taken back rather than kept twice.
+func TestFoldedSubAgentAfterAnOlderReleaseRanAgain(t *testing.T) {
+	h0, h1 := logs.HourOf(t0.Add(-5*time.Hour)), logs.HourOf(t0.Add(-3*time.Hour))
+	hs := logs.HourOf(t0.Add(-15 * time.Minute))
+	st := state.NewState()
+	st.LastRunAt = t0.Add(-15 * time.Minute)
+	st.Sessions[state.Key("codex", "p1")] = &state.Session{Provider: "codex", Seen: tok(1000),
+		By: map[string]snapshot.Tokens{"ann@acme.dev": tok(1500)}, Updated: t0.Add(-3 * time.Hour),
+		U: meter.Hours{h0: use2(1000, 100), h1: use2(500, 50)}}
+	st.Sessions[state.Key("codex", "c1")] = &state.Session{Provider: "codex", Seen: tok(500),
+		By: map[string]snapshot.Tokens{"ann@acme.dev": tok(500)}, Updated: t0.Add(-15 * time.Minute),
+		U: meter.Hours{hs: use2(500, 50)}, Rederive: true}
+	parsed := codexRead("p1", t0.Add(-3*time.Hour), meter.Hours{h0: use2(1000, 100), h1: use2(500, 50)})
+	parsed.Folded = []string{"c1"}
+	growth := map[string]snapshot.Tokens{}
+	if g := attribute(st, "codex", parsed, "ann@acme.dev", false, t0, growth); len(g) != 0 {
+		t.Fatalf("growth = %+v", g)
+	}
+	e := st.Sessions[state.Key("codex", "p1")]
+	if e.Seen != tok(1500) || e.By["ann@acme.dev"] != tok(1500) || len(st.Sessions) != 1 {
+		t.Fatalf("family = %+v, sessions %d", e, len(st.Sessions))
+	}
+	if !reflect.DeepEqual(e.U, parsed.Hours) {
+		t.Fatalf("hours = %v, want %v", e.U, parsed.Hours)
+	}
+}
+
 // A fork whose source's file is gone counted the history it replayed as its
 // own, in the hour it was forked. A full read no longer counts it, so the
 // ledger takes it back, as a v0.3.4 ledger migrated holds it and as one this

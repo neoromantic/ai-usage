@@ -247,7 +247,7 @@ func countCodex(files []*codexFile) []Session {
 // foldFamilies gives each session that others roll into, as rollup will
 // roll them, the ids of those others in Folded, and the account Codex's
 // thread table says created it: its own thread's, or else the first of its
-// members' that names one.
+// members' that names one. creators may be nil.
 func foldFamilies(sessions []Session, creators map[string]string) {
 	at := map[string]int{}
 	for i, s := range sessions {

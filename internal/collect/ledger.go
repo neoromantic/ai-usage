@@ -116,19 +116,30 @@ func touchAccount(st *state.State, p, label string) *state.Account {
 func attribute(st *state.State, p string, s logs.Session, label string, partial bool, now time.Time, growth map[string]snapshot.Tokens) map[string]snapshot.Tokens {
 	k := state.Key(p, s.ID)
 	e := st.Sessions[k]
-	if e == nil {
+	fresh := e == nil
+	if fresh {
 		e = &state.Session{Provider: p, By: map[string]snapshot.Tokens{}}
 		st.Sessions[k] = e
 	}
 	if e.By == nil {
 		e.By = map[string]snapshot.Tokens{}
 	}
+	folded := false
 	for _, id := range s.Folded {
-		if f := st.Sessions[state.Key(p, id)]; f != nil && f != e {
-			fold(e, f)
-			delete(st.Sessions, state.Key(p, id))
+		f := st.Sessions[state.Key(p, id)]
+		if f == nil || f == e {
+			continue
 		}
+		// The ledger reads a Hermes chain whole under its root, which counts
+		// its members already: an entry for one besides the root's is what a
+		// release before v0.4.0, run again, made of it, and only goes.
+		if p != "hermes" || fresh {
+			fold(e, f)
+			folded = true
+		}
+		delete(st.Sessions, state.Key(p, id))
 	}
+	first := firstKept(now.Add(-state.Retention))
 	grown := map[string]snapshot.Tokens{}
 	if s.Parts == nil {
 		g := s.Tokens.Growth(e.Seen)
@@ -155,6 +166,16 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 			e.Seen = e.Seen.Add(t)
 		}
 	}
+	var skipped snapshot.Tokens
+	if fresh && folded && len(s.Hours) > 0 {
+		// A root the ledger first sees through members an earlier read took
+		// as roots of their own, as a chain whose root went quiet before the
+		// window, has its history before the window counted by the release
+		// that read it then: only what the window holds past the members'
+		// hours grew.
+		room := s.Hours.Since(first).Sum().Tokens().Growth(e.U.Since(first).Sum().Tokens())
+		skipped = capGrowth(grown, room)
+	}
 	e.Project = s.Project
 	if !partial {
 		e.Side, e.Nulls = s.Side, s.Nulls
@@ -174,7 +195,7 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 		// not in the hours the spread gives each run a little more of.
 		s.Hours = s.Hours.Since(logs.HourOf(e.Updated))
 	}
-	placeHours(e, s, grown, updated, now)
+	placeHours(e, s, grown, skipped, updated, now)
 	// A full read of a Claude session dates it by its last message, which
 	// can be before the file's time an earlier release dated it by.
 	if updated.After(e.Updated) || (p == "claude" && !partial) {
@@ -199,7 +220,18 @@ func attribute(st *state.State, p string, s logs.Session, label string, partial 
 // counts, shares, hours and times. Growth is then only what grew past both,
 // and what both counted shows as a count the log no longer holds, which
 // shrink takes back.
+//
+// What e counts beyond what it saw, as after a release before v0.4.0 read e
+// without the sessions folded into it and made f again of one, covers f
+// already: e's count takes it, so shrink takes back what f adds twice.
 func fold(e, f *state.Session) {
+	if e.Parts == nil {
+		var by snapshot.Tokens
+		for _, t := range e.By {
+			by = by.Add(t)
+		}
+		e.Seen = e.Seen.Add(by.Growth(e.Seen))
+	}
 	labels := map[string]bool{}
 	for l := range e.By {
 		labels[l] = true
@@ -255,6 +287,32 @@ func addCounts(a, b map[string]snapshot.Tokens) map[string]snapshot.Tokens {
 		a[k] = a[k].Add(t)
 	}
 	return a
+}
+
+// capGrowth cuts the growth by account down to room, kind by kind, each
+// account giving up its part of the cut as it grew, and returns what it cut.
+func capGrowth(grown map[string]snapshot.Tokens, room snapshot.Tokens) snapshot.Tokens {
+	var all snapshot.Tokens
+	for _, g := range grown {
+		all = all.Add(g)
+	}
+	cut := all.Growth(room)
+	labels := slices.Sorted(maps.Keys(grown))
+	kinds := [...]func(*snapshot.Tokens) *int64{
+		func(t *snapshot.Tokens) *int64 { return &t.Input },
+		func(t *snapshot.Tokens) *int64 { return &t.Output },
+		func(t *snapshot.Tokens) *int64 { return &t.CacheRead },
+		func(t *snapshot.Tokens) *int64 { return &t.CacheWrite },
+	}
+	for _, k := range kinds {
+		by := splitCount(*k(&cut), func(l string) int64 { g := grown[l]; return *k(&g) }, labels)
+		for l, n := range by {
+			g := grown[l]
+			*k(&g) -= n
+			grown[l] = g
+		}
+	}
+	return cut
 }
 
 // shrink takes back what the ledger counted of a Codex session beyond what a

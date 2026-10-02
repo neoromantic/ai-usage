@@ -2,9 +2,11 @@ package collect
 
 import (
 	"database/sql"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -474,5 +476,109 @@ func TestHermesGrowthLandsAfterTheLastRead(t *testing.T) {
 	want := meter.Hours{old1: use(500), old2: use(500), logs.HourOf(t0): use(1000)}
 	if got := res.State.Sessions[state.Key("hermes", id)].U; !reflect.DeepEqual(got, want) {
 		t.Fatalf("hours = %v, want %v", got, want)
+	}
+}
+
+// hermesOldRootChain makes a Hermes state.db with a root that went quiet
+// 100 days ago, before the window, and a child of it that ran in the last
+// day with child input tokens, its last message two hours ago.
+func hermesOldRootChain(t *testing.T, w *world, child int64) (rootID, childID string, childAt time.Time) {
+	t.Helper()
+	rootID, childID = "20260501_090000_a4c2e917", "20260830_080000_b5c6d7e8"
+	db, err := sql.Open("sqlite", filepath.Join(w.home(t, "hermes"), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	childAt = t0.Add(-2 * time.Hour)
+	for _, q := range []struct {
+		sql  string
+		args []any
+	}{
+		{`CREATE TABLE sessions (id TEXT PRIMARY KEY, parent_session_id TEXT, cwd TEXT, billing_provider TEXT,
+			input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, started_at REAL, last_activity_at REAL)`, nil},
+		{`CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT, timestamp REAL NOT NULL)`, nil},
+		{`INSERT INTO sessions VALUES (?, NULL, '/work/bot', 'openai-codex', 100000, 0, 0, ?, ?)`,
+			[]any{rootID, t0.AddDate(0, 0, -120).Unix(), t0.AddDate(0, 0, -100).Unix()}},
+		{`INSERT INTO sessions VALUES (?, ?, '/work/bot', 'openai-codex', ?, 0, 0, ?, ?)`,
+			[]any{childID, rootID, child, t0.Add(-26 * time.Hour).Unix(), childAt.Unix()}},
+		{`INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, 'assistant', 'x', ?)`, []any{childID, childAt.Unix()}},
+	} {
+		if _, err := db.Exec(q.sql, q.args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return rootID, childID, childAt
+}
+
+// A release before v0.4.0 read a fresh child of a root older than the window
+// as a root of its own. This one reads the chain whole under its root, and
+// moves what the ledger kept for the child there: the root's history before
+// the window was counted when it ran, and the child's is not counted again.
+func TestHermesChildOfAnOldRootAcrossTheUpgrade(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		child, grown int64
+	}{
+		{"unchanged", 5000, 0},
+		{"grown since", 6000, 1000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w, o := newWorld(t)
+			o.ReadLogs = logs.ReadHomes
+			rootID, childID, at := hermesOldRootChain(t, w, tc.child)
+			seen := snapshot.Tokens{Input: 5000}
+			before := legacyLedger(t, o.Dir, t0.Add(-15*time.Minute), state.Key("hermes", childID), map[string]any{
+				"p": "hermes", "proj": "/work/bot", "at": at, "seen": seen,
+				"by":    map[string]snapshot.Tokens{"openai-codex": seen},
+				"parts": map[string]snapshot.Tokens{"openai-codex": seen},
+				"last":  map[string]time.Time{"openai-codex": at},
+				"h":     map[int64]int64{logs.HourOf(at): 5000},
+			})
+			want := totalsFor(t, before, "hermes", "openai-codex").Tokens
+			want.Input += tc.grown
+			res := run(t, o)
+			if got := totalsFor(t, res.State, "hermes", "openai-codex").Tokens; got != want {
+				t.Fatalf("totals = %+v, want %+v", got, want)
+			}
+			if g := growthOf(lastSample(t, o), "hermes", "openai-codex"); g != (snapshot.Tokens{Input: tc.grown}) {
+				t.Fatalf("growth = %+v, want %d", g, tc.grown)
+			}
+			if _, ok := res.State.Sessions[state.Key("hermes", childID)]; ok || len(res.State.Sessions) != 1 {
+				t.Fatalf("sessions = %v", slices.Collect(maps.Keys(res.State.Sessions)))
+			}
+			e := res.State.Sessions[state.Key("hermes", rootID)]
+			if e.By["openai-codex"] != (snapshot.Tokens{Input: 5000 + tc.grown}) || e.U.Sum().Tokens() != e.By["openai-codex"] {
+				t.Fatalf("root = by %v, hours %+v", e.By, e.U.Sum())
+			}
+		})
+	}
+}
+
+// A release before v0.4.0 run again, as a second install, makes an entry of
+// its own for a child the ledger already counts under its root. The next run
+// drops it rather than adding the child onto the root twice.
+func TestHermesChildMadeAgainByAnOlderReleaseIsDropped(t *testing.T) {
+	w, o := newWorld(t)
+	o.ReadLogs = logs.ReadHomes
+	_, childID, at := hermesOldRootChain(t, w, 5000)
+	res := run(t, o)
+	want := totalsFor(t, res.State, "hermes", "openai-codex").Tokens
+	if want != (snapshot.Tokens{Input: 5000}) {
+		t.Fatalf("first run = %+v", want)
+	}
+	st := res.State
+	c := snapshot.Tokens{Input: 5000}
+	st.Sessions[state.Key("hermes", childID)] = &state.Session{
+		Provider: "hermes", Project: "/work/bot", Seen: c, Parts: map[string]snapshot.Tokens{"openai-codex": c},
+		By: map[string]snapshot.Tokens{"openai-codex": c}, Last: map[string]time.Time{"openai-codex": at},
+		Updated: at, U: meter.Hours{logs.HourOf(at): meter.FromTokens(c)},
+	}
+	if err := o.Dir.SaveState(st); err != nil {
+		t.Fatal(err)
+	}
+	res = run(t, o)
+	if got := totalsFor(t, res.State, "hermes", "openai-codex").Tokens; got != want || len(res.State.Sessions) != 1 {
+		t.Fatalf("totals = %+v, want %+v; sessions %d", got, want, len(res.State.Sessions))
 	}
 }

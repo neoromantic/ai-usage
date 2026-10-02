@@ -148,6 +148,9 @@ func readHermesTx(tx *sql.Tx, since time.Time) (sessions []Session, malformed in
 		sess.Hours = hermesHours(calls, messages[sess.ID], since)
 		sessions = append(sessions, sess)
 	}
+	// A release before v0.4.0 read a fresh child of a root older than since
+	// as a root of its own; the ledger moves what it kept for it onto the root.
+	foldFamilies(sessions, nil)
 	return sessions, malformed, nil
 }
 

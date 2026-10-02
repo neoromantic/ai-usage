@@ -69,9 +69,10 @@ type Session struct {
 	// CreatorAccount is the account the harness's own thread table says
 	// created the session (Codex's creator_account_id).
 	CreatorAccount string
-	// Folded lists the ids of sessions that an earlier read took as roots of
-	// their own and that this read finds inside this session's family, so
-	// the ledger can move what it kept for them here (Codex).
+	// Folded lists the ids of the sessions this read finds inside this
+	// session's family, which an earlier read may have taken as roots of
+	// their own, so the ledger can move what it kept for them here (Codex,
+	// Hermes).
 	Folded []string
 }
 

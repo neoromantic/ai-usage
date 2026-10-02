@@ -22,7 +22,11 @@ import (
 // A log without times has it at the session's last activity, which is within
 // the last run's interval. So each kind of a session's hours, and of each
 // account's, adds up to their tokens in the hours the ledger keeps.
-func placeHours(e *state.Session, s logs.Session, grown map[string]snapshot.Tokens, updated, now time.Time) {
+//
+// skipped is what the log holds before the window that this session counts
+// for no account, as a chain's history an earlier release counted under its
+// root: the log's hours hold it there, so it goes with them.
+func placeHours(e *state.Session, s logs.Session, grown map[string]snapshot.Tokens, skipped snapshot.Tokens, updated, now time.Time) {
 	var had, spent meter.Use
 	for _, t := range e.By {
 		had = had.Add(meter.FromTokens(t))
@@ -36,7 +40,7 @@ func placeHours(e *state.Session, s logs.Session, grown map[string]snapshot.Toke
 		// kept only input plus output by hour: the log's times cover its
 		// whole history, which its accounts share as they share its tokens.
 		// A migrated session's accounts keep what they had by hour.
-		total := had.Add(spent)
+		total := had.Add(spent).Add(meter.FromTokens(skipped))
 		total.CacheWrite1h = s.Hours.Sum().CacheWrite1h
 		u := s.Hours.Clone()
 		u.ScaleTo(total, logs.HourOf(updated))
