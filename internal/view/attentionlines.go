@@ -289,7 +289,8 @@ func (p *page) noReadingForms(a Attention, room int) []chunks {
 }
 
 // cutReason is a reason, "what: what to do", cut to w columns: what to do
-// stays whole while what is wrong keeps a few columns, and is cut last.
+// stays whole while what is wrong keeps a few columns, and is cut last. What
+// to do that does not fit alone keeps its first steps, "a; b; c", whole.
 func cutReason(msg string, w int, ell string) string {
 	if width(msg) <= w {
 		return msg
@@ -305,7 +306,18 @@ func cutReason(msg string, w int, ell string) string {
 		}
 		return head + ": " + act
 	}
-	return truncEnd(act, w, ell)
+	if width(act) <= w {
+		return act
+	}
+	steps := strings.Split(act, "; ")
+	n := 0
+	for n < len(steps)-1 && width(strings.Join(steps[:n+1], "; ")+"; "+ell) <= w {
+		n++
+	}
+	if n == 0 {
+		return truncEnd(act, w, ell)
+	}
+	return strings.Join(steps[:n], "; ") + "; " + ell
 }
 
 // duplicateForms is what to know about a device that was reinstalled: the

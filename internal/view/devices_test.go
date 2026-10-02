@@ -146,6 +146,43 @@ func TestMatrixEstimated(t *testing.T) {
 			t.Errorf("a legend line of %d cells: %q", w, l)
 		}
 	}
+	// What to do too long for a line keeps its first steps whole.
+	steps := "13 devices run releases before v0.4.0: reinstall mbp-2018 with install.sh; the other 12 update themselves within 15 minutes"
+	r.Team.EstimatedReason = &steps
+	p = Render(r, Options{Width: 80, Loc: time.UTC})
+	if !strings.HasSuffix(p.Legend, "~ estimated: reinstall mbp-2018 with install.sh; …") {
+		t.Errorf("steps too long for the legend: %q", p.Legend)
+	}
+	// A report saved by a release before v0.4.0 says so whole at 80.
+	saved := loadReport(t, "team")
+	saved.Collector.Version = "v0.3.4"
+	for i := range saved.Team.Devices {
+		saved.Team.Devices[i].Burn = Usage{}
+	}
+	saved.Team.Estimated, saved.Team.EstimatedReason = false, nil
+	Fill(&saved)
+	p = Render(saved, Options{Width: 80, Loc: time.UTC})
+	if !strings.Contains(p.Legend, "estimated: saved by a release before v0.4.0: tokens are in+out only") {
+		t.Errorf("a saved report's legend: %q", p.Legend)
+	}
+}
+
+func TestCutReason(t *testing.T) {
+	for _, c := range []struct {
+		msg  string
+		w    int
+		want string
+	}{
+		{"annbook runs v0.2.0: reinstall with install.sh", 60, "annbook runs v0.2.0: reinstall with install.sh"},
+		{"annbook runs v0.2.0: reinstall with install.sh", 40, "annbook runs…: reinstall with install.sh"},
+		{"2 devices: reinstall annbook with install.sh; srv1 updates itself", 40, "reinstall annbook with install.sh; …"},
+		{"2 devices: reinstall annbook with install.sh; srv1 updates itself", 30, "reinstall annbook with instal…"},
+		{"no action here at all, only words", 20, "no action here at a…"},
+	} {
+		if got := cutReason(c.msg, c.w, "…"); got != c.want || width(got) > c.w {
+			t.Errorf("cutReason(%q, %d) = %q, want %q", c.msg, c.w, got, c.want)
+		}
+	}
 }
 
 // TestStatusOrderIsTheMatrix: the status view lists the devices in the

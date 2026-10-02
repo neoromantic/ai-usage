@@ -212,7 +212,7 @@ func fillOldBurn(r *Report) {
 		}
 	}
 	if t.Estimated && t.EstimatedReason == nil {
-		t.EstimatedReason = strPtr("saved by a release before v0.4.0, which counts input plus output only")
+		t.EstimatedReason = strPtr("saved by a release before v0.4.0: tokens are in+out only")
 	}
 }
 
