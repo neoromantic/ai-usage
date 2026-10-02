@@ -69,7 +69,7 @@ Columns:
 | LEFT | what is left of the window, in percent |
 | RESETS | the countdown and the local time of the reset |
 | AT RESET | the forecast, described below |
-| USERS | how many devices used the account in this window, and the busiest one |
+| DEVICES | how many devices used the account in this window, and the busiest one |
 | LAST | the newest activity on the account on any device |
 
 A window other than the weekly one is a row of its own under the account. It is indented, has the same columns, and names only the window, such as `Fable` or `5h`. It is shown when it limits more than the weekly window: it is out, it is over, or it is fuller. A model window at 0% stays hidden.
@@ -116,32 +116,33 @@ States:
 
 The cell reads `157% over`, `81% ok`, or `out`.
 
-### Users
+### Devices
 
-USERS counts the devices with tokens on the account since the window began, and names the busiest. A Hermes bot in its own container is a device.
+DEVICES counts the devices with tokens on the account since the window began, and names the busiest. A Hermes bot in its own container is a device.
 
 ## DEVICES × SUBSCRIPTIONS
 
-A matrix. Each device is a row, sorted by total, largest first. Each subscription is a column, grouped under its provider by a heading with a thin rule. The last column, NO QUOTA, holds tokens that have no subscription. Totals are on the right and at the bottom.
+A matrix. Each device is a row, sorted by total in the chosen period, largest first. Each subscription is a column, grouped under its provider by a heading with a thin rule. The last column, NO QUOTA, holds tokens that have no subscription. Totals are on the right and at the bottom.
 
-- A cell is input plus output tokens in the chosen period, in whole millions: `603` or `1210`. It is `<1` under a million and `·` with no use. Cache is left out.
+- A cell is weighted tokens in the chosen period, in whole millions: `603` or `1210`. It is `<1` under a million and `·` with no use. A weighted token weighs each kind of token, cache included, by what the provider's API charges for it against input: a proxy for quota, not its formula. The title says the unit and the period, which counts UTC days, as devices send them: `DEVICES × SUBSCRIPTIONS  15 · 7d UTC · M weighted tokens`.
+- A device on a release before v0.4.0 sends no weighted tokens, so its are estimated from its input and output, and its TOTAL, and the team's, print `~` before the number. The legend then says why, with what to do: `~ stale/estimated: leo-air runs v0.3.4: it updates itself within 15 minutes`, cut to the width with what to do kept whole.
 - The cells form a heat map. A cell grows brighter, and at the top step bold, as its value grows, on a log scale relative to the largest cell. The largest consumers stand out without reading a number.
 - A subscription's name in the header takes its state color, so an `out` column is visible from the matrix too.
 - A mark before the device name gives its state: `●` this device, `×` an error, `~` silent, `↓` an old release. A silent device's error is the one it last reported, so it shows `~`.
 - The share mode (`%`) shows each value as a percent of its column's total in the chosen period instead: a device's tokens on a subscription divided by the team's, so a column adds up to 100 and the bottom row shows that. TOTAL on the right is the device's part of all the team's tokens. It is how the tokens split, not how much of a quota the device used: SUBSCRIPTIONS shows how full each window is. The cells round to whole percents, `<1` under one and `>99` over 99 but under 100.
 
-Many devices scroll down, and many subscriptions scroll sideways, with the device column and the headers kept in place: the interactive view keeps the title, the providers' line, and the subscriptions' names at the top of the page while the rows scroll under them. The static report prints the columns that fit and ends the header with `+N more`.
+Many devices scroll down, and many subscriptions scroll sideways, with the device column and the headers kept in place: the interactive view keeps the title, the providers' line, and the subscriptions' names at the top of the page while the rows scroll under them. The static report prints the columns that fit and folds the rest into a REST column before TOTAL, headed `+N` over `rest`, whose cell is the sum of the folded cells, so every row's cells add up to its TOTAL. At 80 columns the first column of the largest group stays.
 
 The section has two views, usage and status. The title names them as pills before the matrix's modes, `‹usage›  status   ‹tokens›  share`, where both pairs fit; where they do not, as at 80 columns, the views go and the modes stay.
 
-With a single device, a matrix of one row says little. The section becomes USAGE: a row per subscription, with today, 7d, 30d, and 90d. It has one view, so `s` and `--devices` change nothing there.
+With a single device, a matrix of one row says little. The section becomes USAGE: a row per subscription, with today, 7d, 30d, and 90d in weighted tokens, in local periods as PROJECTS counts them. It has one view, so `s` and `--devices` change nothing there.
 
 ### Status
 
 The status view is DEVICES as a table of each device's state: which devices report, on which release, and what fails on them. `s` in the interactive view switches to it and back; `--devices` prints it and opens the interactive view on it.
 
 ```
-DEVICES  13 · 1 error · 2 old · by 7d · M tokens in+out                                                 usage  ‹status›
+DEVICES  13 · 1 error · 2 old · by 7d UTC · M weighted tokens                                           usage  ‹status›
                            COLLECTOR ───────────────────────────  TOKENS ────────────────
   DEVICE           USER    VERSION   SEEN  VIA                    TODAY    7D   30D   90D  NOTE
   srv1             root    v1.4.2      8m  claude, codex, hermes     31   262   786  2227
@@ -155,7 +156,7 @@ DEVICES  13 · 1 error · 2 old · by 7d · M tokens in+out                     
 
 - The rows are the matrix's, in the matrix's order for the chosen period, and the section is as tall as the matrix: a title, a line of group headings, the column headers, the rows, and TOTAL. A device keeps its line when the view changes, so the page keeps its place. The interactive view keeps its first three lines at the top while the rows scroll, as it keeps the matrix's.
 - The title counts the devices that fail, are silent, or run an older release than the team's newest, each in its state's color: errors in the out color, silent in the tight color, old dim. A count of none is left out. A silent device counts as silent, not as an error, since its error is the one it last reported.
-- COLLECTOR heads VERSION, SEEN, and VIA, and TOKENS the periods, each with a thin rule, as the providers head the matrix's columns.
+- COLLECTOR heads VERSION, SEEN, and VIA, and TOKENS the periods, each with a thin rule, as the providers head the matrix's columns. Where the title has no room for its unit, as at 80 columns, the periods' heading says it instead: `M WEIGHTED`.
 - The status view has no share mode. `%` leaves the key bar and does nothing there, and the matrix keeps its mode and its sideways scroll for when it shows again.
 
 | Column | Shows |
@@ -166,7 +167,7 @@ DEVICES  13 · 1 error · 2 old · by 7d · M tokens in+out                     
 | VERSION | the collector's release; an older one than the team's newest is dim and followed by `↓` |
 | SEEN | how long ago it last reported, dim; a silent device's in the tight color |
 | VIA | the harnesses it reads, dim; one that fails or reads only in part is in the out color and followed by `×`; `·` for none |
-| TODAY 7D 30D 90D | its input plus output tokens, as the matrix's TOTAL column prints them; their headers are dim, as every header is, and the title names the chosen period, as in `by 7d` |
+| TODAY 7D 30D 90D | its weighted tokens in UTC days, as the matrix's TOTAL column prints them, with `~` before an estimate; their headers are dim, as every header is, and the title names the chosen period, as in `by 7d` |
 | NOTE | for a silent device, `silent since` when it last reported, then the error it last reported, as ATTENTION says it; else what fails on it, in the out color; else, on an old release, `update failing:` and why its release check failed, in the out color; `not updated for 1d · latest v1.4.2`, in the tight color, once this device's reads of the team have found it reporting on that release for 7 hours, longer than v0.2.0 takes to update itself, counted from its first run they found after a newer release was out, so a machine asleep meanwhile is not counted; else `update: latest v1.4.2`; else, on a current release, `update check failing:` and why; else nothing. Only an error, and an update not made, are in color |
 
 The bottom row is TOTAL for each period. With no note on any device, there is no NOTE column.
@@ -175,7 +176,7 @@ A short NOTE cuts an error with `…`, and keeps a silent device's last error, a
 
 ## PROJECTS
 
-One table for this device, all accounts together, sorted by the chosen period (7d by default). Columns: the project, the period, 90d, sessions, the providers it used, and the last activity. The static report shows the top 10 and says how many more there are. `--projects` prints all of them.
+One table for this device, all accounts together, in weighted tokens, sorted by the chosen period (7d by default): `PROJECTS  annbook · by 7d · M weighted tokens`. Its periods are local: today since local midnight, and 7d, 30d, and 90d the last 168, 720, and 2160 hours, as in USAGE; the team's tables count UTC days, so this device's own row there can differ. Columns: the project, the period, 90d, the sessions active in the period, the providers it used, and the last activity. Where the ledger holds less than 85 days of a provider, the title says since when, as `· claude since Sep 2`, and the 90d of the projects it worked on is dim; where the title is too wide, that note goes first, then the device's name. A long path keeps its start and its last folder, and two that would print alike show more of what tells them apart. A report saved before weighted tokens titles PROJECTS and USAGE `M tokens in+out`. The static report shows the top 10 and says how many more there are. `--projects` prints all of them.
 
 A project is a git repository, named by its folder. Its subfolders and linked worktrees count under it while they exist, so one repository is one row however many branches it had. Claude Code worktrees still count under it after they are removed, and Codex worktrees too when one repository has their name. A folder outside any repository is its own project. [docs/json-schema.md](docs/json-schema.md#projects) has the rules.
 
@@ -186,6 +187,8 @@ The static report ends with a dim legend, listing only the marks on screen, a wo
 ```
 ━ used  ─ left  ┃╋ even use  ┈ no reading  ~ stale  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
 ```
+
+Where a total is estimated, `~` reads `~ stale/estimated`, or `~ estimated`, and why goes on a line of its own after the marks, as the matrix says.
 
 With every mark on screen it is one line from 120 columns on. Below that, where one line does not fit, it takes as few lines as it can, of even length: two at 80 columns. The interactive view keeps the legend in `?` help, which says more of each mark.
 
