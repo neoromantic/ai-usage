@@ -135,7 +135,7 @@ func noQuotaText(p, home string, err error, res logs.Result, userHome string) st
 				kind = " (" + nq.Kind + ")"
 			}
 			msg = fsutil.Tilde(nq.Path, userHome) + " is Claude Code " + nq.Version + kind +
-				" but your sessions run " + ran + ": update it or put the newer one first on PATH"
+				" but your sessions run " + ran + ": update Claude Code or put the newer one first on PATH"
 		}
 	}
 	return named(p, msg)

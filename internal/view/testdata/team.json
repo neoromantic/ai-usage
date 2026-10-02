@@ -108,7 +108,7 @@
       "provider": "claude",
       "account": "kim@corp.test",
       "name": "kim",
-      "message": "/opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update it or put the newer one first on PATH on Mac.localdomain"
+      "message": "/opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update Claude Code or put the newer one first on PATH on Mac.localdomain"
     },
     {
       "kind": "duplicate",
@@ -1325,7 +1325,7 @@
           {
             "provider": "claude",
             "status": "ok",
-            "error": "claude: /opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update it or put the newer one first on PATH"
+            "error": "claude: /opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update Claude Code or put the newer one first on PATH"
           },
           {
             "provider": "codex",
@@ -2221,7 +2221,7 @@
               "90d": 1615200000
             },
             "burn_estimated": false,
-            "no_reading": "/opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update it or put the newer one first on PATH on Mac.localdomain",
+            "no_reading": "/opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update Claude Code or put the newer one first on PATH on Mac.localdomain",
             "outside": null
           }
         ]

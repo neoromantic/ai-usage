@@ -230,7 +230,7 @@ func legacyNoQuota(version, label, msg string) (note, reason, rest string) {
 			if m := claudeTooOld.FindStringSubmatch(parts[i] + "; " + parts[i+1]); m != nil {
 				if note == "" {
 					note = "update Claude Code to " + m[2] + " or newer (it runs " + m[1] + ")"
-					reason = label + " runs Claude Code " + m[1] + ": update it to " + m[2] + " or newer"
+					reason = label + " runs Claude Code " + m[1] + ": update Claude Code to " + m[2] + " or newer"
 				}
 				i++
 				continue

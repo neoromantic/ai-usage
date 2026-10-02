@@ -664,7 +664,7 @@ func TestNoQuotaIsNoProblem(t *testing.T) {
 		name, sessionVersion, want string
 	}{
 		{"older than the sessions", "2.1.210",
-			"claude: /opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update it or put the newer one first on PATH"},
+			"claude: /opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update Claude Code or put the newer one first on PATH"},
 		{"as new as the sessions", "2.1.42", "claude: update Claude Code to 2.1.208 or newer (/opt/homebrew/bin/claude is 2.1.42, Homebrew)"},
 		{"sessions that do not say", "", "claude: update Claude Code to 2.1.208 or newer (/opt/homebrew/bin/claude is 2.1.42, Homebrew)"},
 	}
@@ -717,7 +717,7 @@ func TestNoQuotaNamesItsHome(t *testing.T) {
 	}
 	src := run(t, o).State.Sources["claude"]
 	want := "claude: update Claude Code to 2.1.208 or newer (/usr/local/bin/claude is 2.1.42) (~/.claude); " +
-		"claude: /usr/local/bin/claude is Claude Code 2.1.42 but your sessions run 2.1.210: update it or put the newer one first on PATH (~/.claude-work)"
+		"claude: /usr/local/bin/claude is Claude Code 2.1.42 but your sessions run 2.1.210: update Claude Code or put the newer one first on PATH (~/.claude-work)"
 	if src.Status != "ok" || src.Error != want {
 		t.Fatalf("claude source = %+v\nwant error %q", src, want)
 	}

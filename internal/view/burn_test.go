@@ -339,11 +339,11 @@ func TestNoReadingSaysWhy(t *testing.T) {
 		// A release before v0.4.0 failed the source for it.
 		{"an old Claude Code", []snapshot.Doc{holder("d-abox-device", "abox", "v0.3.4", &state.Source{Status: "partial",
 			Error: "~/.claude: claude /usage: Claude Code 2.1.42 does not cache the usage; update it to 2.1.208 or later (no cache)"})},
-			"abox runs Claude Code 2.1.42: update it to 2.1.208 or newer", "<nil>"},
+			"abox runs Claude Code 2.1.42: update Claude Code to 2.1.208 or newer", "<nil>"},
 		// With another problem, which stays its error.
 		{"an old Claude Code and more", []snapshot.Doc{holder("d-abox-device", "abox", "v0.3.4", &state.Source{Status: "partial",
 			Error: "~/.sam/.claude: permission denied; ~/.claude: claude /usage: Claude Code 2.1.42 does not cache the usage; update it to 2.1.208 or later (no cache)"})},
-			"abox runs Claude Code 2.1.42: update it to 2.1.208 or newer", "<nil>"},
+			"abox runs Claude Code 2.1.42: update Claude Code to 2.1.208 or newer", "<nil>"},
 	} {
 		r := withTeam(t, f, c.docs...)
 		if got := deref(findTeamAccount(t, r, "claude", "ann@acme.dev").NoReading); got != c.claude {
