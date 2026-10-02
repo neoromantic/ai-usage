@@ -299,6 +299,8 @@ On macOS the same command and `PATH` go into `~/Library/LaunchAgents/io.github.n
 
 The Windows task runs `ai-usage.exe collect --quiet --home <state folder>` every 15 minutes. Unlike Task Scheduler's defaults, it also runs on battery, runs once after the computer wakes if it missed a run, never runs twice at once, and is stopped after 10 minutes.
 
+A scheduled run, `collect --quiet`, first waits up to a minute, the same for a machine every time, so that a team's machines do not all reach the relay at the quarter hour. It sends this machine's snapshot every time and reads the team when its last read is 20 minutes old, every other run.
+
 To pause the collector, comment out the crontab line, disable the task in Task Scheduler, or on macOS run:
 
 ```
