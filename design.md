@@ -74,7 +74,7 @@ Columns:
 
 A window other than the weekly one is a row of its own under the account. It is indented, has the same columns, and names only the window, such as `Fable` or `5h`. It is shown when it limits more than the weekly window: it is out, it is over, or it is fuller. A model window at 0% stays hidden.
 
-An account with no reading has a dotted bar and `?` in LEFT. A reading older than 6 hours puts `~` before its numbers. A window that has reset since its reading shows `?`, since nobody knows how full the new one is.
+An account with no reading has a dotted bar and `?` in LEFT. When the team knows why, as `no_reading` says, the reason takes the bar's place instead, muted and cut to the bar's width with what to do kept first: `update Claude Code to 2…`. A reading older than 6 hours puts `~` before its numbers. A window that has reset since its reading shows `?`, since nobody knows how full the new one is.
 
 ### The bar
 
@@ -125,7 +125,7 @@ DEVICES counts the devices with tokens on the account since the window began, an
 A matrix. Each device is a row, sorted by total in the chosen period, largest first. Each subscription is a column, grouped under its provider by a heading with a thin rule. The last column, NO QUOTA, holds tokens that have no subscription. Totals are on the right and at the bottom.
 
 - A cell is weighted tokens in the chosen period, in whole millions: `603` or `1210`. It is `<1` under a million and `·` with no use. A weighted token weighs each kind of token, cache included, by what the provider's API charges for it against input: a proxy for quota, not its formula. The title says the unit and the period, which counts UTC days, as devices send them: `DEVICES × SUBSCRIPTIONS  15 · 7d UTC · M weighted tokens`.
-- A device on a release before v0.4.0 sends no weighted tokens, so its are estimated from its input and output, and its TOTAL, and the team's, print `~` before the number. The legend then says why, with what to do: `~ stale/estimated: leo-air runs v0.3.4: it updates itself within 15 minutes`, cut to the width with what to do kept whole.
+- A device on a release before v0.4.0 sends no weighted tokens, so its are estimated from its input and output, and its TOTAL, and the team's, print `~` before the number. The legend then says why, with what to do: `~ stale/estimated: leo-air runs v0.3.4: it updates itself within 15 minutes`, cut to the width with what to do kept whole: when what to do is itself too long, its first steps stay whole and an ellipsis ends it, `~ estimated: reinstall annbook with install.sh; …`.
 - The cells form a heat map. A cell grows brighter, and at the top step bold, as its value grows, on a log scale relative to the largest cell. The largest consumers stand out without reading a number.
 - A subscription's name in the header takes its state color, so an `out` column is visible from the matrix too.
 - A mark before the device name gives its state: `●` this device, `×` an error, `~` silent, `↓` an old release. A silent device's error is the one it last reported, so it shows `~`.
