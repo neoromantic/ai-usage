@@ -2,6 +2,7 @@ package view
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -320,6 +321,14 @@ func TestAttentionLinesAt80(t *testing.T) {
 		if got := squeeze(lines[i]); got != want {
 			t.Errorf("line %d = %q, want %q", i, got, want)
 		}
+	}
+	// Where NO READING widens the kind column, a stale OUT keeps its
+	// reading's age before how long until it is back.
+	soon := r
+	soon.Attention = slices.Clone(r.Attention)
+	soon.Attention[0].At = tp(now.Add(47 * time.Hour))
+	if l := pageSection(Render(soon, Options{Width: 80, Loc: time.UTC, Interactive: true}), "ATTENTION")[1]; !strings.HasSuffix(l, "back Thu 11:00 · reading 1d old") || width(l) > 80 {
+		t.Errorf("a stale OUT back in 1d 23h = %q", l)
 	}
 	// A little more room shows the release and what to do; OLD names the
 	// device.

@@ -146,21 +146,24 @@ func (p *page) versions(devices []string) []string {
 // the line takes the first that fits in room. What to do stays in the
 // shortest forms, and a path or label in the text is cut last.
 func (p *page) attentionText(a Attention, room int) []chunks {
-	old := ""
+	// A stale reading's age is said shorter before a line drops it.
+	var old, short string
 	if a.ReadingAge > 0 {
-		old = p.g.sep + "reading " + age(time.Duration(a.ReadingAge)*time.Second) + " old"
+		d := age(time.Duration(a.ReadingAge)*time.Second) + " old"
+		old, short = p.g.sep+"reading "+d, p.g.sep+d
 	}
 	switch a.Kind {
 	case AttentionOut:
 		if a.At == nil {
-			return p.forms("until its reset, at a time not known" + old)
+			return p.forms("until its reset, at a time not known"+old, "until its reset"+old, "until its reset"+short)
 		}
-		s := "back " + p.clock(*a.At) + ", in " + dur(a.At.Sub(p.now))
-		return p.forms(s+old, s)
+		back := "back " + p.clock(*a.At)
+		s := back + ", in " + dur(a.At.Sub(p.now))
+		return p.forms(s+old, back+old, back+short, s)
 	case AttentionOver:
-		return p.overForms(a, old)
+		return p.overForms(a, old, short)
 	case AttentionTight:
-		return p.tightForms(a, old)
+		return p.tightForms(a, old, short)
 	case AttentionOutside:
 		return p.outsideForms(a)
 	case AttentionUnder:
@@ -193,8 +196,9 @@ func (p *page) forms(parts ...string) []chunks {
 }
 
 // overForms is what to know about a window forecast to run out before its
-// reset; old is how old its reading is, or empty.
-func (p *page) overForms(a Attention, old string) []chunks {
+// reset; old is how old its reading is, and short the same in fewer words,
+// or both are empty.
+func (p *page) overForms(a Attention, old, short string) []chunks {
 	pace := " at " + p.pace(a) + " pace"
 	// At a forecast of exactly 100% the window runs out at its reset,
 	// and has no time of its own to run out; one that runs out less
@@ -209,28 +213,29 @@ func (p *page) overForms(a Attention, old string) []chunks {
 	}
 	if at == nil {
 		s := "runs out at its reset"
-		return p.forms(s+pace+old, s+old, s)
+		return p.forms(s+pace+old, s+old, s+short, s)
 	}
 	verb := "runs out ~"
 	if !at.After(p.now) {
 		verb = "ran out ~"
 	}
 	s := verb + p.clock(*at)
-	// A short line drops the pace first, then the reading's age: when it
-	// runs out and how long before the reset are what the line says.
-	return p.forms(s+pace+before+old, s+before+old, s+before, s+old, s)
+	// A short line drops the pace first, then the reading's age, said
+	// shorter before it goes: when it runs out and how long before the
+	// reset are what the line says.
+	return p.forms(s+pace+before+old, s+before+old, s+before+short, s+before, s+old, s+short, s)
 }
 
 // tightForms is what to know about a window of an account logged in here
-// that its forecast ends nearly full; old is how old its reading is, or
-// empty.
-func (p *page) tightForms(a Attention, old string) []chunks {
+// that its forecast ends nearly full; old is how old its reading is, and
+// short the same in fewer words, or both are empty.
+func (p *page) tightForms(a Attention, old, short string) []chunks {
 	s := "~" + strconv.Itoa(int(*a.Percent)) + "% at reset"
 	if a.ResetsAt == nil {
-		return p.forms(s+" at "+p.pace(a)+" pace"+old, s+old, s)
+		return p.forms(s+" at "+p.pace(a)+" pace"+old, s+old, s+short, s)
 	}
 	at := s + " " + p.clock(*a.ResetsAt)
-	return p.forms(at+" at "+p.pace(a)+" pace"+old, at+old, at, s)
+	return p.forms(at+" at "+p.pace(a)+" pace"+old, at+old, at+short, at, s+short, s)
 }
 
 // outsideForms is what to know about a window that filled while the team
