@@ -26,7 +26,7 @@ SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
 ● a4c2e917       ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                   —        1
 
 DEVICES  15 · 1 error · 1 silent · 4 old · by 7d UTC            usage  ‹status›
-                        COLLECTOR ─────  TOKENS ──────
+                        COLLECTOR ─────  M WEIGHTED ──
   DEVICE                VERSION    SEEN     7D     90D  NOTE
   srv1                  v1.4.2       8m   1207   10259
 ● annbook               v1.4.2       7m   1057   11627

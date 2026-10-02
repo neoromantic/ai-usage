@@ -62,7 +62,7 @@ func (p *page) deviceStatus() []chunks {
 		}
 	}
 
-	title := p.statusTitle(devs[:n], edge)
+	title, unit := p.statusTitle(devs[:n], edge)
 
 	// The groups over their columns, each with a thin rule, as the matrix
 	// has its providers.
@@ -77,8 +77,17 @@ func (p *page) deviceStatus() []chunks {
 			i++
 		}
 		last := shown[i]
+		name, span := first.group, last.x+last.w-first.x
+		// Where the title has no room for the unit, the periods' group
+		// says it.
+		if name == "TOKENS" && !unit {
+			name = "M WEIGHTED"
+			if span < width(name)+2 {
+				name = "WEIGHTED"
+			}
+		}
 		heads = append(heads, p.space(first.x-cur))
-		heads = append(heads, p.groupHead(first.group, last.x+last.w-first.x)...)
+		heads = append(heads, p.groupHead(name, span)...)
 		cur = last.x + last.w
 	}
 
@@ -253,8 +262,9 @@ func (p *page) fitStatus(cols []*statusCol, note *statusCol, devs []*TeamDevice,
 // many fail, are silent, or run an old release, in the colors of those
 // states, the period the rows are in the order of, and the views on the
 // right at edge, or further right where the title is longer. The unit goes
-// first where the page is narrow, then the views.
-func (p *page) statusTitle(devs []*TeamDevice, edge int) chunks {
+// first where the page is narrow, then the views; unit says whether it
+// stayed.
+func (p *page) statusTitle(devs []*TeamDevice, edge int) (_ chunks, unit bool) {
 	g := p.g
 	var errs, silent, old int
 	for _, d := range devs {
@@ -286,18 +296,18 @@ func (p *page) statusTitle(devs []*TeamDevice, edge int) chunks {
 	count(silent, "silent", p.paint("", p.th.Tight, false, false))
 	count(old, "old", p.muted(""))
 	title = append(title, p.muted(g.sep+"by "+p.o.Period.String()+" UTC"))
-	unit := append(append(chunks(nil), title...), p.muted(g.sep+"M weighted tokens"))
+	withUnit := append(append(chunks(nil), title...), p.muted(g.sep+"M weighted tokens"))
 
 	pills := p.viewPills()
-	for _, t := range []chunks{unit, title} {
+	for i, t := range []chunks{withUnit, title} {
 		if line, ok := p.pillsAt(t, pills, edge); ok {
-			return line
+			return line, i == 0
 		}
 	}
-	if unit.width() <= p.w {
-		return unit
+	if withUnit.width() <= p.w {
+		return withUnit, true
 	}
-	return title
+	return title, false
 }
 
 // harnesses are the harnesses a device reads, as its sources list them, dim,
