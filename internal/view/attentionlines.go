@@ -380,11 +380,15 @@ func limitText(ls []string) (long, short string) {
 }
 
 // pace names the pace an over, tight, or under line forecasts at: the last
-// day's, when the forecast takes that, else this week's, or this window's
-// when it is not a week long.
+// day's, when the forecast takes that, or the recent one in a window
+// shorter than a day, whose readings go back only to its reset; else this
+// week's, or this window's when it is not a week long.
 func (p *page) pace(a Attention) string {
 	w := p.window(a.Provider, a.Account, a.Window)
 	if w != nil && w.Forecast != nil && w.Forecast.Basis == BasisRecent {
+		if windowLength(*w) < 24*time.Hour {
+			return "the recent"
+		}
 		return "the last day's"
 	}
 	if w == nil || windowLength(*w) == week {

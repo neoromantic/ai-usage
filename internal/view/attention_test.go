@@ -351,6 +351,17 @@ func TestAttentionNamesTheRecentPace(t *testing.T) {
 	if !strings.Contains(lines[3], "~91% at reset Fri 12:00 at the last day's pace") {
 		t.Fatalf("TIGHT = %q", lines[3])
 	}
+	// A 5h window's readings go back only to its reset: its pace is the
+	// recent one, and at 80 columns the line drops it before misnaming it.
+	bob := &r.Team.Providers[0].Accounts[1].Quota.Windows[0]
+	bob.Name, bob.Minutes, bob.Forecast.Basis = "5h", 300, BasisRecent
+	r.Attention = r.Attention[:2]
+	for _, w := range []int{80, 160} {
+		lines = pageSection(Render(r, Options{Width: w, Loc: time.UTC, Interactive: true}), "ATTENTION")
+		if strings.Contains(lines[2], "last day's") || w > 80 && !strings.Contains(lines[2], "at the recent pace") || width(lines[2]) > w-1 {
+			t.Errorf("OVER of a 5h window at %d = %q", w, lines[2])
+		}
+	}
 }
 
 // A harness that reads usage but no quota is not an ERROR: the

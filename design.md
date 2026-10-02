@@ -102,7 +102,7 @@ AT RESET is how full the window will be at its reset, if it is used from now on 
 - The pace is the faster of the two, and the forecast `used + pace × hours to the reset`, as a whole percent, up to `999%`. From the window's start with no faster recent pace, that is `used ÷ elapsed`. The JSON names the pace taken: `basis` is `window` or `recent`, and `pace` is in points an hour.
 - It runs out at `reading time + (100 − used) ÷ pace`, when the forecast is over 100% before it is rounded. At exactly 100% it runs out at its reset.
 - Before a tenth of the window has passed, the forecast is shown only when it is already over.
-- The average includes nights and weekends, so one busy hour does not raise an alarm, and the last day's pace catches a week that speeds up. A line forecast at the last day's pace says so.
+- The average includes nights and weekends, so one busy hour does not raise an alarm, and the last day's pace catches a week that speeds up. A line forecast at the last day's pace says so, and names it the recent pace in a window shorter than a day, whose readings go back only to its reset.
 
 States:
 
