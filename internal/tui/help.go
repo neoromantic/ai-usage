@@ -76,7 +76,7 @@ func (m Model) helpLines() []string {
 	for _, e := range marks {
 		lines = append(lines, "  "+pad(e.what)+e.means)
 	}
-	lines = append(lines, "", m.style("STATES", styleTitle)+"  "+m.style("how full a window will be at its reset, at its pace so far", styleAction))
+	lines = append(lines, "", m.style("STATES", styleTitle)+"  "+m.style("how full a window ends, at the faster of its average and recent pace", styleAction))
 	for _, e := range states {
 		what := pad(e.what)
 		if m.opts.Color {
