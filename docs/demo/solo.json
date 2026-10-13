@@ -56,6 +56,8 @@
   "attention": [
     {
       "kind": "over",
+      "subject": "claude mira · Fable",
+      "text": "runs out ~Thu 23:55 at this week's pace, 2d 1h before reset",
       "provider": "claude",
       "account": "mira@studio.dev",
       "name": "mira",
@@ -66,6 +68,8 @@
     },
     {
       "kind": "over",
+      "subject": "claude mira@studio.dev",
+      "text": "runs out ~Sat 12:46 at this week's pace, 12h 13m before reset",
       "provider": "claude",
       "account": "mira@studio.dev",
       "name": "mira",
@@ -75,6 +79,8 @@
     },
     {
       "kind": "under",
+      "subject": "grok 7f3b9c21",
+      "text": "leaves ~88% unused at this week's pace, resets Sat 13:40, in 1d 22h",
       "provider": "grok",
       "account": "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64",
       "name": "7f3b9c21",
@@ -1396,6 +1402,7 @@
         "burn_estimated": false,
         "gap": null,
         "replaced_by": null,
+        "note": null,
         "limitations": []
       }
     ],

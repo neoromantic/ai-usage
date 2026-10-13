@@ -42,15 +42,18 @@ Shown only when something is wrong. At most 6 lines, then `+N more`, with how ma
 | `TIGHT` | a window of an account logged in on this device will end its reset 85% to 99% full | the forecast and the reset |
 | `OUTSIDE` | a window rose 5 points or more in the last day while no team device spent on it | how many points, in how long |
 | `ERROR` | a device's collector or one of its harnesses fails, or the release check of a device on an older release; a quota that could not be read is not an error | the device and the error |
-| `NO READING` | a subscription used in the last 7 days has no reading, for a known reason | the reason and what to do |
+| `NO READING` | a subscription used in the last 7 days has no reading, for a known reason | the reason and what to do; for `unknown`, the tokens no login was known for, the device, and the folder where it has several, whose harness says nobody is logged in, and how to log in, so a short line keeps `on build-01: run claude and log in` |
 | `SILENT` | a device has not reported for a day | since when, and the error it last reported, if any |
 | `DUPLICATE` | a device was reinstalled, and its old record stays on the relay | the command that forgets the old record |
 | `OLD` | devices run an older release | all of them in one line, and, once one that is not silent has run its release for 7 hours without updating, for how long the longest has not updated; a release that cannot read the Claude quota or report update errors gets a line of its own that says so and asks for a reinstall |
 | `UNDER` | past half of an account's weekly window, its forecast is under 50% | how much of the window will go unused |
+| `IDLE` | no team device has used a paid subscription with a reading for 7 days, and nothing says someone outside the team does: its weekly window is under 1%, or began before that last use. Not `unknown`, Hermes, or a free plan. It takes the place of `UNDER` | `idle 11d, paid and unused`, then `idle 11d` |
 
 Each line has forms from the longest to the shortest and takes the first that fits. What to do stays in the shortest, and a path or label is cut last.
 
-A badge is its word in reverse video, colored by its state. `UNDER` is a hint rather than a problem: that subscription has room for more work.
+A badge is its word in reverse video, colored by its state. `UNDER` is a hint rather than a problem: that subscription has room for more work. `IDLE` is quieter still, its badge and line dim: a subscription to use again or cancel, with nothing due soon.
+
+The JSON has each line's words, `subject` and `text`, as the line says them with room for everything, so the menu bar app and agents show what the console does without wording it again. A team device's `note` is its NOTE in the status view, the same way.
 
 ## SUBSCRIPTIONS
 
