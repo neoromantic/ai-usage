@@ -71,7 +71,7 @@ Questions, ideas, a tool you want supported: write me on Telegram, [@usualguy](h
 - [Other data folders](#other-data-folders), and ai-usage [in a container](#in-a-container)
 - [JSON for agents](#json-for-agents)
 - [Privacy](#privacy)
-- [Updates](#updates), [uninstall](#uninstall), and [building from source](#build-from-source)
+- [Updates](#updates), [troubleshooting](#troubleshooting), [uninstall](#uninstall), and [building from source](#build-from-source)
 
 ## What it shows
 
@@ -552,7 +552,7 @@ The state folder on your machine keeps account labels and project paths in plain
 
 ## Updates
 
-A release build checks GitHub for a new release at every scheduled run, so every machine installs a release within about 15 minutes of its publication. A run you start less than 10 minutes after a check, such as `r` in the interactive view, does not check again, even when that check failed; a failed check is tried again by the next scheduled run. The check reads which release `github.com/neoromantic/ai-usage/releases/latest` redirects to, not the GitHub API, which allows 60 requests an hour per IP address without a token: a host with many collectors behind one address would come close to that. When there is a newer `vX.Y.Z` release, it downloads the file for this OS and CPU from that release, checks it against `checksums.txt` from the same release, runs it once with `version`, and replaces its own binary only if the new one starts and reports that release. That run finishes on the old binary; the next run is the update. `ai-usage update` checks right away.
+A release build checks GitHub for a new release at every scheduled run, so every machine installs a release within about 15 minutes of its publication. A run you start less than 10 minutes after a check, such as `r` in the interactive view, does not check again, even when that check failed; a failed check is tried again by the next scheduled run. The check reads which release `github.com/neoromantic/ai-usage/releases/latest` redirects to, not the GitHub API, which allows 60 requests an hour per IP address without a token: a host with many collectors behind one address would come close to that. When there is a newer `vX.Y.Z` release, it downloads the file for this OS and CPU from that release, checks it against `checksums.txt` from the same release, runs it once with `version`, and replaces its own binary only if the new one starts and reports that release. That run finishes on the old binary; the next run is the update, which launchd on macOS 27 can refuse once, as [Troubleshooting](#a-mac-missed-a-run-after-an-update) says. `ai-usage update` checks right away.
 
 The check also runs when a collection fails, for example on a state file this version cannot read, or on a bug that stops the run. A release that breaks collection can then still be replaced by the one that fixes it. Finding the latest release gives up after 30 seconds, so a slow GitHub holds up a run only that long. A download may take several minutes on a slow link; it is dropped only when no data arrives for a minute.
 
@@ -565,6 +565,28 @@ On macOS, the check also keeps the [menu bar app](#menu-bar-app) at the binary's
 The checksum guards against a broken download. It does not protect against a compromised release, since both files come from the same place.
 
 A binary built from source reports version `devel` (`dev` before v0.4.0). It never updates itself and never registers with the scheduler on its own; run `ai-usage schedule install` for that.
+
+## Troubleshooting
+
+### A Mac missed a run after an update
+
+On macOS 27, launchd pins a launch agent it loads at login to its binary's code signature. `ai-usage` is signed ad hoc, so that is the binary's hash, which every release changes. Once an update has replaced the binary, launchd refuses the agent's next start, and at the start after it repairs the pin, records the new binary for the next login, and runs it. So an update can cost one scheduled run, never more. While launchd refuses it, `launchctl print` shows:
+
+```
+$ launchctl print gui/$(id -u)/io.github.neoromantic.ai-usage | grep -E '^.(state|last exit|job state|properties) '
+	state = not running
+	last exit reason = OS_REASON_CODESIGNING
+	job state = spawn failed
+	properties = inferred program | needs LWCR update | managed LWCR | has LWCR
+```
+
+From v0.5.1, `ai-usage` saves that run where it can:
+
+- A run you start that installs a release, such as `ai-usage update`, the menu bar app's Update button, `ai-usage`, or `r` in the view, has launchd start the agent at once when launchd pinned it (`has LWCR`). launchd refuses that start and repairs the pin at a second one, so no scheduled run is refused. The agent then collects, as at a scheduled run.
+- A scheduled run that installs a release cannot: launchd does not start the agent while it runs. So launchd refuses its next run. Any run you start meanwhile, such as `ai-usage`, `ai-usage status`, `ai-usage report`, or the menu bar app reading the report, has launchd start the agent then, which repairs the pin and collects.
+- `ai-usage schedule status` says when launchd refused the agent's last run, and `ai-usage status` repairs it.
+
+An agent launchd pinned to nothing, as on macOS 26 and earlier, is left as it is. When launchd still refuses the agent, `ai-usage status` says so, and `ai-usage schedule install` loads it again from the command line, which launchd pins to nothing until the next login. launchd still records the binary it pinned before, though, so the first run after that login can be refused once more, and launchd repairs it at the run after.
 
 ## Uninstall
 
