@@ -128,8 +128,8 @@ func walkCodex(root, home string, since time.Time, stale map[string]staleCodex, 
 			}
 			return
 		}
-		f, bad, err := parseCodex(file)
-		out.add(bad, err)
+		f, bad, long, err := parseCodex(file)
+		out.add(bad, long, err)
 		f.id = cmp.Or(f.id, strings.TrimSuffix(name, ".jsonl"))
 		f.home = home
 		f.updated = info.ModTime().UTC()
@@ -191,7 +191,7 @@ func linkedCodexFiles(files []*codexFile, stale map[string]staleCodex) []*codexF
 			}
 			loaded[id] = true
 			// A stale file that fails to parse only loses its matching.
-			p, _, _ := parseCodex(sf.path)
+			p, _, _, _ := parseCodex(sf.path)
 			if p.id == "" {
 				p.id = id
 			}

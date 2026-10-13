@@ -38,10 +38,10 @@ func claudeFiles(home string, since time.Time, cache *claudeCache) ([]*claudeFil
 	var out HomeRead
 	var files []*claudeFile
 	read := func(path, id, parent string, mod time.Time) {
-		f, bad, err := cache.parse(path, id, parent)
+		f, err := cache.parse(path, id, parent)
 		f.sess.Updated = f.updated(mod)
 		f.sess.Home = home
-		out.add(bad, err)
+		out.add(f.Bad, f.Long, err)
 		files = append(files, f)
 	}
 	for _, proj := range projEntries {
@@ -238,9 +238,10 @@ type claudeState struct {
 	// SidechainOf is the session the first sidechain line names.
 	SidechainOf string
 	Msgs        []claudeMsg
-	// Anon counts the messages with neither an id nor a line uuid, and Bad
-	// the lines that were malformed or too long.
-	Anon, Bad int
+	// Anon counts the messages with neither an id nor a line uuid, Bad the
+	// lines that were malformed, and Long those too long to read even
+	// squeezed.
+	Anon, Bad, Long int
 	// Last is the newest message's time, and Version the Claude Code version
 	// that message recorded.
 	Last    time.Time

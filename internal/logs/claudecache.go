@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/gob"
+	"fmt"
 	"hash/fnv"
 	"io"
 	"io/fs"
@@ -19,8 +20,8 @@ import (
 // file name with it, whenever the parse keeps something new or reads a line
 // differently: an older cache is then read as none.
 const (
-	claudeCacheVersion = 1
-	claudeCacheName    = "claude-v1.gob"
+	claudeCacheVersion = 2
+	claudeCacheName    = "claude-v2.gob"
 )
 
 // edgeBytes is how much of a file's start and end the cache hashes, to tell
@@ -97,7 +98,14 @@ func (c *claudeCache) save() error {
 	if err := gob.NewEncoder(&buf).Encode(claudeCacheFile{Version: claudeCacheVersion, Files: c.next}); err != nil {
 		return err
 	}
-	return fsutil.WriteFile(c.path, buf.Bytes(), 0o600)
+	if err := fsutil.WriteFile(c.path, buf.Bytes(), 0o600); err != nil {
+		return err
+	}
+	// The caches of older versions are read by none.
+	for v := 1; v < claudeCacheVersion; v++ {
+		_ = os.Remove(filepath.Join(filepath.Dir(c.path), fmt.Sprintf("claude-v%d.gob", v)))
+	}
+	return nil
 }
 
 // lookup is what the cache kept of path: from this read when it has read
@@ -115,18 +123,18 @@ func (c *claudeCache) lookup(path string) (claudeEntry, bool) {
 
 // parse reads one log: from the cache when the file has not changed since,
 // from where the cache's parse stopped when lines were only added, and in
-// full otherwise. It returns the file, how many of its lines were
-// malformed or too long, and why it could not be read.
-func (c *claudeCache) parse(path, id, parent string) (*claudeFile, int, error) {
+// full otherwise. It returns the file, whose state counts its malformed lines
+// and those too long to read, and why it could not be read.
+func (c *claudeCache) parse(path, id, parent string) (*claudeFile, error) {
 	f := &claudeFile{path: path, sess: Session{ID: id, ParentID: parent}}
 	fh, err := os.Open(path)
 	if err != nil {
-		return f, 0, err
+		return f, err
 	}
 	defer fh.Close()
 	info, err := fh.Stat()
 	if err != nil {
-		return f, 0, err
+		return f, err
 	}
 	key := keyOf(info)
 	from := int64(0)
@@ -134,7 +142,7 @@ func (c *claudeCache) parse(path, id, parent string) (*claudeFile, int, error) {
 		if old.Key == key {
 			c.next[path] = old
 			f.claudeState = old.State
-			return f.done(), f.Bad, nil
+			return f.done(), nil
 		}
 		if old.grew(key) && edgeHash(fh, old.Key.Size) == old.Edges {
 			f.claudeState = old.State
@@ -146,12 +154,12 @@ func (c *claudeCache) parse(path, id, parent string) (*claudeFile, int, error) {
 	p := newClaudeParse(f)
 	long, err := forEachReader(io.NewSectionReader(fh, from, key.Size-from), maxLineBytes, p.line)
 	claudeParsed.Add(key.Size - from)
-	f.Bad += long
+	f.Long += long
 	if err == nil && c != nil {
 		c.next[path] = claudeEntry{Key: key, Edges: edgeHash(fh, key.Size), State: f.claudeState}
 		c.dirty = true
 	}
-	return f.done(), f.Bad, err
+	return f.done(), err
 }
 
 // grew is set when to can be the same file as e with lines added after the

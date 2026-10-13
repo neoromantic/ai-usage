@@ -104,13 +104,16 @@ type Result struct {
 	Homes map[string]HomeRead
 }
 
-// HomeRead is one home's part of a read. Malformed and Unreadable make a
-// source partial.
+// HomeRead is one home's part of a read. Malformed, TooLong, and Unreadable
+// make a source partial.
 type HomeRead struct {
 	// Err is set when the home could not be read. Sessions read before the
 	// error are still in the result.
-	Err        error
-	Malformed  int
+	Err       error
+	Malformed int
+	// TooLong counts the lines skipped for being too long to read even
+	// squeezed, which may have held usage.
+	TooLong    int
 	Unreadable int
 	// Limits is the newest quota this home's logs recorded. A home belongs
 	// to whoever is logged in there, so limits are never mixed across homes.
@@ -120,10 +123,11 @@ type HomeRead struct {
 	AccountID string
 }
 
-// add counts one file's read: its malformed lines, and the file as
-// unreadable when err is set.
-func (r *HomeRead) add(malformed int, err error) {
+// add counts one file's read: its malformed lines, the lines too long to
+// read, and the file as unreadable when err is set.
+func (r *HomeRead) add(malformed, long int, err error) {
 	r.Malformed += malformed
+	r.TooLong += long
 	if err != nil {
 		r.Unreadable++
 	}

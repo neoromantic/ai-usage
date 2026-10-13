@@ -102,6 +102,33 @@ var (
 	}
 )
 
+// A rollout's lines over the limit, a long system prompt in its session_meta
+// and a tool's huge output, are read squeezed (issue #1): the thread keeps
+// the project its session_meta names after the prompt, and no line is an
+// error.
+func TestCodexLinesOverTheLimit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("writes lines over 32 MiB")
+	}
+	home := t.TempDir()
+	path := rollout(home, "sessions", "20", rootID)
+	mustWriteFrom(t, path,
+		hugeLine(`{"timestamp":"2026-09-20T10:00:00.000Z","type":"session_meta","payload":{"base_instructions":{"text":"`, 'x', maxLineBytes,
+			fmt.Sprintf(`"},"session_id":%q,"id":%q,"timestamp":"2026-09-20T10:00:00.000Z","cwd":"/work/app","source":"cli"}}`, rootID, rootID)),
+		lines(cxCount("2026-09-20T10:00:05.000Z", e1[0], e1[1])),
+		hugeLine(`{"timestamp":"2026-09-20T10:00:10.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_1","output":"`, 'y', maxLineBytes, `"}}`),
+		lines(cxCount("2026-09-20T10:00:30.000Z", e2[0], e2[1])))
+	ageFile(t, path, now.Add(-time.Hour))
+
+	res := mustRead(t, "codex", home, since)
+	if res.Malformed != 0 || res.TooLong != 0 || res.Unreadable != 0 {
+		t.Fatalf("malformed %d too long %d unreadable %d", res.Malformed, res.TooLong, res.Unreadable)
+	}
+	if got := byID(t, res, rootID); got.Tokens != rootOwn || got.Project != "/work/app" {
+		t.Fatalf("session = %+v", got)
+	}
+}
+
 func TestCodexCountsEachRequestOnceAndMovesCachedOut(t *testing.T) {
 	home := t.TempDir()
 	path := rollout(home, "sessions", "20", rootID)

@@ -76,15 +76,15 @@ func readGrok(home string, since time.Time) ([]Session, HomeRead) {
 		}
 		if slot.summary != "" {
 			id, project, bad, err := parseGrokSummary(slot.summary)
-			hr.add(bad, err)
+			hr.add(bad, 0, err)
 			if err == nil {
 				sess.ID = cmp.Or(id, sess.ID)
 				sess.Project = cmp.Or(project, sess.Project)
 			}
 		}
 		if slot.updates != "" {
-			tok, hours, bad, err := parseGrokUpdates(slot.updates)
-			hr.add(bad, err)
+			tok, hours, bad, long, err := parseGrokUpdates(slot.updates)
+			hr.add(bad, long, err)
 			sess.Tokens, sess.Hours = tok, hours
 		}
 		out = append(out, sess)
@@ -115,12 +115,14 @@ type grokTurn struct {
 	at     time.Time
 }
 
-func parseGrokUpdates(path string) (Tokens, meter.Hours, int, error) {
+// parseGrokUpdates sums the turns of an updates.jsonl. It returns their
+// tokens and hours, how many lines were malformed, how many were too long to
+// read, and why the file could not be read.
+func parseGrokUpdates(path string) (total Tokens, hours meter.Hours, malformed, long int, err error) {
 	latest := map[string]grokTurn{}
 	var order []string
 	var anon int
-	var malformed int
-	long, err := ForEachLine(path, maxLineBytes, func(line []byte) {
+	long, err = ForEachLine(path, maxLineBytes, func(line []byte) {
 		if !bytes.Contains(line, []byte(`"turn_completed"`)) {
 			return
 		}
@@ -152,14 +154,12 @@ func parseGrokUpdates(path string) (Tokens, meter.Hours, int, error) {
 			CacheWrite: usage.CacheCreationTokens,
 		}}
 	})
-	var total Tokens
-	var hours meter.Hours
 	for _, prompt := range order {
 		last := latest[prompt]
 		total = total.Add(last.tokens)
 		hours.Add(last.at, meter.FromTokens(last.tokens))
 	}
-	return total, hours, malformed + long, err
+	return total, hours, malformed, long, err
 }
 
 func decodeGrokPath(enc string) string {

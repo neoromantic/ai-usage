@@ -73,7 +73,8 @@ type grokLogLine struct {
 }
 
 // maxGrokLine bounds the lines kept. The two kinds decoded are far shorter;
-// a longer line is skipped instead of ending the scan before the newest ones.
+// a longer line is read squeezed, or skipped when it is still longer, instead
+// of ending the scan before the newest ones.
 const maxGrokLine = 1 << 20
 
 func (s *grokScan) scan(path string) error {

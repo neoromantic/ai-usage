@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -38,6 +39,53 @@ func mustWrite(t *testing.T, path string, lines ...string) {
 		body += "\n"
 	}
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// repeat reads n copies of c.
+type repeat struct {
+	c byte
+	n int
+}
+
+func (r *repeat) Read(p []byte) (int, error) {
+	if r.n == 0 {
+		return 0, io.EOF
+	}
+	p = p[:min(len(p), r.n)]
+	for i := range p {
+		p[i] = r.c
+	}
+	r.n -= len(p)
+	return len(p), nil
+}
+
+// hugeLine reads head, n copies of c, and tail as one line, so a test can
+// write or read a line over the limit without holding it.
+func hugeLine(head string, c byte, n int, tail string) io.Reader {
+	return io.MultiReader(strings.NewReader(head), &repeat{c: c, n: n}, strings.NewReader(tail+"\n"))
+}
+
+// lines reads each line in turn.
+func lines(ls ...string) io.Reader {
+	return strings.NewReader(strings.Join(ls, "\n") + "\n")
+}
+
+// mustWriteFrom writes path with what parts read, one after another.
+func mustWriteFrom(t *testing.T, path string, parts ...io.Reader) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.Copy(f, io.MultiReader(parts...)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
 }
