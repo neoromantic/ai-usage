@@ -192,7 +192,7 @@ func rescue(ctx context.Context, d state.Dir, cause error, scheduled bool) {
 		st.LastError, st.LastErrorAt = msg, now
 		changed = true
 	}
-	if updateIfDue(ctx, st, now, scheduled) {
+	if updateRepairing(ctx, d, st, now, scheduled) {
 		changed = true
 	}
 	if loaded && changed {

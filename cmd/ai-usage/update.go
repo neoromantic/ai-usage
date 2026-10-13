@@ -59,7 +59,19 @@ func housekeeping(ctx context.Context, d state.Dir, cfg *state.Config, st *state
 		st.Schedule.Registered, st.Schedule.Foreground = false, false
 		st.Schedule.Error = "removed by `ai-usage schedule remove`"
 	}
-	updateIfDue(ctx, st, now, scheduled)
+	updateRepairing(ctx, d, st, now, scheduled)
+}
+
+// updateRepairing is updateIfDue, which reports whether it checked, followed
+// by a repair of the macOS launch agent once a release it installed replaced
+// the binary the agent runs.
+func updateRepairing(ctx context.Context, d state.Dir, st *state.State, now time.Time, scheduled bool) bool {
+	staged := st.Update.Installed
+	checked := updateIfDue(ctx, st, now, scheduled)
+	if st.Update.Installed != "" && st.Update.Installed != staged {
+		repairAgent(ctx, d, st, true)
+	}
+	return checked
 }
 
 // updateIfDue checks for a release on a release build, unless the last check
@@ -151,6 +163,10 @@ func cmdUpdate(ctx context.Context, stdout, stderr io.Writer) error {
 	}
 	res, err := newUpdater().Check(ctx)
 	noteUpdate(st, clock().UTC(), res, err)
+	if res.Installed {
+		// The menu bar app's Update button comes here too.
+		repairAgent(ctx, d, st, true)
+	}
 	// A state a newer release saved is left as it is, and installing the
 	// latest release is what that refusal asks for.
 	if serr := d.SaveState(st); serr != nil && err == nil && !(res.Installed && errors.Is(serr, state.ErrNewer)) {

@@ -62,7 +62,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	case "report":
 		err = cmdReport(ctx, args, stdout)
 	case "status":
-		err = cmdStatus(args, stdout)
+		err = cmdStatus(ctx, args, stdout)
 	case "team":
 		err = cmdTeam(ctx, args, stdin, stdout, stderr)
 	case "home":
