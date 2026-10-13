@@ -54,6 +54,20 @@ struct UsageTopLine: View {
                     Text(store.usageMode.menuTitle)
                 }
             }
+            if !report.solo {
+                Button {
+                    TeamWindow.show()
+                } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Team Window (⌘D): every device against every subscription")
+                .accessibilityLabel("Team Window")
+            }
         }
     }
 }
@@ -94,7 +108,7 @@ struct UsageTotal: View {
 /// A device on an older release that updates itself is fine: that is lag
 /// after a release, and its details name the release. A silent device that
 /// another took the place of was reinstalled.
-private enum DeviceStatus {
+enum DeviceStatus {
     case replaced, silent, error, notUpdating, thisMac, fine
 
     init(_ d: TeamDevice?) {
@@ -124,7 +138,7 @@ private enum DeviceStatus {
     }
 }
 
-private struct DeviceMark: View {
+struct DeviceMark: View {
     let status: DeviceStatus
 
     var body: some View {

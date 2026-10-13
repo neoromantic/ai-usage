@@ -119,6 +119,19 @@ enum Renderer {
                 reset(store)
                 try write(showcase(store, dark: look == "dark"), appearance, to: png("menubar"))
                 try write(ringStates(store.now, dark: look == "dark"), appearance, to: png("menubar-states"))
+                if !report.solo {
+                    let views: [(String, (TeamOptions) -> Void)] = [
+                        ("team-usage", { _ in }),
+                        ("team-share", { $0.mode = .share }),
+                        ("team-status", { $0.segment = .status }),
+                    ]
+                    for (name, setUp) in views {
+                        let options = TeamOptions()
+                        setUp(options)
+                        try writeWindow(TeamView().environmentObject(store).environmentObject(options), title: "Team",
+                                        size: teamSize(report), appearance, to: png(name))
+                    }
+                }
                 for pane in SettingsWindow.panes {
                     let view = pane.view.environmentObject(store).background(Color(nsColor: .windowBackgroundColor))
                     try write(view, appearance, to: png("settings-\(pane.title.lowercased())"))
@@ -231,7 +244,7 @@ enum Renderer {
         return VStack(alignment: .trailing, spacing: 6) {
             menuBar(dark: dark) {
                 HStack(spacing: 16) {
-                    MenuBarLabel(summary: store.summary, shows: .percent, now: store.now)
+                    MenuBarLabel(summary: store.summary(.mac), shows: .percent, now: store.now)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
                         .background(RoundedRectangle(cornerRadius: 5).fill(.primary.opacity(0.12)))
@@ -283,6 +296,30 @@ enum Renderer {
         .background(desktop(dark: dark))
     }
 
+    /// The Team window as tall as its rows, and the controls, header, and
+    /// estimate line around them.
+    private static func teamSize(_ r: Report) -> NSSize {
+        let rows = CGFloat(r.team.matrix.rows.count + 1)
+        return NSSize(width: 1000, height: 72 + TeamTable.headerHeight + rows * TeamTable.rowHeight + (r.team.estimated ? 28 : 0))
+    }
+
+    /// Draws a view as a window of the app shows it, with its title bar.
+    private static func writeWindow<V: View>(_ view: V, title: String, size: NSSize, _ appearance: NSAppearance.Name, to url: URL) throws {
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                              backing: .buffered, defer: false)
+        window.title = title
+        window.appearance = NSAppearance(named: appearance)
+        let host = NSHostingView(rootView: view)
+        host.sizingOptions = []
+        window.contentView = host
+        guard let frame = host.superview else { throw CocoaError(.fileWriteUnknown) }
+        for _ in 0..<6 {
+            frame.layoutSubtreeIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        try draw(frame, to: url)
+    }
+
     /// Lays a view out in an offscreen window and draws it with AppKit, which,
     /// unlike ImageRenderer, draws controls such as pickers and text fields.
     /// A change, when given, comes after the first layout, as a click does.
@@ -306,14 +343,18 @@ enum Renderer {
             change()
             settle()
         }
-        let bounds = host.bounds
+        try draw(host, to: url)
+    }
+
+    private static func draw(_ view: NSView, to url: URL) throws {
+        let bounds = view.bounds
         guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(bounds.width) * 2, pixelsHigh: Int(bounds.height) * 2,
                                          bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                          colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else {
             throw CocoaError(.fileWriteUnknown)
         }
         rep.size = bounds.size
-        host.cacheDisplay(in: bounds, to: rep)
+        view.cacheDisplay(in: bounds, to: rep)
         guard let png = rep.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
         try png.write(to: url)
     }

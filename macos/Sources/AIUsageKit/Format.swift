@@ -272,10 +272,10 @@ extension TeamAccount {
 }
 
 /// What the menu bar shows: the window with the least left among the
-/// subscriptions logged in on this device, of the windows that limit each
-/// one, since any full one stops work. Those are the windows the report
-/// marks with `limits`, or with a report that does not mark them, the main
-/// ones.
+/// subscriptions logged in on this device, or with the team's tracked, among
+/// all of the team's, of the windows that limit each one, since any full one
+/// stops work. Those are the windows the report marks with `limits`, or with
+/// a report that does not mark them, the main ones.
 public struct MenuSummary: Equatable, Sendable {
     public let provider: String
     public let label: String
@@ -295,10 +295,10 @@ public struct MenuSummary: Equatable, Sendable {
         (self.percentLeft, self.used, self.stale, self.state, self.resetsAt) = (percentLeft, used, stale, state, resetsAt)
     }
 
-    public static func pick(_ r: Report) -> MenuSummary? {
+    public static func pick(_ r: Report, tracks: MenuBarTracks = .mac) -> MenuSummary? {
         var best: MenuSummary?
         for p in r.team.providers {
-            for a in p.accounts where a.subscription && a.current {
+            for a in p.accounts where a.subscription && (a.current || tracks == .team) {
                 guard let w = a.tightest else { continue }
                 let s = MenuSummary(provider: p.provider, label: a.label, name: a.name, window: w.name,
                                     percentLeft: Format.percentLeft(w), used: w.percent, stale: w.stale,
@@ -352,4 +352,14 @@ public enum MenuBarShows: String, CaseIterable, Sendable {
     public static func migrated(showPercent: Bool?, shows: String?) -> MenuBarShows? {
         showPercent == false && shows == nil ? .icon : nil
     }
+}
+
+/// Whose subscriptions the menu bar item tracks, as Settings sets it.
+public enum MenuBarTracks: String, CaseIterable, Sendable {
+    /// The subscriptions logged in on this Mac.
+    case mac
+    /// Every subscription of the team, bots' included.
+    case team
+
+    public static let key = "menuBarTracks"
 }

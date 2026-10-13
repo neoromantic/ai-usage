@@ -105,7 +105,11 @@ final class Store: ObservableObject {
         self.phase = phase
     }
 
-    var summary: MenuSummary? { report.flatMap(MenuSummary.pick) }
+    /// What the menu bar item shows, of this Mac's subscriptions or the
+    /// team's.
+    func summary(_ tracks: MenuBarTracks) -> MenuSummary? {
+        report.flatMap { MenuSummary.pick($0, tracks: tracks) }
+    }
 
     /// The collector's update, when there is one to install or the last
     /// check failed.

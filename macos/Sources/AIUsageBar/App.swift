@@ -6,6 +6,7 @@ struct AIUsageApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @ObservedObject private var store = Store.shared
     @AppStorage(MenuBarShows.key) private var shows = MenuBarShows.percent.rawValue
+    @AppStorage(MenuBarTracks.key) private var tracks = MenuBarTracks.mac.rawValue
 
     init() {
         let d = UserDefaults.standard
@@ -18,15 +19,17 @@ struct AIUsageApp: App {
         MenuBarExtra {
             PopoverView().environmentObject(store)
         } label: {
-            MenuBarLabel(summary: store.summary, shows: MenuBarShows(rawValue: shows) ?? .percent, now: store.now)
+            MenuBarLabel(summary: store.summary(MenuBarTracks(rawValue: tracks) ?? .mac), shows: MenuBarShows(rawValue: shows) ?? .percent,
+                         now: store.now)
         }
         .menuBarExtraStyle(.window)
     }
 }
 
 /// The menu bar item: a ring of what is left of the window with the least
-/// left, among those that limit this Mac's subscriptions, as a battery shows
-/// its charge, and what is left of it or how long until it resets.
+/// left, among those that limit this Mac's subscriptions, or the team's, as
+/// a battery shows its charge, and what is left of it or how long until it
+/// resets.
 struct MenuBarLabel: View {
     let summary: MenuSummary?
     let shows: MenuBarShows

@@ -565,6 +565,93 @@ equal("no reset again", unknown.record([unknownReset], now: t0 + 900).count, 0)
 equal("no reset, back", unknown.record([], now: t0 + 1800).count, 0)
 equal("no reset, out again", unknown.record([unknownReset], now: t0 + 2700).count, 1)
 
+// The ring, of the team's subscriptions: every device's, not only this
+// Mac's.
+let elsewhere = try edited("team.json") { objects($0) { o in o["current"] != nil ? o.merging(["current": false]) { $1 } : o } }
+check("no subscription of this Mac's", MenuSummary.pick(elsewhere) == nil)
+let teamRing = MenuSummary.pick(elsewhere, tracks: .team)
+equal("the team's ring", [teamRing?.provider, teamRing?.label, teamRing?.window, teamRing?.text], ["claude", "mira@studio.dev", "5h", "0%"])
+equal("the team's ring alone", MenuSummary.pick(solo, tracks: .team)?.window, soloSummary?.window)
+
+// The Team window's matrix: the report's columns under their providers,
+// its devices in its order, and its numbers.
+let matrix = TeamMatrix(team, period: .week, mode: .tokens)
+equal("matrix groups", matrix.groups.map { "\($0.title) \($0.columns)" }, ["Codex 0..<3", "Claude 3..<6", "Grok 6..<7"])
+equal("matrix columns", matrix.columns.map(\.id), ["codex/bots@studio.dev", "codex/mira@studio.dev", "codex/leo@studio.dev", "claude/mira@studio.dev",
+                                                   "claude/leo@studio.dev", "claude/unknown", "grok/7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64"])
+equal("matrix titles", matrix.columns.map(\.title), ["bots", "mira", "leo", "mira", "leo", "unknown", "7f3b9c21"])
+equal("matrix names", matrix.columns.map(\.name), ["Codex bots", "Codex mira", "Codex leo", "Claude mira", "Claude leo", "Claude unknown", "Grok 7f3b9c21"])
+equal("matrix states", matrix.columns.map(\.state), ["over", "tight", "out", "out", "ok", nil, "under"])
+equal("matrix rows", matrix.lines.map(\.device), team.team.matrix.rows.map(\.device))
+equal("matrix row", matrix.lines[0].cells.map(\.text), ["131", "–", "–", "24", "–", "7", "–"])
+equal("matrix cell help", matrix.lines[0].cells[0].help, "build-01 · Codex bots: 131M in 7 Days · 46% of column · 84M this window")
+equal("matrix cell spoken", matrix.lines[0].cells[0].spoken, "Codex bots: 131 million weighted tokens in 7 days, 46% of column, 84 million this window")
+equal("matrix empty cell help", matrix.lines[0].cells[1].help, "build-01 · Codex mira: none in 7 Days")
+// A step of the heat map for every half of a tenfold below the largest
+// cell, as the console's.
+equal("heat steps", [1, 0.5, 0.3, 0.1, 0.03, 0.01, 0.001, 0].map { TeamMatrix.heatStep($0, top: 1) }, [5, 5, 4, 3, 2, 1, 1, 0])
+equal("matrix heat", matrix.lines.map { $0.cells[0].heat }, [5, 0, 0, 5, 4, 4, 4, 4, 3, 3, 2, 2])
+equal("matrix totals", matrix.totals.map(\.text), ["285", "56", "22", "128", "62", "7", "–"])
+// TOTAL of all is the rows', as the console's; leo-air's is estimated.
+equal("matrix total", [matrix.total.text, matrix.lines[2].total.text], ["~560", "~84"])
+check("matrix estimate said", matrix.lines[2].total.help.hasSuffix("\n~ leo-air runs v0.3.4: it updates itself within 15 minutes"))
+equal("matrix unit", matrix.unit, "M weighted tokens")
+// Share: each device's part of each column, as the report has it.
+let shares = TeamMatrix(team, period: .week, mode: .share)
+equal("share row", shares.lines[0].cells.map(\.text), ["46", "–", "–", "19", "–", "100", "–"])
+equal("share of a column alone", shares.lines[2].cells[2].text, "100")
+equal("share totals", shares.totals.map(\.text), ["100", "100", "100", "100", "100", "100", "–"])
+equal("share row total", shares.lines[0].total.text, "29")
+equal("share unit", shares.unit, "% of column total")
+equal("share heat", shares.lines[0].cells.map(\.heat), [5, 0, 0, 4, 0, 5, 0])
+// Another period takes the report's numbers of it.
+equal("today", TeamMatrix(team, period: .today, mode: .tokens).lines[0].cells[0].text, "13")
+// The tokens with no quota head their own group, with no state.
+let noQuota = try edited("team.json") { json in
+    var o = json as! [String: Any], t = o["team"] as! [String: Any], m = t["matrix"] as! [String: Any]
+    var columns = m["columns"] as! [[String: Any]]
+    columns[6] = columns[6].merging(["provider": "hermes", "name": "hermes", "no_quota": true, "state": "unknown"]) { $1 }
+    columns[6].removeValue(forKey: "label")
+    m["columns"] = columns
+    t["matrix"] = m
+    o["team"] = t
+    return o
+}
+let hermes = TeamMatrix(noQuota, period: .week, mode: .tokens)
+equal("no quota group", hermes.groups.last.map { "\($0.title) \($0.columns)" }, "No Quota 6..<7")
+equal("no quota column", hermes.columns.last.map { [$0.id, $0.title, $0.name, $0.state ?? "-"] }, ["hermes/", "Hermes", "Hermes (no quota)", "-"])
+
+// Sorting: by a column, ties in the report's order; none keeps it.
+let byBots = matrix.lines(sortedBy: .column(0), ascending: false).map(\.device)
+equal("sorted by a column", byBots, ["build-01", "scout", "herald", "sentry", "editor", "archivist", "tutor", "courier", "critic", "concierge", "mira-mbp", "leo-air"])
+equal("sorted up", matrix.lines(sortedBy: .column(0), ascending: true).map(\.device).prefix(3), ["mira-mbp", "leo-air", "concierge"])
+equal("sorted by device", matrix.lines(sortedBy: .device, ascending: true).map(\.device).prefix(4), ["archivist", "build-01", "concierge", "courier"])
+equal("sorted by total", matrix.lines(sortedBy: .total, ascending: false).map(\.device), matrix.lines.map(\.device))
+equal("not sorted", matrix.lines(sortedBy: nil, ascending: true).map(\.device), matrix.lines.map(\.device))
+equal("sorted by share", shares.lines(sortedBy: .column(3), ascending: false).map(\.device).prefix(3), ["mira-mbp", "build-01", "leo-air"])
+
+// The status: each device as the report has it, a line each in the
+// matrix's order.
+let status = DeviceStatusTable(team)
+equal("status rows", status.lines.map(\.device), matrix.lines.map(\.device))
+let leoLine = status.lines[2]
+equal("status line", [leoLine.user, leoLine.version, leoLine.note], ["leo", "v0.3.4", "codex: app-server exited without answering"])
+check("status behind", leoLine.behind && status.lines.filter(\.behind).count == 1)
+equal("status tools", status.lines.prefix(3).map { $0.tools.map { $0.provider + ($0.failing ? " ×" : "") } },
+      [["claude ×", "codex", "hermes"], ["claude", "codex", "grok"], ["claude", "codex ×"]])
+equal("status tokens", [leoLine.tokens.value.week, status.total.week], [83_872_070, 559_618_448])
+check("status estimated", leoLine.estimated && status.estimated)
+equal("status seen", status.lines[1].seen, time("2026-09-24T13:37:00Z"))
+equal("sorted by version", status.lines(sortedBy: .version, ascending: true).map(\.device).prefix(2), ["leo-air", "build-01"])
+equal("sorted by seen", status.lines(sortedBy: .seen, ascending: true).map(\.device).prefix(2), ["mira-mbp", "scout"])
+equal("seen longest ago", status.lines(sortedBy: .seen, ascending: true).last?.device, "courier")
+equal("sorted by today", status.lines(sortedBy: .tokens(.today), ascending: false).first?.device,
+      team.team.matrix.rows.max { $0.shown.value.today < $1.shown.value.today }?.device)
+
+// The header counts the devices as the console's status view does.
+equal("team header", TeamHeader(team, period: .week, unit: matrix.unit).text, "12 devices · 2 errors · 1 not reporting · 7 Days UTC · M weighted tokens")
+equal("team header share", TeamHeader(team, period: .today, unit: shares.unit).text, "12 devices · 2 errors · 1 not reporting · Today UTC · % of column total")
+
 // The locator, on a made-up home.
 let fm = FileManager.default
 let tmp = fm.temporaryDirectory.appendingPathComponent("ai-usage-checks-\(ProcessInfo.processInfo.processIdentifier)")
