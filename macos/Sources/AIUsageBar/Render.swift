@@ -34,6 +34,14 @@ enum Renderer {
             if !report.attention.isEmpty {
                 states.append(("alerts", { $0.tab = .limits }, { $0.showsAlerts = true }))
             }
+            // The details of the first subscription that runs out, and of the
+            // first idle one, in the whole of Limits, as they may be far down.
+            var whole: [(String, String)] = []
+            for (kind, name) in [(Attention.Kind.over, "limits-expanded-over"), (.idle, "limits-expanded-idle")] {
+                guard let a = report.attention.first(where: { $0.kind == kind }), let p = a.provider, let l = a.account,
+                      "limits:\(p)/\(l)" != firstLimitRow(report) else { continue }
+                whole.append((name, "limits:\(p)/\(l)"))
+            }
             if report.solo {
                 if let p = report.providers.first(where: { $0.accounts.contains { $0.shown.value.quarter > 0 } }),
                    let a = p.accounts.first(where: { $0.shown.value.quarter > 0 }) {
@@ -87,11 +95,19 @@ enum Renderer {
                     setUp(store)
                     try write(popover(store), appearance, to: png("popover-\(name)")) { change(store) }
                 }
+                for (name, key) in whole {
+                    reset(store)
+                    try write(popover(store, height: .infinity), appearance, to: png("popover-\(name)")) { store.expanded = key }
+                }
                 if let calm {
                     try write(popover(calm), appearance, to: png("popover-calm"))
                 }
-                if let stale {
-                    try write(popover(stale), appearance, to: png("popover-limits-stale"))
+                if let stale, let a = stale.report?.attention.first(where: { $0.kind == .over && $0.window == nil }),
+                   let p = a.provider, let l = a.account {
+                    stale.popoverClosed()
+                    try write(popover(stale, height: .infinity), appearance, to: png("popover-limits-stale")) {
+                        stale.expanded = "limits:\(p)/\(l)"
+                    }
                 }
                 for (name, phase) in empty {
                     try write(popover(Store(showing: phase)), appearance, to: png("popover-\(name)"))
