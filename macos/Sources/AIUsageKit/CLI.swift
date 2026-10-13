@@ -87,6 +87,26 @@ public struct CLI: Sendable {
         return env
     }
 
+    /// A script for Terminal that runs a command as the collector does,
+    /// with the LaunchAgent's PATH, else the shell's and the standard
+    /// folders, and the collector's folder. On a terminal, the report is its
+    /// interactive view.
+    public func terminalScript(_ args: [String]) -> String {
+        let quote = { (s: String) in "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        var lines = ["#!/bin/sh"]
+        if let path = location.path {
+            lines.append("export PATH=" + quote(path))
+        } else {
+            lines.append("export PATH=\"$PATH\":" + quote(CLILocation.standardDirs(home: home).joined(separator: ":")))
+        }
+        if let h = location.stateHome {
+            lines.append("export AI_USAGE_HOME=" + quote(h))
+        }
+        lines.append("exec " + ([location.executable.path] + args).map(quote).joined(separator: " "))
+        return lines.joined(separator: "\n") + "\n"
+    }
+
     public func run(_ args: [String], input: Data? = nil, timeout: TimeInterval = 30) async throws -> Data {
         try await withCheckedThrowingContinuation { cont in
             DispatchQueue.global(qos: .userInitiated).async {

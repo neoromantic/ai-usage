@@ -230,6 +230,12 @@ final class Store: ObservableObject {
         now = Date()
     }
 
+    /// Opens ai-usage with args in Terminal, run as the collector runs it.
+    func openInTerminal(_ args: [String], named name: String) {
+        guard !demo, let cli = locate() else { return }
+        Terminal.open(cli.terminalScript(args), named: name)
+    }
+
     private func locate() -> CLI? {
         let location = CLILocation.locate()
         cliPath = location?.executable.path
