@@ -216,9 +216,15 @@ private struct DeviceRow: View {
         }
     }
 
-    /// What is wrong with the device, in a line under it.
+    /// What is wrong with the device, in a line under it, in the words of
+    /// the report's NOTE where it has them.
     private var note: (text: String, color: Color, help: String)? {
-        guard let d = device else { return nil }
+        guard let d = device, let line = problem(d) else { return nil }
+        guard let n = d.note, !n.isEmpty else { return line }
+        return (n, line.color, line.help)
+    }
+
+    private func problem(_ d: TeamDevice) -> (text: String, color: Color, help: String)? {
         let all = [d.error, d.lastError.map { "Last error\(lastErrorAge(d)): \($0)" }, d.updateError.map { "Update: \($0)" }].compactMap { $0 }
         switch status {
         case .replaced:
