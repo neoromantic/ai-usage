@@ -106,6 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         guard !Store.shared.demo else { return }
         LoginItem.setUpOnce()
+        Notifier.shared.start()
         Store.shared.start()
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.relaunchIfUpdated() }

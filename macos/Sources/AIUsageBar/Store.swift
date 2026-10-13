@@ -202,7 +202,9 @@ final class Store: ObservableObject {
             return
         }
         do {
-            report = try Report.decode(try await cli.run(args, timeout: timeout))
+            let r = try Report.decode(try await cli.run(args, timeout: timeout))
+            report = r
+            Notifier.shared.observe(r)
             phase = .ready
             refreshError = nil
             fetchedAt = Date()

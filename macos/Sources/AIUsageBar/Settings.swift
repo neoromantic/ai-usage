@@ -177,6 +177,10 @@ private struct CommitField: View {
 struct GeneralSettings: View {
     @EnvironmentObject private var store: Store
     @AppStorage(MenuBarShows.key) private var shows = MenuBarShows.percent.rawValue
+    @AppStorage(NoticeSettings.outKey) private var notifyOut = true
+    @AppStorage(NoticeSettings.runsOutKey) private var runsOut = NoticeSettings.RunsOut.day.rawValue
+    @AppStorage(NoticeSettings.scopeKey) private var scope = NoticeSettings.Scope.mac.rawValue
+    @ObservedObject private var notifier = Notifier.shared
     @ViewState private var login = LoginItem.status
     @ViewState private var loginError: String?
     @ViewState private var cliVersion: String?
@@ -206,6 +210,39 @@ struct GeneralSettings: View {
                         .padding(.horizontal, 8)
                         .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.06)))
                 }
+            }
+            Section {
+                Toggle("When a Window Is Out", isOn: $notifyOut)
+                Picker("When a Window Will Run Out", selection: $runsOut) {
+                    Text("Within a Day").tag(NoticeSettings.RunsOut.day.rawValue)
+                    Text("Any Time").tag(NoticeSettings.RunsOut.always.rawValue)
+                    Text("Never").tag(NoticeSettings.RunsOut.never.rawValue)
+                }
+                .pickerStyle(.menu)
+                Picker("Subscriptions", selection: $scope) {
+                    Text("This Mac's").tag(NoticeSettings.Scope.mac.rawValue)
+                    Text("The Team's").tag(NoticeSettings.Scope.team.rawValue)
+                }
+                .pickerStyle(.menu)
+            } header: {
+                Text("Notifications")
+            } footer: {
+                if notifier.status == .denied && !NoticeSettings(UserDefaults.standard).off {
+                    HStack(spacing: 6) {
+                        Footnote("Notifications for AI Usage are off in System Settings.")
+                        Button("Open Notifications…") { notifier.openSystemSettings() }
+                            .buttonStyle(.borderless)
+                            .font(.subheadline)
+                    }
+                } else {
+                    Footnote("Once for each window until it resets. A forecast early in a long window can change by the next reading; Within a Day waits until it is near.")
+                }
+            }
+            .onChange(of: notifyOut) { _, on in
+                if on { notifier.enable() }
+            }
+            .onChange(of: runsOut) { _, v in
+                if v != NoticeSettings.RunsOut.never.rawValue { notifier.enable() }
             }
             Section {
                 LabeledContent("Name") {
@@ -284,14 +321,19 @@ struct GeneralSettings: View {
                 }
             }
         }
-        .pane(height: 440)
+        .pane(height: 655)
         .onAppear {
             login = LoginItem.status
+            notifier.refreshStatus()
             Task {
                 if let v = try? await store.command(["version"], changes: false), !v.isEmpty {
                     cliVersion = v
                 }
             }
+        }
+        // Coming back from System Settings, which may have changed it.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            notifier.refreshStatus()
         }
     }
 }
