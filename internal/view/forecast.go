@@ -54,53 +54,60 @@ const (
 )
 
 // The pace of the recent readings is the least-squares slope of those over
-// slopeSpan before the reading, when they span slopeMin or more. A drop of
-// more than dropPoints between two readings of one period starts the series
-// again: the provider took use back.
+// slopeSpan before the reading, when they span a tenth of the window, at
+// least slopeMin and at most slopeMax. A drop of more than dropPoints
+// between two readings of one period starts the series again: the provider
+// took use back.
 const (
 	slopeSpan  = 24 * time.Hour
 	slopeMin   = time.Hour
+	slopeMax   = 20 * time.Hour
 	dropPoints = 2
 )
 
 // forecast is how full w will be at its reset if it is used from its
 // reading on at its pace: the faster of its average since it began, or
 // since its last reading at 0% after that, and the pace of its readings of
-// the last day, pts with the reading itself. There is none without the
-// window's length and reset time, and none in its first tenth unless it is
-// over already.
+// the last day, pts with the reading itself. Either pace is measured over a
+// tenth of the window at least, so the first busy hours of a week do not
+// read as the pace of the week. There is none without the window's length
+// and reset time, and none in its first tenth unless it is over already.
 func forecast(w snapshot.Window, at time.Time, pts []pacePoint) *Forecast {
 	start, ok := w.Start()
 	if !ok {
 		return nil
 	}
 	reset := *w.ResetsAt
+	tenth := w.Length() / 10
 	elapsed := float64(at.Sub(start)) / float64(w.Length())
 	elapsed = min(max(elapsed, 0), 1)
 	used := max(w.Percent, 0)
 	series := paceSeries(w, at, pts)
 	// The average runs from the window's start, or from the last reading
-	// at 0% after it: a window left idle at first fills from there.
+	// at 0% after it: a window left idle at first fills from there. It runs
+	// over a tenth of the window at least: what was used in less counts as
+	// used over that tenth.
 	from := start
 	for _, p := range series {
 		if p.Percent <= 0 && p.At.After(from) {
 			from = p.At
 		}
 	}
+	if early := at.Add(-tenth); from.After(early) {
+		from = early
+	}
 	left := reset.Sub(at).Hours()
 	f := &Forecast{Elapsed: elapsed, Basis: BasisWindow}
 	// avg is the forecast at the average pace: used ÷ the share of the time
 	// from `from` to the reset that had passed at the reading.
-	avg := float64(MaxForecast)
-	switch {
-	case used == 0:
-		avg = 0
-	case at.After(from):
+	var avg float64
+	if used > 0 {
 		avg = used / (float64(at.Sub(from)) / float64(reset.Sub(from)))
 		f.Pace = used / at.Sub(from).Hours()
 	}
 	raw := avg
-	if slope, ok := recentSlope(series, at); ok && used+slope*left > avg {
+	need := min(max(tenth, slopeMin), slopeMax)
+	if slope, ok := recentSlope(series, at, need); ok && used+slope*left > avg {
 		raw, f.Pace, f.Basis = used+slope*left, slope, BasisRecent
 	}
 	f.Percent = min(math.Round(raw), MaxForecast)
@@ -109,7 +116,7 @@ func forecast(w snapshot.Window, at time.Time, pts []pacePoint) *Forecast {
 	}
 	// It runs out before its reset when the forecast is over 100% before it
 	// is rounded, so a forecast of 100.4% runs out too. At exactly 100% it
-	// runs out at its reset. With no time elapsed, the pace is infinite.
+	// runs out at its reset.
 	if used > 0 && used < 100 && raw > 100 {
 		var runs time.Time
 		if f.Basis == BasisRecent {
@@ -165,15 +172,15 @@ func paceSeries(w snapshot.Window, at time.Time, pts []pacePoint) []pacePoint {
 
 // recentSlope is the pace of the readings of the slopeSpan before at, in
 // points an hour, at least 0: the least-squares slope of percent over time.
-// It is false when they span less than slopeMin.
-func recentSlope(series []pacePoint, at time.Time) (float64, bool) {
+// It is false when they span less than need.
+func recentSlope(series []pacePoint, at time.Time, need time.Duration) (float64, bool) {
 	var ps []pacePoint
 	for _, p := range series {
 		if !p.At.Before(at.Add(-slopeSpan)) {
 			ps = append(ps, p)
 		}
 	}
-	if len(ps) < 2 || ps[len(ps)-1].At.Sub(ps[0].At) < slopeMin {
+	if len(ps) < 2 || ps[len(ps)-1].At.Sub(ps[0].At) < need {
 		return 0, false
 	}
 	var mx, my float64
