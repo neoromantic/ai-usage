@@ -101,7 +101,7 @@ func TestStateRoundTrip(t *testing.T) {
 			UB:   map[string]meter.Hours{"a@b.c": {497000: {Input: 5}}},
 			Side: snapshot.Tokens{Output: 7}, Nulls: 2, Rederive: true,
 		}},
-		Relay: Relay{LastPushAt: at, Pending: true, NoExtUntil: at.Add(24 * time.Hour)},
+		Relay: Relay{LastPushAt: at, Pending: true, NoExtUntil: at.Add(24 * time.Hour), NoCyclesUntil: at.Add(12 * time.Hour)},
 	}
 	if err := d.SaveState(in); err != nil {
 		t.Fatal(err)
@@ -369,6 +369,7 @@ func TestLoadStateMergesWhatAnOlderAiUsageCollected(t *testing.T) {
 	last := NewState()
 	last.LastRunAt = ran
 	last.Relay.NoExtUntil = ran.Add(24 * time.Hour)
+	last.Relay.NoCyclesUntil = ran.Add(12 * time.Hour)
 	last.Sessions[s] = &Session{
 		Provider: "claude", Project: "/Users/ann/src/app", Updated: ran,
 		Seen: snapshot.Tokens{Input: 1000, Output: 9000},
@@ -414,7 +415,7 @@ func TestLoadStateMergesWhatAnOlderAiUsageCollected(t *testing.T) {
 	if f := st.Sessions[fresh]; f == nil || !f.Rederive || !reflect.DeepEqual(f.U, meter.Hours{h + 1: {Input: 40, Output: 10}}) {
 		t.Fatalf("a session only the older ai-usage saw = %+v", f)
 	}
-	if st.Ledger != LedgerVersion || !st.Relay.NoExtUntil.Equal(last.Relay.NoExtUntil) || !st.LastRunAt.Equal(cur.LastRunAt) {
+	if st.Ledger != LedgerVersion || !st.Relay.NoExtUntil.Equal(last.Relay.NoExtUntil) || !st.Relay.NoCyclesUntil.Equal(last.Relay.NoCyclesUntil) || !st.LastRunAt.Equal(cur.LastRunAt) {
 		t.Fatalf("ledger %d, no ext until %v, last run %v", st.Ledger, st.Relay.NoExtUntil, st.LastRunAt)
 	}
 	wantDamage := "an older ai-usage (v0.3) collected here after v0.4; its hours were merged"

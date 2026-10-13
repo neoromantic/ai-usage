@@ -66,6 +66,52 @@ func TestExtendedWire(t *testing.T) {
 	}
 }
 
+// The cycles' gate waits for v0.5.0 as the other waits for v0.4.0, and is
+// shut for as long as the relay refused them.
+func TestCyclesWire(t *testing.T) {
+	const fp, self = "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2", "d-annbook-0001"
+	now := t0
+	doc := func(device, version string) snapshot.Doc {
+		return snapshot.Doc{Device: device, CollectorVersion: version, CollectedAt: now}
+	}
+	cache := func(docs ...snapshot.Doc) TeamCache {
+		return TeamCache{Team: fp, PulledAt: now.Add(-10 * time.Minute), Docs: docs}
+	}
+	for _, c := range []struct {
+		name  string
+		cache TeamCache
+		until time.Time
+		want  Gate
+	}{
+		{"all on v0.5.0 or later", cache(doc(self, "v0.5.0"), doc("d-srv1-a4c2e917", "v0.5.1"), doc("d-sambook-0002", "v1.0.0")), time.Time{}, Gate{Open: true}},
+		{"a device on v0.4.0", cache(doc(self, "v0.5.0"), doc("d-srv1-a4c2e917", "v0.4.0"), doc("d-sambook-0002", "v0.3.4")), time.Time{},
+			Gate{HeldBack: []string{"d-sambook-0002", "d-srv1-a4c2e917"}, Reason: GateOld}},
+		{"a build from source of v0.4.1", cache(doc("d-srv1-a4c2e917", "v0.4.1-local+dirty")), time.Time{},
+			Gate{HeldBack: []string{"d-srv1-a4c2e917"}, Reason: GateOld}},
+		// A build from source from v0.4.0 on reports devel, as a newer one does.
+		{"a development build", cache(doc("d-srv1-a4c2e917", "devel"), doc("d-sambook-0002", "v0.5.0-rc.1")), time.Time{}, Gate{Open: true}},
+		{"a development build of v0.3", cache(doc("d-srv1-a4c2e917", "dev")), time.Time{},
+			Gate{HeldBack: []string{"d-srv1-a4c2e917"}, Reason: GateOld}},
+		{"the relay refused the cycles", cache(doc("d-srv1-a4c2e917", "v0.5.0")), now.Add(time.Hour), Gate{Reason: GateRejected, Until: now.Add(time.Hour)}},
+		{"a read 4 hours old", TeamCache{Team: fp, PulledAt: now.Add(-4 * time.Hour)}, time.Time{}, Gate{Reason: GateStale}},
+		{"another team", TeamCache{Team: strings.Repeat("b3", 16), PulledAt: now}, time.Time{}, Gate{Reason: GateTeam}},
+	} {
+		got := CyclesWire(c.cache, fp, self, c.until, now)
+		if got.Open != c.want.Open || got.Reason != c.want.Reason || !got.Until.Equal(c.want.Until) || !slices.Equal(got.HeldBack, c.want.HeldBack) {
+			t.Errorf("%s: %+v, want %+v", c.name, got, c.want)
+		}
+	}
+	// A device remembered on v0.4.0 holds it shut, and not the other.
+	known := cache(doc("d-srv1-a4c2e917", "v0.5.0"))
+	known.Known = map[string]Known{"d-leoair-0003": {Version: "v0.4.0"}}
+	if g := CyclesWire(known, fp, self, time.Time{}, now); g.Open || !slices.Equal(g.HeldBack, []string{"d-leoair-0003"}) {
+		t.Errorf("remembered on v0.4.0: %+v", g)
+	}
+	if g := ExtendedWire(known, fp, self, time.Time{}, now); !g.Open {
+		t.Errorf("the gate of v0.4.0's fields: %+v", g)
+	}
+}
+
 // Known keeps a device whose document expired, so that it holds the gate
 // closed when it comes back, and drops one that was forgotten.
 func TestKnownOutlivesExpiredDocuments(t *testing.T) {

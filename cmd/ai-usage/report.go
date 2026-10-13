@@ -30,7 +30,9 @@ func loadResult(d state.Dir) (*collect.Result, error) {
 		return nil, err
 	}
 	cache, _ := collect.LoadTeamCache(d)
-	doc := collect.BuildDoc(st, key, cfg, deviceName(cfg), osUser(), version, st.LastRunAt)
+	// Samples that do not read leave the cycles out, as the run's did.
+	cycles, _ := collect.LoadCycles(d, st.LastRunAt)
+	doc := collect.BuildDoc(st, cycles, key, cfg, deviceName(cfg), osUser(), version, st.LastRunAt)
 	return &collect.Result{Config: cfg, State: st, Key: key, Doc: doc, Team: cache}, nil
 }
 

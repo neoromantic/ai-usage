@@ -131,6 +131,7 @@ func (a Account) validate() error {
 		checkList("days", a.Days, MaxDays, checkDay),
 		checkList("burn_days", a.BurnDays, MaxDays, checkDay),
 		checkList("recent", a.Recent, MaxWindows, Recent.validate),
+		checkList("cycles", a.Cycles, MaxCycles, Cycle.validate),
 		checkList("linked", a.Linked, MaxLinked, func(l Linked) error { return l.validate(a.Provider) }),
 	)
 }
@@ -164,6 +165,22 @@ func (r Recent) validate() error {
 	}
 	if r.Tokens < 0 || r.Tokens > MaxTokenCount || r.Burn < 0 || r.Burn > MaxTokenCount {
 		return errors.New("token count out of range")
+	}
+	return nil
+}
+
+func (c Cycle) validate() error {
+	if err := plainText.check("window name", c.Window, true); err != nil {
+		return err
+	}
+	if c.ResetsAt.IsZero() || c.LastReadAt.IsZero() {
+		return errors.New("resets_at and last_read_at are required")
+	}
+	if c.LastReadAt.After(c.ResetsAt) {
+		return errors.New("last_read_at is after resets_at")
+	}
+	if c.Percent < 0 || c.Percent > 1000 || c.Percent != c.Percent {
+		return errors.New("percent out of range")
 	}
 	return nil
 }

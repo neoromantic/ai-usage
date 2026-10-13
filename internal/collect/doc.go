@@ -51,10 +51,11 @@ func lastError(st *state.State, version string) string {
 	return s
 }
 
-// BuildDoc makes this device's snapshot with every name and path sealed. It
-// has the fields ExtSince added; Legacy is the body a release before it
-// reads.
-func BuildDoc(st *state.State, key *team.Key, cfg state.Config, hostname, osUser, version string, now time.Time) snapshot.Doc {
+// BuildDoc makes this device's snapshot with every name and path sealed,
+// and each account's quota cycles. It has the fields ExtSince and
+// CyclesSince added; Legacy and WithoutCycles are the bodies releases
+// before them read.
+func BuildDoc(st *state.State, cycles Cycles, key *team.Key, cfg state.Config, hostname, osUser, version string, now time.Time) snapshot.Doc {
 	seal := func(s string) string { return key.Seal(clip(s, maxSealedPlain)) }
 	doc := snapshot.Doc{
 		V:                snapshot.Version,
@@ -111,6 +112,7 @@ func BuildDoc(st *state.State, key *team.Key, cfg state.Config, hostname, osUser
 		}
 		sa.Days = DaysOf(a.Hours.Series(meter.Use.InOut), now)
 		sa.BurnDays = DaysOf(a.Burn, now)
+		sa.Cycles = slices.Clone(cycles[HistoryKey(a.Provider, a.Label)])
 		if !a.LastActive.IsZero() {
 			la := a.LastActive
 			sa.LastActiveAt = &la
@@ -161,12 +163,49 @@ func aliases(set map[string]state.Alias, seal func(string) string) []snapshot.Al
 }
 
 // fitDoc fits the document under the relay's size limit. The body a
+// release before CyclesSince reads is fitted first, as such a release fits
+// its own: fitExtended. The cycles of the accounts it kept then go back, and
+// only they are cut further, the oldest of the window with the most first,
+// while the whole is too big.
+func fitDoc(doc *snapshot.Doc) {
+	full := *doc
+	*doc = full.WithoutCycles()
+	fitExtended(doc)
+	accts := doc.Accounts
+	for i := range accts {
+		// Accounts go from the end, so the kept ones are a prefix.
+		accts[i].Cycles = slices.Clone(full.Accounts[i].Cycles)
+	}
+	for {
+		b, err := json.Marshal(doc)
+		if err != nil || len(b) <= snapshot.MaxBytes {
+			return
+		}
+		// Marshal once for as many cycles as the excess takes.
+		for over := len(b) - snapshot.MaxBytes; over > 0; {
+			i := longest(accts, func(a snapshot.Account) int { return len(a.Cycles) }, 0)
+			if i < 0 {
+				return
+			}
+			cs := accts[i].Cycles
+			j := oldestOfMost(cs)
+			over -= cycleBytes(cs[j])
+			if cs = slices.Delete(cs, j, j+1); len(cs) == 0 {
+				cs, over = nil, over-len(`,"cycles":[]`)
+			}
+			accts[i].Cycles = cs
+		}
+	}
+}
+
+// fitExtended fits the document under the relay's size limit as a release
+// from ExtSince on, and before CyclesSince, fits its own. The body a
 // release before ExtSince reads is fitted first, as such a release fits its
 // own, so the days it shows stay as long as they were: fitLegacy. The burn
 // days are then cut to the days each account kept, and only they are cut
 // further, oldest first, while the whole is too big. Should the fields
 // ExtSince added still not fit, the document goes without them.
-func fitDoc(doc *snapshot.Doc) {
+func fitExtended(doc *snapshot.Doc) {
 	full := *doc
 	*doc = full.Legacy()
 	fitLegacy(doc)

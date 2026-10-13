@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -69,7 +70,7 @@ func encodeDecode(t *testing.T, doc snapshot.Doc) (snapshot.Doc, []byte) {
 
 func TestBuildDocDecodesAndOpens(t *testing.T) {
 	key := mustKey(t)
-	doc, body := encodeDecode(t, BuildDoc(ledger(), key, state.Config{Device: "d-0123456789"}, "workbox", "sam", "v1.2.3", t0))
+	doc, body := encodeDecode(t, BuildDoc(ledger(), nil, key, state.Config{Device: "d-0123456789"}, "workbox", "sam", "v1.2.3", t0))
 	open := func(s string) string {
 		t.Helper()
 		v, err := key.Open(s)
@@ -122,7 +123,7 @@ func TestBuildDocDecodesAndOpens(t *testing.T) {
 
 func TestBuildDocWithEmptyState(t *testing.T) {
 	st := state.NewState()
-	doc, _ := encodeDecode(t, BuildDoc(st, mustKey(t), state.Config{Device: "d-0123456789"}, "", "", "", t0))
+	doc, _ := encodeDecode(t, BuildDoc(st, nil, mustKey(t), state.Config{Device: "d-0123456789"}, "", "", "", t0))
 	if doc.CollectorVersion != "unknown" || doc.LastError != "" {
 		t.Fatalf("doc = %+v", doc)
 	}
@@ -135,7 +136,7 @@ func TestLastErrorCarriesTheUpdateError(t *testing.T) {
 	key := mustKey(t)
 	lastError := func(st *state.State) (run, update string, found bool) {
 		t.Helper()
-		doc, _ := encodeDecode(t, BuildDoc(st, key, state.Config{Device: "d-0123456789"}, "workbox", "sam", "v1.2.3", t0))
+		doc, _ := encodeDecode(t, BuildDoc(st, nil, key, state.Config{Device: "d-0123456789"}, "workbox", "sam", "v1.2.3", t0))
 		if len(doc.LastError) > snapshot.MaxSealed {
 			t.Fatalf("last_error is %d bytes sealed", len(doc.LastError))
 		}
@@ -193,7 +194,7 @@ func TestBuildDocFitsTheSizeLimit(t *testing.T) {
 			}
 		}
 	}
-	doc, body := encodeDecode(t, BuildDoc(st, key, state.Config{Device: "d-0123456789"}, "workbox", "sam", "v1", t0))
+	doc, body := encodeDecode(t, BuildDoc(st, nil, key, state.Config{Device: "d-0123456789"}, "workbox", "sam", "v1", t0))
 	if len(body) > snapshot.MaxBytes {
 		t.Fatalf("doc is %d bytes", len(body))
 	}
@@ -273,7 +274,7 @@ func TestDocCarriesDaysRecentAndAliases(t *testing.T) {
 		state.Key("codex", "ann@example.com"): {Name: "ann", At: t0},
 		state.Key("claude", "bo@example.com"): {At: t0.Add(-time.Hour)},
 	}}
-	doc, _ := encodeDecode(t, BuildDoc(st, key, cfg, "box", "ann", "v1", t0))
+	doc, _ := encodeDecode(t, BuildDoc(st, nil, key, cfg, "box", "ann", "v1", t0))
 	a := doc.Accounts[0]
 	if want := []int64{60, 0, 0, 0, 0, 0, 0, 40}; !reflect.DeepEqual(a.Days, want) {
 		t.Errorf("days = %v, want %v", a.Days, want)
@@ -320,7 +321,7 @@ func extendedLedger(errAt time.Time) *state.State {
 func TestBuildDocExtended(t *testing.T) {
 	key := mustKey(t)
 	at := t0.Add(-20 * time.Minute).In(time.FixedZone("east", 3*3600))
-	doc, body := encodeDecode(t, BuildDoc(extendedLedger(at), key, state.Config{Device: "d-0123456789"}, "annbook", "ann", "v0.4.0", t0))
+	doc, body := encodeDecode(t, BuildDoc(extendedLedger(at), nil, key, state.Config{Device: "d-0123456789"}, "annbook", "ann", "v0.4.0", t0))
 	a := doc.Accounts[0]
 	// Codex weighs output 8 and cache reads 0.1: 28+96+10 and 42+144+100.
 	if want := []int64{286, 0, 0, 0, 0, 0, 0, 134}; !reflect.DeepEqual(a.BurnDays, want) {
@@ -359,7 +360,7 @@ func TestBuildDocLastErrorAt(t *testing.T) {
 	key := mustKey(t)
 	build := func(st *state.State) snapshot.Doc {
 		t.Helper()
-		doc, _ := encodeDecode(t, BuildDoc(st, key, state.Config{Device: "d-0123456789"}, "annbook", "ann", "v0.4.0", t0))
+		doc, _ := encodeDecode(t, BuildDoc(st, nil, key, state.Config{Device: "d-0123456789"}, "annbook", "ann", "v0.4.0", t0))
 		return doc
 	}
 	if doc := build(ledger()); doc.LastError == "" || doc.LastErrorAt != nil {
@@ -424,6 +425,87 @@ func TestFitDocKeepsTheLegacyDays(t *testing.T) {
 		}
 		if (kept > 0) != c.burnKept {
 			t.Fatalf("%d aliases: %d burn days kept", c.aliases, kept)
+		}
+	}
+}
+
+// fitDoc fits the body a release before v0.5.0 reads as that release did,
+// then puts back the cycles of the accounts it kept, cutting the oldest of
+// the window with the most first while the whole is too big.
+func TestFitDocKeepsCyclesLast(t *testing.T) {
+	sealed := func(c byte) string { return strings.Repeat(string(c), snapshot.MaxSealed/2) }
+	for _, c := range []struct {
+		name    string
+		days    int
+		cut     bool
+		without bool // the fields v0.4.0 added still fit
+	}{
+		{"room for all", 7, false, true},
+		{"cycles cut", 45, true, true},
+	} {
+		doc := snapshot.Doc{V: snapshot.Version, Accounts: []snapshot.Account{}, Sources: []snapshot.Source{}}
+		for i := range snapshot.MaxAccounts {
+			a := snapshot.Account{Provider: "claude", Label: sealed('A' + byte(i%26)), Windows: []snapshot.Window{}, Projects: []snapshot.Project{}}
+			for d := range c.days {
+				a.Days = append(a.Days, 100_000_000_000_000+int64(d))
+				a.BurnDays = append(a.BurnDays, 700_000_000_000_000+int64(d))
+			}
+			if i < 6 {
+				for w, name := range []string{"5h", "7d", "7d sonnet"} {
+					for n := range []int{12, 13, 13}[w] {
+						reset := t0.Add(-time.Duration(n) * 7 * 24 * time.Hour).Add(time.Duration(w) * time.Hour)
+						a.Cycles = append(a.Cycles, cycle(name, reset, float64(50+n), reset.Add(-time.Hour)))
+					}
+				}
+			}
+			doc.Accounts = append(doc.Accounts, a)
+		}
+		without := doc.WithoutCycles()
+		fitDoc(&without)
+		full := doc.WithoutCycles()
+		for i := range full.Accounts {
+			full.Accounts[i].Cycles = doc.Accounts[i].Cycles
+		}
+		fitDoc(&doc)
+
+		if !reflect.DeepEqual(doc.WithoutCycles(), without) {
+			t.Fatalf("%s: the body without cycles differs from the one v0.4.0 fits", c.name)
+		}
+		if without.Extended() != c.without {
+			t.Fatalf("%s: the fields v0.4.0 added were dropped", c.name)
+		}
+		b, _ := json.Marshal(doc)
+		if len(b) > snapshot.MaxBytes {
+			t.Fatalf("%s: %d bytes", c.name, len(b))
+		}
+		total, most := 0, 0
+		for i, a := range doc.Accounts {
+			total += len(a.Cycles)
+			was := full.Accounts[i].Cycles
+			// What is kept of each window is its newest.
+			n := map[string]int{}
+			for _, cy := range a.Cycles {
+				n[cy.Window]++
+			}
+			for _, cy := range was {
+				if n[cy.Window] > 0 {
+					if !slices.Contains(a.Cycles, cy) {
+						t.Fatalf("%s: account %d kept an older cycle than %+v", c.name, i, cy)
+					}
+					n[cy.Window]--
+				}
+			}
+			most = max(most, len(a.Cycles))
+		}
+		if cut := total < 6*38; cut != c.cut {
+			t.Fatalf("%s: %d cycles kept", c.name, total)
+		}
+		// The accounts with the most lose them first, so none keeps many
+		// more than another.
+		for i, a := range doc.Accounts[:6] {
+			if most-len(a.Cycles) > 1 {
+				t.Fatalf("%s: account %d kept %d cycles, another %d", c.name, i, len(a.Cycles), most)
+			}
 		}
 	}
 }
