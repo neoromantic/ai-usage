@@ -1,0 +1,30 @@
+ATTENTION
+ OUT         claude lee@corp.test        back Fri 12:00, in 3d · reading 1d old
+ OVER        claude bob@mail.test        runs out ~Wed 12:00, 2d before reset
+ TIGHT       claude ann@acme.dev         ~91% at reset Fri 12:00
+ OUTSIDE     claude sam@mail.test        +25 points, no team device spent
+ ERROR       bot-b                       codex: app-server exited without answ…
+ NO READING  claude a-very-long-subscr…  on v0.2.0: reinstall with install.sh
+ NO READING  claude unknown              on srv1: run claude and log in
+ SILENT      bot-c                       no report since Mon 06:00, 1d 6h ago
+ DUPLICATE   annbook                     ai-usage team forget-device 3f9a1c2e
+ OLD         1 device on v0.2.0          no Claude quota; reinstall
+ OLD         1 device on v0.3.4          bot-a · latest v0.4.0
+ UNDER       claude kim@corp.test        leaves ~65% unused at this week's pace
+ IDLE        claude max@mail.test        idle 11d, paid and unused
+
+ATTENTION
+ OUT         claude lee@corp.test            back Fri 12:00, in 3d · reading 1d old
+ OVER        claude bob@mail.test            runs out ~Wed 12:00 at this week's pace, 2d before reset
+ TIGHT       claude ann@acme.dev             ~91% at reset Fri 12:00 at this week's pace
+ OUTSIDE     claude sam@mail.test            +25 points in 20h, no team device spent
+ ERROR       bot-b                           codex: app-server exited without answering
+ NO READING  claude a-very-long-subscripti…  annbook runs v0.2.0: reinstall with install.sh
+ NO READING  claude unknown                  not logged in on srv1: run claude and log in
+ SILENT      bot-c                           no report since Mon 06:00, 1d 6h ago
+ DUPLICATE   annbook                         reinstalled as annbook: ai-usage team forget-device 3f9a1c2e
+ OLD         1 device on v0.2.0              srv1 · cannot read Claude quota; reinstall with install.sh
+ OLD         1 device on v0.3.4              bot-a · latest v0.4.0
+ UNDER       claude kim@corp.test            leaves ~65% unused at this week's pace, resets Fri 12:00, in 3d
+ IDLE        claude max@mail.test            idle 11d, paid and unused
+

@@ -22,6 +22,9 @@ const (
 	// than updating takes without updating itself: v0.2.0 checks for a
 	// release every 6 hours, and the next run is the update.
 	BehindAfter = 7 * time.Hour
+	// IdleAfter marks a subscription no team device has used for that long
+	// as idle: a week, so no current weekly window of it was used.
+	IdleAfter = 7 * 24 * time.Hour
 )
 
 // Report is everything both views show. The console draws it as one page:
@@ -145,15 +148,21 @@ const (
 	AttentionDuplicate = "duplicate"  // a device was reinstalled, and its old record stays
 	AttentionOld       = "old"        // devices run an older release
 	AttentionUnder     = "under"      // past half of a window, its forecast is under 50%
+	AttentionIdle      = "idle"       // no team device has used a paid subscription for a week
 )
 
 // Attention is one thing that needs attention. The fields that apply depend
 // on Kind.
 type Attention struct {
 	Kind string `json:"kind"`
+	// Subject is what the entry is about, and Text what to know, as the
+	// console's ATTENTION line says them in full, its badge left out, with
+	// clocks in this device's time zone.
+	Subject string `json:"subject"`
+	Text    string `json:"text"`
 	// Provider, Account, and Name are the account of an out, over, tight,
-	// under, or outside window, or of a subscription with no reading: its
-	// label and its short name.
+	// under, or outside window, or of a subscription with no reading or
+	// idle: its label and its short name.
 	Provider string `json:"provider,omitempty"`
 	Account  string `json:"account,omitempty"`
 	Name     string `json:"name,omitempty"`
@@ -167,8 +176,9 @@ type Attention struct {
 	// At is when an out window resets, when an over window runs out before
 	// its reset, when an outside window began to rise, when a silent or
 	// duplicate device last reported, when a device's last error happened,
-	// when its collector says, or the earliest BehindSince of old devices
-	// that do not update themselves.
+	// when its collector says, the earliest BehindSince of old devices
+	// that do not update themselves, or when an idle subscription was last
+	// used.
 	At *time.Time `json:"at,omitempty"`
 	// ResetsAt is when an over, tight, or under window resets.
 	ResetsAt *time.Time `json:"resets_at,omitempty"`
@@ -452,6 +462,9 @@ type TeamDevice struct {
 	// ReplacedBy is the label of the device that reinstalled this one: the
 	// same name and OS user, reporting while this one is silent.
 	ReplacedBy *string `json:"replaced_by"`
+	// Note is what the status view's NOTE says of the device, in full, with
+	// clocks in this device's time zone; nil when it says nothing.
+	Note *string `json:"note"`
 	// Limitations are what the device's release cannot do:
 	// "no_claude_quota" before v0.2.3, and "no_update_errors" before v0.2.5.
 	Limitations []string `json:"limitations"`
@@ -516,7 +529,9 @@ type TeamAccount struct {
 	Burn          Usage `json:"burn"`
 	BurnEstimated bool  `json:"burn_estimated"`
 	// NoReading is why a subscription has no reading of its main window,
-	// with what to do, when that is known.
+	// with what to do, when that is known. For the unknown account, the
+	// tokens no login was known for, it is why and where, as a device that
+	// holds them says.
 	NoReading *string `json:"no_reading"`
 	// Outside is a window that filled in the last day while the team spent
 	// next to nothing on it: someone outside the team uses it.

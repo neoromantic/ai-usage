@@ -3,22 +3,25 @@ package view
 import (
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/collect"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 )
 
 // attentionOrder is the kinds, most urgent first.
 var attentionOrder = []string{
 	AttentionOut, AttentionOver, AttentionTight, AttentionOutside, AttentionError,
-	AttentionNoReading, AttentionSilent, AttentionDuplicate, AttentionOld, AttentionUnder,
+	AttentionNoReading, AttentionSilent, AttentionDuplicate, AttentionOld, AttentionUnder, AttentionIdle,
 }
 
 // attention is what needs attention now, most urgent first: windows that
 // are out, will run out, or will end nearly full, windows someone outside
 // the team fills, devices that fail, subscriptions in use with no reading,
 // devices that are silent or were reinstalled, devices on an older
-// release, and windows past half that will be left mostly unused.
+// release, windows past half that will be left mostly unused, and paid
+// subscriptions no team device uses.
 func attention(t Team, c Collector, now time.Time) []Attention {
 	out := append(append([]Attention{}, quotaAttention(t, now)...), deviceAttention(t, c)...)
 	sort.SliceStable(out, func(i, j int) bool {
@@ -27,7 +30,7 @@ func attention(t Team, c Collector, now time.Time) []Attention {
 			return ra < rb
 		}
 		switch a.Kind {
-		case AttentionOut, AttentionOver, AttentionSilent:
+		case AttentionOut, AttentionOver, AttentionSilent, AttentionIdle:
 			if ta, tb := when(a), when(b); !sameTime(ta, tb) {
 				return before(ta, tb)
 			}
@@ -51,7 +54,8 @@ func attention(t Team, c Collector, now time.Time) []Attention {
 // quotaAttention is the subscription windows that are out or will run out,
 // those of an account logged in here that will end nearly full, the main
 // windows past half that will be left mostly unused, the subscriptions
-// someone outside the team fills, and those in use with no reading.
+// someone outside the team fills, those in use with no reading, and the
+// idle ones.
 func quotaAttention(t Team, now time.Time) []Attention {
 	var out []Attention
 	for _, p := range t.Providers {
@@ -71,6 +75,12 @@ func quotaAttention(t Team, now time.Time) []Attention {
 			if a.NoReading != nil && a.Burn.Week > 0 {
 				at := of
 				at.Kind, at.Message = AttentionNoReading, *a.NoReading
+				out = append(out, at)
+			}
+			idle := idleSince(a, now)
+			if idle != nil {
+				at := of
+				at.Kind, at.At = AttentionIdle, idle
 				out = append(out, at)
 			}
 			if a.Quota == nil {
@@ -99,7 +109,8 @@ func quotaAttention(t Team, now time.Time) []Attention {
 					// Only one's own account: another's is its user's to
 					// watch.
 					at.Kind, at.ResetsAt = AttentionTight, w.ResetsAt
-				case w.State == StateUnder && w.Main && w.Forecast.Elapsed >= 0.5:
+				case w.State == StateUnder && w.Main && w.Forecast.Elapsed >= 0.5 && idle == nil:
+					// Of an idle subscription, IDLE says more.
 					at.Kind, at.ResetsAt = AttentionUnder, w.ResetsAt
 				default:
 					continue
@@ -113,6 +124,27 @@ func quotaAttention(t Team, now time.Time) []Attention {
 		}
 	}
 	return out
+}
+
+// idleSince is when a paid subscription that no team device has used for
+// IdleAfter, as its LastActiveAt says, was last used, or nil. It has a
+// reading, and nothing says that someone outside the team uses it: it has
+// no Outside, and its main window, read since it began after that last use,
+// is under 1%. The unknown account is no subscription to pay for, and a
+// free plan costs nothing.
+func idleSince(a TeamAccount, now time.Time) *time.Time {
+	last := a.LastActiveAt
+	switch {
+	case !a.Subscription, a.Label == collect.UnknownAccount, a.Quota == nil, a.Outside != nil,
+		last == nil, now.Sub(*last) < IdleAfter, a.Plan != nil && strings.EqualFold(*a.Plan, "free"):
+		return nil
+	}
+	if m := knownMain(a.Quota); m != nil && m.Percent >= 1 && m.ResetsAt != nil {
+		if l := windowLength(*m); l > 0 && m.ResetsAt.Add(-l).After(*last) {
+			return nil
+		}
+	}
+	return last
 }
 
 // deviceAttention is the failing, silent, reinstalled, and old devices.
@@ -224,9 +256,10 @@ func failed(c Collector) bool {
 }
 
 // when is the time an entry is ordered by within its kind: when an out
-// window resets, when a silent device last reported, and when an over window
-// runs out, which is its reset when it runs out at its reset and has no time
-// of its own.
+// window resets, when a silent device last reported, when an idle
+// subscription was last used, so the longest idle comes first, and when an
+// over window runs out, which is its reset when it runs out at its reset and
+// has no time of its own.
 func when(a Attention) *time.Time {
 	if a.Kind == AttentionOver && a.At == nil {
 		return a.ResetsAt

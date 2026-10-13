@@ -56,6 +56,8 @@
   "attention": [
     {
       "kind": "out",
+      "subject": "codex ann@acme.dev",
+      "text": "back Fri 17:09, in 1d 23h",
       "provider": "codex",
       "account": "ann@acme.dev",
       "name": "ann",
@@ -63,6 +65,8 @@
     },
     {
       "kind": "out",
+      "subject": "claude ann · Fable",
+      "text": "back Sun 01:00, in 3d 7h",
       "provider": "claude",
       "account": "ann@acme.dev",
       "name": "ann",
@@ -71,6 +75,8 @@
     },
     {
       "kind": "over",
+      "subject": "claude ann@acme.dev",
+      "text": "runs out ~Thu 01:17 at this week's pace, 2d 23h before reset · reading 1d old",
       "provider": "claude",
       "account": "ann@acme.dev",
       "name": "ann",
@@ -81,6 +87,8 @@
     },
     {
       "kind": "over",
+      "subject": "codex sam@mail.test",
+      "text": "runs out ~Sat 03:01 at the last day's pace, 2d 17h before reset",
       "provider": "codex",
       "account": "sam@mail.test",
       "name": "sam",
@@ -90,6 +98,8 @@
     },
     {
       "kind": "outside",
+      "subject": "codex lee@corp.test",
+      "text": "+25 points in 20h, no team device spent",
       "provider": "codex",
       "account": "lee@corp.test",
       "name": "lee",
@@ -98,6 +108,8 @@
     },
     {
       "kind": "error",
+      "subject": "Mac.localdomain",
+      "text": "codex: app-server exited without answering",
       "devices": [
         "Mac.localdomain"
       ],
@@ -105,6 +117,8 @@
     },
     {
       "kind": "no_reading",
+      "subject": "claude kim@corp.test",
+      "text": "/opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update Claude Code or put the newer one first on PATH on Mac.localdomain",
       "provider": "claude",
       "account": "kim@corp.test",
       "name": "kim",
@@ -112,6 +126,8 @@
     },
     {
       "kind": "duplicate",
+      "subject": "Mac.localdomain",
+      "text": "reinstalled as Mac.localdomain: ai-usage team forget-device e1f3a5c7",
       "devices": [
         "Mac.localdomain"
       ],
@@ -121,6 +137,8 @@
     },
     {
       "kind": "old",
+      "subject": "3 devices on old releases",
+      "text": "Mac.localdomain, MacBook-Pro-Kim, ci-runner-eu-west-build-pool-node-0042ab · latest v1.4.2",
       "devices": [
         "Mac.localdomain",
         "MacBook-Pro-Kim",
@@ -1313,6 +1331,7 @@
         "burn_estimated": false,
         "gap": null,
         "replaced_by": null,
+        "note": null,
         "limitations": []
       },
       {
@@ -1365,6 +1384,7 @@
         "burn_estimated": false,
         "gap": null,
         "replaced_by": null,
+        "note": "codex: app-server exited without answering",
         "limitations": []
       },
       {
@@ -1417,6 +1437,7 @@
         "burn_estimated": false,
         "gap": null,
         "replaced_by": "Mac.localdomain",
+        "note": "silent since Sun 12:12 · reinstalled as Mac.localdomain",
         "limitations": [],
         "update_error": null,
         "behind_since": null,
@@ -1472,6 +1493,7 @@
         "burn_estimated": false,
         "gap": null,
         "replaced_by": null,
+        "note": "update: latest v1.4.2",
         "limitations": []
       },
       {
@@ -1524,6 +1546,7 @@
         "burn_estimated": false,
         "gap": null,
         "replaced_by": null,
+        "note": null,
         "limitations": []
       },
       {
@@ -1576,6 +1599,7 @@
         "burn_estimated": false,
         "gap": null,
         "replaced_by": null,
+        "note": null,
         "limitations": []
       },
       {
@@ -1631,6 +1655,7 @@
           "at": "2026-09-22T19:40:00Z"
         },
         "replaced_by": null,
+        "note": "gap 12h Sep 22",
         "limitations": []
       },
       {
@@ -1683,6 +1708,7 @@
         "burn_estimated": false,
         "gap": null,
         "replaced_by": null,
+        "note": null,
         "limitations": []
       },
       {
@@ -1735,6 +1761,7 @@
         "burn_estimated": false,
         "gap": null,
         "replaced_by": null,
+        "note": null,
         "limitations": []
       },
       {
@@ -1787,6 +1814,7 @@
         "burn_estimated": false,
         "gap": null,
         "replaced_by": null,
+        "note": null,
         "limitations": []
       },
       {
@@ -1839,6 +1867,7 @@
         "burn_estimated": false,
         "gap": null,
         "replaced_by": null,
+        "note": null,
         "limitations": []
       },
       {
@@ -1891,6 +1920,7 @@
         "burn_estimated": false,
         "gap": null,
         "replaced_by": null,
+        "note": null,
         "limitations": []
       },
       {
@@ -1943,6 +1973,7 @@
         "burn_estimated": false,
         "gap": null,
         "replaced_by": null,
+        "note": null,
         "limitations": []
       },
       {
@@ -1995,6 +2026,7 @@
         "burn_estimated": true,
         "gap": null,
         "replaced_by": null,
+        "note": "update: latest v1.4.2",
         "limitations": []
       },
       {
@@ -2047,6 +2079,7 @@
         "burn_estimated": false,
         "gap": null,
         "replaced_by": null,
+        "note": null,
         "limitations": []
       }
     ],

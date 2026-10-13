@@ -172,7 +172,7 @@ func TestJSONFieldNamesAreStable(t *testing.T) {
 // jsonFields are every field of the report, as dotted paths.
 const jsonFields = `
 attention attention.account attention.at attention.devices attention.kind attention.message attention.name
-attention.percent attention.provider attention.reading_age_seconds attention.resets_at attention.window
+attention.percent attention.provider attention.reading_age_seconds attention.resets_at attention.subject attention.text attention.window
 collector collector.device collector.device_label
 collector.health collector.health.at collector.health.item collector.health.release collector.health.state collector.health.status
 collector.last_error collector.last_error_at
@@ -220,7 +220,7 @@ schema_version
 team team.devices team.devices.age_seconds team.devices.behind_since team.devices.burn team.devices.burn.30d team.devices.burn.7d team.devices.burn.90d team.devices.burn.today
 team.devices.burn_estimated team.devices.collected_at team.devices.collector_version
 team.devices.device team.devices.error team.devices.gap team.devices.label team.devices.last_error team.devices.last_error_at team.devices.last_success_at
-team.devices.limitations team.devices.not_updating team.devices.old team.devices.os_user team.devices.replaced_by
+team.devices.limitations team.devices.not_updating team.devices.note team.devices.old team.devices.os_user team.devices.replaced_by
 team.devices.silent team.devices.sources team.devices.sources.error team.devices.sources.provider
 team.devices.sources.status team.devices.this_device team.devices.update_error team.devices.usage team.devices.usage.30d team.devices.usage.7d
 team.devices.usage.90d team.devices.usage.today
