@@ -13,11 +13,20 @@ import (
 
 	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/schedule"
+	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
 
 // disabledByHand is the schedule error for an entry the person paused.
 const disabledByHand = "disabled by hand in the system scheduler; `ai-usage schedule install` turns it back on"
+
+// refusedAtLastRun says what is wrong with a launch agent launchd refused to
+// start at its last run, which any run a person starts repairs.
+const refusedAtLastRun = "launchd refused to start the updated binary at its last run; `ai-usage status` has launchd start it now, or `ai-usage schedule install` loads it again"
+
+// stillRefused is the schedule error while launchd refuses to start the
+// launch agent after a repair.
+const stillRefused = "launchd refuses to start the updated binary; `ai-usage schedule install` loads it again"
 
 // ensureSchedule registers this binary and state folder unless the scheduler
 // already runs them. An entry the person commented out or disabled stays so.
@@ -36,7 +45,14 @@ func ensureSchedule(ctx context.Context, d state.Dir, st *state.State, now time.
 		st.Schedule.Registered, st.Schedule.Error = false, disabledByHand
 		return
 	}
-	if err == nil && got != schedule.Active {
+	switch {
+	case err != nil:
+	case got == schedule.Refused:
+		// Starting the agent has launchd repair its pin. Loading it again
+		// would leave it pinned to nothing until the next login, whose
+		// first run launchd could refuse once more.
+		err = s.Repair(ctx, false)
+	case got != schedule.Active:
 		err = s.Install(ctx, exe, home, os.Getenv("PATH"))
 	}
 	if err != nil && ctx.Err() != nil {
@@ -48,11 +64,61 @@ func ensureSchedule(ctx context.Context, d state.Dir, st *state.State, now time.
 	st.Schedule.Registered = err == nil
 	st.Schedule.Error = ""
 	switch {
+	case errors.Is(err, schedule.ErrRefused):
+		st.Schedule.Error = stillRefused
 	case errors.Is(err, exec.ErrNotFound):
 		// Containers and minimal systems often have no crontab.
 		st.Schedule.Error = err.Error() + "; keep `ai-usage schedule run` running instead, such as beside a container's other services"
 	case err != nil:
 		st.Schedule.Error = err.Error()
+	}
+}
+
+// repairs says whether this run may have launchd start the macOS launch
+// agent: not on other systems, not in the run the agent started, and not in
+// a run told to leave the scheduler alone.
+func repairs(s schedule.Scheduler) bool {
+	return s.GOOS == "darwin" && !s.InAgent && os.Getenv("AI_USAGE_NO_SCHEDULE") == ""
+}
+
+// repairAgent has launchd start the macOS launch agent now when it runs this
+// binary with this state folder and launchd refused to start it at its last
+// run, or replaced says an update has just replaced the binary, which
+// launchd would refuse at the next run. A repair that fails is the
+// schedule's error. The run the agent started leaves it to launchd, which
+// starts the new binary at the run after the one it refuses.
+func repairAgent(ctx context.Context, d state.Dir, st *state.State, replaced bool) {
+	s := newScheduler()
+	if !repairs(s) {
+		return
+	}
+	exe, home, err := job(d)
+	if err != nil {
+		return
+	}
+	got, err := s.Lookup(ctx, exe, home)
+	if err != nil || got != schedule.Refused && (!replaced || got != schedule.Active) {
+		return
+	}
+	err = s.Repair(ctx, replaced)
+	switch {
+	case err == nil:
+		st.Schedule.Registered, st.Schedule.Error = true, ""
+	case ctx.Err() != nil:
+	case errors.Is(err, schedule.ErrRefused):
+		st.Schedule.Registered, st.Schedule.Error = false, stillRefused
+	default:
+		st.Schedule.Registered, st.Schedule.Error = false, "starting the launch agent: "+err.Error()
+	}
+}
+
+// healSchedule repairs a macOS launch agent launchd refused to start at its
+// last run, so a report a person or the menu bar app reads brings collection
+// back at once, not at the next run. The run launchd starts takes the run
+// lock itself.
+func healSchedule(ctx context.Context, d state.Dir, st *state.State) {
+	if !selfupdate.Dev(version) {
+		repairAgent(ctx, d, st, false)
 	}
 }
 
@@ -141,6 +207,8 @@ func scheduleStatus(ctx context.Context, d state.Dir, s schedule.Scheduler, exe,
 		fmt.Fprintln(stdout, "registered, but for a different binary path or state folder; `ai-usage schedule install` registers this one")
 	case schedule.Disabled:
 		fmt.Fprintln(stdout, disabledByHand)
+	case schedule.Refused:
+		fmt.Fprintln(stdout, "registered, but "+refusedAtLastRun)
 	default:
 		fmt.Fprintln(stdout, "not registered")
 	}

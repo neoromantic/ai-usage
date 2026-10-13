@@ -304,3 +304,243 @@ func TestStoppedHousekeeping(t *testing.T) {
 		t.Errorf("a stopped scheduler lookup: %+v", st.Schedule)
 	}
 }
+
+// fakeAgent is launchd in memory, holding the macOS launch agent whose plist
+// is in dir. pinned says launchd pinned the agent to its binary's code
+// signature, as macOS 27 does at login, and replaced that an update replaced
+// the binary since: launchd refuses the next start, and repairs the pin at
+// the start after. refused says it refused the last start, and stubborn that
+// it refuses every start. inAgent makes this process a run the agent
+// started.
+type fakeAgent struct {
+	mu                                sync.Mutex
+	dir                               string
+	loaded, pinned, replaced, refused bool
+	stubborn, inAgent                 bool
+	runs, kicks, boots                int
+}
+
+func newFakeAgent(t *testing.T) *fakeAgent {
+	return &fakeAgent{dir: filepath.Join(t.TempDir(), "LaunchAgents")}
+}
+
+func (f *fakeAgent) plist() string { return filepath.Join(f.dir, schedule.AgentLabel+".plist") }
+
+func (f *fakeAgent) scheduler() schedule.Scheduler {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	svc := "gui/501/" + schedule.AgentLabel
+	return schedule.Scheduler{GOOS: "darwin", AgentDir: f.dir, UID: 501, InAgent: f.inAgent, Run: func(_ context.Context, name string, args []string, _ []byte) ([]byte, error) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		switch strings.Join(append([]string{name}, args...), " ") {
+		case "launchctl print gui/501", "launchctl print-disabled gui/501", "launchctl enable " + svc:
+			return nil, nil
+		case "launchctl print " + svc:
+			if !f.loaded {
+				return nil, fmt.Errorf("launchctl: Could not find service %q in domain for user gui: 501", schedule.AgentLabel)
+			}
+			out := fmt.Sprintf("%s = {\n\tstate = not running\n\truns = %d\n", svc, f.runs)
+			switch {
+			case f.refused:
+				out += "\tlast exit reason = OS_REASON_CODESIGNING\n\tjob state = spawn failed\n" +
+					"\tproperties = inferred program | needs LWCR update | managed LWCR | has LWCR\n"
+			case f.pinned:
+				out += "\tlast exit code = 0\n\tjob state = exited\n\tproperties = inferred program | managed LWCR | has LWCR\n"
+			default:
+				out += "\tlast exit code = 0\n\tjob state = exited\n\tproperties = inferred program\n"
+			}
+			return []byte(out + "}\n"), nil
+		case "launchctl bootout " + svc:
+			f.loaded = false
+			return nil, nil
+		case "launchctl bootstrap gui/501 " + f.plist():
+			f.loaded, f.pinned, f.refused, f.runs = true, false, false, 0
+			f.boots++
+			return nil, nil
+		case "launchctl kickstart " + svc:
+			f.runs++
+			f.kicks++
+			f.refused = f.pinned && (f.stubborn || f.replaced && !f.refused)
+			if !f.refused {
+				f.replaced = false
+			}
+			return nil, nil
+		}
+		return nil, fmt.Errorf("unexpected %s %v", name, args)
+	}}
+}
+
+// load is the agent of exe collecting into home, with the PATH path, as
+// launchd loaded it at login and pinned it. It returns the plist.
+func (f *fakeAgent) load(t *testing.T, exe, home, path string) []byte {
+	t.Helper()
+	plist := []byte(schedule.AgentPlist(exe, home, path))
+	if err := os.MkdirAll(f.dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(f.plist(), plist, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.loaded, f.pinned = true, true
+	return plist
+}
+
+// check fails t unless launchd was asked to start the agent n times in all,
+// and the agent keeps the plist it was loaded with, never loaded again.
+func (f *fakeAgent) check(t *testing.T, n int, plist []byte) {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if b, err := os.ReadFile(f.plist()); err != nil || !bytes.Equal(b, plist) {
+		t.Fatalf("the plist changed: %v\n%s", err, b)
+	}
+	if f.kicks != n || !f.loaded || f.boots != 0 {
+		t.Fatalf("agent started %d times, want %d; loaded %v, bootstrapped %d times", f.kicks, n, f.loaded, f.boots)
+	}
+}
+
+// Once an update replaced the binary of the launch agent launchd loaded at
+// login, launchd refuses to start it at its next run, and repairs that at
+// the run after. A run a person starts, collecting or reading the report,
+// has launchd start it now, which repairs it. The agent's own run leaves it
+// to launchd.
+func TestRefusedAgentIsRepaired(t *testing.T) {
+	hermetic(t)
+	t.Setenv("AI_USAGE_NO_SCHEDULE", "")
+	releaseBuild(t, "v1.3.0")
+	agent := newFakeAgent(t)
+	newScheduler = agent.scheduler
+	exe, err := executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := newDevice(t)
+	d.claude("aaaa", "/work/app", 1)
+	plist := agent.load(t, exe, d.dir, "/opt/acme/bin")
+	d.ok("collect", "--quiet", "--offline")
+	agent.check(t, 0, plist)
+
+	agent.refused, agent.runs = true, 1
+	agent.inAgent = true
+	d.ok("collect", "--quiet", "--offline")
+	agent.check(t, 0, plist)
+	agent.inAgent = false
+	if out := d.ok("schedule", "status"); !strings.Contains(out, "registered, but launchd refused") || !strings.Contains(out, "ai-usage status") {
+		t.Fatalf("schedule status of a refused agent = %q", out)
+	}
+	// A dev build reads the report and leaves the agent alone.
+	version = "devel"
+	d.ok("status")
+	agent.check(t, 0, plist)
+	version = "v1.3.0"
+
+	if out := d.ok("status"); strings.Contains(out, "refuse") || !strings.Contains(out, "registered with the system scheduler") {
+		t.Fatalf("status after the repair:\n%s", out)
+	}
+	agent.check(t, 1, plist)
+
+	agent.refused = true
+	if r := d.report(); !r.Collector.Schedule.Registered || r.Collector.Schedule.Error != nil {
+		t.Fatalf("schedule in the report = %+v", r.Collector.Schedule)
+	}
+	agent.check(t, 2, plist)
+
+	agent.refused = true
+	d.ok("collect", "--offline")
+	agent.check(t, 3, plist)
+	if st := d.state(); !st.Schedule.Registered || st.Schedule.Error != "" {
+		t.Fatalf("schedule after a collection = %+v", st.Schedule)
+	}
+
+	// An agent launchd still refuses is a problem status names, with what
+	// fixes it.
+	agent.refused, agent.stubborn = true, true
+	d.ok("collect", "--offline")
+	if st := d.state(); st.Schedule.Registered || st.Schedule.Error != stillRefused {
+		t.Fatalf("schedule of an agent launchd still refuses = %+v", st.Schedule)
+	}
+	out := d.ok("status")
+	if !strings.Contains(out, "not scheduled") || !strings.Contains(out, "launchd refuses") || strings.Count(out, "schedule install") != 1 {
+		t.Fatalf("status of an agent launchd still refuses:\n%s", out)
+	}
+	agent.check(t, 5, plist)
+}
+
+// A release that a run a person starts installs, as `ai-usage update` and the
+// menu bar app's Update button do, has launchd start the launch agent at once
+// when it pinned it: launchd refuses that start and repairs the pin at the
+// next, so no scheduled run is refused. The agent's own run cannot, and an
+// agent pinned to nothing needs nothing.
+func TestUpdateRepairsTheAgent(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		args            []string
+		inAgent, pinned bool
+		want            int
+	}{
+		{"update", []string{"update"}, false, true, 2},
+		{"collect", []string{"collect", "--offline"}, false, true, 2},
+		{"scheduled", []string{"collect", "--quiet", "--offline"}, true, true, 0},
+		{"pinned to nothing", []string{"update"}, false, false, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hermetic(t)
+			t.Setenv("AI_USAGE_NO_SCHEDULE", "")
+			binary, _ := releaseBuild(t, "v1.2.0")
+			agent := newFakeAgent(t)
+			agent.inAgent = tc.inAgent
+			newScheduler = agent.scheduler
+			exe, err := executable()
+			if err != nil {
+				t.Fatal(err)
+			}
+			d := newDevice(t)
+			plist := agent.load(t, exe, d.dir, "/opt/acme/bin")
+			agent.pinned, agent.replaced = tc.pinned, true
+			d.ok(tc.args...)
+			if b, _ := os.ReadFile(binary); string(b) == "old binary" {
+				t.Fatal("the release was not installed")
+			}
+			agent.check(t, tc.want, plist)
+			if agent.refused || agent.replaced != (tc.want == 0) {
+				t.Fatalf("after the update: refused %v, replaced %v", agent.refused, agent.replaced)
+			}
+			if st := d.state(); st.Update.Installed != "v1.3.0" || !tc.inAgent && (!st.Schedule.Registered || st.Schedule.Error != "") {
+				t.Fatalf("update %+v, schedule %+v", st.Update, st.Schedule)
+			}
+		})
+	}
+}
+
+// A repair that fails is the schedule's error, with what registers again.
+func TestFailedRepairIsTheScheduleError(t *testing.T) {
+	hermetic(t)
+	t.Setenv("AI_USAGE_NO_SCHEDULE", "")
+	releaseBuild(t, "v1.2.0")
+	agent := newFakeAgent(t)
+	exe, err := executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := newDevice(t)
+	agent.load(t, exe, d.dir, "/opt/acme/bin")
+	newScheduler = func() schedule.Scheduler {
+		s := agent.scheduler()
+		run := s.Run
+		s.Run = func(ctx context.Context, name string, args []string, stdin []byte) ([]byte, error) {
+			if args[0] == "kickstart" {
+				return nil, fmt.Errorf("launchctl: Could not kickstart service: 5: Input/output error")
+			}
+			return run(ctx, name, args, stdin)
+		}
+		return s
+	}
+	d.ok("update")
+	if st := d.state(); st.Schedule.Registered || !strings.Contains(st.Schedule.Error, "starting the launch agent: launchctl: Could not kickstart") {
+		t.Fatalf("schedule = %+v", st.Schedule)
+	}
+	if out := d.ok("status"); !strings.Contains(out, "Input/output error") || !strings.Contains(out, "register: ai-usage schedule install") {
+		t.Fatalf("status:\n%s", out)
+	}
+}

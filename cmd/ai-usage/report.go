@@ -104,6 +104,7 @@ func cmdReport(ctx context.Context, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	healSchedule(ctx, d, res.State)
 	if disp.interactive(stdout, *jsonOut, false) {
 		return tui.Run(ctx, viewConfig(d, res, disp, false, stdout), os.Stdin, stdout)
 	}
@@ -133,7 +134,7 @@ func reportFrom(ctx context.Context, path string, jsonOut bool, disp *display, s
 	return printReport(stdout, r, jsonOut, false, disp)
 }
 
-func cmdStatus(args []string, stdout io.Writer) error {
+func cmdStatus(ctx context.Context, args []string, stdout io.Writer) error {
 	fs := flags("status")
 	jsonOut := fs.Bool("json", false, "")
 	disp := displayFlags(fs, false)
@@ -148,6 +149,7 @@ func cmdStatus(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	healSchedule(ctx, d, res.State)
 	r := reportAt(d, res, clock().UTC())
 	type source struct {
 		Provider string   `json:"provider"`
