@@ -67,7 +67,7 @@ To try an installer against local files, serve the folder and point the installe
 
 `.github/workflows/ci.yml` runs on pushes to `main` and on pull requests:
 
-- `gofmt` and `go build` with the oldest Go that `go.mod` allows
+- `gofmt` and `go build` with the oldest Go that `go.mod` allows, at the patch its `toolchain` line names, which is also the Go Vercel builds the relay with
 - `sh -n` and ShellCheck on the shell scripts, `macos/build.sh` among them, and a PowerShell parse of `install.ps1`
 - a cross-compile of the six binaries, on Linux
 - the menu bar app's checks and a build of it with `macos/build.sh`, on macOS

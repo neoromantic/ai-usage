@@ -602,7 +602,7 @@ If you set `AI_USAGE_BIN_DIR` or `AI_USAGE_HOME`, remove those folders instead.
 
 ## Build from source
 
-Go 1.26 or newer:
+Go 1.26 or newer. `go.mod` names Go 1.26.9 as its toolchain, so an older Go 1.26 downloads 1.26.9 to build, unless `GOTOOLCHAIN=local`:
 
 ```sh
 go build -o ai-usage ./cmd/ai-usage
