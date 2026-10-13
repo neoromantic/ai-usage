@@ -120,6 +120,29 @@ The cell reads `157% over`, `81% ok`, or `out`.
 
 DEVICES counts the devices with tokens on the account since the window began, and names the busiest. A Hermes bot in its own container is a device.
 
+## UTILIZATION
+
+How full each subscription's windows got before each reset, over the last 90 days: `UTILIZATION  fullest % before each reset`. Where SUBSCRIPTIONS says how this window will end, this says how the last ones did: a subscription that runs out week after week, or one mostly left unused.
+
+A period is one reset time of a window, give or take 5 minutes, and its percent is the fullest reading of it any device read. So a window that ran out stays at 100% when the provider resets it early, and usage taken back changes nothing. A period has ended once its reset time has passed or a newer one has begun; the one running now is left out, since SUBSCRIPTIONS shows it.
+
+The groups and their order are those of SUBSCRIPTIONS. An account's row is its main window, the weekly one; its other windows with a period that ended, such as a model's or the 5-hour one, are rows under it, indented and named by the window only, as in SUBSCRIPTIONS. An account with no period that ended has no row.
+
+| Column | Shows |
+| --- | --- |
+| mark | `●` when the account is logged in on this device |
+| account | its label, or the short name the team gave it |
+| CYCLES | how many periods ended in the 90 days; of a window shorter than a day, the last 12 at most |
+| OUT | how many of them ran out, in the out color; `·` for none |
+| AVG | their average percent, in the color of its state |
+| NEWEST FIRST | each period's percent, newest first, in the color of its state, four columns wide |
+
+A period's state is out at 100% or more, then tight, ok, and under, as a forecast's. A period last read under 100% more than 6 hours before it ended, or a quarter of a window shorter than a day, as when the laptop slept, may have got fuller: `~` goes before its percent, as before a stale reading.
+
+While a device in the team runs a release that cannot read the periods, no device sends them, and each shows its own. A muted line under the title says so, and why, cut with what to do kept whole: `only this device's cycles: leo-air runs v0.3.4: it updates itself within 15 minutes`.
+
+As the page narrows, the periods go first, the oldest first, down to 4; the header shortens to `NEWEST` when `NEWEST FIRST` no longer fits. Then CYCLES drops, and last the account is cut in the middle, as in SUBSCRIPTIONS.
+
 ## DEVICES × SUBSCRIPTIONS
 
 A matrix. Each device is a row, sorted by total in the chosen period, largest first. Each subscription is a column, grouped under its provider by a heading with a thin rule. The last column, NO QUOTA, holds tokens that have no subscription. Totals are on the right and at the bottom.
@@ -188,7 +211,7 @@ The static report ends with a dim legend, listing only the marks on screen, a wo
 ━ used  ─ left  ┃╋ even use  ┈ no reading  ~ stale  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
 ```
 
-Where a total is estimated, `~` reads `~ stale/estimated`, or `~ estimated`, and why goes on a line of its own after the marks, as the matrix says.
+Where a total is estimated, `~` reads `~ stale/estimated`, or `~ estimated`, and why goes on a line of its own after the marks, as the matrix says. A period of UTILIZATION read only partly is `~ stale` too.
 
 With every mark on screen it is one line from 120 columns on. Below that, where one line does not fit, it takes as few lines as it can, of even length: two at 80 columns. The interactive view keeps the legend in `?` help, which says more of each mark.
 

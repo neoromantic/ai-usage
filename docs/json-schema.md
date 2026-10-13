@@ -252,6 +252,8 @@ The report's list is sorted by `burn` in `7d`, in whole millions as the console 
 | `estimated` | bool | the weighted tokens of some device are estimated: a release before v0.4.0 sends none, so they are worked out from its input and output, at the ratio its 90 days' tokens give. Such devices have `burn_estimated` |
 | `held_back_by` | list of strings | the devices whose release keeps this device from sending its own weighted days: until every device the team knows runs v0.4.0 or later, each device sends the snapshot an older release reads, without them |
 | `estimated_reason` | string | why totals are estimated, with what to do, in a line, such as `leo-air runs v0.3.4: it updates itself within 15 minutes`, `3 devices run releases before v0.4.0: reinstall old-mini with install.sh; the other 2 update themselves within 15 minutes`, a device that `has not reported since …: forget it with ai-usage team forget-device …`, or `the team was last read 4h ago`; `null` when `estimated` is `false` |
+| `cycles_held_back_by` | list of strings | the devices whose release keeps every device from sending its quota cycles: until every device the team knows runs v0.5.0 or later, none sends them, and each account's `utilization` holds this device's alone |
+| `cycles_reason` | string | why `utilization` holds only this device's cycles, with what to do, in a line, such as `leo-air runs v0.4.0: it updates itself within 15 minutes`, `2 devices run releases before v0.5.0: …`, `the relay did not accept cycles; trying again Sep 2 08:00`, or `the team was last read 4h ago`; `null` when the team's cycles are in |
 | `devices` | list | one entry per device; see below |
 | `providers` | list | `{provider, accounts}` with each account summed across devices; see below |
 | `matrix` | object | every device against every subscription; see [matrix](#matrix) |
@@ -307,6 +309,27 @@ A team account. Each provider's accounts are in the order the report lists them:
 | `burn_estimated` | bool | some of `burn` is estimated, from a device whose release sends no weighted tokens |
 | `no_reading` | string | why a subscription has no reading of its main window, with what to do, such as `leo-air runs v0.3.0: reinstall with install.sh`, when that is known; `null` otherwise |
 | `outside` | object | `{points, since}`: the main window rose `points` since `since`, in the last day, while the team spent next to nothing on it, so someone outside the team uses it; `null` otherwise |
+| `utilization` | list | how full each of a subscription's windows got before each reset; see below. `[]` for an account that is not a subscription, and for one no device read a period of that ended |
+
+A window's `utilization`, the main window first, then the longest. A period is one reset time of the window, give or take 5 minutes, and its percent the fullest reading of it any device read, so a window that ran out stays at 100% when the provider resets it early or takes usage back. A device reads its periods from its samples of the last 90 days and sends them in its snapshot, and the team takes the fullest of each; while `cycles_held_back_by` is not empty, these are this device's alone. A period read only at 0% is left out, as are a window without a reset time, an account that is not known, and Hermes, whose quota is another login's.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `window` | string | the window's name, as in `quota.windows` |
+| `main` | bool | it is the account's main window, the weekly one where it has one |
+| `cycles` | list | the window's periods that ended, newest first: those that ended in the last 90 days, and of a window shorter than a day, or of unknown length, the last 12. A period has ended once its reset time has passed, or once a newer period began, as when Codex resets a week early; the period that runs now is not here |
+| `out` | number | how many of `cycles` ran out: 100% or more |
+| `average` | number | their mean `percent` |
+
+A period:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `resets_at` | time | when it was to reset. When a newer period began first, this can be later than that, and still to come |
+| `percent` | number | its fullest reading, which can pass 100 when a provider reports so |
+| `last_read_at` | time | when a device last read it |
+| `partial` | bool | it was last read under 100%, more than 6 hours before it ended, or a quarter of a window shorter than a day, as when the laptop slept: it may have ended fuller. It ended at `resets_at`, or when the newer period began, at that period's reset less the window's length |
+| `state` | string | the band of `percent`: `out` from 100, `tight` from 85, `ok` from 50, and `under` below |
 
 ### matrix
 
@@ -365,6 +388,7 @@ A cell:
 - `not_updating` on a team device, so that each device the `old` entry in `attention` counts is marked. A report from an earlier release does not have it; `ai-usage report --from` fills it in from `old`, `silent`, `collected_at`, and `behind_since`. No field changed meaning, so the version stays 4.
 - `basis` and `pace` on a forecast, which may now follow the last day's readings, the `tight`, `outside`, `no_reading`, and `duplicate` kinds in `attention`, with `device_id` and `limitations` on an entry, `reading_age_seconds` on an `out` entry with an old reading, `at` on an `error` entry, and the `stale` relay status, whose `at`, like `ok`'s, is now the older of the last push and pull. A reader that skips kinds and statuses it does not know reads the rest as before, so the version stays 4.
 - Weighted tokens, in v0.4.0: `burn` beside every `usage`, with `burn_days`, `window_burn`, and `burn_share` beside `days`, `window_tokens`, and `share`; `fresh` and `transcript_gaps` on this device's accounts, `fresh` and `active_sessions` on projects, and `covered_since` on a provider. On the team, `estimated`, `held_back_by`, and `estimated_reason`; `burn_estimated` on devices, accounts, and rows; and on a device `last_error_at`, `gap`, `replaced_by`, and `limitations`, and on an account `no_reading` and `outside`. This device's own `burn` counts local periods, as the conventions at the top say. Lists are now ordered by weighted tokens. No field changed meaning, so the version stays 4. A report from an earlier release has no weighted tokens: `ai-usage report --from` gives each object whose `burn` is all zero and `usage` is not its `usage` as `burn`, and its `days`, `share`, and `window_tokens` as `burn_days`, `burn_share`, and `window_burn`, marks the team devices, team accounts, and matrix rows it filled `burn_estimated` and the team `estimated`, with `estimated_reason` saying the report was saved by an earlier release, gives each project its `sessions` as `active_sessions` in every period, and titles this device's PROJECTS and USAGE in tokens in+out.
+- Quota cycles, in v0.5.0: `utilization` on a team account, and `cycles_held_back_by` and `cycles_reason` on the team. A report from an earlier release has none: read a missing `utilization` as `[]`, and a missing `cycles_held_back_by` and `cycles_reason` as `[]` and `null`, as `ai-usage report --from` fills them in. No field changed meaning, so the version stays 4.
 - `folders` on a project. A project is now a git repository, with its subfolders and linked worktrees, where each working folder was one; `path` is the project's folder, and `folders` says how many working folders count under it. A report from an earlier release has a project for each working folder and no `folders`: read a missing one as `1`, as `ai-usage report --from` fills it in. Every field keeps its type, and a project's numbers still sum its sessions, so the version stays 4.
 
 ## Example
@@ -511,6 +535,8 @@ A shortened report from a team of two:
     "estimated": false,
     "held_back_by": [],
     "estimated_reason": null,
+    "cycles_held_back_by": [],
+    "cycles_reason": null,
     "devices": [
       {
         "device": "d-8e41d07c5a2b93f6e1d4c7a0",
@@ -598,7 +624,31 @@ A shortened report from a team of two:
             "burn": { "today": 4280000, "7d": 19970000, "30d": 23300000, "90d": 23300000 },
             "burn_estimated": false,
             "no_reading": null,
-            "outside": null
+            "outside": null,
+            "utilization": [
+              {
+                "window": "7d",
+                "main": true,
+                "cycles": [
+                  {
+                    "resets_at": "2026-08-28T12:00:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-08-27T09:15:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-08-21T12:00:00Z",
+                    "percent": 62,
+                    "last_read_at": "2026-08-19T18:40:00Z",
+                    "partial": true,
+                    "state": "ok"
+                  }
+                ],
+                "out": 1,
+                "average": 81
+              }
+            ]
           }
         ]
       }

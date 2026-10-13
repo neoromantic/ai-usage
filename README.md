@@ -31,6 +31,7 @@ ai-usage is one small binary for macOS, Linux, and Windows. The system scheduler
 
 - **Every subscription on one page.** Claude Code and the Claude app's agent-mode sessions, Codex from its CLI, the ChatGPT app, or an IDE extension, Grok, and Hermes. Each account shows its 5-hour, weekly, and per-model windows, and its tokens today and over 7, 30, and 90 days, weighed by what the API charges for each kind.
 - **A forecast, not just a percentage.** Each window says how full it will be at its reset at your pace, the average since it began or the last day's when that is faster: `over`, `tight`, `ok`, or `under`. An `over` window says when it runs out.
+- **How full each window got before it reset,** over the last 90 days, for every account in the team: a subscription that runs out week after week, or one mostly left unused.
 - **ATTENTION, only when something is wrong.** A full window, one that will run out before its reset, a machine whose tool fails or that stopped reporting, an old release, a subscription nobody uses.
 - **The whole team.** Laptops, servers, and bots in containers, every machine against every subscription, with each one's share. A colleague joins with one command. See [Teams](#teams).
 - **Private by design.** The relay sees tools, plans, and numbers. Names, emails, and project paths are encrypted with the team key, and every snapshot is signed. See [Privacy](#privacy).
@@ -108,6 +109,18 @@ SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
 
   GROK
 ● a4c2e917       SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  annbook           11h
+UTILIZATION  fullest % before each reset
+  only this device's cycles: ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it updates itself within 15 minutes
+
+  CLAUDE         CYCLES  OUT  AVG  NEWEST FIRST
+● ann@acme.dev       13    5  86%   100  100   92  ~78  100   64   88  100   71  ~45   96  100   83
+    Fable             3    1  64%   100   62  ~30
+    5h               12    2  59%    38  100   71  ~52   90   12   64  100   41   77    8   55
+
+  CODEX
+● ann@acme.dev        6    2  86%   100   87   93  100   58   76
+  sam@mail.test       4    1  94%    97   91  100  ~88
+● lee@corp.test       9    ·  28%    22  ~35   18   40   27   31   12   44   19
 
 DEVICES × SUBSCRIPTIONS  15 · 7d UTC · M weighted tokens                  ‹usage›  status   ‹tokens›  share
                         CODEX ─────────────────────────────  CLAUDE ──────────  GROK ───  NO QUOTA
@@ -152,6 +165,10 @@ PROJECTS  annbook · by 7d · M weighted tokens · claude since Sep 2
 The header names this machine and the team, and says whether collection, the relay, and self-update are healthy; when one of them fails, its error is in ATTENTION. The relay's age is the older of the last push and the last read of the team, and its dot turns yellow once the team was last read over an hour ago. ATTENTION appears only when something is wrong: a subscription that is out, or will run out by its reset at its pace; one logged in on this machine that will end its window nearly full; one whose window fills while no team machine spends on it; a machine whose collector or one of its tools fails, or that has not reported for a day; a subscription in use with no reading; a reinstalled machine's old record; machines on an older release; and a subscription past half its window that will be left mostly unused.
 
 SUBSCRIPTIONS has one row per Claude, Codex, and Grok account, grouped by tool, the worst first. The bar is the weekly window: the heavy line is what has been used, and the tick how much would be used by now if the window were spent evenly. LEFT is what is left, RESETS when it resets, and AT RESET how full it will be then at its average pace since the window began, or since it was last at 0%, or at the pace of the last day's readings when that is faster, each measured over a tenth of the window at least, so a busy first morning does not read as the pace of the week: `over` at 100% or more, which means it runs out by its reset, `tight` from 85%, `ok` from 50%, and `under` below that. A window that limits the account more than the weekly one, such as a model's window or a full 5-hour window, gets an indented row of its own. `~` marks a reading over 6 hours old, unless the window is full, since a full window stays full until it resets. `?` marks an account with no reading, a window that has reset since it was read, or a Claude 5-hour or weekly window that a refused request did not read. DEVICES counts the machines that used the account in this window and names the busiest. Hermes is a tool, not a subscription: what it spends through a Codex or Grok login counts as that login's use.
+
+UTILIZATION is how full each subscription's windows got before each reset over the last 90 days: the fullest reading of each period, so a window that ran out stays at 100% even when the provider reset it early or took usage back. An account's row is its main window, the weekly one, with its other windows, such as a model's or the 5-hour one, indented under it. CYCLES counts the periods that ended, OUT those that ran out, and AVG is their average; then comes each period's percent, newest first, colored as AT RESET is: out at 100%, tight from 85%, ok from 50%, and under below that. `~` marks a period last read more than 6 hours before it ended, or a quarter of a shorter window, as when the laptop slept, so it may have got fuller. A period read only at 0% is left out, and so is one that ended over 90 days ago and, of a window shorter than a day, any but the newest 12. Narrower, the section shows fewer periods, then drops CYCLES. The team takes each period's fullest reading from every machine that read it; see [Teams](#teams).
+
+![UTILIZATION for one developer over 90 days: Claude's week ran out 5 times in 13, its 5-hour window 4 times in 11, and Codex and SuperGrok were never more than 71% full](docs/demo/social/solo-utilization.png)
 
 ![One developer's subscriptions: at this week's pace Claude runs out on Saturday, 12 hours before its reset, and its model window tonight; Codex has 78% left, and SuperGrok will leave most of its week unused](docs/demo/social/solo-forecast.png)
 
@@ -324,7 +341,7 @@ The state folder is `~/Library/Application Support/ai-usage` on macOS, `$XDG_CON
 | `projects.json` | the project each folder belonged to, so a worktree that is gone still counts with its repository |
 | `cache/` | what the last run parsed of each Claude Code transcript, so the next one reads only what was added |
 | `team-cache.json` | the team's snapshots from the last read |
-| `samples/` | one file per day of samples, kept for 90 days |
+| `samples/` | one file per day of samples, kept for 90 days; UTILIZATION finds each window's periods in them |
 | `run.lock`, `config.lock`, `schedule.lock` | keep two runs from overlapping, two commands from changing `config.json` at once, and tell other runs that `schedule run` schedules this folder; held with the system's file lock, which ends with its process |
 
 ## Teams
@@ -344,6 +361,8 @@ A key cannot be revoked. To shut someone out, start a new team and join the rema
 In the team view, token counts add up across machines. Quota percentages do not: an account's quota is the newest reading any machine has for it.
 
 While any machine in the team runs a release before v0.4.0, every machine sends the snapshot such a release reads, without weighted tokens, so that none drops out of its view. The team's weighted tokens are then estimated from input and output, marked `~`, and the legend names the machines holding them back and what to do: releases from v0.2.5 on update themselves within 15 minutes, or take `ai-usage update` where that fails, and older ones need `install.sh` again. A retired machine on an old release, or one silent for over a week, holds them back until `ai-usage team forget-device` forgets it.
+
+Likewise, while any machine runs a release before v0.5.0, no machine sends the periods UTILIZATION shows, since such a release cannot read them: each machine shows its own, and a line under the section's title names the machines holding them back and what to do. A relay that does not accept them yet, because it runs an older release, has each machine send its snapshot without them and try again a day later.
 
 ![DEVICES × SUBSCRIPTIONS for a made-up team: twelve machines, most of them bots, against six subscriptions, in millions of weighted tokens over 7 days](docs/demo/social/team-matrix.png)
 
