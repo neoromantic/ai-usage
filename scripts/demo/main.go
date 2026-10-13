@@ -379,9 +379,12 @@ func (d *device) spend(until time.Time, provider, label, project string, perDay 
 	}
 }
 
+// cycles are the quota cycles the device's samples hold.
+func (d *device) cycles() collect.Cycles { return collect.FindCycles(d.samples) }
+
 // doc is the device's snapshot as another device pulls it.
 func (d *device) doc(key *team.Key) snapshot.Doc {
-	body, err := json.Marshal(collect.BuildDoc(d.st, key, state.Config{Device: d.id}, d.host, d.user, d.version, d.at))
+	body, err := json.Marshal(collect.BuildDoc(d.st, d.cycles(), key, state.Config{Device: d.id}, d.host, d.user, d.version, d.at))
 	if err != nil {
 		panic(err)
 	}
@@ -398,7 +401,7 @@ func (d *device) report(tc *collect.TeamCache) view.Report {
 	cfg := state.Config{Device: d.id}
 	in := view.Input{
 		Version: d.version, RelayURL: relay, Config: cfg, State: d.st, Key: key,
-		Doc:      collect.BuildDoc(d.st, key, cfg, d.host, d.user, d.version, d.at),
+		Doc:      collect.BuildDoc(d.st, d.cycles(), key, cfg, d.host, d.user, d.version, d.at),
 		Hostname: d.host, OSUser: d.user, Now: now, Folders: d.folders, Samples: d.samples,
 	}
 	if tc != nil {

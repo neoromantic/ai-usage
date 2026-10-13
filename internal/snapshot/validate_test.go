@@ -18,13 +18,18 @@ import (
 // member a collector before v0.4.0 knows. It sets last_error, aliases and
 // every account's quota_at, so the minimal document beside it, which leaves
 // them out, pins their omitempty. v1-extended.json adds the members v0.4.0
-// added, which v1.json pins as left out when empty.
+// added, which v1.json pins as left out when empty, and v1-cycles.json the
+// cycles v0.5.0 added, which v1-extended.json pins so.
 func TestWireFormat(t *testing.T) {
 	golden, err := os.ReadFile(filepath.Join("testdata", "v1.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	extended, err := os.ReadFile(filepath.Join("testdata", "v1-extended.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cycles, err := os.ReadFile(filepath.Join("testdata", "v1-cycles.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +40,7 @@ func TestWireFormat(t *testing.T) {
 		`"tokens":{"input":1,"output":2,"cache_read":3,"cache_write":4},"projects":[]},` +
 		`{"provider":"claude","label":"Ab-_","current":false,"windows":[],"sessions":1,` +
 		`"tokens":{"input":1,"output":2,"cache_read":3,"cache_write":4},"projects":[]}],"sources":[]}`
-	for _, body := range [][]byte{bytes.TrimSpace(golden), []byte(minimal), bytes.TrimSpace(extended)} {
+	for _, body := range [][]byte{bytes.TrimSpace(golden), []byte(minimal), bytes.TrimSpace(extended), bytes.TrimSpace(cycles)} {
 		d, err := Decode(body)
 		if err != nil {
 			t.Fatalf("Decode: %v", err)
@@ -89,6 +94,8 @@ func TestDecodeRejectsUnknownFields(t *testing.T) {
 		// A field a release after this one adds, sent before this one knows it.
 		"newer field":           strings.Replace(body, `"projects":[`, `"pace":[1],"projects":[`, 1),
 		"burn_days as a number": strings.Replace(body, `"projects":[`, `"burn_days":5,"projects":[`, 1),
+		"cycle with a member more": strings.Replace(body, `"projects":[`,
+			`"cycles":[{"window":"7d","resets_at":"2026-09-25T00:00:00Z","percent":40,"last_read_at":"2026-09-23T11:59:00Z","note":1}],"projects":[`, 1),
 	}
 	for name, b := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -105,6 +112,14 @@ func TestDecodeRejectsUnknownFields(t *testing.T) {
 func TestValidate(t *testing.T) {
 	al := Alias{Provider: "claude", Label: sealed(40), Name: sealed(12), At: t0}
 	rc := Recent{Window: "5h", Start: t0.Add(-time.Hour), Tokens: 900}
+	cy := Cycle{Window: "7d", ResetsAt: t0.Add(-time.Hour), Percent: 100, LastReadAt: t0.Add(-2 * time.Hour)}
+	cycle := func(edit func(*Cycle)) func(*Doc) {
+		return func(d *Doc) {
+			c := cy
+			edit(&c)
+			d.Accounts[0].Cycles = []Cycle{c}
+		}
+	}
 	at := func(d time.Duration) *time.Time { t := t0.Add(d); return &t }
 	failed := func(d *Doc, when *time.Time) { d.LastError, d.LastErrorAt = sealed(30), when }
 	cases := []struct {
@@ -230,6 +245,21 @@ func TestValidate(t *testing.T) {
 		{"recent window missing", func(d *Doc) { d.Accounts[0].Recent = []Recent{rc}; d.Accounts[0].Recent[0].Window = "" }, false},
 		{"recent start missing", func(d *Doc) { d.Accounts[0].Recent = []Recent{rc}; d.Accounts[0].Recent[0].Start = time.Time{} }, false},
 		{"recent negative tokens", func(d *Doc) { d.Accounts[0].Recent = []Recent{rc}; d.Accounts[0].Recent[0].Tokens = -1 }, false},
+		{"cycle", cycle(func(*Cycle) {}), true},
+		{"cycle read as it reset", cycle(func(c *Cycle) { c.LastReadAt = c.ResetsAt }), true},
+		{"cycle of a model window", cycle(func(c *Cycle) { c.Window = "7d sonnet" }), true},
+		{"cycle empty", cycle(func(c *Cycle) { c.Percent = 0 }), true},
+		{"cycle over", cycle(func(c *Cycle) { c.Percent = 1000 }), true},
+		{"cycle too far over", cycle(func(c *Cycle) { c.Percent = 1000.5 }), false},
+		{"cycle negative", cycle(func(c *Cycle) { c.Percent = -1 }), false},
+		{"cycle NaN", cycle(func(c *Cycle) { c.Percent = math.NaN() }), false},
+		{"cycle window missing", cycle(func(c *Cycle) { c.Window = "" }), false},
+		{"cycle window not plain", cycle(func(c *Cycle) { c.Window = "7d\n" }), false},
+		{"cycle resets_at missing", cycle(func(c *Cycle) { c.ResetsAt = time.Time{} }), false},
+		{"cycle last_read_at missing", cycle(func(c *Cycle) { c.LastReadAt = time.Time{} }), false},
+		{"cycle read after it reset", cycle(func(c *Cycle) { c.LastReadAt = c.ResetsAt.Add(time.Second) }), false},
+		{"most cycles", func(d *Doc) { d.Accounts[0].Cycles = repeat(cy, MaxCycles) }, true},
+		{"too many cycles", func(d *Doc) { d.Accounts[0].Cycles = repeat(cy, MaxCycles+1) }, false},
 
 		{"quota_from another provider", func(d *Doc) { d.Accounts[0].Provider, d.Accounts[0].QuotaFrom = "hermes", "codex" }, true},
 		{"quota_from grok", func(d *Doc) { d.Accounts[0].Provider, d.Accounts[0].QuotaFrom = "hermes", "grok" }, true},

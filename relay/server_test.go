@@ -393,8 +393,9 @@ func TestSlowBodyTimesOut(t *testing.T) {
 	}
 }
 
-// The relay takes both the snapshot a collector before v0.4.0 sends and one
-// with the fields v0.4.0 added, each only as the exact bytes it signs. The
+// The relay takes the snapshot a collector before v0.4.0 sends, one with the
+// fields v0.4.0 added, and one with the cycles v0.5.0 added, each only as the
+// exact bytes it signs. The
 // bodies are the snapshot package's hand-written goldens, filed under a test
 // key's team.
 func TestPutAcceptsOlderAndExtendedSnapshots(t *testing.T) {
@@ -423,6 +424,7 @@ func TestPutAcceptsOlderAndExtendedSnapshots(t *testing.T) {
 	}{
 		{"v1.json, as v0.3.4 sends it", "mac-0123abcd", golden("v1.json")},
 		{"v1-extended.json", "mac-0123abcd", golden("v1-extended.json")},
+		{"v1-cycles.json", "mac-0123abcd", golden("v1-cycles.json")},
 		{"an extended collector document", "work-laptop", marshal(t, extended)},
 		{"last_error_at within the skew", "work-laptop", marshal(t, inSkew)},
 	} {
@@ -438,8 +440,8 @@ func TestPutAcceptsOlderAndExtendedSnapshots(t *testing.T) {
 		t.Fatalf("Pull = %+v, %v", res, err)
 	}
 	for _, d := range res.Devices {
-		if !d.Doc.Extended() {
-			t.Fatalf("%s: read back without its extended fields", d.Doc.Device)
+		if !d.Doc.Extended() || d.Doc.HasCycles() != (d.Doc.Device == "mac-0123abcd") {
+			t.Fatalf("%s: read back without its extended fields or cycles", d.Doc.Device)
 		}
 	}
 }

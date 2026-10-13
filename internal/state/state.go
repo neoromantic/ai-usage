@@ -193,6 +193,9 @@ type Relay struct {
 	// NoExtUntil is when the relay last refused a snapshot with fields added
 	// after v1 began, plus a day: until then only v1's first fields are sent.
 	NoExtUntil time.Time `json:"no_ext_until,omitzero"`
+	// NoCyclesUntil is when the relay last refused a snapshot with quota
+	// cycles, plus a day: until then the cycles are not sent.
+	NoCyclesUntil time.Time `json:"no_cycles_until,omitzero"`
 }
 
 // Update is the self-update bookkeeping.
@@ -360,6 +363,7 @@ func migrate(s *State) {
 // only s has is migrated, and one only last has was pruned.
 func mergeOlder(s, last *State) {
 	s.Relay.NoExtUntil = last.Relay.NoExtUntil
+	s.Relay.NoCyclesUntil = last.Relay.NoCyclesUntil
 	from := hourOf(last.LastRunAt) - 1
 	for k, sess := range s.Sessions {
 		if sess == nil {

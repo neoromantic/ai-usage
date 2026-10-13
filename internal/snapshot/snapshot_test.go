@@ -181,6 +181,43 @@ func TestLegacyIsTheOlderWireFormat(t *testing.T) {
 	}
 }
 
+// WithoutCycles of the cycles golden is the extended golden a collector from
+// v0.4.0 on, and before v0.5.0, reads, byte for byte, and its Legacy the one
+// before v0.4.0.
+func TestWithoutCyclesIsTheOlderWireFormat(t *testing.T) {
+	read := func(name string) []byte {
+		b, err := os.ReadFile(filepath.Join("testdata", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return bytes.TrimSpace(b)
+	}
+	d, err := Decode(read("v1-cycles.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.HasCycles() || !d.Extended() {
+		t.Fatal("the cycles golden has no cycles")
+	}
+	without := d.WithoutCycles()
+	if without.HasCycles() || !without.Extended() {
+		t.Fatal("WithoutCycles has cycles, or lost the v0.4.0 fields")
+	}
+	if b := encode(t, without); !bytes.Equal(b, read("v1-extended.json")) {
+		t.Fatalf("WithoutCycles encodes to\n%s", b)
+	}
+	if b := encode(t, d.Legacy()); !bytes.Equal(b, read("v1.json")) {
+		t.Fatalf("Legacy encodes to\n%s", b)
+	}
+	extended, err := Decode(read("v1-extended.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if extended.HasCycles() || !reflect.DeepEqual(extended.WithoutCycles(), extended) {
+		t.Fatal("WithoutCycles changed a document without cycles")
+	}
+}
+
 func TestExtended(t *testing.T) {
 	at := t0.Add(-time.Hour)
 	for name, c := range map[string]struct {
@@ -193,6 +230,9 @@ func TestExtended(t *testing.T) {
 		"burn_days":       {func(d *Doc) { d.Accounts[0].BurnDays = []int64{0, 7} }, true},
 		"recent burn":     {func(d *Doc) { d.Accounts[0].Recent = []Recent{{Window: "5h", Start: at, Tokens: 3, Burn: 9}} }, true},
 		"recent, no burn": {func(d *Doc) { d.Accounts[0].Recent = []Recent{{Window: "5h", Start: at, Tokens: 3}} }, false},
+		"cycles": {func(d *Doc) {
+			d.Accounts[0].Cycles = []Cycle{{Window: "5h", ResetsAt: at, Percent: 90, LastReadAt: at.Add(-time.Hour)}}
+		}, true},
 	} {
 		d := validDoc()
 		c.edit(&d)
@@ -201,6 +241,9 @@ func TestExtended(t *testing.T) {
 		}
 		if l := d.Legacy(); l.Extended() || l.Validate() != nil {
 			t.Errorf("%s: Legacy is extended or invalid", name)
+		}
+		if w := d.WithoutCycles(); w.HasCycles() || w.Validate() != nil || w.Extended() != (c.want && name != "cycles") {
+			t.Errorf("%s: WithoutCycles has cycles, is invalid, or lost a v0.4.0 field", name)
 		}
 	}
 }
@@ -216,7 +259,20 @@ func TestLegacySharesNothing(t *testing.T) {
 	a.Days, a.BurnDays = []int64{1, 2}, []int64{10, 20}
 	a.Recent = []Recent{{Window: "5h", Start: at, Tokens: 3, Burn: 9}}
 	a.Linked = []Linked{{Provider: "hermes", Label: sealed(8)}}
+	a.Cycles = []Cycle{{Window: "5h", ResetsAt: at, Percent: 90, LastReadAt: at.Add(-time.Hour)}}
 	before := encode(t, d)
+
+	w := d.WithoutCycles()
+	w.Accounts[0].BurnDays[0] = 99
+	w.Accounts[0].Recent[0].Burn = 99
+	w.Accounts[0].Days[0] = 99
+	w.Accounts[0].Windows[0].Percent = 99
+	if after := encode(t, d); !bytes.Equal(after, before) {
+		t.Fatalf("changing WithoutCycles changed the document:\n%s\n%s", before, after)
+	}
+	if len(d.Accounts[0].Cycles) != 1 {
+		t.Fatal("WithoutCycles cleared the document's own cycles")
+	}
 
 	l := d.Legacy()
 	l.Accounts[0].Days[0] = 99

@@ -30,6 +30,7 @@ const (
 	MaxSources        = 12
 	MaxDays           = 90
 	MaxAliases        = 48
+	MaxCycles         = 64
 	MaxSealed         = 512
 	MaxPlain          = 40
 	MaxTokenCount     = int64(1) << 50
@@ -67,9 +68,10 @@ type Doc struct {
 }
 
 // Extended reports whether d carries any field a collector before v0.4.0
-// does not know, and so would drop d as undecodable.
+// does not know, and so would drop d as undecodable: those v0.4.0 added,
+// and the cycles v0.5.0 added.
 func (d Doc) Extended() bool {
-	if d.LastErrorAt != nil {
+	if d.LastErrorAt != nil || d.HasCycles() {
 		return true
 	}
 	for _, a := range d.Accounts {
@@ -80,25 +82,45 @@ func (d Doc) Extended() bool {
 	return false
 }
 
+// HasCycles reports whether d carries quota cycles, which a collector before
+// v0.5.0 does not know, and so would drop d as undecodable.
+func (d Doc) HasCycles() bool {
+	return slices.ContainsFunc(d.Accounts, func(a Account) bool { return len(a.Cycles) > 0 })
+}
+
 // Legacy is d without the fields a collector before v0.4.0 does not know:
 // the body such a collector decodes. It shares no slice with d, so either
 // can be changed without the other.
 func (d Doc) Legacy() Doc {
+	d = d.WithoutCycles()
 	d.LastErrorAt = nil
+	for i := range d.Accounts {
+		a := &d.Accounts[i]
+		a.BurnDays = nil
+		for j := range a.Recent {
+			a.Recent[j].Burn = 0
+		}
+	}
+	return d
+}
+
+// WithoutCycles is d without the quota cycles a collector before v0.5.0
+// does not know: the body a collector from v0.4.0 on, and before v0.5.0,
+// decodes. It shares no slice with d, so either can be changed without the
+// other.
+func (d Doc) WithoutCycles() Doc {
 	d.Sources = slices.Clone(d.Sources)
 	d.Aliases = slices.Clone(d.Aliases)
 	d.Accounts = slices.Clone(d.Accounts)
 	for i := range d.Accounts {
 		a := &d.Accounts[i]
-		a.BurnDays = nil
+		a.Cycles = nil
 		a.Windows = slices.Clone(a.Windows)
 		a.Projects = slices.Clone(a.Projects)
 		a.Linked = slices.Clone(a.Linked)
 		a.Days = slices.Clone(a.Days)
+		a.BurnDays = slices.Clone(a.BurnDays)
 		a.Recent = slices.Clone(a.Recent)
-		for j := range a.Recent {
-			a.Recent[j].Burn = 0
-		}
 	}
 	return d
 }
@@ -161,6 +183,22 @@ type Account struct {
 	// each window of its reading began, for the windows whose start is known
 	// and which had not reset when the snapshot was taken.
 	Recent []Recent `json:"recent,omitempty"`
+	// Cycles are the periods of the account's quota windows this device
+	// read, each with the fullest reading of it: by window, newest first. A
+	// collector before v0.5.0 neither sends nor reads it.
+	Cycles []Cycle `json:"cycles,omitempty"`
+}
+
+// Cycle is one period of a quota window, the one that resets at ResetsAt,
+// as one device or a team read it: the fullest reading of it, and when it
+// was last read in it.
+type Cycle struct {
+	Window   string    `json:"window"`
+	ResetsAt time.Time `json:"resets_at"`
+	Percent  float64   `json:"percent"`
+	// LastReadAt is the newest reading of the period, never after
+	// ResetsAt: one long before it may have missed the period's end.
+	LastReadAt time.Time `json:"last_read_at"`
 }
 
 // SameReading says two accounts carry one quota reading: taken at the same

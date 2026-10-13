@@ -141,6 +141,10 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	if err := o.Dir.PruneSamples(now); err != nil {
 		saving = append(saving, "samples: "+err.Error())
 	}
+	cycles, err := LoadCycles(o.Dir, now)
+	if err != nil {
+		saving = append(saving, "samples: "+err.Error())
+	}
 
 	// A run succeeds when every installed source could be read. A run where
 	// nothing is installed has nothing to fail and still counts.
@@ -153,7 +157,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	// sees them now rather than one run late.
 	noteProblems(st, s.problems(saving, ""), now)
 	res := &Result{Config: cfg, State: st, Key: key}
-	res.Doc = BuildDoc(st, key, cfg, o.Hostname, o.OSUser, o.Version, now)
+	res.Doc = BuildDoc(st, cycles, key, cfg, o.Hostname, o.OSUser, o.Version, now)
 	res.Team, _ = LoadTeamCache(o.Dir)
 	relayErr := s.publish(ctx, key, cfg.Device, res)
 	offline := s.goOffline(relayErr)
@@ -162,7 +166,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	}
 	if offline {
 		// The snapshot no one could be sent is this device's own row.
-		res.Doc = BuildDoc(st, key, cfg, o.Hostname, o.OSUser, o.Version, now)
+		res.Doc = BuildDoc(st, cycles, key, cfg, o.Hostname, o.OSUser, o.Version, now)
 	}
 	// A stopped run leaves its housekeeping to the next one.
 	if o.After != nil && ctx.Err() == nil {
@@ -199,7 +203,9 @@ func reuseWaited(o Options, cfg state.Config, key *team.Key, st *state.State, in
 	if o.Relay != nil && !read {
 		return nil
 	}
-	doc := BuildDoc(st, key, cfg, o.Hostname, o.OSUser, o.Version, st.LastRunAt)
+	// Samples that do not read leave the cycles out, as the run's did.
+	cycles, _ := LoadCycles(o.Dir, st.LastRunAt)
+	doc := BuildDoc(st, cycles, key, cfg, o.Hostname, o.OSUser, o.Version, st.LastRunAt)
 	return &Result{Config: cfg, State: st, Key: key, Doc: doc, Team: cache, Waited: true}
 }
 

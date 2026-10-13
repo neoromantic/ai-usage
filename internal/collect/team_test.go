@@ -55,7 +55,7 @@ func publishOther(t *testing.T, r *testRelay, w *world, key *team.Key, device st
 // publishRelease stores a snapshot for another device on a release.
 func publishRelease(t *testing.T, r *testRelay, w *world, key *team.Key, device, version string, st *state.State, at time.Time) {
 	t.Helper()
-	doc := BuildDoc(st, key, state.Config{Device: device}, "otherbox", "kim", version, at)
+	doc := BuildDoc(st, nil, key, state.Config{Device: device}, "otherbox", "kim", version, at)
 	if selfupdate.Newer(ExtSince, version) {
 		// A release before v0.4.0 sends none of the fields it added.
 		doc = doc.Legacy()
@@ -321,7 +321,7 @@ func TestStoppedExchange(t *testing.T) {
 	w, o := newWorld(t)
 	r := newRelay(t, w)
 	key, _ := LoadKey(o.Dir)
-	body, _ := json.Marshal(BuildDoc(ledger(), key, state.Config{Device: "d-forged-device"}, "x", "y", "v1", t0))
+	body, _ := json.Marshal(BuildDoc(ledger(), nil, key, state.Config{Device: "d-forged-device"}, "x", "y", "v1", t0))
 	_ = r.store.Put(context.Background(), key.Fingerprint(), "d-forged-device", relay.Record{Body: body, Sig: []byte("not a signature")}, time.Hour)
 	o.Relay = r.client(w)
 	run(t, o)
@@ -389,7 +389,7 @@ func TestRelayDocsThatDoNotVerifyAreReported(t *testing.T) {
 	w, o := newWorld(t)
 	r := newRelay(t, w)
 	key, _ := LoadKey(o.Dir)
-	body, _ := json.Marshal(BuildDoc(ledger(), key, state.Config{Device: "d-forged-device"}, "x", "y", "v1", t0))
+	body, _ := json.Marshal(BuildDoc(ledger(), nil, key, state.Config{Device: "d-forged-device"}, "x", "y", "v1", t0))
 	_ = r.store.Put(context.Background(), key.Fingerprint(), "d-forged-device", relay.Record{Body: body, Sig: []byte("not a signature")}, time.Hour)
 
 	o.Relay = r.client(w)
@@ -421,7 +421,7 @@ func TestRelayDocsFromANewerReleaseAreReported(t *testing.T) {
 	w, o := newWorld(t)
 	r := newRelay(t, w)
 	key, _ := LoadKey(o.Dir)
-	body, _ := json.Marshal(BuildDoc(ledger(), key, state.Config{Device: "d-newer-device"}, "x", "y", "v9.0.0", t0))
+	body, _ := json.Marshal(BuildDoc(ledger(), nil, key, state.Config{Device: "d-newer-device"}, "x", "y", "v9.0.0", t0))
 	body = bytes.Replace(body, []byte(`{"v":1,`), []byte(`{"v":1,"pace":[2],`), 1)
 	_ = r.store.Put(context.Background(), key.Fingerprint(), "d-newer-device", relay.Record{Body: body, Sig: key.Sign(relay.SnapshotMessage(body))}, time.Hour)
 
@@ -516,7 +516,7 @@ func TestLoadTeamCache(t *testing.T) {
 	}
 
 	key := mustKey(t)
-	good, _ := json.Marshal(BuildDoc(ledger(), key, state.Config{Device: "d-0123456789"}, "a", "b", "v1", t0))
+	good, _ := json.Marshal(BuildDoc(ledger(), nil, key, state.Config{Device: "d-0123456789"}, "a", "b", "v1", t0))
 	want := TeamCache{PulledAt: t0, Team: key.Fingerprint(), Bodies: [][]byte{good, []byte(`{"v":99}`)}}
 	if err := saveTeamCache(d, want); err != nil {
 		t.Fatal(err)
@@ -541,12 +541,14 @@ func TestLoadTeamCache(t *testing.T) {
 }
 
 // putRecorder records the snapshots put to a relay, and refuses those with
-// the fields v0.4.0 added, as an older relay does, while reject is set.
+// the fields v0.4.0 added, as a relay before it does, while reject is set,
+// and those with cycles, as one before v0.5.0 does, while rejectCycles is.
 type putRecorder struct {
-	next   http.Handler
-	reject bool
-	mu     sync.Mutex
-	puts   []snapshot.Doc
+	next         http.Handler
+	reject       bool
+	rejectCycles bool
+	mu           sync.Mutex
+	puts         []snapshot.Doc
 }
 
 func (p *putRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -556,9 +558,9 @@ func (p *putRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		doc, err := snapshot.Decode(body)
 		p.mu.Lock()
 		p.puts = append(p.puts, doc)
-		reject := p.reject
+		reject := p.reject && doc.Extended() || p.rejectCycles && doc.HasCycles()
 		p.mu.Unlock()
-		if err == nil && reject && doc.Extended() {
+		if err == nil && reject {
 			http.Error(w, "snapshot: unknown field", http.StatusUnprocessableEntity)
 			return
 		}
@@ -580,6 +582,26 @@ func (p *putRecorder) sent(device string, from int) []bool {
 	for _, d := range p.puts[from:] {
 		if d.Device == device {
 			out = append(out, d.Extended())
+		}
+	}
+	return out
+}
+
+// wire is what each snapshot device put since from had: "cycles", the
+// fields v0.4.0 added ("extended"), or neither ("legacy").
+func (p *putRecorder) wire(device string, from int) []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var out []string
+	for _, d := range p.puts[from:] {
+		switch {
+		case d.Device != device:
+		case d.HasCycles():
+			out = append(out, "cycles")
+		case d.Extended():
+			out = append(out, "extended")
+		default:
+			out = append(out, "legacy")
 		}
 	}
 	return out
@@ -656,6 +678,79 @@ func TestPublishSendsExtendedFieldsBehindTheGate(t *testing.T) {
 		from = rec.count()
 		run(t, o)
 		if got, want := rec.sent(self, from), []bool{c.second[len(c.second)-1]}; !slices.Equal(got, want) {
+			t.Fatalf("%s: the third run put %v, want %v", c.name, got, want)
+		}
+	}
+}
+
+// A device sends its quota cycles once a read shows every teammate reads
+// them, and goes without them for a day when the relay refuses them, still
+// sending the fields v0.4.0 added when the relay takes those.
+func TestPublishSendsCyclesBehindTheGate(t *testing.T) {
+	for _, c := range []struct {
+		name                 string
+		teammate             string
+		reject, rejectCycles bool
+		second               []string // what the second run put
+	}{
+		{"a teammate on v0.4.0", "v0.4.0", false, false, []string{"extended"}},
+		{"a teammate on v0.3.4", "v0.3.4", false, false, []string{"legacy"}},
+		{"everyone on v0.5.0", "v0.5.0", false, false, []string{"cycles"}},
+		{"a relay on v0.4.0", "v0.5.0", false, true, []string{"cycles", "extended"}},
+		{"a relay before v0.4.0", "v0.5.0", true, true, []string{"cycles", "extended", "legacy"}},
+	} {
+		w, o := newWorld(t)
+		o.Version = "v0.5.0"
+		h := w.home(t, "claude")
+		w.login("claude", h, "ann@acme.dev", quota(t0, 10))
+		w.sessions("claude", h, sess("a4c2e917", "/p", 100, t0))
+		r, rec := newRecordingRelay(t, w)
+		o.Relay = r.client(w)
+		key, _ := LoadKey(o.Dir)
+		publishRelease(t, r, w, key, "d-srv1-a4c2e917", c.teammate, ledger(), t0)
+		rec.mu.Lock()
+		rec.reject, rec.rejectCycles = c.reject, c.rejectCycles
+		rec.mu.Unlock()
+
+		// No read of the team yet: nothing vouches for the teammates.
+		res := run(t, o)
+		self := res.Config.Device
+		if got := rec.wire(self, 0); !slices.Equal(got, []string{"legacy"}) {
+			t.Fatalf("%s: the first run put %v", c.name, got)
+		}
+		if !res.Doc.HasCycles() {
+			t.Fatalf("%s: the run's own snapshot has no cycles", c.name)
+		}
+
+		w.now = t0.Add(15 * time.Minute)
+		from := rec.count()
+		res = run(t, o)
+		if got := rec.wire(self, from); !slices.Equal(got, c.second) {
+			t.Fatalf("%s: the second run put %v, want %v", c.name, got, c.second)
+		}
+		rs := res.State.Relay
+		if rs.LastError != "" || rs.Pending || !rs.LastPushAt.Equal(w.now) {
+			t.Fatalf("%s: relay state = %+v", c.name, rs)
+		}
+		var noCycles, noExt time.Time
+		if c.rejectCycles {
+			noCycles = w.now.Add(24 * time.Hour)
+		}
+		if c.reject {
+			noExt = w.now.Add(24 * time.Hour)
+		}
+		if !rs.NoCyclesUntil.Equal(noCycles) || !rs.NoExtUntil.Equal(noExt) {
+			t.Fatalf("%s: no cycles until %v, no extended fields until %v", c.name, rs.NoCyclesUntil, rs.NoExtUntil)
+		}
+		if !res.Doc.HasCycles() {
+			t.Fatalf("%s: the report's own snapshot lost its cycles", c.name)
+		}
+
+		// A day without them after a refusal.
+		w.now = t0.Add(30 * time.Minute)
+		from = rec.count()
+		run(t, o)
+		if got, want := rec.wire(self, from), c.second[len(c.second)-1:]; !slices.Equal(got, want) {
 			t.Fatalf("%s: the third run put %v, want %v", c.name, got, want)
 		}
 	}
