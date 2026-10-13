@@ -42,6 +42,10 @@ enum Renderer {
                       "limits:\(p)/\(l)" != firstLimitRow(report) else { continue }
                 whole.append((name, "limits:\(p)/\(l)"))
             }
+            // The subscriptions not read, opened, whose reasons the line cuts.
+            if let p = report.team.providers.first(where: { $0.accounts.contains { $0.subscription && LimitLine($0) == nil } }) {
+                whole.append(("limits-unread", "unread:\(p.provider)"))
+            }
             if report.solo {
                 if let p = report.providers.first(where: { $0.accounts.contains { $0.shown.value.quarter > 0 } }),
                    let a = p.accounts.first(where: { $0.shown.value.quarter > 0 }) {
