@@ -95,16 +95,17 @@ func Render(r Report, o Options) Page {
 	// Where DEVICES heads its rows, and where it ends.
 	var devHead [2]int
 	devEnd := 0
-	sections := [][]chunks{p.attention(), p.subscriptions(), p.devices(), p.projects()}
+	sections := [][]chunks{p.attention(), p.subscriptions(), p.utilization(), p.devices(), p.projects()}
+	const devices = 3
 	for i, s := range sections {
 		if len(s) == 0 {
 			continue
 		}
 		// A blank line under the header, and between two sections.
 		body = append(body, nil)
-		// DEVICES is the third section. Its rows have a head in either view,
-		// and USAGE, on a single device, none.
-		if i == 2 && p.deviceViews() {
+		// DEVICES has a head over its rows in either view, and USAGE, on a
+		// single device, none.
+		if i == devices && p.deviceViews() {
 			devHead = [2]int{len(body), len(body) + devicesHead}
 			devEnd = len(body) + len(s)
 		}

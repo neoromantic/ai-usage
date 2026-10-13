@@ -33,6 +33,8 @@ type teamAccount struct {
 	main  string
 	// holders are the devices whose snapshots have the account.
 	holders []*device
+	// cycles are the periods of its windows each snapshot carries.
+	cycles []snapshot.Cycle
 }
 
 type winReading struct {
@@ -139,6 +141,7 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 		return cmp.Or(cmp.Compare(a.Label, b.Label), cmp.Compare(a.Device, b.Device))
 	})
 	m.estimate(&t)
+	m.cyclesGate(&t)
 	return t
 }
 
@@ -352,6 +355,7 @@ func (m *merger) addAccounts(dv *device, d snapshot.Doc) {
 			x.local = link
 		}
 		x.addReading(a, dv.name, link)
+		x.cycles = append(x.cycles, a.Cycles...)
 		for _, u := range a.Linked {
 			addLinked(m.linked, a.Provider, l, u.Provider, m.open(u.Label), dv.name, u)
 		}
@@ -434,6 +438,10 @@ func (m *merger) provider(p string) (TeamProvider, bool) {
 			x.ta.NoReading = m.noReading(x)
 		}
 		x.ta.Outside = outside(m.in.Team.History[collect.HistoryKey(p, x.ta.Label)], m.now)
+		x.ta.Utilization = []Utilization{}
+		if x.ta.Subscription {
+			x.ta.Utilization = utilization(x.cycles, x.ta.Quota, m.now)
+		}
 	}
 	names(p, accts, m.aliases)
 	users(accts, m.byProv, m.devs)

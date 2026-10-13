@@ -272,7 +272,7 @@ func TestDeviceViewsAt80(t *testing.T) {
 // TestDeviceViewsDrawn: s draws the status view of a real report, with the
 // device's release, and the page keeps its lines.
 func TestDeviceViewsDrawn(t *testing.T) {
-	m := model(t, 120, 40, Config{Report: teamReport(t), Render: view.Render})
+	m := model(t, 120, 60, Config{Report: teamReport(t), Render: view.Render})
 	lines := len(m.page.Body)
 	m = keys(t, m, "s")
 	text := strings.Join(screen(m), "\n")

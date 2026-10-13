@@ -538,7 +538,13 @@ func TestStatusVia(t *testing.T) {
 			t.Errorf("ascii %v: legend %q", c.ascii, p.Legend)
 		}
 	}
-	// At 80 VIA goes, and its marks with it.
+	// At 80 VIA goes, and its marks with it. UTILIZATION, which has a · of
+	// its own, is left out.
+	for i := range r.Team.Providers {
+		for j := range r.Team.Providers[i].Accounts {
+			r.Team.Providers[i].Accounts[j].Utilization = nil
+		}
+	}
 	p := Render(r, devices(Options{Width: 80, Loc: sampleZone}))
 	if slices.Contains(statusHeads(t, p), "VIA") || strings.Contains(p.Legend, "× error") || strings.Contains(p.Legend, "· none") {
 		t.Errorf("at 80: %v, legend %q", statusHeads(t, p), p.Legend)

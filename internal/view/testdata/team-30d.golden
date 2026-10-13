@@ -1,4 +1,4 @@
-ai-usage · annbook · team qmvrtzpa                                  ● collected 7m ago  ● relay 7m ago  ● up to date
+ai-usage · annbook · team qmvrtzpa                                    ● collected 7m ago  ● relay 7m ago  ● up to date
 
 ATTENTION
  OUT      codex ann@acme.dev   back Fri 17:09, in 1d 23h
@@ -24,6 +24,19 @@ SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
 
   GROK
 ● a4c2e917       SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  annbook           11h
+
+UTILIZATION  fullest % before each reset
+  only this device's cycles: ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it updates itself within 15 minutes
+
+  CLAUDE         CYCLES  OUT  AVG  NEWEST FIRST
+● ann@acme.dev       13    5  86%   100  100   92  ~78  100   64   88  100   71  ~45   96  100   83
+    Fable             3    1  64%   100   62  ~30
+    5h               12    2  59%    38  100   71  ~52   90   12   64  100   41   77    8   55
+
+  CODEX
+● ann@acme.dev        6    2  86%   100   87   93  100   58   76
+  sam@mail.test       4    1  94%    97   91  100  ~88
+● lee@corp.test       9    ·  28%    22  ~35   18   40   27   31   12   44   19
 
 DEVICES × SUBSCRIPTIONS  15 · 30d UTC · M weighted tokens                 ‹usage›  status   ‹tokens›  share
                         CODEX ─────────────────────────────  CLAUDE ──────────  GROK ───  NO QUOTA
