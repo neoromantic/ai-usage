@@ -451,6 +451,9 @@ func (s *sampler) provider(ctx context.Context, p string, homes []string) state.
 		if hr.Malformed > 0 {
 			errs = append(errs, fmt.Sprintf("%d malformed lines", hr.Malformed))
 		}
+		if hr.TooLong > 0 {
+			errs = append(errs, fmt.Sprintf("%d lines too long to read", hr.TooLong))
+		}
 		if hr.Unreadable > 0 {
 			errs = append(errs, fmt.Sprintf("%d unreadable files", hr.Unreadable))
 			partial = true

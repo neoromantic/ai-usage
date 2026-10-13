@@ -61,6 +61,28 @@ func TestGrokCountsLastUsagePerPrompt(t *testing.T) {
 	noLeak(t, res)
 }
 
+// Updates over the limit are read squeezed (issue #1): a huge message chunk
+// is no error, and a turn's usage after a long field counts.
+func TestGrokLinesOverTheLimit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("writes lines over 32 MiB")
+	}
+	home := t.TempDir()
+	mustWriteFrom(t, filepath.Join(home, "sessions", "%2Fwork%2Fapp", "sid", "updates.jsonl"),
+		lines(turn("p1", [4]int64{10, 1, 2, 3})),
+		hugeLine(`{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"`, 'x', maxLineBytes, `"}}}}`),
+		hugeLine(`{"jsonrpc":"2.0","method":"_x.ai/session/update","params":{"sessionId":"sid","update":{"sessionUpdate":"turn_completed","prompt_id":"p2","stopReason":"`,
+			'y', maxLineBytes, `","usage":{"inputTokens":3,"outputTokens":1,"cachedReadTokens":0,"cacheCreationTokens":0}}}}`))
+
+	res := mustRead(t, "grok", home, since)
+	if res.Malformed != 0 || res.TooLong != 0 || res.Unreadable != 0 {
+		t.Fatalf("malformed %d too long %d unreadable %d", res.Malformed, res.TooLong, res.Unreadable)
+	}
+	if got, want := byID(t, res, "sid").Tokens, (Tokens{Input: 11, Output: 2, CacheRead: 2, CacheWrite: 3}); got != want {
+		t.Fatalf("tokens = %+v, want %+v", got, want)
+	}
+}
+
 func TestGrokSessionWithoutSummary(t *testing.T) {
 	home := t.TempDir()
 	dir := filepath.Join(home, "sessions", "%2Fwork%2Fmy%20app", "dir-id")

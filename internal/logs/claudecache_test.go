@@ -3,6 +3,7 @@ package logs
 import (
 	"bytes"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -55,7 +56,16 @@ func cachedFiles(t *testing.T, dir string) map[string]claudeEntry {
 func TestClaudeCacheUnchanged(t *testing.T) {
 	c := newClaudeCorpus(t)
 	dir := filepath.Join(t.TempDir(), "cache")
+	// An older version's cache goes once this version's is written.
+	older := filepath.Join(dir, fmt.Sprintf("claude-v%d.gob", claudeCacheVersion-1))
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, older, "stale")
 	res, parsed := readCached(dir, c.home)
+	if _, err := os.Stat(older); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the older cache is still there: %v", err)
+	}
 	sameRead(t, res, c.home)
 	if want := sizes(t, c.main, c.sub, c.copy); parsed != want {
 		t.Fatalf("first read parsed %d bytes, want %d", parsed, want)

@@ -106,17 +106,54 @@ func TestPartialReads(t *testing.T) {
 	extra := w.extraHome(t, "claude", "claude-work")
 	w.readErr[state.Key("claude", extra)] = errors.New("boom")
 	r := w.logs[state.Key("claude", def)]
-	r.Malformed, r.Unreadable = 3, 1
+	r.Malformed, r.TooLong, r.Unreadable = 3, 2, 1
 	w.logs[state.Key("claude", def)] = r
 	res := run(t, o)
 	src := res.State.Sources["claude"]
 	if src.Status != "partial" {
 		t.Fatalf("status = %q", src.Status)
 	}
-	for _, want := range []string{extra, "boom", "3 malformed", "1 unreadable"} {
+	for _, want := range []string{extra, "boom", "3 malformed", "2 lines too long to read", "1 unreadable"} {
 		if !strings.Contains(src.Error, want) {
 			t.Fatalf("error %q lacks %q", src.Error, want)
 		}
+	}
+}
+
+// A Claude transcript can hold a valid line longer than the reader's 32 MiB
+// limit, such as a prompt with a huge paste (issue #1). Collected twice, it is
+// no error, and the usage after it counts once.
+func TestLineOverTheLimitIsNoError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("writes a line over 32 MiB")
+	}
+	w, o := newWorld(t)
+	// The collector's own reader, with its cache.
+	o.ReadLogs = nil
+	home := w.home(t, "claude")
+	w.login("claude", home, "ann", nil)
+	at := t0.Add(-time.Hour).Format(time.RFC3339)
+	path := filepath.Join(home, "projects", "-work-app", "a4c2e917.jsonl")
+	mkdirs(t, filepath.Dir(path))
+	transcript := `{"parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/work/app","sessionId":"a4c2e917","type":"user","message":{"role":"user","content":"` +
+		strings.Repeat("x", 33<<20) + `"},"uuid":"u1","timestamp":"` + at + `"}` + "\n" +
+		`{"parentUuid":"u1","isSidechain":false,"userType":"external","cwd":"/work/app","sessionId":"a4c2e917","type":"assistant","message":{"id":"msg_1","role":"assistant","content":[],"usage":{"input_tokens":1200,"output_tokens":300,"cache_read_input_tokens":5000}},"requestId":"req_1","uuid":"u2","timestamp":"` + at + `"}` + "\n"
+	if err := os.WriteFile(path, []byte(transcript), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	want := snapshot.Tokens{Input: 1200, Output: 300, CacheRead: 5000}
+	for i := range 2 {
+		res := run(t, o)
+		if src := res.State.Sources["claude"]; src.Status != "ok" || src.Error != "" {
+			t.Fatalf("run %d: claude source = %+v", i+1, src)
+		}
+		if got := totalsFor(t, res.State, "claude", "ann").Tokens; got != want {
+			t.Fatalf("run %d: tokens = %+v, want %+v", i+1, got, want)
+		}
+		w.now = w.now.Add(15 * time.Minute)
+	}
+	if g := growthOf(lastSample(t, o), "claude", "ann"); !g.Zero() {
+		t.Fatalf("the second run grew %+v", g)
 	}
 }
 

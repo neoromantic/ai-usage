@@ -1,11 +1,14 @@
 package logs
 
 import (
+	"cmp"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"testing/iotest"
@@ -267,23 +270,45 @@ func TestReadHomesCountsAcrossHomesOnce(t *testing.T) {
 	})
 }
 
-// A line too long to read is malformed. The lines on either side still count.
-func TestLineTooLongIsSkipped(t *testing.T) {
+// A valid line over the limit, such as a prompt with a huge paste, is read
+// squeezed (issue #1). It is no error, and the usage on such a line counts.
+// A line too long to read even squeezed is skipped and counted as too long,
+// not as malformed. The lines around them count, and a cached read says the
+// same.
+func TestLineOverTheLimit(t *testing.T) {
 	if testing.Short() {
-		t.Skip("writes a 32 MiB line")
+		t.Skip("writes lines over 32 MiB")
 	}
 	home := t.TempDir()
-	long := `{"type":"assistant","usage":"` + strings.Repeat("x", maxLineBytes) + `"}`
-	mustWrite(t, filepath.Join(home, "projects", "p", "sess.jsonl"),
-		cl{id: "m1", req: "r1", session: "sess", cwd: "/work", usage: use(4, 1, 0, 0)}.String(),
-		long,
-		cl{id: "m2", req: "r2", session: "sess", cwd: "/work", usage: use(6, 2, 0, 0)}.String())
-	res := mustRead(t, "claude", home, since)
-	if res.Malformed != 1 || res.Unreadable != 0 {
-		t.Fatalf("malformed %d unreadable %d", res.Malformed, res.Unreadable)
+	mustWriteFrom(t, filepath.Join(home, "projects", "p", "sess.jsonl"),
+		hugeLine(`{"parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/work","sessionId":"sess","type":"user","message":{"role":"user","content":"`,
+			'x', maxLineBytes, `"},"uuid":"u1","timestamp":"2026-09-22T09:00:00Z"}`),
+		lines(cl{id: "m1", req: "r1", session: "sess", cwd: "/work", at: "2026-09-22T09:01:00Z", usage: use(4, 1, 0, 0)}.String()),
+		// The usage comes after the tool's output, at the end of the line.
+		hugeLine(`{"cwd":"/work","sessionId":"sess","type":"assistant","message":{"id":"m2","role":"assistant","content":[{"type":"text","text":"`,
+			'y', maxLineBytes, `"}],"usage":{"input_tokens":6,"output_tokens":2}},"requestId":"r2","uuid":"u2","timestamp":"2026-09-22T09:02:00Z"}`),
+		hugeLine(`{"sessionId":"sess","type":"assistant","n":`, '7', maxLineBytes, `}`),
+		lines(cl{id: "m3", req: "r3", session: "sess", cwd: "/work", at: "2026-09-22T09:03:00Z", usage: use(1, 1, 0, 0)}.String()))
+	want := Tokens{Input: 11, Output: 4}
+	check := func(res Result) {
+		t.Helper()
+		hr := res.Homes[home]
+		if hr.Malformed != 0 || hr.TooLong != 1 || hr.Unreadable != 0 {
+			t.Fatalf("malformed %d too long %d unreadable %d", hr.Malformed, hr.TooLong, hr.Unreadable)
+		}
+		s := byID(t, res, "sess")
+		if s.Tokens != want || s.Project != "/work" {
+			t.Fatalf("session = %+v", s)
+		}
 	}
-	if got := total(res); got != (Tokens{Input: 10, Output: 3}) {
-		t.Fatalf("total = %+v", got)
+	check(mustRead(t, "claude", home, since).Result)
+	dir := t.TempDir()
+	for range 2 {
+		res, _ := readCached(dir, home)
+		check(res)
+	}
+	if _, parsed := readCached(dir, home); parsed != 0 {
+		t.Fatalf("an unchanged read parsed %d bytes", parsed)
 	}
 }
 
@@ -481,6 +506,74 @@ func TestForEachReader(t *testing.T) {
 	// A line too long to keep is counted even when it ends the input.
 	if got, long, err := read("a\n" + strings.Repeat("x", maxLineBytes+1)); got != "a" || long != 1 || err != nil {
 		t.Fatalf("lines %q long %d err %v", got, long, err)
+	}
+}
+
+// A line over the limit is read squeezed, in pieces as it comes. One still
+// over the limit squeezed is counted, and the lines after it are read.
+func TestForEachReaderSqueezes(t *testing.T) {
+	const limit = 1 << 20
+	in := io.MultiReader(
+		lines("first"),
+		hugeLine(`{"type":"user","message":{"content":"`, 'x', 3*limit, `"},"cwd":"/work"}`),
+		hugeLine(`{"type":"user","content":[`, '1', 3*limit, `],"cwd":"/work"}`),
+		hugeLine(`{"type":"user","n":`, '1', limit, `}`),
+		lines("last"))
+	var got []string
+	long, err := forEachReader(in, limit, func(line []byte) { got = append(got, string(line)) })
+	want := []string{"first", `{"type":"user","message":{"content":""},"cwd":"/work"}`, `{"type":"user","content":[],"cwd":"/work"}`, "last"}
+	if !slices.Equal(got, want) || long != 1 || err != nil {
+		t.Fatalf("lines %q long %d err %v", got, long, err)
+	}
+}
+
+// A line far over the limit is read in about the limit's memory, however
+// long it is.
+func TestForEachReaderMemory(t *testing.T) {
+	const limit = 1 << 20
+	in := hugeLine(`{"type":"user","message":{"content":"`, 'x', 70<<20, `"},"cwd":"/work"}`)
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	n := 0
+	long, err := forEachReader(in, limit, func([]byte) { n++ })
+	runtime.ReadMemStats(&after)
+	if n != 1 || long != 0 || err != nil {
+		t.Fatalf("lines %d long %d err %v", n, long, err)
+	}
+	if alloc := after.TotalAlloc - before.TotalAlloc; alloc > 8*limit {
+		t.Fatalf("allocated %d bytes for a 70 MiB line", alloc)
+	}
+}
+
+// A squeeze keeps the same whether the line comes whole, a byte at a time,
+// or in the buffer it is squeezed into.
+func TestSqueezer(t *testing.T) {
+	full := strings.Repeat("y", longString)
+	for _, tc := range []struct{ name, in, want string }{
+		{"short strings, numbers, and objects stay", `{"a":"b","n":-1.5e3,"t":true,"z":null,"o":{"k":"v"}}`, ""},
+		{"a string up to the limit stays", `{"s":"` + full + `"}`, ""},
+		{"a longer string is left empty", `{"s":"` + full + `z","k":1}`, `{"s":"","k":1}`},
+		{"a long key is left empty too", `{"` + full + `z":1}`, `{"":1}`},
+		{"an escape the limit falls in is cut with the rest", `{"s":"` + full[1:] + `\"\\\u00e9\"","k":1}`, `{"s":"","k":1}`},
+		{"an escaped quote does not end a string", `{"s":"a\"]\\","k":[1]}`, `{"s":"a\"]\\","k":[]}`},
+		{"arrays are left empty, brackets in their strings too", `{"a":[1,[2,"]"],{"b":"["}],"k":2,"e":[]}`, `{"a":[],"k":2,"e":[]}`},
+		{"a line that is not JSON stays broken", `{"a":]],"b`, `{"a":]],"b`},
+	} {
+		want := cmp.Or(tc.want, tc.in)
+		whole := string(new(squeezer).add(nil, []byte(tc.in)))
+		buf := []byte(tc.in)
+		inPlace := string(new(squeezer).add(buf[:0], buf))
+		var s squeezer
+		var bytewise []byte
+		for i := range len(tc.in) {
+			bytewise = s.add(bytewise, []byte{tc.in[i]})
+		}
+		for _, got := range []string{whole, inPlace, string(bytewise)} {
+			if got != want {
+				t.Errorf("%s: got %.80q, want %.80q", tc.name, got, want)
+			}
+		}
 	}
 }
 

@@ -52,11 +52,13 @@ type codexRecord struct {
 	at       time.Time
 }
 
-func parseCodex(path string) (*codexFile, int, error) {
-	f := &codexFile{path: path}
+// parseCodex reads a rollout file. It returns the file, how many of its
+// lines were malformed, how many were too long to read, and why it could not
+// be read.
+func parseCodex(path string) (f *codexFile, malformed, long int, err error) {
+	f = &codexFile{path: path}
 	haveMeta := false
-	var malformed int
-	long, err := ForEachLine(path, maxLineBytes, func(line []byte) {
+	long, err = ForEachLine(path, maxLineBytes, func(line []byte) {
 		// One marker finds token_count and token_usage_record lines alike.
 		// Rollouts run to gigabytes, and each marker is a pass over them.
 		if !bytes.Contains(line, []byte(`"session_meta"`)) && !bytes.Contains(line, []byte(`"token_`)) {
@@ -82,7 +84,7 @@ func parseCodex(path string) (*codexFile, int, error) {
 	})
 	// The newest record's token_count may not be written yet. It will repeat it.
 	f.settle(nil)
-	return f, malformed + long, err
+	return f, malformed, long, err
 }
 
 func (f *codexFile) meta(row codexLine) {

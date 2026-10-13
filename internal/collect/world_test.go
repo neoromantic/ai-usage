@@ -32,9 +32,9 @@ type world struct {
 
 // homeLogs is what a read of one home's logs finds.
 type homeLogs struct {
-	Sessions              []logs.Session
-	Limits                *logs.Limits
-	Malformed, Unreadable int
+	Sessions                       []logs.Session
+	Limits                         *logs.Limits
+	Malformed, TooLong, Unreadable int
 }
 
 func newWorld(t *testing.T) (*world, Options) {
@@ -127,7 +127,7 @@ func (w *world) read(p string, homes []string, since time.Time) logs.Result {
 	for _, home := range homes {
 		k := state.Key(p, home)
 		r := w.logs[k]
-		out.Homes[home] = logs.HomeRead{Err: w.readErr[k], Malformed: r.Malformed, Unreadable: r.Unreadable, Limits: r.Limits}
+		out.Homes[home] = logs.HomeRead{Err: w.readErr[k], Malformed: r.Malformed, TooLong: r.TooLong, Unreadable: r.Unreadable, Limits: r.Limits}
 		for _, s := range r.Sessions {
 			s.Home = home
 			if i, ok := at[s.ID]; ok {
