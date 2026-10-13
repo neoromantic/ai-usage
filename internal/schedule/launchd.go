@@ -133,6 +133,70 @@ func (s Scheduler) installAgent(ctx context.Context, exe, home, path string) err
 	return err
 }
 
+// ErrRefused is Repair's answer when launchd still refuses to start the
+// launch agent.
+var ErrRefused = errors.New("launchd refuses to start the updated binary")
+
+// repairAgent has launchd start the agent now, from the binary on disk. On
+// macOS 27, launchd pins an agent it loaded at login to its binary's code
+// signature, which for an ad-hoc signed binary is its cdhash. Once an update
+// replaces the binary, launchd refuses the next start, and at the start after
+// it repairs the pin and records the new binary for the next login. So a
+// refused agent takes one start. A pinned one whose binary replaced says was
+// just replaced takes two, and the first, refused at once, costs no run;
+// when launchd does not refuse it in time, there is no second. An agent
+// pinned to nothing, as on an earlier macOS, and one that runs or is being
+// started are left alone. The started run collects as a scheduled run does.
+// A run the agent started does nothing, since launchd does not start the
+// agent while it runs.
+func (s Scheduler) repairAgent(ctx context.Context, replaced bool) error {
+	if s.InAgent {
+		return nil
+	}
+	out, err := s.launchctl(ctx, "print", s.service())
+	if err != nil {
+		return nil
+	}
+	p := readPrint(out)
+	if !p.idle || !p.refused && !(replaced && p.pinned) {
+		return nil
+	}
+	if !p.refused {
+		if p, err = s.start(ctx, p.runs); err != nil || !p.refused {
+			return err
+		}
+	}
+	if p, err = s.start(ctx, p.runs); err == nil && p.refused {
+		return ErrRefused
+	}
+	return err
+}
+
+// start has launchd start the agent, and waits up to 5 seconds for the try:
+// for the agent to run, or to have stopped with the outcome printed. It
+// returns what launchctl print says then, or nothing if it did not get
+// there.
+func (s Scheduler) start(ctx context.Context, runs int) (agentPrint, error) {
+	if _, err := s.launchctl(ctx, "kickstart", s.service()); err != nil {
+		return agentPrint{}, err
+	}
+	for range 50 {
+		out, err := s.launchctl(ctx, "print", s.service())
+		if err != nil {
+			return agentPrint{}, nil
+		}
+		if p := readPrint(out); p.runs > runs && (p.running || p.idle && p.ended) {
+			return p, nil
+		}
+		select {
+		case <-ctx.Done():
+			return agentPrint{}, ctx.Err()
+		case <-time.After(settle):
+		}
+	}
+	return agentPrint{}, nil
+}
+
 // removeAgent boots the agent out and removes the plist.
 func (s Scheduler) removeAgent(ctx context.Context) error {
 	file, err := s.plist()
@@ -174,7 +238,9 @@ func (s Scheduler) bootout(ctx context.Context) error {
 }
 
 // lookupAgent reads the plist and asks launchd whether it is loaded. A plist
-// launchd has not loaded counts as absent, so the next run loads it.
+// launchd has not loaded counts as absent, so the next run loads it. A run
+// the agent started was not refused, whatever launchd says of the run
+// before.
 func (s Scheduler) lookupAgent(ctx context.Context, exe, home string) (State, error) {
 	file, err := s.plist()
 	if err != nil {
@@ -192,8 +258,13 @@ func (s Scheduler) lookupAgent(ctx context.Context, exe, home string) (State, er
 		return Disabled, nil
 	case !strings.Contains(string(b), programArguments(exe, home)):
 		return Other, nil
-	case !s.loaded(ctx):
+	}
+	out, err := s.launchctl(ctx, "print", s.service())
+	switch {
+	case err != nil:
 		return Absent, nil
+	case !s.InAgent && readPrint(out).refused:
+		return Refused, nil
 	}
 	return Active, nil
 }
@@ -201,6 +272,52 @@ func (s Scheduler) lookupAgent(ctx context.Context, exe, home string) (State, er
 func (s Scheduler) loaded(ctx context.Context) bool {
 	_, err := s.launchctl(ctx, "print", s.service())
 	return err == nil
+}
+
+// agentPrint is what launchctl print says of the agent: how many times
+// launchd started it or tried to; whether it is not running, or runs, and
+// not on its way between the two, as while launchd spawns it; whether the
+// outcome of the last try is printed yet; whether launchd pinned it to its
+// binary's code signature; and whether launchd refused to start it at its
+// last try for that pin, as once an update replaced the binary.
+type agentPrint struct {
+	runs                 int
+	idle, running, ended bool
+	pinned, refused      bool
+}
+
+// readPrint reads the agent's own lines, which launchctl indents once. A
+// refused agent waits for launchd to update its pin, and prints the refusal
+// as its last exit's reason, and a moment later also as a job state of spawn
+// failed.
+func readPrint(print []byte) agentPrint {
+	var p agentPrint
+	repin, refusal := false, false
+	for l := range strings.SplitSeq(string(print), "\n") {
+		if !strings.HasPrefix(l, "\t") || strings.HasPrefix(l, "\t\t") {
+			continue
+		}
+		k, v, _ := strings.Cut(strings.TrimSpace(l), " = ")
+		switch k {
+		case "runs":
+			p.runs, _ = strconv.Atoi(v)
+		case "state":
+			p.idle, p.running = v == "not running", v == "running"
+		case "job state":
+			p.ended = true
+			refusal = refusal || v == "spawn failed"
+		case "last exit reason":
+			p.ended = true
+			refusal = refusal || strings.Contains(v, "OS_REASON_CODESIGNING")
+		case "last exit code":
+			p.ended = p.ended || v != "(never exited)"
+		case "properties":
+			props := strings.Split(v, " | ")
+			p.pinned, repin = slices.Contains(props, "has LWCR"), slices.Contains(props, "needs LWCR update")
+		}
+	}
+	p.refused = p.idle && p.pinned && repin && refusal
+	return p
 }
 
 // disabled reports whether the person ran launchctl disable on the agent.

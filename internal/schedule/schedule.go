@@ -36,6 +36,11 @@ const (
 	Disabled
 	// Active means the entry runs this binary with this state folder.
 	Active
+	// Refused means the macOS launch agent runs this binary with this state
+	// folder, but launchd refused to start it at its last run for the code
+	// signature it pinned the agent to at login, as after an update replaced
+	// the binary. launchd repairs that at the next run; Repair does now.
+	Refused
 )
 
 // Runner runs a scheduler command. Tests replace it.
@@ -119,6 +124,19 @@ func (s Scheduler) Remove(ctx context.Context) error {
 		return s.removeTask(ctx)
 	}
 	return s.removeCron(ctx)
+}
+
+// Repair has launchd start the macOS launch agent now when it refused to
+// start it at its last run, or when replaced says an update has just
+// replaced the binary of an agent launchd pinned to its code signature, so
+// that launchd repairs the pin now instead of refusing the next run. It
+// returns ErrRefused when launchd still refuses. Elsewhere there is nothing
+// to repair.
+func (s Scheduler) Repair(ctx context.Context, replaced bool) error {
+	if s.GOOS != "darwin" {
+		return nil
+	}
+	return s.repairAgent(ctx, replaced)
 }
 
 // Lookup reports whether the scheduler runs exe with the state folder home.

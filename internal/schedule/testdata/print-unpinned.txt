@@ -1,0 +1,99 @@
+gui/501/io.github.neoromantic.ai-usage = {
+	active count = 0
+	path = /Users/ann/Library/LaunchAgents/io.github.neoromantic.ai-usage.plist
+	type = LaunchAgent
+	state = not running
+
+	program = /Users/ann/.local/bin/ai-usage
+	arguments = {
+		/Users/ann/.local/bin/ai-usage
+		collect
+		--quiet
+		--home
+		/Users/ann/Library/Application Support/ai-usage
+	}
+
+	stdout path = /dev/null
+	stderr path = /dev/null
+	inherited environment = {
+		SSH_AUTH_SOCK => /var/run/com.apple.launchd.AbCdEf1234/Listeners
+	}
+
+	default environment = {
+		PATH => /opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin
+	}
+
+	environment = {
+		OSLogRateLimit => 64
+		PATH => /opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin
+		XPC_SERVICE_NAME => io.github.neoromantic.ai-usage
+	}
+
+	domain = gui/501 [100008]
+	asid = 100008
+	minimum runtime = 10
+	exit timeout = 5
+	runs = 0
+	last exit code = (never exited)
+
+	event triggers = {
+		io.github.neoromantic.ai-usage.268435512 => {
+			keepalive = 0
+			service = io.github.neoromantic.ai-usage
+			stream = com.apple.launchd.calendarinterval
+			monitor = com.apple.UserEventAgent-Aqua
+			descriptor = {
+				"Minute" => 45
+			}
+		}
+		io.github.neoromantic.ai-usage.268435511 => {
+			keepalive = 0
+			service = io.github.neoromantic.ai-usage
+			stream = com.apple.launchd.calendarinterval
+			monitor = com.apple.UserEventAgent-Aqua
+			descriptor = {
+				"Minute" => 30
+			}
+		}
+		io.github.neoromantic.ai-usage.268435510 => {
+			keepalive = 0
+			service = io.github.neoromantic.ai-usage
+			stream = com.apple.launchd.calendarinterval
+			monitor = com.apple.UserEventAgent-Aqua
+			descriptor = {
+				"Minute" => 15
+			}
+		}
+		io.github.neoromantic.ai-usage.268435509 => {
+			keepalive = 0
+			service = io.github.neoromantic.ai-usage
+			stream = com.apple.launchd.calendarinterval
+			monitor = com.apple.UserEventAgent-Aqua
+			descriptor = {
+				"Minute" => 0
+			}
+		}
+	}
+
+	event channels = {
+		"com.apple.launchd.calendarinterval" = {
+			port = 0x0
+			active = 0
+			managed = 1
+			reset = 0
+			hide = 0
+			watching = 1
+		}
+	}
+
+	spawn type = background (5)
+	jetsam priority = 40
+	jetsam memory limit (active) = (unlimited)
+	jetsam memory limit (inactive) = (unlimited)
+	jetsamproperties category = daemon
+	jetsam thread limit = 32
+	cpumon = default
+	sanitizer flags = 0x0
+
+	properties = inferred program
+}
