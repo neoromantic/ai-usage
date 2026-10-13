@@ -303,6 +303,20 @@ let rejected = try withQuota("leo@studio.dev") { q in windows(q) { w in
 let rejectedLine = rejected.flatMap(LimitLine.init)
 equal("rejection row", [rejectedLine?.window.name, rejectedLine?.unreadMain?.name, rejectedLine?.blocking?.name], ["5h", "7d", nil])
 check("never read has no row", try withQuota("leo@studio.dev") { _ in NSNull() }.flatMap(LimitLine.init) == nil)
+// An over account counts down to the window that runs out first, among
+// the one shown and the others that limit it, the one shown first of
+// equals; an account another window stops, and one not over, count down to
+// their resets.
+let runOut = { (r: Report, p: String, l: String) in r.teamAccount(provider: p, label: l).flatMap(LimitLine.init)?.runsOut }
+equal("run-out countdown", runOut(team, "codex", "bots@studio.dev").map { "\($0.window.name) \($0.at == team.attention[2].at)" }, "7d true")
+equal("first window to run out", runOut(solo, "claude", "mira@studio.dev").map { "\($0.window.name) \($0.at == solo.attention[0].at)" }, "7d Fable true")
+check("no run-out when stopped or not over", runOut(team, "claude", "mira@studio.dev") == nil && runOut(team, "codex", "mira@studio.dev") == nil)
+let sameRunOut = try edited("solo.json") { objects($0) { o in
+    guard var f = o["forecast"] as? [String: Any], f["runs_out_at"] is String else { return o }
+    f["runs_out_at"] = "2026-09-25T06:00:00Z"
+    return o.merging(["forecast": f]) { $1 }
+} }
+equal("run-out tie goes to the shown window", runOut(sameRunOut, "claude", "mira@studio.dev")?.window.name, "7d")
 
 // Two reports of the same team: one as v0.3.4 printed it, with no
 // weighted tokens, and one as v0.4.0 prints it, with every field it added.

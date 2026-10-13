@@ -266,9 +266,16 @@ public struct Chip: Equatable, Sendable {
 /// A subscription's row in Limits, as the report has it: the window its bar
 /// and percent show, which is the main one, or the one that limits the
 /// account when the main one has no reading; the account's state, which the
-/// report takes from every window that limits it; and the other windows
-/// that limit it. It only picks among what the report has decided.
+/// report takes from every window that limits it; the other windows that
+/// limit it; and the first of them to run out. It only picks among what the
+/// report has decided.
 public struct LimitLine: Sendable {
+    /// A window the report forecasts to run out before its reset, and when.
+    public struct RunOut: Sendable {
+        public let window: Quota.Window
+        public let at: Date
+    }
+
     /// The window the bar and percent show.
     public let window: Quota.Window
     /// The account's state, as the report has it.
@@ -281,6 +288,10 @@ public struct LimitLine: Sendable {
     public let blocking: Quota.Window?
     /// The main window, when it has no reading and another is shown.
     public let unreadMain: Quota.Window?
+    /// For an over account no window stops, the window that runs out
+    /// first: the earliest run-out the report forecasts among the window
+    /// shown and the others, the one shown first of equals.
+    public let runsOut: RunOut?
 
     /// Nil for an account with no window known that limits it.
     public init?(_ a: TeamAccount) {
@@ -295,6 +306,8 @@ public struct LimitLine: Sendable {
         }.map(\.element)
         blocking = shown.state == "out" ? nil : others.first { $0.state == "out" }
         unreadMain = main?.known == true ? nil : main
+        runsOut = a.state != "over" || blocking != nil || shown.state == "out" ? nil
+            : ([shown] + others).compactMap { w in w.forecast?.runsOutAt.map { RunOut(window: w, at: $0) } }.min { $0.at < $1.at }
     }
 }
 
