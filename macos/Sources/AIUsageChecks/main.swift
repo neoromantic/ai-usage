@@ -35,6 +35,7 @@ equal("idle kind", team.attention.last?.kind, .idle)
 // entry from an older ai-usage has neither.
 equal("attention words", [team.attention[2].subject, team.attention[2].text],
       ["codex bots@studio.dev", "runs out ~Fri 08:59 at this week's pace, 2d 17h before reset"])
+equal("device notes", ["courier", "mira-mbp"].map { team.teamDevice(named: $0)?.note }, ["silent since Wed 10:28", nil])
 equal("team devices", team.team.devices.count, 12)
 equal("team providers", team.team.providers.map(\.provider), ["claude", "codex", "grok", "hermes"])
 equal("team matrix", [team.team.matrix.columns.count, team.team.matrix.rows.count], [7, 12])

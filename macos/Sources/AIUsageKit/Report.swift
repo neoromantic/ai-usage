@@ -486,6 +486,9 @@ public struct TeamDevice: Decodable, Sendable {
     /// What the device's release cannot do: `no_claude_quota`,
     /// `no_update_errors`.
     @Absent public var limitations: [String]
+    /// What the report's status view says of the device in its NOTE, in
+    /// full; nil from an ai-usage that does not say, or with nothing to say.
+    @Absent public var note: String?
 
     public struct Gap: Decodable, Sendable {
         public let seconds: Int
