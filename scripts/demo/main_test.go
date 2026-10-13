@@ -12,7 +12,8 @@ import (
 )
 
 // The team shows what the pictures are for: a Claude week over at the last
-// day's pace, a tight Codex week, and one device whose burn is estimated.
+// day's pace, a tight Codex week, and one device whose burn is estimated
+// and that keeps the team from sending its quota cycles.
 func TestTeamReport(t *testing.T) {
 	r := teamReport()
 	var kinds []string
@@ -33,6 +34,9 @@ func TestTeamReport(t *testing.T) {
 	if !r.Team.Estimated || r.Team.EstimatedReason == nil || !strings.Contains(*r.Team.EstimatedReason, "leo-air runs v0.3.4") {
 		t.Errorf("estimated %v, reason %v; want leo-air on v0.3.4", r.Team.Estimated, r.Team.EstimatedReason)
 	}
+	if got := r.Team.CyclesHeldBackBy; len(got) != 1 || got[0] != "leo-air" {
+		t.Errorf("cycles held back by %v, want leo-air", got)
+	}
 	for _, d := range r.Team.Devices {
 		if d.BurnEstimated != (d.Label == "leo-air") {
 			t.Errorf("%s burn estimated = %v", d.Label, d.BurnEstimated)
@@ -41,6 +45,35 @@ func TestTeamReport(t *testing.T) {
 			t.Errorf("%s burned nothing in 7 days", d.Label)
 		}
 	}
+}
+
+// The solo page shows how full each subscription got before its resets,
+// one of them read only partly, and the weeks Claude ran out.
+func TestSoloUtilization(t *testing.T) {
+	r := solo()
+	for _, p := range r.Team.Providers {
+		for _, a := range p.Accounts {
+			if len(a.Utilization) == 0 {
+				t.Errorf("%s %s has no utilization", p.Provider, a.Label)
+			}
+		}
+	}
+	u := teamUtilization(r, "claude", "mira@studio.dev")
+	if len(u) != 2 || u[0].Window != "7d" || u[0].Out == 0 || !slices.ContainsFunc(u[0].Cycles, func(c view.Cycle) bool { return c.Partial }) {
+		t.Errorf("mira's Claude = %+v, want a week that ran out and one read partly", u)
+	}
+}
+
+// teamUtilization is an account's utilization in the team.
+func teamUtilization(r view.Report, provider, label string) []view.Utilization {
+	for _, p := range r.Team.Providers {
+		for _, a := range p.Accounts {
+			if p.Provider == provider && a.Label == label {
+				return a.Utilization
+			}
+		}
+	}
+	return nil
 }
 
 // sgr is a terminal's bold or reverse, which the plain page keeps.

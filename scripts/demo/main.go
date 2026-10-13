@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,7 +33,7 @@ import (
 var now = time.Date(2026, 9, 24, 13, 40, 0, 0, time.UTC)
 
 const (
-	latest = "v0.4.0"
+	latest = "v0.5.0"
 	relay  = "https://relay.example.com"
 	week   = 7 * 24 * time.Hour
 )
@@ -103,6 +104,7 @@ func soloDevice(at time.Time) *device {
 		window("7d", 22, week, 4*24*time.Hour+19*time.Hour))
 	d.account("grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64", "SuperGrok", true, at,
 		window("7d", 9, week, 1*24*time.Hour+22*time.Hour))
+	miraHistory(d)
 	d.webWorktrees()
 	d.work("claude", "mira@studio.dev", "/Users/mira/src/orbit/web", 16, 90)
 	d.work("claude", "mira@studio.dev", "/Users/mira/src/orbit/api", 9, 60)
@@ -135,6 +137,7 @@ func teamReport() view.Report {
 		window("7d", 47, week, 3*24*time.Hour+7*time.Hour))
 	mira.account("grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64", "SuperGrok", true, now.Add(-3*time.Minute),
 		window("7d", 6, week, 5*24*time.Hour+2*time.Hour))
+	miraHistory(mira)
 	mira.webWorktrees()
 	mira.work("claude", "mira@studio.dev", "/Users/mira/src/orbit/web", 17, 90)
 	mira.work("claude", "mira@studio.dev", "/Users/mira/src/orbit/api", 8, 60)
@@ -170,7 +173,9 @@ func teamReport() view.Report {
 	srv.work("claude", "mira@studio.dev", "/srv/orbit/review", 5, 60)
 	srv.hermes("bots@studio.dev", 6, 60)
 
-	docs := []snapshot.Doc{leo.doc(key).Legacy(), srv.doc(key)}
+	// leo's release reads none of the cycles, so no device sends them: the
+	// team sees mira's alone.
+	docs := []snapshot.Doc{leo.doc(key).Legacy(), srv.doc(key).WithoutCycles()}
 	bots := []struct {
 		name   string
 		perDay float64
@@ -189,7 +194,7 @@ func teamReport() view.Report {
 			window("5h", 30, 5*time.Hour, 2*time.Hour+40*time.Minute),
 			window("7d", 83, week, 3*24*time.Hour+11*time.Hour))
 		bot.hermes("bots@studio.dev", b.perDay, 60)
-		docs = append(docs, bot.doc(key))
+		docs = append(docs, bot.doc(key).WithoutCycles())
 	}
 	// The reads found each device on the release its snapshot names, since
 	// the first read of the quarter.
@@ -200,9 +205,21 @@ func teamReport() view.Report {
 	return mira.report(&collect.TeamCache{PulledAt: now.Add(-3 * time.Minute), Team: key.Fingerprint(), Docs: docs, Known: known})
 }
 
+// miraHistory is how full mira's subscriptions got before each reset over
+// the quarter: her Claude week runs out most weeks, its 5 hours now and
+// then, and her Codex and Grok have room.
+func miraHistory(d *device) {
+	d.history("claude", "mira@studio.dev", "7d", week, "100 94 ~71 100 88 100 82 97 100 76 91 100 85")
+	d.history("claude", "mira@studio.dev", "5h", 7*time.Hour, "100 64 38 100 92 ~55 71 100 47 83 100 59 66 90")
+	d.history("codex", "mira@studio.dev", "7d", week, "52 41 ~29 63 48 37 55 44 71 39 46 58 33")
+	d.history("codex", "mira@studio.dev", "5h", 7*time.Hour, "34 12 27 8 41 19 22 15 30 9 26 18 11 24")
+	d.history("grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64", "7d", week, "12 7 15 4 9 11 6 14 3 8 10 5 13")
+}
+
 // device is one made-up machine and the ledger its collector keeps. Its
 // folders are the projects of the worktrees and subfolders its sessions
-// ran in, which spread holds by harness and project.
+// ran in, which spread holds by harness and project. Its past is the
+// samples of the quarter before that read its quota windows.
 type device struct {
 	rng            *rand.Rand
 	id, host, user string
@@ -211,7 +228,7 @@ type device struct {
 	st             *state.State
 	folders        collect.Folders
 	spread         map[string][]string
-	samples        []state.Sample
+	samples, past  []state.Sample
 }
 
 func newDevice(rng *rand.Rand, id, host, user, home, version string, at time.Time, providers ...string) *device {
@@ -287,6 +304,34 @@ func (d *device) runs(provider, label, name string, runs ...run) {
 		w.Percent = r.percent
 		d.samples = append(d.samples, state.Sample{At: at, Accounts: []state.SampleAccount{
 			{Provider: provider, Label: label, QuotaAt: &at, Windows: []snapshot.Window{w}},
+		}})
+	}
+}
+
+// history adds the periods of window name of provider's account label
+// before the one now to the device's past, newest first, one every as long
+// before the next: how full each got, as UTILIZATION shows it. Each was
+// last read a quarter hour before its reset, or, marked ~, as the laptop
+// slept, halfway through.
+func (d *device) history(provider, label, name string, every time.Duration, periods string) {
+	a := d.st.Accounts[state.Key(provider, label)]
+	i := slices.IndexFunc(a.Quota.Windows, func(w snapshot.Window) bool { return w.Name == name })
+	w := a.Quota.Windows[i]
+	for k, p := range strings.Fields(periods) {
+		p, asleep := strings.CutPrefix(p, "~")
+		pct, err := strconv.ParseFloat(p, 64)
+		if err != nil {
+			panic(err)
+		}
+		reset := w.ResetsAt.Add(-time.Duration(k+1) * every)
+		at := reset.Add(-15 * time.Minute)
+		if asleep {
+			at = reset.Add(-w.Length() / 2)
+		}
+		was := w
+		was.Percent, was.ResetsAt = pct, &reset
+		d.past = append(d.past, state.Sample{At: at, Accounts: []state.SampleAccount{
+			{Provider: provider, Label: label, QuotaAt: &at, Windows: []snapshot.Window{was}},
 		}})
 	}
 }
@@ -379,8 +424,17 @@ func (d *device) spend(until time.Time, provider, label, project string, perDay 
 	}
 }
 
-// cycles are the quota cycles the device's samples hold.
-func (d *device) cycles() collect.Cycles { return collect.FindCycles(d.samples) }
+// cycles are the quota cycles the device's samples hold: its past, its
+// runs, and its last run's readings.
+func (d *device) cycles() collect.Cycles {
+	last := state.Sample{At: d.at}
+	for _, a := range d.st.Accounts {
+		if a.Quota != nil {
+			last.Accounts = append(last.Accounts, state.SampleAccount{Provider: a.Provider, Label: a.Label, QuotaAt: &a.Quota.At, Windows: a.Quota.Windows})
+		}
+	}
+	return collect.FindCycles(slices.Concat(d.past, d.samples, []state.Sample{last}))
+}
 
 // doc is the device's snapshot as another device pulls it.
 func (d *device) doc(key *team.Key) snapshot.Doc {
