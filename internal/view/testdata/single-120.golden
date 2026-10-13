@@ -20,6 +20,18 @@ SUBSCRIPTIONS  5 · 1 over · 2 no reading
   GROK
 ● 3f2a9c1e             SuperGrok  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                            —   1  sam-air    2d
 
+UTILIZATION  fullest % before each reset
+
+  CLAUDE           CYCLES  OUT  AVG  NEWEST FIRST
+● sam@example.com       4    1  85%   100   84   91  ~66
+    5h                  6    2  72%   100  100   47   73  ~25   88
+
+  CODEX
+● sam@example.com       3    ·  29%    31   12   44
+
+  GROK
+● 3f2a9c1e              2    ·  64%    70   58
+
 USAGE  sam-air · M weighted tokens
 
   CLAUDE               TODAY    7D   30D   90D

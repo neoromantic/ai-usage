@@ -56,10 +56,11 @@ func (p *page) legend() string {
 		items = append(items, g.tickIn+" even use")
 	}
 	add(s["dotted"], g.unread+" no reading")
-	// An old reading and a silent device are both stale, and a total from
-	// input and output estimated.
-	short, long := p.staleItem(s["stale"] || s["silent"], s["estimated"])
-	add(long == "" && (s["stale"] || s["silent"] || s["estimated"]), short)
+	// An old reading, a silent device, and a period last read long before
+	// it ended are all stale, and a total from input and output estimated.
+	stale := s["stale"] || s["silent"] || s["partial"]
+	short, long := p.staleItem(stale, s["estimated"])
+	add(long == "" && (stale || s["estimated"]), short)
 	// A window not read since a refusal is not known either.
 	add(s["unknown"] || s["unread"], "? unknown")
 	add(s["dash"], g.dash+" no forecast")

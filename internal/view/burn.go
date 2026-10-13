@@ -37,22 +37,7 @@ func (m *merger) estimate(t *Team) {
 		return
 	}
 	g := collect.ExtendedWire(m.in.Team, m.in.Key.Fingerprint(), m.in.Config.Device, m.in.State.Relay.NoExtUntil, m.now)
-	// A device whose snapshot the relay no longer has is known by its id,
-	// and has not reported since its last one.
-	var hs []TeamDevice
-	for _, id := range g.HeldBack {
-		k := m.in.Team.Known[id]
-		h := TeamDevice{Device: id, Label: id, CollectorVersion: k.Version, CollectedAt: k.Last, Silent: true}
-		for _, dv := range m.devs {
-			if dv.dev.Device == id {
-				h = *dv.dev
-			}
-		}
-		hs = append(hs, h)
-	}
-	// The busiest first, as the matrix lists them.
-	by := byBurn(Week, func(d TeamDevice) Usage { return d.Burn }, func(d TeamDevice) string { return d.Label })
-	slices.SortStableFunc(hs, by)
+	hs := m.heldBackDevices(g)
 	for _, h := range hs {
 		t.HeldBackBy = append(t.HeldBackBy, h.Label)
 	}
@@ -63,7 +48,7 @@ func (m *merger) estimate(t *Team) {
 	case g.Reason == collect.GateRejected:
 		reason = "the relay did not accept weighted days; trying again " + g.Until.In(m.loc()).Format("Jan 2 15:04")
 	case len(hs) == 1:
-		reason = m.heldBackReason(hs[0])
+		reason = m.heldBackReason(hs[0], collect.ExtSince)
 	case len(hs) > 1:
 		reason = strconv.Itoa(len(hs)) + " devices run releases before " + collect.ExtSince + ": " + m.heldBackSteps(hs)
 	default:
@@ -81,6 +66,26 @@ func (m *merger) estimate(t *Team) {
 		}
 	}
 	t.EstimatedReason = strPtr(reason)
+}
+
+// heldBackDevices are the devices gate g holds back, the busiest first, as
+// the matrix lists them. A device whose snapshot the relay no longer has is
+// known by its id, and has not reported since its last one.
+func (m *merger) heldBackDevices(g collect.Gate) []TeamDevice {
+	var hs []TeamDevice
+	for _, id := range g.HeldBack {
+		k := m.in.Team.Known[id]
+		h := TeamDevice{Device: id, Label: id, CollectorVersion: k.Version, CollectedAt: k.Last, Silent: true}
+		for _, dv := range m.devs {
+			if dv.dev.Device == id {
+				h = *dv.dev
+			}
+		}
+		hs = append(hs, h)
+	}
+	by := byBurn(Week, func(d TeamDevice) Usage { return d.Burn }, func(d TeamDevice) string { return d.Label })
+	slices.SortStableFunc(hs, by)
+	return hs
 }
 
 // What a device that holds back weighted days does to send them: it is
@@ -120,8 +125,8 @@ func (m *merger) gone(h TeamDevice) bool {
 }
 
 // heldBackReason is why the one held-back device h holds back weighted
-// days, and what it takes.
-func (m *merger) heldBackReason(h TeamDevice) string {
+// days, or cycles, which the release since added, and what it takes.
+func (m *merger) heldBackReason(h TeamDevice, since string) string {
 	runs := h.Label + " runs " + h.CollectorVersion + ": "
 	switch m.heldBackStep(h) {
 	case stepForget:
@@ -135,7 +140,7 @@ func (m *merger) heldBackReason(h TeamDevice) string {
 	case stepReinstall:
 		return runs + "reinstall with install.sh"
 	case stepRebuild:
-		return h.Label + " runs a build from source before " + collect.ExtSince + ": build it again"
+		return h.Label + " runs a build from source before " + since + ": build it again"
 	case stepUpdate:
 		return runs + "its update fails; run ai-usage update on it"
 	}

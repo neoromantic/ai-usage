@@ -16,7 +16,7 @@ func TestLegend(t *testing.T) {
 	}{{80, 2}, {100, 2}, {119, 2}, {120, 1}, {160, 1}} {
 		for _, ascii := range []bool{false, true} {
 			p := newPage(&Report{}, Options{Width: c.width, ASCII: ascii})
-			for _, k := range []string{"used", "left", "tick", "tickIn", "dotted", "stale", "silent", "unknown", "unread",
+			for _, k := range []string{"used", "left", "tick", "tickIn", "dotted", "stale", "silent", "partial", "unknown", "unread",
 				"dash", "here", "this", "fail", "old", "none", "chosen"} {
 				p.mark(k)
 			}

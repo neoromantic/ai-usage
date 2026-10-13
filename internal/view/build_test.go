@@ -115,6 +115,9 @@ func TestJSONFieldNamesAreStable(t *testing.T) {
 		otherDoc(t, f.key, "d-other-device", "o", now.Add(-48*time.Hour), other),
 	}}
 	f.in.Config.Aliases = map[string]state.Alias{state.Key("codex", "bob"): {Name: "b", At: now}}
+	f.cycles = collect.Cycles{collect.HistoryKey("claude", "ann"): {
+		{Window: "7d", ResetsAt: start, Percent: 100, LastReadAt: start.Add(-time.Hour)},
+	}}
 	f.seal(now)
 	r := Build(f.in)
 	if r.SchemaVersion != 4 {
@@ -221,6 +224,7 @@ team.devices.limitations team.devices.not_updating team.devices.old team.devices
 team.devices.silent team.devices.sources team.devices.sources.error team.devices.sources.provider
 team.devices.sources.status team.devices.this_device team.devices.update_error team.devices.usage team.devices.usage.30d team.devices.usage.7d
 team.devices.usage.90d team.devices.usage.today
+team.cycles_held_back_by team.cycles_reason
 team.estimated team.estimated_reason team.held_back_by team.latest_version
 team.matrix team.matrix.columns team.matrix.columns.burn team.matrix.columns.burn.30d team.matrix.columns.burn.7d team.matrix.columns.burn.90d team.matrix.columns.burn.today
 team.matrix.columns.label team.matrix.columns.name team.matrix.columns.no_quota
@@ -266,6 +270,11 @@ team.providers.accounts.tokens.cache_read team.providers.accounts.tokens.cache_w
 team.providers.accounts.tokens.output
 team.providers.accounts.usage team.providers.accounts.usage.30d team.providers.accounts.usage.7d team.providers.accounts.usage.90d
 team.providers.accounts.usage.today team.providers.accounts.users
+team.providers.accounts.utilization team.providers.accounts.utilization.average team.providers.accounts.utilization.cycles
+team.providers.accounts.utilization.cycles.last_read_at team.providers.accounts.utilization.cycles.partial
+team.providers.accounts.utilization.cycles.percent team.providers.accounts.utilization.cycles.resets_at
+team.providers.accounts.utilization.cycles.state team.providers.accounts.utilization.main team.providers.accounts.utilization.out
+team.providers.accounts.utilization.window
 team.providers.provider team.pulled_at
 `
 

@@ -238,6 +238,17 @@ func listDefaults(r *Report) {
 	if r.Team.HeldBackBy == nil {
 		r.Team.HeldBackBy = []string{}
 	}
+	if r.Team.CyclesHeldBackBy == nil {
+		r.Team.CyclesHeldBackBy = []string{}
+	}
+	for i := range r.Team.Providers {
+		for j := range r.Team.Providers[i].Accounts {
+			a := &r.Team.Providers[i].Accounts[j]
+			if a.Utilization == nil {
+				a.Utilization = []Utilization{}
+			}
+		}
+	}
 	for i := range r.Team.Devices {
 		if d := &r.Team.Devices[i]; d.Limitations == nil {
 			d.Limitations = []string{}

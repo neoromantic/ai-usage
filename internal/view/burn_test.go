@@ -255,7 +255,7 @@ func TestTeamReplacedBy(t *testing.T) {
 	f := newFixture(t, emptyState())
 	doc := func(id, host, user string, at time.Time) snapshot.Doc {
 		t.Helper()
-		body, err := json.Marshal(collect.BuildDoc(emptyState(), f.key, state.Config{Device: id}, host, user, "v1.2.0", at))
+		body, err := json.Marshal(collect.BuildDoc(emptyState(), nil, f.key, state.Config{Device: id}, host, user, "v1.2.0", at))
 		if err != nil {
 			t.Fatal(err)
 		}

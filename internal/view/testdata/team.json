@@ -1258,6 +1258,10 @@
       "ci-runner-eu-west-build-pool-node-0042ab"
     ],
     "estimated_reason": "ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it updates itself within 15 minutes",
+    "cycles_held_back_by": [
+      "ci-runner-eu-west-build-pool-node-0042ab"
+    ],
+    "cycles_reason": "ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it updates itself within 15 minutes",
     "devices": [
       {
         "device": "d-7c3e1a9b5f2d4e8a6c0b1d3f",
@@ -2154,7 +2158,229 @@
             },
             "burn_estimated": false,
             "no_reading": null,
-            "outside": null
+            "outside": null,
+            "utilization": [
+              {
+                "window": "7d",
+                "main": true,
+                "cycles": [
+                  {
+                    "resets_at": "2026-09-20T01:00:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-09-20T00:40:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-09-13T01:00:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-09-13T00:40:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-09-06T01:00:00Z",
+                    "percent": 92,
+                    "last_read_at": "2026-09-06T00:40:00Z",
+                    "partial": false,
+                    "state": "tight"
+                  },
+                  {
+                    "resets_at": "2026-08-30T01:00:00Z",
+                    "percent": 78,
+                    "last_read_at": "2026-08-28T01:00:00Z",
+                    "partial": true,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-08-23T01:00:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-08-23T00:40:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-08-16T01:00:00Z",
+                    "percent": 64,
+                    "last_read_at": "2026-08-16T00:40:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-08-09T01:00:00Z",
+                    "percent": 88,
+                    "last_read_at": "2026-08-09T00:40:00Z",
+                    "partial": false,
+                    "state": "tight"
+                  },
+                  {
+                    "resets_at": "2026-08-02T01:00:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-08-02T00:40:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-07-26T01:00:00Z",
+                    "percent": 71,
+                    "last_read_at": "2026-07-26T00:40:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-07-19T01:00:00Z",
+                    "percent": 45,
+                    "last_read_at": "2026-07-17T01:00:00Z",
+                    "partial": true,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-07-12T01:00:00Z",
+                    "percent": 96,
+                    "last_read_at": "2026-07-12T00:40:00Z",
+                    "partial": false,
+                    "state": "tight"
+                  },
+                  {
+                    "resets_at": "2026-07-05T01:00:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-07-05T00:40:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-06-28T01:00:00Z",
+                    "percent": 83,
+                    "last_read_at": "2026-06-28T00:40:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  }
+                ],
+                "out": 5,
+                "average": 85.9231
+              },
+              {
+                "window": "7d Fable",
+                "main": false,
+                "cycles": [
+                  {
+                    "resets_at": "2026-09-20T01:00:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-09-20T00:40:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-09-13T01:00:00Z",
+                    "percent": 62,
+                    "last_read_at": "2026-09-13T00:40:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-09-06T01:00:00Z",
+                    "percent": 30,
+                    "last_read_at": "2026-09-03T01:00:00Z",
+                    "partial": true,
+                    "state": "under"
+                  }
+                ],
+                "out": 1,
+                "average": 64
+              },
+              {
+                "window": "5h",
+                "main": false,
+                "cycles": [
+                  {
+                    "resets_at": "2026-09-23T13:00:00Z",
+                    "percent": 38,
+                    "last_read_at": "2026-09-23T12:40:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-23T08:00:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-09-23T07:40:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-09-23T03:00:00Z",
+                    "percent": 71,
+                    "last_read_at": "2026-09-23T02:40:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-09-22T22:00:00Z",
+                    "percent": 52,
+                    "last_read_at": "2026-09-22T19:00:00Z",
+                    "partial": true,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-09-22T17:00:00Z",
+                    "percent": 90,
+                    "last_read_at": "2026-09-22T16:40:00Z",
+                    "partial": false,
+                    "state": "tight"
+                  },
+                  {
+                    "resets_at": "2026-09-22T12:00:00Z",
+                    "percent": 12,
+                    "last_read_at": "2026-09-22T11:40:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-22T07:00:00Z",
+                    "percent": 64,
+                    "last_read_at": "2026-09-22T06:40:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-09-22T02:00:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-09-22T01:40:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-09-21T21:00:00Z",
+                    "percent": 41,
+                    "last_read_at": "2026-09-21T20:40:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-21T16:00:00Z",
+                    "percent": 77,
+                    "last_read_at": "2026-09-21T15:40:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-09-21T11:00:00Z",
+                    "percent": 8,
+                    "last_read_at": "2026-09-21T10:40:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-21T06:00:00Z",
+                    "percent": 55,
+                    "last_read_at": "2026-09-21T05:40:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  }
+                ],
+                "out": 2,
+                "average": 59
+              }
+            ]
           },
           {
             "label": "kim@corp.test",
@@ -2222,7 +2448,8 @@
             },
             "burn_estimated": false,
             "no_reading": "/opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update Claude Code or put the newer one first on PATH on Mac.localdomain",
-            "outside": null
+            "outside": null,
+            "utilization": []
           }
         ]
       },
@@ -2314,7 +2541,59 @@
             },
             "burn_estimated": false,
             "no_reading": null,
-            "outside": null
+            "outside": null,
+            "utilization": [
+              {
+                "window": "7d",
+                "main": true,
+                "cycles": [
+                  {
+                    "resets_at": "2026-09-18T17:09:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-09-18T16:49:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-09-11T17:09:00Z",
+                    "percent": 87,
+                    "last_read_at": "2026-09-11T16:49:00Z",
+                    "partial": false,
+                    "state": "tight"
+                  },
+                  {
+                    "resets_at": "2026-09-04T17:09:00Z",
+                    "percent": 93,
+                    "last_read_at": "2026-09-04T16:49:00Z",
+                    "partial": false,
+                    "state": "tight"
+                  },
+                  {
+                    "resets_at": "2026-08-28T17:09:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-08-28T16:49:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-08-21T17:09:00Z",
+                    "percent": 58,
+                    "last_read_at": "2026-08-21T16:49:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-08-14T17:09:00Z",
+                    "percent": 76,
+                    "last_read_at": "2026-08-14T16:49:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  }
+                ],
+                "out": 2,
+                "average": 85.6667
+              }
+            ]
           },
           {
             "label": "sam@mail.test",
@@ -2400,7 +2679,45 @@
             },
             "burn_estimated": false,
             "no_reading": null,
-            "outside": null
+            "outside": null,
+            "utilization": [
+              {
+                "window": "7d",
+                "main": true,
+                "cycles": [
+                  {
+                    "resets_at": "2026-09-21T20:12:00Z",
+                    "percent": 97,
+                    "last_read_at": "2026-09-21T19:52:00Z",
+                    "partial": false,
+                    "state": "tight"
+                  },
+                  {
+                    "resets_at": "2026-09-14T20:12:00Z",
+                    "percent": 91,
+                    "last_read_at": "2026-09-14T19:52:00Z",
+                    "partial": false,
+                    "state": "tight"
+                  },
+                  {
+                    "resets_at": "2026-09-07T20:12:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-09-07T19:52:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-08-31T20:12:00Z",
+                    "percent": 88,
+                    "last_read_at": "2026-08-29T20:12:00Z",
+                    "partial": true,
+                    "state": "tight"
+                  }
+                ],
+                "out": 1,
+                "average": 94
+              }
+            ]
           },
           {
             "label": "lee@corp.test",
@@ -2525,7 +2842,80 @@
             "outside": {
               "points": 25,
               "since": "2026-09-22T18:38:00Z"
-            }
+            },
+            "utilization": [
+              {
+                "window": "7d",
+                "main": true,
+                "cycles": [
+                  {
+                    "resets_at": "2026-09-22T16:30:00Z",
+                    "percent": 22,
+                    "last_read_at": "2026-09-22T16:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-15T16:30:00Z",
+                    "percent": 35,
+                    "last_read_at": "2026-09-13T16:30:00Z",
+                    "partial": true,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-08T16:30:00Z",
+                    "percent": 18,
+                    "last_read_at": "2026-09-08T16:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-01T16:30:00Z",
+                    "percent": 40,
+                    "last_read_at": "2026-09-01T16:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-08-25T16:30:00Z",
+                    "percent": 27,
+                    "last_read_at": "2026-08-25T16:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-08-18T16:30:00Z",
+                    "percent": 31,
+                    "last_read_at": "2026-08-18T16:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-08-11T16:30:00Z",
+                    "percent": 12,
+                    "last_read_at": "2026-08-11T16:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-08-04T16:30:00Z",
+                    "percent": 44,
+                    "last_read_at": "2026-08-04T16:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-07-28T16:30:00Z",
+                    "percent": 19,
+                    "last_read_at": "2026-07-28T16:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  }
+                ],
+                "out": 0,
+                "average": 27.5556
+              }
+            ]
           },
           {
             "label": "unknown",
@@ -2566,7 +2956,8 @@
             },
             "burn_estimated": false,
             "no_reading": null,
-            "outside": null
+            "outside": null,
+            "utilization": []
           }
         ]
       },
@@ -2612,7 +3003,8 @@
             },
             "burn_estimated": false,
             "no_reading": null,
-            "outside": null
+            "outside": null,
+            "utilization": []
           }
         ]
       },
@@ -2660,7 +3052,8 @@
             },
             "burn_estimated": false,
             "no_reading": null,
-            "outside": null
+            "outside": null,
+            "utilization": []
           }
         ]
       }

@@ -394,12 +394,17 @@ type Team struct {
 	// and output, as a release before v0.4.0 sends no burn. HeldBackBy are
 	// the devices whose release keeps this device from sending its own, and
 	// EstimatedReason says why, and what to do, in a line.
-	Estimated       bool           `json:"estimated"`
-	HeldBackBy      []string       `json:"held_back_by"`
-	EstimatedReason *string        `json:"estimated_reason"`
-	Devices         []TeamDevice   `json:"devices"`
-	Providers       []TeamProvider `json:"providers"`
-	Matrix          Matrix         `json:"matrix"`
+	Estimated       bool     `json:"estimated"`
+	HeldBackBy      []string `json:"held_back_by"`
+	EstimatedReason *string  `json:"estimated_reason"`
+	// CyclesHeldBackBy are the devices whose release keeps this device from
+	// sending its quota cycles, and CyclesReason says why, and what to do,
+	// in a line, while this device has cycles the team does not get.
+	CyclesHeldBackBy []string       `json:"cycles_held_back_by"`
+	CyclesReason     *string        `json:"cycles_reason"`
+	Devices          []TeamDevice   `json:"devices"`
+	Providers        []TeamProvider `json:"providers"`
+	Matrix           Matrix         `json:"matrix"`
 }
 
 type TeamDevice struct {
@@ -516,6 +521,44 @@ type TeamAccount struct {
 	// Outside is a window that filled in the last day while the team spent
 	// next to nothing on it: someone outside the team uses it.
 	Outside *Outside `json:"outside"`
+	// Utilization is the history of a subscription's windows: each window
+	// with a period that ended, the main one first, then the longest.
+	Utilization []Utilization `json:"utilization"`
+}
+
+// Utilization is one quota window's history: how full each of its periods
+// was before it reset, as the fullest reading any device took of it.
+type Utilization struct {
+	Window string `json:"window"`
+	// Main is the account's main window, the weekly one where it has one.
+	Main bool `json:"main"`
+	// Cycles are the window's periods that ended, newest first: those of
+	// the last 90 days, and of a window shorter than a day the last 12.
+	Cycles []Cycle `json:"cycles"`
+	// Out counts the cycles that ran out, and Average is their mean
+	// percent.
+	Out     int     `json:"out"`
+	Average float64 `json:"average"`
+}
+
+// Cycle is one period of a quota window that ended: when it reset, how full
+// it was, and when it was last read.
+type Cycle struct {
+	// ResetsAt is when the period was to reset. A window can reset early,
+	// as Codex's may: a newer period of it then began before this time,
+	// which may still be to come.
+	ResetsAt time.Time `json:"resets_at"`
+	// Percent is the fullest reading of the period. A drop within it, as
+	// when the provider takes usage back, does not lower it.
+	Percent    float64   `json:"percent"`
+	LastReadAt time.Time `json:"last_read_at"`
+	// Partial says the period was last read under 100% long before it
+	// ended, 6 hours or a quarter of a window shorter than a day, so it may
+	// have ended fuller.
+	Partial bool `json:"partial"`
+	// State is the band of Percent: out at 100% or more, tight from 85%,
+	// ok from 50%, else under.
+	State string `json:"state"`
 }
 
 // Outside is how many points a window rose since when, with no burn of the
