@@ -444,6 +444,11 @@ let tight5h = try edited("team.json") { json in
     return o
 }
 equal("5h window's recent pace", tight5h.teamAccount(provider: "claude", label: "mira@studio.dev")?.quota?.windows.first { $0.name == "5h" }?.recentPace, "the recent")
+// The pace a forecast takes, as the report names it: the recent one, else
+// this week's, or this window's when it is not a week long.
+let paces = { (r: Report, p: String, l: String) in r.teamAccount(provider: p, label: l)?.quota?.windows.map(\.pace) ?? [] }
+equal("forecast paces", paces(tight5h, "claude", "mira@studio.dev") + paces(team, "codex", "bots@studio.dev"),
+      ["the recent", "the last day's", "this window's", "this week's"])
 let chips04 = Chip.chips(v04)
 equal("v0.4 chips", chips04.map { "\($0.text) \($0.state) \($0.devices)" },
       ["1 needs reinstall tight [\"leo-air\"]", "1 reinstalled unknown [\"courier\"]"])

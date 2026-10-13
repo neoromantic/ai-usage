@@ -45,8 +45,9 @@ struct PopoverView: View {
         .onPreferenceChange(TabHeights.self) { measured in
             // The popover keeps the height of its collapsed rows: what a
             // row, a filter, or Show All opens scrolls inside it, since a
-            // window under the menu bar that changes its height blinks.
-            if store.collapsed || heights.isEmpty {
+            // window under the menu bar that changes its height blinks. The
+            // renderer's pictures of a whole tab take what is open too.
+            if store.collapsed || heights.isEmpty || maxHeight == .infinity {
                 heights = measured
             }
         }

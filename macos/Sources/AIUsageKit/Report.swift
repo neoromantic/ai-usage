@@ -331,6 +331,14 @@ public struct Quota: Decodable, Sendable {
         public var recentPace: String {
             (length ?? 10080) < 1440 ? "the recent" : "the last day's"
         }
+
+        /// The pace the window's forecast takes, as the report names it: the
+        /// recent one, when the forecast takes that, else this week's, or
+        /// this window's when it is not a week long.
+        public var pace: String {
+            if forecast?.basis == "recent" { return recentPace }
+            return (length ?? 10080) == 10080 ? "this week's" : "this window's"
+        }
     }
 }
 

@@ -111,7 +111,6 @@ private struct NotRead: View {
 }
 
 private struct LimitRow: View {
-    @EnvironmentObject private var store: Store
     let provider: String
     let account: TeamAccount
     let line: LimitLine
@@ -306,9 +305,11 @@ private struct LimitRow: View {
     // MARK: Details
 
     /// A line for each thing the row does not show: the account's login,
-    /// each window, what fills it from outside the team, how old the
-    /// reading is and who read it, and the devices that used it. A caveat
-    /// has its line whatever the line under the row says.
+    /// each window, where the one that runs out is headed and at what pace,
+    /// what fills it from outside the team, how old the reading is and who
+    /// read it, who spent the window so far, when it was last used, and
+    /// why it is idle or not read. A caveat has its line whatever the line
+    /// under the row says.
     private var details: some View {
         let a = account
         return DetailGrid {
@@ -316,16 +317,35 @@ private struct LimitRow: View {
             ForEach(orderedWindows, id: \.name) { w in
                 DetailLine(short(w), windowValue(w), help: windowHelp(w))
             }
+            DetailLine("Forecast", forecast)
             DetailLine("Outside", outsideWords.map { Text($0).foregroundColor(Palette.text("tight")) })
             DetailLine("Reading", reading)
-            if solo {
-                DetailLine("Active", a.lastActiveAt.map { Format.ago($0, now: now) })
-            } else if let per = perDevice {
-                DetailLine("Devices", per.text, help: per.help)
+            if let spent = thisWindow {
+                DetailLine("This window", spent.text, help: spent.help)
             }
+            DetailLine("Last used", a.lastActiveAt.map { Format.ago($0, now: now) })
+            DetailLine("Idle", idle)
+            DetailLine("Not read", a.noReading)
             ForEach(Array(a.linkedUsage.enumerated()), id: \.offset) { _, l in
                 DetailLine(Format.provider(l.provider), linked(l))
             }
+        }
+    }
+
+    /// Where the window that runs out is headed by its reset, and the pace
+    /// the report's forecast takes: "164% at reset · this week's pace", with
+    /// its name when it is not the window shown.
+    private var forecast: String? {
+        let over = line.runsOut?.window ?? ([shown] + line.others).first { $0.state == "over" && $0.forecast?.runsOutAt != nil }
+        guard let w = over, let f = w.forecast else { return nil }
+        return (w.name == shown.name ? "" : short(w) + " ") + "\(Int(f.percent))% at reset · \(w.pace) pace"
+    }
+
+    /// Why the report calls the account idle: "9d, paid and unused".
+    private var idle: String? {
+        report.attention.first { $0.kind == .idle && $0.provider == provider && $0.account == account.label }.map { a in
+            let text = AttentionText(a, report: report).detail
+            return text.hasPrefix("idle ") ? String(text.dropFirst(5)) : text
         }
     }
 
@@ -405,17 +425,39 @@ private struct LimitRow: View {
         return (q.stale ? age.foregroundColor(Palette.text("tight")) : age) + Text(rest)
     }
 
-    /// The devices that used the account in the period, busiest first:
-    /// "build-01 141M, scout 49M +8"; the tooltip has all of them, and when
-    /// it was last used.
-    private var perDevice: (text: String, help: String)? {
-        let p = store.period
-        let used = account.perDevice.filter { $0.shown.value[p] > 0 }
+    /// The devices that spent the main window since it began, busiest
+    /// first, as the report's table has them: "build-01 84M, scout 35M +7 ·
+    /// since 21 Sep 02:40"; alone, the tokens. The tooltip has all of them.
+    private var thisWindow: (text: String, help: String)? {
+        let m = report.team.matrix
+        guard let col = m.columns.firstIndex(where: { $0.provider == provider && $0.label == account.label }) else { return nil }
+        let used = m.rows.enumerated().compactMap { i, r -> (i: Int, device: String, tokens: Int)? in
+            guard col < r.cells.count, r.cells[col].shownWindow.value > 0 else { return nil }
+            return (i, r.device, r.cells[col].shownWindow.value)
+        }.sorted { $0.tokens != $1.tokens ? $0.tokens > $1.tokens : $0.i < $1.i }
         guard !used.isEmpty else { return nil }
-        let items = used.map { "\($0.device) \(Format.tokensM($0.shown.value[p]))" }
-        let text = items.prefix(2).joined(separator: ", ") + (items.count > 2 ? " +\(items.count - 2)" : "")
-        let last = account.lastActiveAt.map { "Last active \(Format.ago($0, now: now))" }
-        return (text, (["\(p.title), \(used[0].shown.label):"] + items + [last].compactMap { $0 }).joined(separator: "\n"))
+        let items = used.map { "\($0.device) \(Format.tokensM($0.tokens))" }
+        let since = windowStart.map { " · since " + sinceText($0) } ?? ""
+        let text = solo ? Format.tokensM(m.columns[col].shownWindow.value) + since
+            : items.prefix(2).joined(separator: ", ") + (items.count > 2 ? " +\(items.count - 2)" : "") + since
+        let head = "\(short(quota?.main ?? shown)) window" + (windowStart.map { " since " + sinceText($0) } ?? "") + ", \(m.columns[col].shownWindow.label):"
+        return (text, ([head] + items).joined(separator: "\n"))
+    }
+
+    /// When the main window began: its length before its reset.
+    private var windowStart: Date? {
+        guard let w = quota?.main, let reset = w.resetsAt, let length = w.length else { return nil }
+        return reset.addingTimeInterval(-Double(length) * 60)
+    }
+
+    /// A start within the last day as the clock, else as the date: "21 Sep
+    /// 02:40", so that it does not read as the reset's weekday.
+    private func sinceText(_ t: Date) -> String {
+        guard now.timeIntervalSince(t) >= 86400 else { return clock(t) }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "d MMM HH:mm"
+        return f.string(from: t)
     }
 
     /// "312 sessions through it on 9 devices".
