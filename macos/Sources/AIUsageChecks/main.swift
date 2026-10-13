@@ -634,6 +634,22 @@ check("timeout", {
 }() && Date().timeIntervalSince(start) < 5)
 let asyncResult = await Task { try await cli.run(["echo"], input: Data("async".utf8)) }.result
 equal("async run", try String(decoding: asyncResult.get(), as: UTF8.self), "async")
+// The script Terminal opens runs the command as the collector does, with
+// its folder and arguments quoted; without the LaunchAgent's PATH, the
+// shell's and the standard folders.
+let quoted = CLI(location: CLILocation(executable: local, stateHome: "/state/mira's ai-usage", path: "/usr/bin:/bin"))
+let command = tmp.appendingPathComponent("AI Usage Report.command")
+try Data(quoted.terminalScript(["env"]).utf8).write(to: command)
+let sh = Process(), shOut = Pipe()
+sh.executableURL = URL(fileURLWithPath: "/bin/sh")
+sh.arguments = [command.path]
+sh.standardOutput = shOut
+try sh.run()
+sh.waitUntilExit()
+equal("terminal script", String(decoding: shOut.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self), "/state/mira's ai-usage|/usr/bin:/bin")
+equal("terminal script without the agent", CLI(location: CLILocation(executable: URL(fileURLWithPath: "/opt/ai usage/ai-usage")))
+        .terminalScript(["report", "--devices"]).split(separator: "\n").map(String.init).dropFirst().map { $0.hasPrefix("export PATH=\"$PATH\":'") ? "path" : $0 },
+      ["path", "exec '/opt/ai usage/ai-usage' 'report' '--devices'"])
 
 print(failures == 0 ? "all checks passed" : "\(failures) checks failed")
 exit(failures == 0 ? 0 : 1)

@@ -626,6 +626,19 @@ enum StatusMenu {
                 menu.addItem(action(title, enabled: !store.updating) { Task { await store.update() } })
             }
             menu.addItem(.separator())
+            // The whole report, interactive, where the popover shows a
+            // glance: alone, this Mac is the only device.
+            let views: [(String, [String], String)] = [
+                ("Open Report in Terminal", [], "AI Usage Report"),
+                ("Device Status in Terminal", ["--devices"], "AI Usage Devices"),
+                ("All Projects in Terminal", ["--projects"], "AI Usage Projects"),
+            ].filter { !r.solo || $0.1 != ["--devices"] }
+            for (title, flags, name) in views {
+                let item = action(title, enabled: store.cliPath != nil) { store.openInTerminal(["report"] + flags, named: name) }
+                item.toolTip = (["ai-usage report"] + flags).joined(separator: " ")
+                menu.addItem(item)
+            }
+            menu.addItem(.separator())
         }
         menu.addItem(action("Settings…", key: ",") { SettingsWindow.show() })
         menu.addItem(action("Quit AI Usage", key: "q") { NSApp.terminate(nil) })
@@ -904,15 +917,9 @@ private struct EmptyStateView: View {
         .frame(maxWidth: .infinity, minHeight: 180)
     }
 
-    /// Runs the install command in a Terminal window, from a script the app
-    /// writes, so the person sees what runs and how it ends.
+    /// Runs the install command in a Terminal window.
     private static func installInTerminal() {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("Install ai-usage.command")
-        let script = "#!/bin/sh\necho '$ \(install)'\n\(install)\necho\necho 'You can close this window.'\n"
-        guard (try? script.write(to: url, atomically: true, encoding: .utf8)) != nil,
-              (try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)) != nil,
-              let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else { return }
-        NSWorkspace.shared.open([url], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration())
+        Terminal.open("#!/bin/sh\necho '$ \(install)'\n\(install)\necho\necho 'You can close this window.'\n", named: "Install ai-usage")
     }
 
     /// What went wrong, behind a quiet button under the one that fixes it.
