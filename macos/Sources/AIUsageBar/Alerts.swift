@@ -139,8 +139,10 @@ private struct AlertRow: View {
             store.expanded = key
             store.scrollTarget = key
         case .notRead(let provider):
+            let key = "unread:\(provider)"
             store.tab = .limits
-            store.scrollTarget = "unread:\(provider)"
+            store.expanded = key
+            store.scrollTarget = key
         case .devices(let devices):
             // Alone, this Mac is the only device, and Usage lists none.
             guard !solo else {

@@ -212,7 +212,7 @@ On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/A
 - **Usage:** the tokens of each device or each subscription, today or over 7, 30, or 90 days, in whole millions.
 - **Projects:** this Mac's repositories, their worktrees counted in, grouped by the folder they share.
 
-A click on a row opens its details: each window with its forecast, and the forecast of the one that runs out with the pace it takes; who spent the window since it began, when the subscription was last used, and why the report calls it idle or could not read it; a device's release, tools, and errors, in the words of the report's NOTE; a project's sessions. Color means a problem only: red is out, orange runs out before the reset, yellow is tight. `⌘1` to `⌘3` switch the tabs and `⌘R` collects now.
+A click on a row opens its details: each window with its forecast, and the forecast of the one that runs out with the pace it takes; who spent the window since it began, when the subscription was last used, and why the report calls it idle or could not read it, which a click on the line of the subscriptions not read also gives whole; a device's release, tools, and errors, in the words of the report's NOTE; a project's sessions. Color means a problem only: red is out, orange runs out before the reset, yellow is tight. `⌘1` to `⌘3` switch the tabs and `⌘R` collects now.
 
 <table>
 <tr>

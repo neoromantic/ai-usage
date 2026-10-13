@@ -57,8 +57,10 @@ struct LimitsView: View {
 }
 
 /// The subscriptions of a provider with no window known now that limits
-/// them, in a line: "Not read: ann, bo". The tooltip says why of each; the
-/// line says it too, as the report has it, when it is the only one.
+/// them, in a line: "Not read: ann, bo". The line says why, as the report
+/// has it, when it is the only one; a click opens why of each, whole, as
+/// the tooltip has it, since the report's reason and what to do about it
+/// rarely fit the line.
 private struct NotRead: View {
     let provider: String
     let accounts: [TeamAccount]
@@ -66,15 +68,20 @@ private struct NotRead: View {
     let now: Date
 
     var body: some View {
-        line
-            .font(.subheadline)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .frame(height: Metrics.row - 6)
-            .padding(.leading, Metrics.slot)
-            .help(accounts.map(details).joined(separator: "\n"))
-            .accessibilityLabel(spoken)
-            .id("unread:\(provider)")
+        DisclosureRow(key: "unread:\(provider)", spoken: spoken) {
+            line
+                .font(.subheadline)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(height: Metrics.row - 6)
+                .padding(.leading, Metrics.slot)
+                .help(accounts.map(details).joined(separator: "\n"))
+        } details: {
+            ForEach(accounts, id: \.label) { a in
+                Text(details(a))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     private var line: Text {
