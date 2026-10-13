@@ -324,10 +324,14 @@ private struct VerdictButton: View {
                 store.scrollTarget = key
             }
         } label: {
-            // Where the title does not fit, the time it runs out leads the
-            // line under it.
+            // Where the line does not fit, it drops how long before its
+            // reset the window runs out, and then the time it runs out
+            // leads it in place of the title's end; the reading's age
+            // stays.
             ViewThatFits(in: .horizontal) {
                 VerdictLabel(symbol: symbol(v.kind), title: v.title, subline: v.subline).fixedSize()
+                VerdictLabel(symbol: symbol(v.kind), title: v.title, subline: v.shortSubline).fixedSize()
+                VerdictLabel(symbol: symbol(v.kind), title: v.compactTitle, subline: v.compactSubline).fixedSize()
                 VerdictLabel(symbol: symbol(v.kind), title: v.compactTitle, subline: v.compactSubline)
             }
             .frame(maxWidth: .infinity, alignment: .leading)

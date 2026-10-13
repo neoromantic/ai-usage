@@ -199,9 +199,27 @@ check("team verdict opens its account", teamVerdict.kind == .out && teamVerdict.
 let soloVerdict = Verdict(solo, now: solo.generatedAt, timeZone: berlin)
 equal("solo verdict", [soloVerdict.title, soloVerdict.subline],
       ["Claude mira · Fable runs out ~Thu 23:55", "2d 1h before its reset · +1 more"])
+// A narrow header cuts how long before its reset first, then moves the
+// time it runs out from the title to the line.
+equal("solo verdict short", soloVerdict.shortSubline, "+1 more")
 equal("solo verdict compact", [soloVerdict.compactTitle, soloVerdict.compactSubline],
-      ["Claude mira · Fable runs out", "~Thu 23:55 · 2d 1h before its reset · +1 more"])
+      ["Claude mira · Fable runs out", "~Thu 23:55 · +1 more"])
 check("solo verdict is over", soloVerdict.kind == .over)
+// An old reading's age stays in every form of the line, ahead of the count
+// of the others.
+let ranOut = try edited("solo.json") { json in
+    var o = json as! [String: Any]
+    var attention = o["attention"] as! [[String: Any]]
+    attention[0]["at"] = "2026-09-24T03:18:00Z"
+    attention[0]["reading_age_seconds"] = 129_600
+    o["attention"] = attention
+    return o
+}
+let ranOutVerdict = Verdict(ranOut, now: ranOut.generatedAt, timeZone: berlin)
+equal("stale verdict", [ranOutVerdict.title, ranOutVerdict.subline, ranOutVerdict.shortSubline],
+      ["Claude mira · Fable ran out ~Thu 05:18", "2d 19h before its reset · reading 1d 12h old · +1 more", "reading 1d 12h old · +1 more"])
+equal("stale verdict compact", [ranOutVerdict.compactTitle, ranOutVerdict.compactSubline],
+      ["Claude mira · Fable ran out", "~Thu 05:18 · reading 1d 12h old · +1 more"])
 let calm = try edited("team.json") { json in
     var o = json as! [String: Any]
     o["attention"] = (o["attention"] as! [[String: Any]]).filter { !["out", "over", "tight"].contains($0["kind"] as? String) }
