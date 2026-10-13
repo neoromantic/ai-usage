@@ -30,7 +30,7 @@ enum Metrics {
     static let name: CGFloat = 120
     static let gap: CGFloat = 8
     static let value: CGFloat = 54
-    static let trailing: CGFloat = 54
+    static let trailing: CGFloat = 60
     /// The space between the value and the trailing column.
     static let trailingGap: CGFloat = 6
 }

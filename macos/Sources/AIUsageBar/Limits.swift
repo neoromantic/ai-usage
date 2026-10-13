@@ -202,13 +202,19 @@ private struct LimitRow: View {
             .lineLimit(1)
     }
 
-    /// How long until the account can be used again when a window stops
-    /// it, else until the shown window resets.
+    /// How long until an over account runs out, as the report forecasts
+    /// it: "↘17h 19m", or "↘ ran out" from an old reading, which is not out;
+    /// else how long until the account can be used again when a window
+    /// stops it, else until the shown window resets.
     private var countdown: some View {
         let w = line.blocking ?? shown
         let out = w.state == "out"
         return Group {
-            if let at = w.resetsAt {
+            if let r = line.runsOut {
+                Text(r.at > now ? "↘" + Format.duration(r.at.timeIntervalSince(now)) : "↘ ran out")
+                    .foregroundStyle(Palette.text("over"))
+                    .help(runsOutHelp(r))
+            } else if let at = w.resetsAt {
                 Text(Format.duration(at.timeIntervalSince(now)))
                     .foregroundStyle(out ? Palette.text("out") : .secondary)
                     .help(out ? "\(short(w)) back \(clock(at))" : "Resets \(clock(at))")
@@ -222,16 +228,48 @@ private struct LimitRow: View {
         .fixedSize()
     }
 
+    /// "Runs out ~17:39 · resets Tue 22:00", with the window's name when
+    /// it is not the one shown, and the reading's age when it is old.
+    private func runsOutHelp(_ r: LimitLine.RunOut) -> String {
+        let name = r.window.name == shown.name ? "" : short(r.window) + " "
+        var parts = [name + (r.at > now ? "runs out ~" : "ran out ~") + clock(r.at)]
+        if let reset = r.window.resetsAt {
+            parts.append("resets \(clock(reset))")
+        }
+        if r.window.stale, let age = readingAge(r.window) {
+            parts.append("reading \(age) old")
+        }
+        let s = parts.joined(separator: " · ")
+        return s.prefix(1).uppercased() + s.dropFirst()
+    }
+
     /// The line under the row: the window that stops the account, with the
     /// shown window's reset that the countdown gives up for it, "5h out ·
-    /// 7d resets Sun 01:00"; or the window that limits it more, "Fable ·
-    /// 7% left · resets Sun 01:00 · Over"; or, with the main window unread,
-    /// "7d not in the last reading".
+    /// 7d resets Sun 01:00"; the window that runs out first, "7d runs out
+    /// ~Fri 08:59 · resets Mon 02:40", or "Fable · 7% left · runs out ~Thu
+    /// 23:55"; or the window that limits it more, "Fable · 7% left · resets
+    /// Sun 01:00 · Over"; or, with the main window unread, "7d not in the
+    /// last reading".
     private var subLine: Text? {
         let secondary = { (s: String) in Text(s).foregroundColor(.secondary) }
         if let b = line.blocking {
             return secondary(short(b) + " ") + Text("out").foregroundColor(Palette.text("out"))
                 + secondary(shown.resetsAt.map { " · \(short(shown)) resets \(clock($0))" } ?? "")
+        }
+        if let r = line.runsOut {
+            let when = Text((r.at > now ? "runs out ~" : "ran out ~") + clock(r.at)).foregroundColor(Palette.text("over"))
+            var text: Text
+            var rest = line.others.count
+            if r.window.name == shown.name {
+                text = secondary(short(shown) + " ") + when + secondary(shown.resetsAt.map { " · resets \(clock($0))" } ?? "")
+            } else {
+                text = secondary("\(short(r.window)) · \(Format.left(r.window)) left · ") + when
+                rest -= 1
+            }
+            if rest > 0 {
+                text = text + secondary(" · +\(rest)")
+            }
+            return text
         }
         if let m = line.unreadMain {
             return secondary(short(m) + (m.reset ? " reset since the last reading" : " not in the last reading"))
@@ -306,8 +344,8 @@ private struct LimitRow: View {
     }
 
     /// A window in a few words, all in what is left: "42% left · ~12% at
-    /// reset Sun 01:00", "17% left · runs out ~Thu 23:55", "Out · back Thu
-    /// 17:05". Where it is headed takes the window's color when that asks
+    /// reset Sun 01:00", "17% left · runs out ~Thu 23:55 · resets Sat
+    /// 01:00", "Out · back Thu 17:05". Where it is headed takes the window's color when that asks
     /// for something.
     private func windowValue(_ w: Quota.Window) -> Text {
         if w.reset { return Text("Reset since the last reading") }
@@ -318,7 +356,7 @@ private struct LimitRow: View {
         let left = Text("\(Format.left(w)) left · ")
         let tint = { (s: String) in Palette.loud(w.state) ? Text(s).foregroundColor(Palette.text(w.state)) : Text(s) }
         if w.state == "over", let at = w.forecast?.runsOutAt {
-            return left + tint((at > now ? "runs out ~" : "ran out ~") + clock(at))
+            return left + tint((at > now ? "runs out ~" : "ran out ~") + clock(at)) + Text(w.resetsAt.map { " · resets \(clock($0))" } ?? "")
         }
         let resets = w.resetsAt.map { " \(clock($0))" } ?? ""
         if let f = w.forecast, f.percent > w.percent {
@@ -411,6 +449,10 @@ private struct LimitRow: View {
             s += Palette.label(line.state).lowercased() + "; "
         }
         s += parts.joined(separator: ", ")
+        if let r = line.runsOut {
+            s += "; " + (r.window.name == w.name ? "" : "\(short(r.window)) window ")
+                + (r.at > now ? "runs out in \(Format.spokenDuration(r.at.timeIntervalSince(now)))" : "ran out")
+        }
         if let m = line.unreadMain {
             s += "; \(short(m)) window not read"
         }

@@ -66,6 +66,7 @@ enum Renderer {
                 states.append(("projects-expanded", { $0.tab = .projects }, { $0.expanded = "proj:\(p.path)" }))
             }
             let calm = try calmStore(data)
+            let stale = try staleStore(data)
             let empty: [(String, Store.Phase)] = [
                 ("loading", .loading),
                 ("not-installed", .notInstalled),
@@ -88,6 +89,9 @@ enum Renderer {
                 }
                 if let calm {
                     try write(popover(calm), appearance, to: png("popover-calm"))
+                }
+                if let stale {
+                    try write(popover(stale), appearance, to: png("popover-limits-stale"))
                 }
                 for (name, phase) in empty {
                     try write(popover(Store(showing: phase)), appearance, to: png("popover-\(name)"))
@@ -129,6 +133,47 @@ enum Renderer {
         guard var json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let attention = json["attention"] as? [[String: Any]] else { return nil }
         json["attention"] = attention.filter { !["out", "over"].contains($0["kind"] as? String) }
+        return Store(demo: try Report.decode(JSONSerialization.data(withJSONObject: json)))
+    }
+
+    /// The report with the first subscription that runs out read a day and
+    /// a half ago, past the time it was to run out: it ran out, as far as
+    /// anyone knows, but is not out. Its entry's text is the report's, in
+    /// Berlin's time, as the pictures are drawn.
+    private static func staleStore(_ data: Data) throws -> Store? {
+        guard var json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var attention = json["attention"] as? [[String: Any]],
+              let i = attention.firstIndex(where: { $0["kind"] as? String == "over" && $0["window"] == nil }),
+              let provider = attention[i]["provider"] as? String, let label = attention[i]["account"] as? String,
+              var team = json["team"] as? [String: Any], var providers = team["providers"] as? [[String: Any]],
+              let p = providers.firstIndex(where: { $0["provider"] as? String == provider }),
+              var accounts = providers[p]["accounts"] as? [[String: Any]],
+              let a = accounts.firstIndex(where: { $0["label"] as? String == label }),
+              var q = accounts[a]["quota"] as? [String: Any], let windows = q["windows"] as? [[String: Any]],
+              let generated = (json["generated_at"] as? String).flatMap(parseTime) else { return nil }
+        let iso = { (t: Date) in ISO8601DateFormatter().string(from: t) }
+        let read = iso(generated.addingTimeInterval(-36 * 3600)), ran = iso(generated.addingTimeInterval(-(10 * 3600 + 22 * 60)))
+        q["observed_at"] = read
+        q["age_seconds"] = 36 * 3600
+        q["stale"] = true
+        q["windows"] = windows.map { w in
+            var w = w
+            w["observed_at"] = read
+            w["stale"] = true
+            if var f = w["forecast"] as? [String: Any], f["runs_out_at"] is String {
+                f["runs_out_at"] = ran
+                w["forecast"] = f
+            }
+            return w
+        }
+        accounts[a]["quota"] = q
+        providers[p]["accounts"] = accounts
+        team["providers"] = providers
+        json["team"] = team
+        attention[i]["at"] = ran
+        attention[i]["reading_age_seconds"] = 36 * 3600
+        attention[i]["text"] = "ran out ~Thu 05:18 at this week's pace, 3d 21h before reset · reading 1d 12h old"
+        json["attention"] = attention
         return Store(demo: try Report.decode(JSONSerialization.data(withJSONObject: json)))
     }
 
