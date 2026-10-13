@@ -453,6 +453,8 @@ The Claude desktop app's agent-mode sessions are the exception. The app keeps a 
 
 On a server, run the collector as a user that can read those folders. On macOS and Linux, a Claude folder another user owns is only read: Claude Code is not asked to read its usage, since it would save that user's config, and a renewed login, as the collector's user, out of that user's reach. Its reading is as fresh as that user's own Claude Code left it. Hermes databases are read in place, read-only; a database Hermes has open is read the way any SQLite reader reads it, and one nobody has open is read without taking a lock.
 
+Session logs are read a line at a time. A line over 32 MiB, such as a prompt with a huge paste or a tool's huge output, is read with its lists and its long texts left out, in no more memory than that, so the usage on it still counts and it is no error. A tool's status is partial with `N malformed lines` when lines that hold usage do not parse, and with `N lines too long to read` when a line is still over 32 MiB after that, as it could have held usage.
+
 ## In a container
 
 The collector runs in a container as on any Linux machine: install it inside, as the user whose tools it should read, and each container is a machine in the team. Keep that user's home on a volume, name the machine with `AI_USAGE_NAME`, and run `ai-usage schedule run` beside the main process, since containers rarely have cron. [docs/containers.md](docs/containers.md) has the install command, an entrypoint, a Dockerfile, and an s6-overlay service.
