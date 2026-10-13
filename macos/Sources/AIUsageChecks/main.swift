@@ -410,6 +410,108 @@ let calm04 = try edited("team.json") { json in
 equal("calm verdict with a tight window", Verdict(calm04, now: calm04.generatedAt, timeZone: berlin).subline,
       "Most room: Grok 7f3b9c21 · 94% · 1 tight")
 
+// Notifications: the out and over windows of this Mac's subscriptions, as
+// attention lists them, with the main window named; another device's are
+// its user's to watch, unless Settings asks for the team's.
+let always = NoticeSettings(runsOut: .always)
+let teamNotices = WindowNotice.notices(team, always, now: team.generatedAt, timeZone: berlin)
+equal("team notices", teamNotices.map { "\($0.kind) \($0.key)" }, ["out claude/mira@studio.dev/5h", "over claude/mira@studio.dev/7d"])
+equal("out notice", teamNotices.first.map { [$0.title, $0.body, $0.thread] }, ["Claude mira · 5h is out", "Back Thu 17:05 (in 1h 25m)", "claude/mira@studio.dev"])
+check("out notice's period", teamNotices.first?.resetsAt == time("2026-09-24T15:05:00Z") && teamNotices.first?.length == 5 * 3600)
+equal("over notice", teamNotices.last.map { [$0.title, $0.body] }, ["Claude mira · 7d runs out ~Sat 10:28", "14h 31m before its reset · resets Sun 01:00"])
+equal("over notice's reset", teamNotices.last?.resetsAt, time("2026-09-26T23:00:00Z"))
+equal("over notice's run-out", teamNotices.last?.runsOutAt, time("2026-09-26T08:28:35.1159618Z"))
+equal("solo notices", WindowNotice.notices(solo, always, now: solo.generatedAt, timeZone: berlin).map(\.title),
+      ["Claude mira · 7d Fable runs out ~Thu 23:55", "Claude mira · 7d runs out ~Sat 12:46"])
+let atReset = try edited("team.json") { json in
+    var o = json as! [String: Any]
+    o["attention"] = [["kind": "over", "provider": "claude", "account": "mira@studio.dev", "name": "mira", "resets_at": "2026-09-26T23:00:00Z",
+                       "percent": 100, "reading_age_seconds": 7200]]
+    return o
+}
+let atResetNotices = WindowNotice.notices(atReset, always, now: atReset.generatedAt, timeZone: berlin)
+equal("over at its reset", atResetNotices.map { [$0.title, $0.body] }, [["Claude mira · 7d runs out at its reset", "Resets Sun 01:00 · reading 2h old"]])
+equal("over at its reset runs out then", atResetNotices.first?.runsOutAt, time("2026-09-26T23:00:00Z"))
+check("no notices in calm", WindowNotice.notices(calm, always, now: calm.generatedAt).isEmpty)
+
+// By default, a window that will run out gets one only when it runs out
+// within a day, as early forecasts of a long window change.
+equal("within a day by default", WindowNotice.notices(team, now: team.generatedAt, timeZone: berlin).map(\.key), ["claude/mira@studio.dev/5h"])
+equal("solo within a day", WindowNotice.notices(solo, now: solo.generatedAt, timeZone: berlin).map(\.title), ["Claude mira · 7d Fable runs out ~Thu 23:55"])
+equal("never", WindowNotice.notices(solo, NoticeSettings(runsOut: .never), now: solo.generatedAt).count, 0)
+equal("not when out", WindowNotice.notices(team, NoticeSettings(out: false, runsOut: .always), now: team.generatedAt).map(\.key), ["claude/mira@studio.dev/7d"])
+let day: TimeInterval = 86400
+let soon = WindowNotice(provider: "claude", label: "ann@acme.dev", window: "7d", kind: .over, resetsAt: team.generatedAt + 3 * day,
+                        runsOutAt: team.generatedAt + day)
+check("a day ahead", NoticeSettings().wants(soon, now: team.generatedAt) && !NoticeSettings().wants(soon, now: team.generatedAt - 1))
+check("off", NoticeSettings(out: false, runsOut: .never).off && !NoticeSettings(out: false).off && !NoticeSettings(runsOut: .never).off)
+
+// The team's: every account with a reading, bots' too, with the device that
+// uses it most.
+let teamWide = WindowNotice.notices(team, NoticeSettings(scope: .team), now: team.generatedAt, timeZone: berlin)
+equal("the team's notices", teamWide.map { "\($0.kind) \($0.key)" },
+      ["out claude/mira@studio.dev/5h", "out codex/leo@studio.dev/7d", "over codex/bots@studio.dev/7d"])
+equal("the team's notices' text", teamWide.map { [$0.title, $0.body] }, [
+    ["Claude mira · 5h is out", "Back Thu 17:05 (in 1h 25m) · used on mira-mbp +1"],
+    ["Codex leo · 7d is out", "Back Fri 11:12 (in 19h 32m) · used on leo-air"],
+    ["Codex bots · 7d runs out ~Fri 08:59", "2d 17h before its reset · resets Mon 02:40 · used on build-01 +9"],
+])
+
+// Settings read from defaults, each at its default until it is set.
+let suite = "ai-usage-checks-\(ProcessInfo.processInfo.processIdentifier)"
+let defaults = UserDefaults(suiteName: suite)!
+equal("default settings", NoticeSettings(defaults), NoticeSettings())
+defaults.set(false, forKey: NoticeSettings.outKey)
+defaults.set("always", forKey: NoticeSettings.runsOutKey)
+defaults.set("team", forKey: NoticeSettings.scopeKey)
+equal("saved settings", NoticeSettings(defaults), NoticeSettings(out: false, runsOut: .always, scope: .team))
+defaults.set("someday", forKey: NoticeSettings.runsOutKey)
+equal("an unknown setting", NoticeSettings(defaults).runsOut, .day)
+defaults.removePersistentDomain(forName: suite)
+
+// Each window is said once a period and state, over a restart too.
+let t0 = team.generatedAt
+var ledger = NoticeLedger()
+equal("notices said", ledger.record(teamNotices, now: t0).map(\.key), teamNotices.map(\.key))
+equal("not said at the next run", ledger.record(teamNotices, now: t0.addingTimeInterval(900)).count, 0)
+var restarted = try JSONDecoder().decode(NoticeLedger.self, from: JSONEncoder().encode(ledger))
+equal("not said after a restart", restarted.record(teamNotices, now: t0.addingTimeInterval(1800)).count, 0)
+let hour: TimeInterval = 3600
+let reset = t0.addingTimeInterval(3 * hour)
+func ann5h(_ kind: WindowNotice.Kind, _ resetsAt: Date) -> WindowNotice {
+    WindowNotice(provider: "claude", label: "ann@acme.dev", window: "5h", kind: kind, resetsAt: resetsAt, length: 5 * hour)
+}
+let over5h = ann5h(.over, reset)
+let out5h = ann5h(.out, reset.addingTimeInterval(20))
+var steps = NoticeLedger()
+equal("over", steps.record([over5h], now: t0).map(\.kind.rawValue), ["over"])
+equal("over again", steps.record([over5h], now: t0 + 900).count, 0)
+equal("forecast under 100%", steps.record([], now: t0 + 1800).count, 0)
+equal("over in the same period", steps.record([over5h], now: t0 + 2700).count, 0)
+equal("then out", steps.record([out5h], now: t0 + hour).map(\.kind.rawValue), ["out"])
+equal("out again", steps.record([out5h], now: t0 + hour + 900).count, 0)
+equal("over after out", steps.record([over5h], now: t0 + 2 * hour).count, 0)
+equal("a reset read 10 minutes later", steps.record([ann5h(.out, reset.addingTimeInterval(600))], now: t0 + 2 * hour + 900).count, 0)
+equal("a passed reset", steps.record([out5h], now: reset + 60).count, 0)
+check("forgotten after the reset", steps.said.isEmpty)
+equal("the next period", steps.record([ann5h(.over, reset + 5 * hour)], now: reset + hour).map(\.kind.rawValue), ["over"])
+var early = NoticeLedger()
+_ = early.record([over5h], now: t0)
+equal("a period after an early reset", early.record([ann5h(.over, reset + 4 * hour)], now: t0 + hour).map(\.kind.rawValue), ["over"])
+func grok(_ resetsAt: Date) -> WindowNotice {
+    WindowNotice(provider: "grok", label: "7f3b9c21", window: "7d", kind: .over, resetsAt: resetsAt)
+}
+var unsized = NoticeLedger()
+_ = unsized.record([grok(reset)], now: t0)
+equal("without its length, a minute", unsized.record([grok(reset + 50)], now: t0 + 60).count, 0)
+equal("without its length, the next period", unsized.record([grok(reset + hour)], now: t0 + 120).count, 1)
+let unknownReset = WindowNotice(provider: "codex", label: "leo@acme.dev", window: "7d", kind: .out, resetsAt: nil)
+var unknown = NoticeLedger()
+equal("no reset", unknown.record([unknownReset], now: t0).count, 1)
+equal("no reset again", unknown.record([unknownReset], now: t0 + 900).count, 0)
+equal("no reset, back", unknown.record([], now: t0 + 1800).count, 0)
+equal("no reset, out again", unknown.record([unknownReset], now: t0 + 2700).count, 1)
+
 // The locator, on a made-up home.
 let fm = FileManager.default
 let tmp = fm.temporaryDirectory.appendingPathComponent("ai-usage-checks-\(ProcessInfo.processInfo.processIdentifier)")
