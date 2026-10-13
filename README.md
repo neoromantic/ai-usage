@@ -198,7 +198,7 @@ On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/A
   <img alt="The menu bar item in each state: on track, tight, used up, stale, over, out, time until reset, no reading, and the ring alone" src="docs/demo/app-menubar.png">
 </picture>
 
-**The popover** opens with one line that answers the first question: what is out and when it is back, what runs out and when, or that all is on track and where the most room is. Chips under it name what to fix on the devices, such as errors or a device that stopped reporting; a click shows those devices. The dot beside it is the collector's health and the report's age, and opens a menu with Collect Now, Settings, and Quit. Then three tabs:
+**The popover** opens with one line that answers the first question: what is out and when it is back, what runs out and when, or that all is on track and where the most room is. When the report has more to say, the line ends with a link, "11 alerts ›", to every entry of its ATTENTION, in its order and its words, in place of the tab: one line each with the mark of its kind, a click opening the subscription in Limits or the devices in Usage, and last the subscription with the most room. Chips under it name what to fix on the devices, such as errors or a device that stopped reporting; a click shows those devices. The dot beside it is the collector's health and the report's age, and opens a menu with Collect Now, the report, the device status view, and every project in Terminal, Settings, and Quit. Then three tabs:
 
 <table>
 <tr>
@@ -208,11 +208,18 @@ On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/A
 </tr>
 </table>
 
-- **Limits:** a row per account: a bar of what is left, with the forecast's part faint, the percent left, and the time until the reset. When another window stops the account, such as a 5-hour window that is out, the row says so under it.
+- **Limits:** a row per account: a bar of what is left, with the forecast's part faint, the percent left, and the time until the reset. A row that runs out counts down to when it does instead, "↘17h 19m" in orange, or says "↘ ran out" when an old reading has, and names the window and its reset under it. When another window stops the account, such as a 5-hour window that is out, the row says so under it.
 - **Usage:** the tokens of each device or each subscription, today or over 7, 30, or 90 days, in whole millions.
 - **Projects:** this Mac's repositories, their worktrees counted in, grouped by the folder they share.
 
-A click on a row opens its details: each window with its forecast, a device's release, tools, and errors, a project's sessions. Color means a problem only: red is out, orange runs out before the reset, yellow is tight. `⌘1` to `⌘3` switch the tabs and `⌘R` collects now.
+A click on a row opens its details: each window with its forecast, and the forecast of the one that runs out with the pace it takes; who spent the window since it began, when the subscription was last used, and why the report calls it idle or could not read it; a device's release, tools, and errors, in the words of the report's NOTE; a project's sessions. Color means a problem only: red is out, orange runs out before the reset, yellow is tight. `⌘1` to `⌘3` switch the tabs and `⌘R` collects now.
+
+<table>
+<tr>
+<td><picture><source media="(prefers-color-scheme: light)" srcset="docs/demo/app-alerts-light.png"><img alt="The alerts: every entry of the report's ATTENTION, one line each with the mark of its kind, and the subscription with the most room under them" src="docs/demo/app-alerts.png"></picture></td>
+<td><picture><source media="(prefers-color-scheme: light)" srcset="docs/demo/app-details-light.png"><img alt="The details of a subscription that runs out: its countdown, each window, the forecast at this week's pace, the devices that spent the window, and when it was last used" src="docs/demo/app-details.png"></picture></td>
+</tr>
+</table>
 
 **Notifications** say when a window is out, "Claude mira · 5h is out", with when it is back, and when one will run out before its reset, "Claude mira · 7d runs out ~Sat 10:28", with how long before its reset. They are the windows the report's ATTENTION marks out and over, and Settings picks which: When a Window Is Out (on by default); When a Window Will Run Out, Within a Day (the default), Any Time, or Never, since a forecast early in a long window can say it runs out days ahead and change by the next reading; and Subscriptions, This Mac's (the default), those logged in here, or The Team's, every subscription with a reading, bots' included, where a notification also names the device that uses it most, "used on build-01 +9". Each window gets one notification per period and state, not one at every run: a forecast that dips under 100% and rises again says nothing new, and after its reset a window starts over. The app remembers what it said in its settings, so a restart says nothing twice. A click on a notification opens the popover on that subscription in Limits, when the menu bar has room to show the app's item. macOS asks for permission when there is first something to say, or when you turn a notification on; when you decline, the app asks no more, and Settings says where to turn notifications on.
 

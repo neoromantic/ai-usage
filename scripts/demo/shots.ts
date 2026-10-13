@@ -345,7 +345,8 @@ async function shootTour() {
 }
 
 // app draws the macOS menu bar app with its own renderer: its item in the
-// menu bar over the popover, the popover's tabs, the menu bar's looks, and
+// menu bar over the popover, the popover's tabs, its alerts list, the
+// details of a subscription that runs out, the menu bar's looks, and
 // Settings' General pane, each dark and light, and for posts the three
 // tabs side by side on the backdrop. Only on macOS, with Xcode or the
 // Command Line Tools.
@@ -361,6 +362,8 @@ async function app() {
     ["popover-limits", "app-limits"],
     ["popover-usage", "app-usage"],
     ["popover-projects", "app-projects"],
+    ["popover-alerts", "app-alerts"],
+    ["popover-limits-expanded-over", "app-details"],
     ["menubar-states", "app-menubar"],
     ["settings-general", "app-settings"],
   ];
