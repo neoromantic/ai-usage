@@ -43,7 +43,9 @@ TZ=Europe/Berlin ai-usage report --from docs/demo/solo.json --plain --width 110
 | `app-alerts.png`, `app-alerts-light.png` | the app's alerts, every entry of ATTENTION in place of Limits, with the subscription with the most room under them |
 | `app-details.png`, `app-details-light.png` | the app's Limits with the details of a subscription that runs out open: its countdown, each window, the forecast, who spent the window, and when it was last used |
 | `app-menubar.png`, `app-menubar-light.png` | the app's item in the menu bar in each state: on track, tight, used up, stale, over, out, time until reset, no reading, and the ring alone |
-| `app-settings.png`, `app-settings-light.png` | the app's Settings on General: what the menu bar shows, notifications, this Mac's name and opening at login, and the versions |
+| `app-team.png`, `app-team-light.png` | the app's Team window on Usage: every device against every subscription over 7 days, shaded by tokens |
+| `app-team-status.png`, `app-team-status-light.png` | the app's Team window on Status: each device's user, release, last report, tools, tokens in each period, and note |
+| `app-settings.png`, `app-settings-light.png` | the app's Settings on General: what the menu bar shows and tracks, notifications, this Mac's name and opening at login, and the versions |
 | `social/app-tabs.png` | the app's three tabs side by side on a backdrop, for posts |
 | `social/architecture.png` | how a team's numbers travel, drawn from `scripts/demo/diagram.html` |
 | `social/*.png` | the pictures marked for posts, on a backdrop; the README shows these |
@@ -70,6 +72,7 @@ The menu bar app draws its own pictures with `AIUsageBar --render REPORT OUTDIR`
 - `popover-TAB-LOOK.png`, each tab as tall as the popover shows it, and `popover-TAB-full-LOOK.png`, the whole tab. TAB is `limits`, `usage`, `usage-subscriptions` (Usage by subscription), and `projects`; a report of one device has no `usage-subscriptions`
 - `popover-STATE-LOOK.png`, the popover after a click: `limits-expanded`, `usage-expanded`, and `projects-expanded`, a row opened; `usage-filtered`, `usage-filtered-silent`, and `usage-filtered-not-updating`, Usage after a click on the chip of devices with errors, not reporting, or not updating, from Usage by subscription; `alerts`, the alerts after a click on the verdict's link; `limits-expanded-over` and `limits-expanded-idle`, Limits as tall as it is with the details of the first subscription that runs out or is idle open; `limits-unread`, Limits as tall as it is with the line of the subscriptions not read open; `limits-stale`, Limits with a reading of the subscription that runs out 36 hours old, so its row says it ran out; and `calm`, the popover with nothing out or running out
 - `popover-STATE-LOOK.png`, the popover with no report to show: `loading`, `not-installed`, `not-collected`, `mismatch` (a report of another schema), and `failed`
+- `team-usage-LOOK.png`, `team-share-LOOK.png`, and `team-status-LOOK.png`, the Team window on Usage in tokens and in shares, and on Status; a report of one device has none
 - `settings-PANE-LOOK.png`, each Settings pane: `general`, `accounts`, and `team`
 - `menubar-LOOK.png`, the app's item in the menu bar with the popover on Limits under it, and `menubar-states-LOOK.png`, the item in each state
 

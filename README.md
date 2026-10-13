@@ -191,14 +191,14 @@ On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/A
   <img alt="The AI Usage menu bar app with the made-up team's subscriptions: Claude mira's 5-hour window is out and back in 1h 25m" src="docs/demo/menubar.png">
 </picture>
 
-**The menu bar** shows a ring of what is left of the fullest window among the subscriptions logged in on this Mac, with its percent left. The ring turns orange when the window will run out before its reset, and red with the time until it is back when it is out. Settings can show the time until reset instead, or the ring alone.
+**The menu bar** shows a ring of what is left of the fullest window among the subscriptions logged in on this Mac, or among the team's when Settings' Track says so, with its percent left. The ring turns orange when the window will run out before its reset, and red with the time until it is back when it is out. Settings can show the time until reset instead, or the ring alone.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/demo/app-menubar-light.png">
   <img alt="The menu bar item in each state: on track, tight, used up, stale, over, out, time until reset, no reading, and the ring alone" src="docs/demo/app-menubar.png">
 </picture>
 
-**The popover** opens with one line that answers the first question: what is out and when it is back, what runs out and when, or that all is on track and where the most room is. When the report has more to say, the line ends with a link, "11 alerts ›", to every entry of its ATTENTION, in its order and its words, in place of the tab: one line each with the mark of its kind, a click opening the subscription in Limits or the devices in Usage, and last the subscription with the most room. Chips under it name what to fix on the devices, such as errors or a device that stopped reporting; a click shows those devices. The dot beside it is the collector's health and the report's age, and opens a menu with Collect Now, the report, the device status view, and every project in Terminal, Settings, and Quit. Then three tabs:
+**The popover** opens with one line that answers the first question: what is out and when it is back, what runs out and when, or that all is on track and where the most room is. When the report has more to say, the line ends with a link, "11 alerts ›", to every entry of its ATTENTION, in its order and its words, in place of the tab: one line each with the mark of its kind, a click opening the subscription in Limits or the devices in Usage, and last the subscription with the most room. Chips under it name what to fix on the devices, such as errors or a device that stopped reporting; a click shows those devices. The dot beside it is the collector's health and the report's age, and opens a menu with Collect Now, the Team window, the report, the device status view, and every project in Terminal, Settings, and Quit. Then three tabs:
 
 <table>
 <tr>
@@ -221,13 +221,25 @@ A click on a row opens its details: each window with its forecast, and the forec
 </tr>
 </table>
 
+**The Team window** has the whole team on one screen, as the terminal's DEVICES does. Team Window… in that menu opens it, and so do `⌘D` and the ⤢ at the top of Usage; with only this Mac there is no team, so neither shows. Usage puts each device against each subscription, grouped by tool, then the tokens no subscription covers and TOTAL. A cell is shaded by its tokens, a step for every half of a tenfold below the largest, as in the terminal, and its tooltip says "build-01 · Codex bots: 131M in 7 Days · 46% of column · 84M this window"; a subscription's name is in the color of its state. Status has each device's user, release (↓ when it is behind the latest), last report, the tools it reads (× for a failing one), its tokens in each period, and the report's NOTE. A click on a heading sorts the rows; until then they are in the report's order. As in the terminal, `1`, `7`, `3`, and `9` pick the period, `%` switches Usage between tokens and each device's share of its column, and `s` switches between Usage and Status. The window opens where it was last, at its size.
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/demo/app-team-light.png">
+  <img alt="The Team window on Usage: twelve devices against seven subscriptions under Codex, Claude, and Grok, over 7 days, with heat shading and a TOTAL row" src="docs/demo/app-team.png">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/demo/app-team-status-light.png">
+  <img alt="The Team window on Status: each device's user, collector version, when it last reported, its tools, its tokens today and over 7, 30, and 90 days, and the report's note" src="docs/demo/app-team-status.png">
+</picture>
+
 **Notifications** say when a window is out, "Claude mira · 5h is out", with when it is back, and when one will run out before its reset, "Claude mira · 7d runs out ~Sat 10:28", with how long before its reset. They are the windows the report's ATTENTION marks out and over, and Settings picks which: When a Window Is Out (on by default); When a Window Will Run Out, Within a Day (the default), Any Time, or Never, since a forecast early in a long window can say it runs out days ahead and change by the next reading; and Subscriptions, This Mac's (the default), those logged in here, or The Team's, every subscription with a reading, bots' included, where a notification also names the device that uses it most, "used on build-01 +9". Each window gets one notification per period and state, not one at every run: a forecast that dips under 100% and rises again says nothing new, and after its reset a window starts over. The app remembers what it said in its settings, so a restart says nothing twice. A click on a notification opens the popover on that subscription in Limits, when the menu bar has room to show the app's item. macOS asks for permission when there is first something to say, or when you turn a notification on; when you decline, the app asks no more, and Settings says where to turn notifications on.
 
-**Settings** does what the terminal commands do: this Mac's name in the team (`ai-usage name`), the names of accounts (`ai-usage alias`), the relay (`ai-usage relay`), the team key, open at login, what the menu bar shows, notifications, and updates.
+**Settings** does what the terminal commands do: this Mac's name in the team (`ai-usage name`), the names of accounts (`ai-usage alias`), the relay (`ai-usage relay`), the team key, open at login, what the menu bar shows and whose subscriptions it tracks, notifications, and updates.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/demo/app-settings-light.png">
-  <img alt="Settings, General: what the menu bar shows, notifications when a window is out or will run out and for whose subscriptions, this Mac's name, open at login, and the versions" src="docs/demo/app-settings.png" width="460">
+  <img alt="Settings, General: what the menu bar shows and whose subscriptions it tracks, notifications when a window is out or will run out and for whose subscriptions, this Mac's name, open at login, and the versions" src="docs/demo/app-settings.png" width="460">
 </picture>
 
 The app computes nothing itself. It runs `ai-usage report --json` every minute and when the popover opens, and shows what the report says: forecasts, states, what needs attention, and the collector's health. Its notifications come from the same report. It finds the binary through the launch agent, or shows the install command when there is none. To go without it, install with `AI_USAGE_NO_APP=1`, or remove it as [Uninstall](#uninstall) shows; self-update does not bring it back.

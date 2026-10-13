@@ -346,10 +346,10 @@ async function shootTour() {
 
 // app draws the macOS menu bar app with its own renderer: its item in the
 // menu bar over the popover, the popover's tabs, its alerts list, the
-// details of a subscription that runs out, the menu bar's looks, and
-// Settings' General pane, each dark and light, and for posts the three
-// tabs side by side on the backdrop. Only on macOS, with Xcode or the
-// Command Line Tools.
+// details of a subscription that runs out, the menu bar's looks, the Team
+// window's Usage and Status, and Settings' General pane, each dark and
+// light, and for posts the three tabs side by side on the backdrop. Only on
+// macOS, with Xcode or the Command Line Tools.
 async function app() {
   if (process.platform !== "darwin") return;
   const macos = join(root, "macos");
@@ -365,6 +365,8 @@ async function app() {
     ["popover-alerts", "app-alerts"],
     ["popover-limits-expanded-over", "app-details"],
     ["menubar-states", "app-menubar"],
+    ["team-usage", "app-team"],
+    ["team-status", "app-team-status"],
     ["settings-general", "app-settings"],
   ];
   for (const [from, to] of pictures) {
