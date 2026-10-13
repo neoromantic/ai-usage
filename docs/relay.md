@@ -109,14 +109,14 @@ Ctrl-C stops the relay gracefully.
 A host with Docker and no Go can build and run the newest release in the official Go image:
 
 ```sh
-docker run -d --name ai-usage-relay --restart unless-stopped -p 127.0.0.1:8080:8080 golang:1.25 go run github.com/neoromantic/ai-usage/cmd/ai-usage@latest relay serve --addr :8080 --client-ip-header X-Real-Ip
+docker run -d --name ai-usage-relay --restart unless-stopped -p 127.0.0.1:8080:8080 golang:1.26 go run github.com/neoromantic/ai-usage/cmd/ai-usage@latest relay serve --addr :8080 --client-ip-header X-Real-Ip
 ```
 
-The first start downloads and builds the release, which takes a minute or two; `docker logs ai-usage-relay` shows when it listens. `@latest` is looked up again on every start, so `docker restart ai-usage-relay` moves the relay to the newest release. The image must have at least the Go version in `go.mod`, which is 1.25.
+The first start downloads and builds the release, which takes a minute or two; `docker logs ai-usage-relay` shows when it listens. `@latest` is looked up again on every start, so `docker restart ai-usage-relay` moves the relay to the newest release. The image must have at least the Go version in `go.mod`, which is 1.26.
 
 The port is published on 127.0.0.1 only, for a reverse proxy on the same host set up as above. The proxy's connections reach the container from Docker's private network, so the relay reads the proxy's header.
 
-Snapshots stay in the container's memory, and a restart drops them. To keep them in Upstash for Redis instead, set `KV_REST_API_URL` and `KV_REST_API_TOKEN` in the shell and add `-e KV_REST_API_URL -e KV_REST_API_TOKEN` before `golang:1.25`, which passes them in without writing the token on the command line.
+Snapshots stay in the container's memory, and a restart drops them. To keep them in Upstash for Redis instead, set `KV_REST_API_URL` and `KV_REST_API_TOKEN` in the shell and add `-e KV_REST_API_URL -e KV_REST_API_TOKEN` before `golang:1.26`, which passes them in without writing the token on the command line.
 
 ## Connect collectors to your relay
 

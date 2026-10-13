@@ -574,7 +574,7 @@ If you set `AI_USAGE_BIN_DIR` or `AI_USAGE_HOME`, remove those folders instead.
 
 ## Build from source
 
-Go 1.25 or newer:
+Go 1.26 or newer:
 
 ```sh
 go build -o ai-usage ./cmd/ai-usage
