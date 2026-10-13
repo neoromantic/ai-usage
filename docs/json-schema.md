@@ -84,7 +84,7 @@ A `health` entry:
 
 ### attention
 
-Each entry is one thing that needs attention, from the team's view of each subscription and device. The report lists them most urgent first, by `kind` in the order of this table; within a kind, the earliest `at` first, which for an `over` without `at` is its `resets_at`, the highest `percent` first for `tight` and `outside`, the lowest forecast first for `under`, and by device for `error`. The fields that apply depend on the kind; the others are absent. A reader should skip a kind it does not know.
+Each entry is one thing that needs attention, from the team's view of each subscription and device. The report lists them most urgent first, by `kind` in the order of this table; within a kind, the earliest `at` first, which for an `over` without `at` is its `resets_at`, and for `idle` puts the longest idle first, the highest `percent` first for `tight` and `outside`, the lowest forecast first for `under`, and by device for `error`. The fields that apply depend on the kind; the others are absent. Every entry has `subject` and `text`, the console's words for it. A reader should skip a kind it does not know.
 
 | `kind` | When | Fields |
 | --- | --- | --- |
@@ -93,17 +93,20 @@ Each entry is one thing that needs attention, from the team's view of each subsc
 | `tight` | a window of a subscription logged in on this device will end its reset in the `tight` state | `provider`, `account`, `name`, `window`; `resets_at` is when it resets, `percent` its forecast |
 | `outside` | a subscription has `outside` set: a window filled while no team device spent on it | `provider`, `account`, `name`; `at` is when it began to rise, `percent` how many points it rose |
 | `error` | a device's collector or one of its tools fails; on this device, also a run a bug stopped before it could report, its relay, or its update check; on an `old` device that is not silent, its update check. A quota that could not be read is not an error | `devices` names the device; `message` is the error, which starts with `relay` or `update` when it is theirs; `at` is when that error happened, when its collector says (v0.4.0 on) |
-| `no_reading` | a subscription with weighted tokens in the last 7 days has `no_reading` set | `provider`, `account`, `name`; `message` is the reason, with what to do |
+| `no_reading` | a subscription with weighted tokens in the last 7 days has `no_reading` set | `provider`, `account`, `name`; `message` is the reason, with what to do. For the `unknown` account, it is where its tool answered that nobody is logged in, and how to log in |
 | `silent` | a device has not reported for a day, with or without an error in its last report, and no other device took its place | `devices` names the device; `at` is when it last reported; `message` is the error it last reported, if it had one |
 | `duplicate` | a device has `replaced_by` set: it was reinstalled, and its old record stays on the relay | `devices` names the device; `device_id` is its id, for `ai-usage team forget-device`, which takes its first 8 hex digits too; `message` is the label of the device that replaced it; `at` is when it last reported |
 | `old` | devices run an older release than the team's newest | `devices` lists every one of them; `message` is the newest release; `at` is the earliest `behind_since` among those that have reported for 7 hours since it and are not `silent`, absent when none has. Devices whose release has `limitations` have an entry of their own, first, with those in `limitations`: they need a reinstall. A `duplicate` device is not counted |
 | `under` | past half of a subscription's main window, its forecast is under 50% | `provider`, `account`, `name`; `resets_at` is when it resets, `percent` its forecast |
+| `idle` | no team device has used a subscription with a reading for 7 days, by its `last_active_at`, and nothing says someone outside the team does: it has no `outside`, and its main window is under 1% or began before that last use. Not the `unknown` account, a Hermes account, or a free plan. It has no `under` entry then | `provider`, `account`, `name`; `at` is when a team device last used it |
 
 A window is one with `limits`: the account's main one, or one that limits it more. An `over`, `tight`, or `under` entry has `reading_age_seconds` when its window's reading is stale, and an `out` entry when its reading is over 6 hours old, as the provider can reset a full window early.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `kind` | string | one of the kinds above |
+| `subject` | string | what the entry is about, as the console's ATTENTION line names it, uncut: an account, such as `claude ann@example.com`, with its window, as in `claude ann · Fable`; a device's label; or the devices of an `old` entry, as in `3 devices on v1.2.3` |
+| `text` | string | what to know, as the console's ATTENTION line says it at its longest, without its badge and subject, such as `runs out ~Wed 12:00 at this week's pace, 2d before reset`. Clocks are in the time zone of the machine that made the report. A reader can show `subject` and `text` as they are, and use the other fields to link the entry to its subscription or device |
 | `provider` | string | the account's provider |
 | `account` | string | the account's label |
 | `name` | string | the account's short name |
@@ -284,6 +287,7 @@ A device:
 | `burn_estimated` | bool | `burn` is estimated from its input and output, as its release sends no weighted tokens |
 | `gap` | object | `{seconds, at}`: the longest time in the last 2 days this device's reads of the team did not find the device's snapshot growing, when over an hour, and when it began; `null` otherwise. For another device, only time this device was reading the team counts: a stretch ends at this device's last read before that device reported again |
 | `replaced_by` | string | the label of the device that reinstalled this one: the same name and OS user, reporting while this one is silent; `null` otherwise |
+| `note` | string | what the status view's NOTE says of the device, uncut: its silence, the error it reports, the release it is behind and why it does not update, what its release cannot do, or its longest gap in reporting, as `ai-usage report --devices` shows it. Clocks are in the time zone of the machine that made the report. `null` when there is nothing to note |
 | `limitations` | list of strings | what its release cannot do: `no_claude_quota` before v0.2.3, and `no_update_errors` before v0.2.5 |
 
 A team account. Each provider's accounts are in the order the report lists them: the worst `state` first (`out`, `over`, `tight`, `ok`, `under`, then `unknown`), ties to the one with less left of its main window, then by label.
@@ -307,7 +311,7 @@ A team account. Each provider's accounts are in the order the report lists them:
 | `linked_usage` | list | `{provider, label, devices, sessions, tokens}` for each account of another tool that spent through this one on any device, as each device counted it session by session, summed across devices, with the devices it ran on; `[]` when none. These tokens are that account's and are not in `tokens` |
 | `burn` | object | the account's own weighted tokens, summed across devices |
 | `burn_estimated` | bool | some of `burn` is estimated, from a device whose release sends no weighted tokens |
-| `no_reading` | string | why a subscription has no reading of its main window, with what to do, such as `leo-air runs v0.3.0: reinstall with install.sh`, when that is known; `null` otherwise |
+| `no_reading` | string | why a subscription has no reading of its main window, with what to do, such as `leo-air runs v0.3.0: reinstall with install.sh`, when that is known; `null` otherwise. For the `unknown` account, the tokens no login was known for, it is where its tool answered that nobody is logged in, as a device that holds them says, such as `not logged in on srv1 (~/.claude-work): run claude and log in` |
 | `outside` | object | `{points, since}`: the main window rose `points` since `since`, in the last day, while the team spent next to nothing on it, so someone outside the team uses it; `null` otherwise |
 | `utilization` | list | how full each of a subscription's windows got before each reset; see below. `[]` for an account that is not a subscription, and for one no device read a period of that ended |
 
@@ -389,6 +393,7 @@ A cell:
 - `basis` and `pace` on a forecast, which may now follow the last day's readings, the `tight`, `outside`, `no_reading`, and `duplicate` kinds in `attention`, with `device_id` and `limitations` on an entry, `reading_age_seconds` on an `out` entry with an old reading, `at` on an `error` entry, and the `stale` relay status, whose `at`, like `ok`'s, is now the older of the last push and pull. A reader that skips kinds and statuses it does not know reads the rest as before, so the version stays 4.
 - Weighted tokens, in v0.4.0: `burn` beside every `usage`, with `burn_days`, `window_burn`, and `burn_share` beside `days`, `window_tokens`, and `share`; `fresh` and `transcript_gaps` on this device's accounts, `fresh` and `active_sessions` on projects, and `covered_since` on a provider. On the team, `estimated`, `held_back_by`, and `estimated_reason`; `burn_estimated` on devices, accounts, and rows; and on a device `last_error_at`, `gap`, `replaced_by`, and `limitations`, and on an account `no_reading` and `outside`. This device's own `burn` counts local periods, as the conventions at the top say. Lists are now ordered by weighted tokens. No field changed meaning, so the version stays 4. A report from an earlier release has no weighted tokens: `ai-usage report --from` gives each object whose `burn` is all zero and `usage` is not its `usage` as `burn`, and its `days`, `share`, and `window_tokens` as `burn_days`, `burn_share`, and `window_burn`, marks the team devices, team accounts, and matrix rows it filled `burn_estimated` and the team `estimated`, with `estimated_reason` saying the report was saved by an earlier release, gives each project its `sessions` as `active_sessions` in every period, and titles this device's PROJECTS and USAGE in tokens in+out.
 - Quota cycles, in v0.5.0: `utilization` on a team account, and `cycles_held_back_by` and `cycles_reason` on the team. A report from an earlier release has none: read a missing `utilization` as `[]`, and a missing `cycles_held_back_by` and `cycles_reason` as `[]` and `null`, as `ai-usage report --from` fills them in. No field changed meaning, so the version stays 4.
+- `subject` and `text` on every `attention` entry, `note` on a team device, and the `idle` kind in `attention`, so that a reader can show what the console says instead of wording it again. The `unknown` account's `no_reading` now says where nobody is logged in, and what to do. A report from an earlier release has no `subject`, `text`, or `note`, and no `idle` entry; `ai-usage report --from` fills in the first three, with clocks in the time zone it runs in. No field changed meaning, so the version stays 4.
 - `folders` on a project. A project is now a git repository, with its subfolders and linked worktrees, where each working folder was one; `path` is the project's folder, and `folders` says how many working folders count under it. A report from an earlier release has a project for each working folder and no `folders`: read a missing one as `1`, as `ai-usage report --from` fills it in. Every field keeps its type, and a project's numbers still sum its sessions, so the version stays 4.
 
 ## Example
@@ -427,6 +432,8 @@ A shortened report from a team of two:
   "attention": [
     {
       "kind": "over",
+      "subject": "claude ann@example.com",
+      "text": "runs out ~Wed 12:00 at this week's pace, 2d before reset",
       "provider": "claude",
       "account": "ann@example.com",
       "name": "ann",
@@ -434,7 +441,14 @@ A shortened report from a team of two:
       "resets_at": "2026-09-04T12:00:00Z",
       "percent": 140
     },
-    { "kind": "old", "devices": ["bo-laptop"], "at": "2026-08-31T16:40:00Z", "message": "v1.3.0" }
+    {
+      "kind": "old",
+      "subject": "1 device on v1.2.3",
+      "text": "bo-laptop · latest v1.3.0 · not updated for 19h",
+      "devices": ["bo-laptop"],
+      "at": "2026-08-31T16:40:00Z",
+      "message": "v1.3.0"
+    }
   ],
   "providers": [
     {
@@ -564,6 +578,7 @@ A shortened report from a team of two:
         "burn_estimated": false,
         "gap": null,
         "replaced_by": null,
+        "note": "not updated for 19h · latest v1.3.0",
         "limitations": []
       }
     ],

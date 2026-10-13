@@ -21,7 +21,7 @@
 
 </div>
 
-![The top of the ai-usage page for a made-up team: ATTENTION lists a full Claude window, a Codex login that runs out on Friday, a failing tool, a silent bot, and an old release; below it, every subscription with how full it will be at its reset](docs/demo/social/team-attention.png)
+![The top of the ai-usage page for a made-up team: ATTENTION lists a full Claude window, a Codex login that runs out on Friday, and a server folder where nobody is logged in to Claude Code, and counts the rest, from a silent bot to a subscription nobody uses; below it, every subscription with how full it will be at its reset](docs/demo/social/team-attention.png)
 
 <p align="center"><sub>A made-up team: two laptops, a Linux server, and nine bots on one Codex login. <a href="#what-it-shows">The whole page</a> · <a href="docs/demo">more pictures</a></sub></p>
 
@@ -162,7 +162,7 @@ PROJECTS  annbook · by 7d · M weighted tokens · claude since Sep 2
 
 </details>
 
-The header names this machine and the team, and says whether collection, the relay, and self-update are healthy; when one of them fails, its error is in ATTENTION. The relay's age is the older of the last push and the last read of the team, and its dot turns yellow once the team was last read over an hour ago. ATTENTION appears only when something is wrong: a subscription that is out, or will run out by its reset at its pace; one logged in on this machine that will end its window nearly full; one whose window fills while no team machine spends on it; a machine whose collector or one of its tools fails, or that has not reported for a day; a subscription in use with no reading; a reinstalled machine's old record; machines on an older release; and a subscription past half its window that will be left mostly unused.
+The header names this machine and the team, and says whether collection, the relay, and self-update are healthy; when one of them fails, its error is in ATTENTION. The relay's age is the older of the last push and the last read of the team, and its dot turns yellow once the team was last read over an hour ago. ATTENTION appears only when something is wrong: a subscription that is out, or will run out by its reset at its pace; one logged in on this machine that will end its window nearly full; one whose window fills while no team machine spends on it; a machine whose collector or one of its tools fails, or that has not reported for a day; a subscription in use with no reading, with why and what to do, which for tokens no login was known for names the machine, and the folder, where the tool says nobody is logged in; a reinstalled machine's old record; machines on an older release; a subscription past half its window that will be left mostly unused; and, dim, a paid subscription no team machine has used for a week, which is IDLE in place of that.
 
 SUBSCRIPTIONS has one row per Claude, Codex, and Grok account, grouped by tool, the worst first. The bar is the weekly window: the heavy line is what has been used, and the tick how much would be used by now if the window were spent evenly. LEFT is what is left, RESETS when it resets, and AT RESET how full it will be then at its average pace since the window began, or since it was last at 0%, or at the pace of the last day's readings when that is faster, each measured over a tenth of the window at least, so a busy first morning does not read as the pace of the week: `over` at 100% or more, which means it runs out by its reset, `tight` from 85%, `ok` from 50%, and `under` below that. A window that limits the account more than the weekly one, such as a model's window or a full 5-hour window, gets an indented row of its own. `~` marks a reading over 6 hours old, unless the window is full, since a full window stays full until it resets. `?` marks an account with no reading, a window that has reset since it was read, or a Claude 5-hour or weekly window that a refused request did not read. DEVICES counts the machines that used the account in this window and names the busiest. Hermes is a tool, not a subscription: what it spends through a Codex or Grok login counts as that login's use.
 
@@ -371,7 +371,7 @@ While any machine in the team runs a release before v0.4.0, every machine sends 
 
 Likewise, while any machine runs a release before v0.5.0, no machine sends the periods UTILIZATION shows, since such a release cannot read them: each machine shows its own, and a line under the section's title names the machines holding them back and what to do. A relay that does not accept them yet, because it runs an older release, has each machine send its snapshot without them and try again a day later.
 
-![DEVICES × SUBSCRIPTIONS for a made-up team: twelve machines, most of them bots, against six subscriptions, in millions of weighted tokens over 7 days](docs/demo/social/team-matrix.png)
+![DEVICES × SUBSCRIPTIONS for a made-up team: twelve machines, most of them bots, against six subscriptions and the tokens no login was known for, in millions of weighted tokens over 7 days](docs/demo/social/team-matrix.png)
 
 A machine goes by its host name; a Mac goes by the local host name in Sharing settings, which does not change with the network. `ai-usage name set NAME` gives it another, and the team sees it after the machine's next run.
 
@@ -497,7 +497,8 @@ The collector runs in a container as on any Linux machine: install it inside, as
 schema_version, generated_at
 collector   version, device, team, last run, last success, last error,
             relay, schedule, and update state, and health[] as the header shows it
-attention[] out, over, tight, outside, error, no_reading, silent, duplicate, old, under: the account or devices, when, and why
+attention[] out, over, tight, outside, error, no_reading, silent, duplicate, old, under, idle: the account or
+            devices, when, and why, and subject and text, the line as the console words it
 providers[] claude, codex, grok, hermes: status (ok, partial, error, skipped), error, homes,
             covered_since, accounts[]: label, name, home, plan, state (out, over, tight, ok,
                         under, unknown), quota with from and windows[] (percent, resets_at, main,
@@ -506,7 +507,7 @@ providers[] claude, codex, grok, hermes: status (ok, partial, error, skipped), e
                         linked_usage[], last_active_at, projects[]
 projects[]  this machine's projects over every account, with usage, burn, active_sessions, and providers
 team        pulled_at, latest_version, estimated, held_back_by, estimated_reason,
-            devices[] (error, silent, old, usage, burn, gap, replaced_by, limitations), providers[]
+            devices[] (error, silent, old, usage, burn, gap, replaced_by, note, limitations), providers[]
             with accounts summed across devices (name, alias, state, quota, usage, burn, users,
             busiest, no_reading, outside, per_device[], linked_usage[]), and matrix (columns[],
             rows[] with share and burn_share, of cells with share and burn_share)

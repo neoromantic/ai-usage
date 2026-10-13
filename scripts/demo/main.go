@@ -32,6 +32,16 @@ import (
 // now is every report's time: a Thursday afternoon in Berlin.
 var now = time.Date(2026, 9, 24, 13, 40, 0, 0, time.UTC)
 
+// berlin is the time zone the reports' words give their clocks in, as the
+// pictures show them.
+var berlin = func() *time.Location {
+	loc, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		panic(err)
+	}
+	return loc
+}()
+
 const (
 	latest = "v0.5.0"
 	relay  = "https://relay.example.com"
@@ -135,8 +145,9 @@ func teamReport() view.Report {
 	mira.account("codex", "mira@studio.dev", "pro", true, now.Add(-3*time.Minute),
 		window("5h", 9, 5*time.Hour, 4*time.Hour+5*time.Minute),
 		window("7d", 47, week, 3*24*time.Hour+7*time.Hour))
+	// She stopped using Grok nine days ago, and still pays for it.
 	mira.account("grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64", "SuperGrok", true, now.Add(-3*time.Minute),
-		window("7d", 6, week, 5*24*time.Hour+2*time.Hour))
+		window("7d", 0, week, 5*24*time.Hour+2*time.Hour))
 	miraHistory(mira)
 	mira.webWorktrees()
 	mira.work("claude", "mira@studio.dev", "/Users/mira/src/orbit/web", 17, 90)
@@ -144,7 +155,7 @@ func teamReport() view.Report {
 	mira.work("codex", "mira@studio.dev", "/Users/mira/src/orbit/web", 10, 90)
 	mira.workTo(now.Add(-3*time.Hour), "codex", "mira@studio.dev", "/Users/mira/src/orbit/infra", 3, 45)
 	mira.workTo(now.Add(-6*time.Hour), "claude", "mira@studio.dev", "/Users/mira/notes", 2.5, 90)
-	mira.workTo(now.Add(-2*24*time.Hour), "grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64", "/Users/mira/src/ml-playground", 0.7, 30)
+	mira.workTo(now.Add(-9*24*time.Hour), "grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64", "/Users/mira/src/ml-playground", 0.7, 30)
 	mira.workTo(now.Add(-4*24*time.Hour), "claude", "mira@studio.dev", "/Users/mira/dotfiles", 0.3, 90)
 
 	// leo runs a release from before weighted tokens, so his snapshot has
@@ -163,9 +174,12 @@ func teamReport() view.Report {
 	leo.work("claude", "leo@studio.dev", "/Users/leo/src/orbit/api", 3, 40)
 
 	// The server runs Claude Code and Codex jobs, and Hermes on the Codex
-	// login the bots share.
+	// login the bots share. Its triage job runs Claude Code in a home of its
+	// own that nobody logged in to, so its tokens go to no login.
 	srv := newDevice(rng, "d-demo-build", "build-01", "root", "/root", latest, now.Add(-6*time.Minute), "claude", "codex", "hermes")
 	srv.account("claude", "mira@studio.dev", "max", false, time.Time{})
+	srv.loggedOut("claude", "/root/triage/.claude")
+	srv.work("claude", collect.UnknownAccount, "/srv/orbit/triage", 1.5, 20)
 	srv.account("codex", "bots@studio.dev", "pro", true, now.Add(-6*time.Minute),
 		window("5h", 30, 5*time.Hour, 2*time.Hour+40*time.Minute),
 		window("7d", 83, week, 3*24*time.Hour+11*time.Hour))
@@ -336,6 +350,15 @@ func (d *device) history(provider, label, name string, every time.Duration, peri
 	}
 }
 
+// loggedOut adds a home of provider's on the device that nobody is logged
+// in to, as the harness answers there.
+func (d *device) loggedOut(provider, home string) {
+	src := d.st.Sources[provider]
+	src.Status, src.Homes = "partial", append(src.Homes, home)
+	src.Error = strings.Replace(home, d.home, "~", 1) + ": " + provider + ": not logged in"
+	d.st.Sources[provider] = src
+}
+
 // fail makes a harness fail on the device.
 func (d *device) fail(provider, msg string) {
 	src := d.st.Sources[provider]
@@ -456,7 +479,7 @@ func (d *device) report(tc *collect.TeamCache) view.Report {
 	in := view.Input{
 		Version: d.version, RelayURL: relay, Config: cfg, State: d.st, Key: key,
 		Doc:      collect.BuildDoc(d.st, d.cycles(), key, cfg, d.host, d.user, d.version, d.at),
-		Hostname: d.host, OSUser: d.user, Now: now, Folders: d.folders, Samples: d.samples,
+		Hostname: d.host, OSUser: d.user, Now: now, Folders: d.folders, Samples: d.samples, Loc: berlin,
 	}
 	if tc != nil {
 		in.Team = *tc
