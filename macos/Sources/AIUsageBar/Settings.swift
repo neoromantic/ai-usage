@@ -3,9 +3,35 @@ import AppKit
 import SwiftUI
 import SystemConfiguration
 
+/// The app's windows, Settings and Team. While one is open the app is a
+/// regular one, in the Dock and in ⌘-Tab, so the window does not get lost
+/// behind others; once the last one closes, the app is in the menu bar alone.
+@MainActor
+enum AppWindows {
+    private static var open: Set<ObjectIdentifier> = []
+
+    /// Follows a new window's closing.
+    static func register(_ w: NSWindow) {
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: w, queue: .main) { n in
+            MainActor.assumeIsolated {
+                guard let w = n.object as? NSWindow else { return }
+                open.remove(ObjectIdentifier(w))
+                if open.isEmpty {
+                    _ = NSApp.setActivationPolicy(.accessory)
+                }
+            }
+        }
+    }
+
+    static func show(_ w: NSWindow) {
+        open.insert(ObjectIdentifier(w))
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate()
+        w.makeKeyAndOrderFront(nil)
+    }
+}
+
 /// The settings window: a toolbar of panes, as a Mac app's settings have.
-/// While it is open the app is a regular one, in the Dock and in ⌘-Tab, so
-/// the window does not get lost behind others.
 @MainActor
 enum SettingsWindow {
     private static var window: NSWindow?
@@ -36,14 +62,10 @@ enum SettingsWindow {
             w.toolbarStyle = .preference
             w.isReleasedWhenClosed = false
             w.center()
-            NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: w, queue: .main) { _ in
-                MainActor.assumeIsolated { _ = NSApp.setActivationPolicy(.accessory) }
-            }
+            AppWindows.register(w)
             window = w
         }
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate()
-        window?.makeKeyAndOrderFront(nil)
+        window.map(AppWindows.show)
     }
 }
 
@@ -177,6 +199,7 @@ private struct CommitField: View {
 struct GeneralSettings: View {
     @EnvironmentObject private var store: Store
     @AppStorage(MenuBarShows.key) private var shows = MenuBarShows.percent.rawValue
+    @AppStorage(MenuBarTracks.key) private var tracks = MenuBarTracks.mac.rawValue
     @AppStorage(NoticeSettings.outKey) private var notifyOut = true
     @AppStorage(NoticeSettings.runsOutKey) private var runsOut = NoticeSettings.RunsOut.day.rawValue
     @AppStorage(NoticeSettings.scopeKey) private var scope = NoticeSettings.Scope.mac.rawValue
@@ -203,8 +226,14 @@ struct GeneralSettings: View {
                     Text("Icon Only").tag(MenuBarShows.icon.rawValue)
                 }
                 .pickerStyle(.menu)
+                Picker("Track", selection: $tracks) {
+                    Text("This Mac's Subscriptions").tag(MenuBarTracks.mac.rawValue)
+                    Text("The Team's").tag(MenuBarTracks.team.rawValue)
+                }
+                .pickerStyle(.menu)
                 LabeledContent("Preview") {
-                    MenuBarLabel(summary: store.summary, shows: MenuBarShows(rawValue: shows) ?? .percent, now: store.now)
+                    MenuBarLabel(summary: store.summary(MenuBarTracks(rawValue: tracks) ?? .mac), shows: MenuBarShows(rawValue: shows) ?? .percent,
+                                 now: store.now)
                         .font(.system(size: 13, weight: .medium))
                         .padding(.vertical, 4)
                         .padding(.horizontal, 8)
@@ -321,7 +350,7 @@ struct GeneralSettings: View {
                 }
             }
         }
-        .pane(height: 655)
+        .pane(height: 683)
         .onAppear {
             login = LoginItem.status
             notifier.refreshStatus()

@@ -279,6 +279,9 @@ private struct Header: View {
             // The shortcuts work while the popover is open, without the menu.
             Group {
                 Button("Settings") { SettingsWindow.show() }.keyboardShortcut(",")
+                if store.report.map({ !$0.solo }) ?? false {
+                    Button("Team Window") { TeamWindow.show() }.keyboardShortcut("d")
+                }
                 Button("Quit") { NSApp.terminate(nil) }.keyboardShortcut("q")
             }
             .opacity(0)
@@ -624,6 +627,10 @@ enum StatusMenu {
             if let h = store.updateHealth {
                 let title = "Update ai-usage" + (h.release.map { " to \($0)" } ?? "") + "…"
                 menu.addItem(action(title, enabled: !store.updating) { Task { await store.update() } })
+            }
+            // Alone, this Mac is the only device, which Usage shows whole.
+            if !r.solo {
+                menu.addItem(action("Team Window…", key: "d") { TeamWindow.show() })
             }
             menu.addItem(.separator())
             // The whole report, interactive, where the popover shows a

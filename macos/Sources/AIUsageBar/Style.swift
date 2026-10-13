@@ -73,6 +73,13 @@ enum Palette {
         Color.primary.opacity(contrast == .increased ? 0.15 : 0.08)
     }
 
+    /// A step of the Team window's heat map, from 1, faint, to 5: gray, as
+    /// tokens are, since color is for states; clear for 0.
+    static func heat(_ step: Int, _ contrast: ColorSchemeContrast) -> Color {
+        let opacity = [0, 0.04, 0.08, 0.13, 0.19, 0.27][min(max(step, 0), 5)]
+        return Color.primary.opacity(contrast == .increased ? opacity * 1.6 : opacity)
+    }
+
     /// Where a window is headed by its reset, past what it has used.
     static func projection(_ state: String, _ contrast: ColorSchemeContrast) -> Color {
         let strong = contrast == .increased
@@ -83,11 +90,16 @@ enum Palette {
     /// Text in a state's color. In light mode each is a shade darker than
     /// the system color, so small text keeps a contrast of 4.5:1 on white.
     static func text(_ state: String) -> Color {
+        loud(state) ? Color(nsColor: nsText(state)) : .secondary
+    }
+
+    /// The same for AppKit.
+    static func nsText(_ state: String) -> NSColor {
         switch state {
         case "out": return adaptive(.systemRed, light: (0.80, 0.10, 0.08))
         case "over": return adaptive(.systemOrange, light: (0.70, 0.33, 0))
         case "tight": return adaptive(.systemYellow, light: (0.55, 0.40, 0))
-        default: return .secondary
+        default: return .secondaryLabelColor
         }
     }
 
@@ -124,12 +136,12 @@ enum Palette {
         }
     }
 
-    private static func adaptive(_ dark: NSColor, light: (CGFloat, CGFloat, CGFloat)) -> Color {
+    private static func adaptive(_ dark: NSColor, light: (CGFloat, CGFloat, CGFloat)) -> NSColor {
         let light = NSColor(srgbRed: light.0, green: light.1, blue: light.2, alpha: 1)
-        return Color(nsColor: NSColor(name: nil) { appearance in
+        return NSColor(name: nil) { appearance in
             let match = appearance.bestMatch(from: [.aqua, .darkAqua, .accessibilityHighContrastAqua, .accessibilityHighContrastDarkAqua])
             return match == .darkAqua || match == .accessibilityHighContrastDarkAqua ? dark : light
-        })
+        }
     }
 }
 
