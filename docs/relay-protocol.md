@@ -277,7 +277,7 @@ Every integer the document allows fits exactly in an IEEE 754 double, so readers
 | `sources` | array of Source | required | at most 12 |
 | `aliases` | array of Alias | omitted when empty | at most 48: the short names this device gave accounts, newest first. The newest one for an account, from any device in the team, names it everywhere |
 
-The body as a whole MUST be at most 65536 bytes. The reference collector drops projects, then the oldest `days` down to 7 per account, then accounts until it fits.
+The body as a whole MUST be at most 65536 bytes. The reference collector fits the document without `cycles` first: it drops projects, then the oldest `days` down to 7 per account, then accounts until it fits. It then puts back the `cycles` of the accounts it kept, and drops them one at a time until the document fits: the oldest of the window with the most in the account with the most.
 
 ### 7.4 Nested objects
 
@@ -300,6 +300,7 @@ The body as a whole MUST be at most 65536 bytes. The reference collector drops p
 | `days` | array of token count | omitted when empty | at most 90: the account's input plus output tokens on this device per UTC day, cache left out, newest first. The first entry is the UTC day of `collected_at`, the next the day before, and so on. Trailing zeros are left out; zeros between days are written as `0` |
 | `burn_days` | array of token count | omitted when empty | at most 90: the account's weighted tokens on this device per UTC day, laid out as `days` is. A weighted token weighs each kind of token by what the provider's API charges for it against input, as [json-schema.md](json-schema.md) lists. Added in v0.4.0; see §11 |
 | `recent` | array of Recent | omitted when empty | at most 8: the account's input plus output tokens on this device since each window of its reading began, for the windows whose start is known and which had not reset when the snapshot was taken |
+| `cycles` | array of Cycle | omitted when empty | at most 64: the periods of the account's quota windows this device read, each with its fullest reading. Added in v0.5.0; see §11 |
 
 **Window**: one quota window as the tool reported it.
 
@@ -335,6 +336,15 @@ The body as a whole MUST be at most 65536 bytes. The reference collector drops p
 | `start` | time | required | when the window's current period began: its `resets_at` minus its length. MUST NOT be `0001-01-01T00:00:00Z` |
 | `tokens` | token count | required | input plus output tokens since `start`, cache left out |
 | `burn` | token count | omitted when 0 | weighted tokens since `start`, as `burn_days` weighs them. Added in v0.4.0; see §11 |
+
+**Cycle**: one period of a quota window, from one reset to the next, with the fullest reading of it this device took. The reference collector finds them in its samples of the last 90 days. A period is one `resets_at`, give or take 5 minutes, since a provider's reset time wobbles and one read from a log is rounded; a drop within it, as when a provider resets a full window early or takes usage back, does not lower it. It sends every period of a window a day long or longer, the newest 12 of a shorter one, and none read only at 0%, of a window without a reset time, of an account it does not know, or of a provider whose quota is another account's (`quota_from`). They are ordered by `window`, then newest first. A reader takes the fullest of each period across the team's documents.
+
+| Member | Type | Presence | Rule and meaning |
+| --- | --- | --- | --- |
+| `window` | plain | required, not empty | the window's `name` |
+| `resets_at` | time | required | when the period was to reset. MUST NOT be `0001-01-01T00:00:00Z` |
+| `percent` | number | required | its fullest reading, 0 to 1000 |
+| `last_read_at` | time | required | when this device last read it. MUST NOT be `0001-01-01T00:00:00Z` or after `resets_at` |
 
 **Alias**: a short name for an account, set on one device for the whole team.
 
@@ -525,7 +535,9 @@ A collector that sends a member its relay does not know gets `422`. The referenc
 
 The members v0.4.0 added, `last_error_at`, `burn_days`, and Recent's `burn`, are sent only where every reader of the team reads them. The reference collector sends them when its last team read is of this team, at most 3 hours old, and every other device it found, or still remembers, runs v0.4.0 or later; a development build counts as new, except one that reports `dev`, as builds from source before v0.4.0 did, and one whose version has a suffix after a release before v0.4.0, such as `v0.0.0-local`. It remembers a device the read no longer finds for up to 90 days after its last report, so a laptop on an older release that sleeps for a week still holds the members back when it wakes. A device gone before the relay would have let its record expire, as `since` (§6.6) tells, was deleted, and is forgotten at once; `ai-usage team forget-device` forgets one on this device. Otherwise it sends the document without them, and its team estimates their values from `days` and `recent`. When its relay answers `422` to a document with them, it sends the document without them in the same run and does not send them again for 24 hours.
 
-One case remains: a device the team has never seen, installed with a release before v0.4.0, can read documents with the new members on its first run. It drops them, as any older reader drops a document it cannot decode, until it updates itself, within its next run, or the others' next team read closes the gate, within about half an hour. The installer always installs the newest release.
+`cycles`, added in v0.5.0, takes the same gate, with v0.5.0 in place of v0.4.0: the reference collector sends it only when every other device it found, or still remembers, runs v0.5.0 or later, and the gate for v0.4.0's members is open too. Otherwise it sends the document without `cycles`, and the team's readers show their own device's periods alone. When its relay answers `422` to a document with `cycles`, it sends the document without them, with v0.4.0's members when their gate is open, in the same run, and does not send `cycles` again for 24 hours. A relay before v0.5.0 answers so; the reference relay accepts `cycles` from v0.5.0, so it is deployed before collectors on v0.5.0.
+
+One case remains: a device the team has never seen, installed with a release before v0.4.0, can read documents with the new members on its first run. It drops them, as any older reader drops a document it cannot decode, until it updates itself, within its next run, or the others' next team read closes the gate, within about half an hour. The same holds for a new device on a release before v0.5.0 and `cycles`. The installer always installs the newest release.
 
 ## 12. Security notes
 
