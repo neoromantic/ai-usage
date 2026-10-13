@@ -267,8 +267,9 @@ private struct LimitRow: View {
     // MARK: Details
 
     /// A line for each thing the row does not show: the account's login,
-    /// each window, and the devices that used it. Who read it goes in the
-    /// windows' tooltips.
+    /// each window, what fills it from outside the team, how old the
+    /// reading is and who read it, and the devices that used it. A caveat
+    /// has its line whatever the line under the row says.
     private var details: some View {
         let a = account
         return DetailGrid {
@@ -276,6 +277,8 @@ private struct LimitRow: View {
             ForEach(orderedWindows, id: \.name) { w in
                 DetailLine(short(w), windowValue(w), help: windowHelp(w))
             }
+            DetailLine("Outside", outsideWords.map { Text($0).foregroundColor(Palette.text("tight")) })
+            DetailLine("Reading", reading)
             if solo {
                 DetailLine("Active", a.lastActiveAt.map { Format.ago($0, now: now) })
             } else if let per = perDevice {
@@ -323,9 +326,8 @@ private struct LimitRow: View {
         return left + Text(w.resetsAt == nil ? "no reset known" : "resets" + resets)
     }
 
-    /// A window in a sentence, with who read it: "7d: 42% left, ~12% left
-    /// at its reset Sun 01:00, in 2d 9h · Tight · read 3m ago on mira-mbp
-    /// (mira)".
+    /// A window in a sentence: "7d: 42% left, ~12% left at its reset Sun
+    /// 01:00, in 2d 9h · Tight · reading 7h old".
     private func windowHelp(_ w: Quota.Window) -> String {
         var parts: [String] = []
         if w.known {
@@ -343,7 +345,6 @@ private struct LimitRow: View {
             if Palette.marked(w.state) { parts.append(Palette.label(w.state)) }
             if w.stale, let age = readingAge(w) { parts.append("reading \(age) old") }
         }
-        if let read = readLine { parts.append(read) }
         return "\(short(w)): " + parts.joined(separator: " · ")
     }
 
@@ -351,17 +352,18 @@ private struct LimitRow: View {
         (w.observedAt ?? quota?.observedAt).map { Format.duration(now.timeIntervalSince($0)) }
     }
 
-    /// "read 20m ago on mira-mbp (mira) via the Codex login".
-    private var readLine: String? {
+    /// How old the newest reading is, and the device that took it, as the
+    /// report names it with its user: "20m old, from mira-mbp (mira)", "via
+    /// the Codex login" when it is that login's. The age takes the tight
+    /// color when a window's reading is stale.
+    private var reading: Text? {
         guard let q = quota else { return nil }
-        var s = "read " + Format.ago(q.observedAt, now: now)
-        if let d = q.device {
-            s += " on \(d)" + (report.teamDevice(named: d).map { " (\($0.osUser))" } ?? "")
-        }
+        let age = Text("\(Format.duration(now.timeIntervalSince(q.observedAt))) old")
+        var rest = q.device.map { ", from \($0)" } ?? ""
         if let from = q.from {
-            s += " via the \(Format.provider(from)) login"
+            rest += " via the \(Format.provider(from)) login"
         }
-        return s
+        return (q.stale ? age.foregroundColor(Palette.text("tight")) : age) + Text(rest)
     }
 
     /// The devices that used the account in the period, busiest first:

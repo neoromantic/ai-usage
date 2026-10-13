@@ -17,9 +17,14 @@ public struct Verdict: Equatable, Sendable {
 
     public let kind: Kind
     public let title: String
+    /// The line under the title: what to know, then the reading's age,
+    /// which no form of the line drops, then how many more there are.
     public let subline: String
-    /// The title without the time it runs out, which leads the subline
-    /// instead, for a header too narrow for the whole title.
+    /// The line without what a narrow header cuts first: how long before
+    /// its reset a window runs out.
+    public let shortSubline: String
+    /// The title without the time it runs out, which leads the short
+    /// subline instead, for a header too narrow for the whole title.
     public let compactTitle: String
     public let compactSubline: String
     /// The other out and over entries the title leaves out.
@@ -39,6 +44,9 @@ public struct Verdict: Equatable, Sendable {
                 subject += " · " + (account?.quota?.shortName(w) ?? w)
             }
             var parts: [String] = []
+            // How long before its reset a window runs out goes first when
+            // the line is short of room.
+            var cut: String?
             var compact: (title: String, lead: String)?
             if a.kind == .out {
                 kind = .out
@@ -52,7 +60,7 @@ public struct Verdict: Equatable, Sendable {
                     // The reset's clock is the row's countdown, and the
                     // verdict's tooltip.
                     if let reset = a.resetsAt {
-                        parts.append("\(Format.duration(reset.timeIntervalSince(at))) before its reset")
+                        cut = "\(Format.duration(reset.timeIntervalSince(at))) before its reset"
                     }
                 } else {
                     title = subject + " runs out at reset"
@@ -61,18 +69,21 @@ public struct Verdict: Equatable, Sendable {
                     }
                 }
             }
-            // The count of the others comes before the reading's age, which
-            // the line cuts first.
+            // An old reading's age is what a forecast stands on, so it
+            // comes before the count of the others, which the line cuts
+            // before it.
+            var tail: [String] = []
+            if let age = a.readingAgeSeconds {
+                tail.append("reading \(Format.duration(TimeInterval(age))) old")
+            }
             more = urgent.count - 1
             if more > 0 {
-                parts.append("+\(more) more")
+                tail.append("+\(more) more")
             }
-            if let age = a.readingAgeSeconds {
-                parts.append("reading \(Format.duration(TimeInterval(age))) old")
-            }
-            subline = parts.joined(separator: " · ")
+            subline = (parts + [cut].compactMap { $0 } + tail).joined(separator: " · ")
+            shortSubline = (parts + tail).joined(separator: " · ")
             compactTitle = compact?.title ?? title
-            compactSubline = compact.map { ([$0.lead] + parts).joined(separator: " · ") } ?? subline
+            compactSubline = compact.map { ([$0.lead] + parts + tail).joined(separator: " · ") } ?? shortSubline
             (provider, label) = (a.provider, a.account)
             return
         }
@@ -82,7 +93,7 @@ public struct Verdict: Equatable, Sendable {
             kind = .none
             title = "No limits read yet"
             subline = "Claude Code, Codex and Grok report them after first use"
-            (compactTitle, compactSubline) = (title, subline)
+            (shortSubline, compactTitle, compactSubline) = (subline, title, subline)
             (provider, label) = (nil, nil)
             return
         }
@@ -110,7 +121,7 @@ public struct Verdict: Equatable, Sendable {
             parts.append("\(under) underused")
         }
         subline = parts.joined(separator: " · ")
-        (compactTitle, compactSubline) = (title, subline)
+        (shortSubline, compactTitle, compactSubline) = (subline, title, subline)
         (provider, label) = (room?.provider, room?.account.label)
     }
 }
