@@ -36,6 +36,8 @@ func (p *page) badgeOf(kind string) (string, color.Color) {
 		return "OLD", t.Muted
 	case AttentionUnder:
 		return "UNDER", t.Under
+	case AttentionIdle:
+		return "IDLE", t.Muted
 	}
 	return strings.ToUpper(kind), t.Muted
 }
@@ -64,6 +66,12 @@ func (p *page) attention() []chunks {
 		word, _ := p.badgeOf(a.Kind)
 		badgeW = max(badgeW, width(word)+2)
 		subjects[i] = p.subject(a)
+		if a.Kind == AttentionIdle {
+			// A quiet line, dim throughout.
+			for j := range subjects[i] {
+				subjects[i][j] = p.muted(subjects[i][j].text)
+			}
+		}
 		subjW = max(subjW, subjects[i].width())
 	}
 	subjW = min(subjW, attentionSubject, p.w/3)
@@ -117,7 +125,7 @@ func (p *page) moreText(hidden []Attention) string {
 // device, or the devices on an old release.
 func (p *page) subject(a Attention) chunks {
 	switch a.Kind {
-	case AttentionOut, AttentionOver, AttentionTight, AttentionUnder, AttentionOutside, AttentionNoReading:
+	case AttentionOut, AttentionOver, AttentionTight, AttentionUnder, AttentionOutside, AttentionNoReading, AttentionIdle:
 		label := shortID(a.Account)
 		if acct := p.account(a.Provider, a.Account); acct != nil {
 			label = shownLabel(acct)
@@ -191,6 +199,8 @@ func (p *page) attentionText(a Attention, room int) []chunks {
 		return p.outsideForms(a)
 	case AttentionUnder:
 		return p.underForms(a)
+	case AttentionIdle:
+		return p.idleForms(a)
 	case AttentionError:
 		if a.At != nil {
 			// How long ago, while the whole error fits beside it.
@@ -279,13 +289,19 @@ func (p *page) outsideForms(a Attention) []chunks {
 func (p *page) noReadingForms(a Attention, room int) []chunks {
 	msg := p.txt(a.Message)
 	out := p.forms(msg)
+	short := msg
 	if head, act, ok := strings.Cut(msg, ": "); ok {
 		if _, version, ok := strings.Cut(head, " runs "); ok {
 			// OLD names the device.
 			out = append(out, p.forms("on "+version+": "+act)...)
 		}
+		// Of the unknown account's, where to log in is what to keep.
+		if where, ok := strings.CutPrefix(head, "not logged in on "); ok {
+			short = "on " + where + ": " + act
+			out = append(out, p.forms(short)...)
+		}
 	}
-	return append(out, p.forms(cutReason(msg, room, p.g.ell))...)
+	return append(out, p.forms(cutReason(short, room, p.g.ell))...)
 }
 
 // cutReason is a reason, "what: what to do", cut to w columns: what to do
@@ -352,6 +368,16 @@ func (p *page) underForms(a Attention) []chunks {
 		return p.forms(s, "leaves "+unused+" unused")
 	}
 	return p.forms(s+", resets "+p.clock(*a.ResetsAt)+", in "+dur(a.ResetsAt.Sub(p.now)), s, "leaves "+unused+" unused")
+}
+
+// idleForms is what to know about a paid subscription no team device has
+// used for a week or more, dim, as it asks for nothing soon.
+func (p *page) idleForms(a Attention) []chunks {
+	s := "idle"
+	if a.At != nil {
+		s += " " + age(p.now.Sub(*a.At))
+	}
+	return []chunks{{p.muted(s + ", paid and unused")}, {p.muted(s)}}
 }
 
 // silentForms is what to know about a device that has not reported.

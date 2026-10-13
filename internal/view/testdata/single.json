@@ -56,6 +56,8 @@
   "attention": [
     {
       "kind": "over",
+      "subject": "claude sam · 5h",
+      "text": "runs out ~Wed 18:27 at this window's pace, 12m before reset",
       "provider": "claude",
       "account": "sam@example.com",
       "name": "sam",
@@ -66,6 +68,8 @@
     },
     {
       "kind": "tight",
+      "subject": "claude sam@example.com",
+      "text": "~95% at reset Sat 12:00 at the last day's pace",
       "provider": "claude",
       "account": "sam@example.com",
       "name": "sam",
@@ -74,6 +78,8 @@
     },
     {
       "kind": "old",
+      "subject": "1 device on v1.4.2",
+      "text": "sam-air · latest v1.4.3",
       "devices": [
         "sam-air"
       ],
@@ -81,6 +87,8 @@
     },
     {
       "kind": "under",
+      "subject": "codex sam@example.com",
+      "text": "leaves ~73% unused at this week's pace, resets Fri 12:00, in 1d 18h",
       "provider": "codex",
       "account": "sam@example.com",
       "name": "sam",
@@ -1294,6 +1302,7 @@
         "burn_estimated": false,
         "gap": null,
         "replaced_by": null,
+        "note": "update: latest v1.4.3",
         "limitations": []
       }
     ],

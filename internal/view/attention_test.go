@@ -1,6 +1,8 @@
 package view
 
 import (
+	"cmp"
+	"encoding/json"
 	"reflect"
 	"slices"
 	"strings"
@@ -9,6 +11,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/neoromantic/ai-usage/internal/collect"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
@@ -237,8 +240,11 @@ func newKindsReport() Report {
 	outside.Outside = &Outside{Points: 25, Since: now.Add(-20 * time.Hour)}
 	noReading := subAccount(long, false, now)
 	noReading.NoReading = strPtr("annbook runs v0.2.0: reinstall with install.sh")
-	idle := subAccount("lee@mail.test", false, now)
-	idle.NoReading, idle.Burn = strPtr("not read on srv1"), Usage{} // not in use: no news
+	unused := subAccount("lee@mail.test", false, now)
+	unused.NoReading, unused.Burn = strPtr("not read on srv1"), Usage{} // not in use: no news
+	// Read, and no team device has used it for 11 days: IDLE, not UNDER.
+	idle := subAccount("max@mail.test", false, now, weekly(0))
+	idle.Burn, idle.LastActiveAt = Usage{}, tp(now.Add(-11*24*time.Hour))
 	r := Report{GeneratedAt: now, Collector: Collector{Version: "v0.4.0", DeviceLabel: "annbook"}}
 	r.Team = Team{
 		PulledAt: tp(now), Latest: strPtr("v0.4.0"),
@@ -247,7 +253,7 @@ func newKindsReport() Report {
 			subAccount("bob@mail.test", false, now, weekly(80)),
 			subAccount("ann@acme.dev", true, now, weekly(52)),
 			subAccount("kim@mail.test", false, now, weekly(52)), // tight, but not logged in here
-			outside, noReading, idle,
+			outside, noReading, unused, idle,
 			subAccount("kim@corp.test", false, now, weekly(20)),
 		}}},
 		Devices: []TeamDevice{
@@ -268,7 +274,7 @@ func newKindsReport() Report {
 // Every kind in its place: what runs out, a tight window of one's own, one
 // someone outside the team fills, failures, a subscription in use with no
 // reading, silence, a reinstall's old record, old releases (the ones that
-// need a reinstall first), and what will be left unused.
+// need a reinstall first), what will be left unused, and what no one uses.
 func TestAttentionOrderOfEveryKind(t *testing.T) {
 	r := newKindsReport()
 	var got []string
@@ -278,7 +284,7 @@ func TestAttentionOrderOfEveryKind(t *testing.T) {
 	want := []string{
 		"out lee", "over bob", "tight ann", "outside sam", "error bot-b",
 		"no_reading a-very-long-subscription-name", "silent bot-c", "duplicate annbook",
-		"old srv1", "old bot-a", "under kim",
+		"old srv1", "old bot-a", "under kim", "idle max",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("attention =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -317,6 +323,7 @@ func TestAttentionLinesAt80(t *testing.T) {
 		8:  "DUPLICATE annbook ai-usage team forget-device 3f9a1c2e",
 		9:  "OLD 1 device on v0.2.0 no Claude quota; reinstall",
 		10: "OLD 1 device on v0.3.4 bot-a · latest v0.4.0",
+		12: "IDLE claude max@mail.test idle 11d, paid and unused",
 	} {
 		if got := squeeze(lines[i]); got != want {
 			t.Errorf("line %d = %q, want %q", i, got, want)
@@ -387,4 +394,161 @@ func TestQuotaOnlyProblemIsNoError(t *testing.T) {
 	if got := attentionList(r); !reflect.DeepEqual(got, want) {
 		t.Fatalf("attention = %q, want %q", got, want)
 	}
+}
+
+// A paid subscription with a reading that no team device has used for a
+// week is IDLE, the longest idle first, in place of its UNDER. Not one used
+// sooner, one with no reading, the unknown account, a free plan, Hermes, or
+// one that someone outside the team uses.
+func TestIdle(t *testing.T) {
+	start := now.Add(-4 * 24 * time.Hour) // 4/7 of the week gone
+	weekly := func(pct float64) snapshot.Window { return week7(pct, start.Add(week)) }
+	acct := func(label string, last time.Duration, ws ...snapshot.Window) TeamAccount {
+		a := subAccount(label, false, now, ws...)
+		a.Burn, a.LastActiveAt = Usage{}, tp(now.Add(-last))
+		return a
+	}
+	day := 24 * time.Hour
+	free := acct("free@mail.test", 20*day, weekly(0))
+	free.Plan = strPtr("Free")
+	outside := acct("web@mail.test", 20*day, weekly(30))
+	outside.Outside = &Outside{Points: 30, Since: now.Add(-10 * time.Hour)}
+	hermes := acct("openai-codex", 20*day, weekly(0))
+	hermes.Subscription = false
+	// Its window began before its last use: what filled it may be the
+	// team's.
+	month := acct("month@mail.test", 9*day, snapshot.Window{Name: "30d", Percent: 40, Minutes: 30 * 24 * 60, ResetsAt: tp(now.Add(15 * day))})
+	r := Report{GeneratedAt: now, Collector: Collector{Version: "v0.4.0", DeviceLabel: "annbook"}}
+	r.Team = Team{Providers: []TeamProvider{{Provider: "codex", Accounts: []TeamAccount{
+		acct("ann@acme.dev", 8*day, weekly(0)),
+		acct("bob@mail.test", 6*day, weekly(0)), // used 6 days ago: UNDER only
+		acct("kim@mail.test", 30*day, weekly(0)),
+		acct("lee@mail.test", 30*day),                   // no reading
+		acct(collect.UnknownAccount, 30*day, weekly(0)), // no login to pay for
+		acct("sam@mail.test", 10*day, weekly(12)),       // used outside the team since
+		acct("old@mail.test", 9*day, weekly(0.4)),       // under 1%: unused
+		free, outside, hermes, month,
+	}}}}
+	r.Attention = attention(r.Team, r.Collector, now)
+	var got []string
+	for _, a := range r.Attention {
+		s := a.Kind + " " + a.Name
+		if a.Kind == AttentionIdle {
+			s += " " + age(now.Sub(*a.At))
+		}
+		got = append(got, s)
+	}
+	// The others keep their UNDER: a free plan, the unknown account, and one
+	// that someone used since.
+	want := []string{"outside web", "under bob", "under unknown", "under free", "under sam",
+		"idle kim 30d", "idle old 9d", "idle month 9d", "idle ann 8d"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("attention = %q, want %q", got, want)
+	}
+	line := ""
+	for _, l := range pageSection(Render(r, Options{Width: 80, Loc: time.UTC, Interactive: true}), "ATTENTION") {
+		if strings.Contains(l, "kim@") {
+			line = strings.Join(strings.Fields(l), " ")
+		}
+	}
+	if line != "IDLE codex kim@mail.test idle 30d, paid and unused" {
+		t.Errorf("IDLE = %q", line)
+	}
+	// The static page counts the ones it does not show.
+	static := pageSection(Render(r, Options{Width: 80, Loc: time.UTC}), "ATTENTION")
+	if l := strings.TrimSpace(static[len(static)-1]); l != "+3 more: 3 idle" {
+		t.Errorf("static ATTENTION ends in %q", l)
+	}
+}
+
+// The report words each ATTENTION entry as its line does at any width: the
+// subject uncut, and the text in its longest form, with clocks in the zone
+// it was given.
+func TestAttentionWordsAreTheLines(t *testing.T) {
+	r := newKindsReport()
+	describe(&r, time.UTC)
+	o := Options{Width: 400, Loc: time.UTC, Interactive: true}
+	p := newPage(&r, o)
+	lines := pageSection(Render(r, o), "ATTENTION")[1:]
+	squeeze := func(l string) string { return strings.Join(strings.Fields(l), " ") }
+	for i, a := range r.Attention {
+		word, _ := p.badgeOf(a.Kind)
+		line, ok := strings.CutPrefix(squeeze(lines[i]), word+" ")
+		subject, cut := strings.CutSuffix(line, " "+squeeze(a.Text))
+		// The line cuts a long subject.
+		if !ok || !cut || a.Text == "" || subject != squeeze(a.Subject) && !strings.HasPrefix(a.Subject, strings.TrimSuffix(subject, "…")) {
+			t.Errorf("%s: subject %q, text %q, line %q", a.Kind, a.Subject, a.Text, lines[i])
+		}
+	}
+	got := map[string]string{}
+	for _, a := range r.Attention {
+		got[a.Subject] = a.Text
+	}
+	for subject, text := range map[string]string{
+		"claude lee@corp.test":                            "back Fri 12:00, in 3d · reading 1d old",
+		"claude a-very-long-subscription-name@acme.devxy": "annbook runs v0.2.0: reinstall with install.sh",
+		"1 device on v0.2.0":                              "srv1 · cannot read Claude quota; reinstall with install.sh",
+		"claude max@mail.test":                            "idle 11d, paid and unused",
+	} {
+		if got[subject] != text {
+			t.Errorf("%s: %q, want %q", subject, got[subject], text)
+		}
+	}
+	// In another zone, other clocks.
+	r = newKindsReport()
+	describe(&r, sampleZone)
+	if a := r.Attention[0]; a.Text != "back Fri 15:00, in 3d · reading 1d old" {
+		t.Errorf("at UTC+3: %q", a.Text)
+	}
+}
+
+// Each device's note is what the status view's NOTE says of it in full,
+// with clocks in the zone the report was given, and nil where it says
+// nothing.
+func TestDeviceNoteIsTheStatusViews(t *testing.T) {
+	r := troubled(t)
+	for i := range r.Team.Devices {
+		r.Team.Devices[i].Note = nil
+	}
+	describe(&r, time.UTC)
+	p := newPage(&r, Options{Loc: time.UTC})
+	none := 0
+	for _, d := range r.Team.Devices {
+		if want := p.deviceNote(d, -1).String(); deref(d.Note) != cmp.Or(want, "<nil>") {
+			t.Errorf("%s: note %q, want %q", d.Label, deref(d.Note), want)
+		}
+		if d.Note == nil {
+			none++
+		}
+		if d.Label == "bot-e" && deref(d.Note) != "silent since Mon 11:02 · last error: codex: not logged in" {
+			t.Errorf("bot-e: note %q", deref(d.Note))
+		}
+	}
+	if none == 0 {
+		t.Error("every device has a note")
+	}
+}
+
+// ATTENTION with every kind, and tokens no login was known for, at 80 and
+// 120 columns, and its entries in the JSON.
+func TestAttentionGolden(t *testing.T) {
+	r := newKindsReport()
+	unknown := subAccount(collect.UnknownAccount, false, now)
+	unknown.NoReading = strPtr("not logged in on srv1: run claude and log in")
+	r.Team.Providers[0].Accounts = append(r.Team.Providers[0].Accounts, unknown)
+	r.Attention = attention(r.Team, r.Collector, now)
+	describe(&r, time.UTC)
+	var b strings.Builder
+	for _, w := range []int{80, 120} {
+		for _, l := range pageSection(Render(r, Options{Width: w, Loc: time.UTC, Interactive: true}), "ATTENTION") {
+			b.WriteString(l + "\n")
+		}
+		b.WriteString("\n")
+	}
+	golden(t, "attention.golden", b.String())
+	js, err := json.MarshalIndent(r.Attention, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	golden(t, "attention.json.golden", string(js)+"\n")
 }

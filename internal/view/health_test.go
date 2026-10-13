@@ -206,6 +206,36 @@ func TestFillGivesAnEarlierReportNotUpdating(t *testing.T) {
 	}
 }
 
+// TestFillGivesAnEarlierReportItsWords: a report saved before ATTENTION's
+// subjects and texts, and the devices' notes, were in it gets them, and
+// one saved with them keeps its own.
+func TestFillGivesAnEarlierReportItsWords(t *testing.T) {
+	want := loadReport(t, "team")
+	r := loadReport(t, "team")
+	for i := range r.Attention {
+		r.Attention[i].Subject, r.Attention[i].Text = "", ""
+	}
+	for i := range r.Team.Devices {
+		r.Team.Devices[i].Note = nil
+	}
+	r.Attention[0].Subject, r.Attention[0].Text = "its subject", "its text"
+	Fill(&r)
+	if a := r.Attention[0]; a.Subject != "its subject" || a.Text != "its text" {
+		t.Errorf("words of its own: %q, %q", a.Subject, a.Text)
+	}
+	// With no clock in them, the words are the same in any zone.
+	for _, i := range []int{5, 6, 7, 8} {
+		if got, w := r.Attention[i], want.Attention[i]; got.Subject != w.Subject || got.Text != w.Text {
+			t.Errorf("%s: %q, %q, want %q, %q", got.Kind, got.Subject, got.Text, w.Subject, w.Text)
+		}
+	}
+	for _, i := range []int{0, 1, 3} {
+		if got, w := deref(r.Team.Devices[i].Note), deref(want.Team.Devices[i].Note); got != w {
+			t.Errorf("%s: note %q, want %q", r.Team.Devices[i].Label, got, w)
+		}
+	}
+}
+
 // quotas are the quotas of a report's accounts, this device's and the
 // team's.
 func quotas(r *Report) []*Quota {

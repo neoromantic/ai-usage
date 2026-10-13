@@ -1,0 +1,131 @@
+[
+  {
+    "kind": "out",
+    "subject": "claude lee@corp.test",
+    "text": "back Fri 12:00, in 3d · reading 1d old",
+    "provider": "claude",
+    "account": "lee@corp.test",
+    "name": "lee",
+    "at": "2026-09-04T12:00:00Z",
+    "reading_age_seconds": 108000
+  },
+  {
+    "kind": "over",
+    "subject": "claude bob@mail.test",
+    "text": "runs out ~Wed 12:00 at this week's pace, 2d before reset",
+    "provider": "claude",
+    "account": "bob@mail.test",
+    "name": "bob",
+    "at": "2026-09-02T12:00:00Z",
+    "resets_at": "2026-09-04T12:00:00Z",
+    "percent": 140
+  },
+  {
+    "kind": "tight",
+    "subject": "claude ann@acme.dev",
+    "text": "~91% at reset Fri 12:00 at this week's pace",
+    "provider": "claude",
+    "account": "ann@acme.dev",
+    "name": "ann",
+    "resets_at": "2026-09-04T12:00:00Z",
+    "percent": 91
+  },
+  {
+    "kind": "outside",
+    "subject": "claude sam@mail.test",
+    "text": "+25 points in 20h, no team device spent",
+    "provider": "claude",
+    "account": "sam@mail.test",
+    "name": "sam",
+    "at": "2026-08-31T16:00:00Z",
+    "percent": 25
+  },
+  {
+    "kind": "error",
+    "subject": "bot-b",
+    "text": "codex: app-server exited without answering",
+    "devices": [
+      "bot-b"
+    ],
+    "message": "codex: app-server exited without answering"
+  },
+  {
+    "kind": "no_reading",
+    "subject": "claude a-very-long-subscription-name@acme.devxy",
+    "text": "annbook runs v0.2.0: reinstall with install.sh",
+    "provider": "claude",
+    "account": "a-very-long-subscription-name@acme.devxy",
+    "name": "a-very-long-subscription-name",
+    "message": "annbook runs v0.2.0: reinstall with install.sh"
+  },
+  {
+    "kind": "no_reading",
+    "subject": "claude unknown",
+    "text": "not logged in on srv1: run claude and log in",
+    "provider": "claude",
+    "account": "unknown",
+    "name": "unknown",
+    "message": "not logged in on srv1: run claude and log in"
+  },
+  {
+    "kind": "silent",
+    "subject": "bot-c",
+    "text": "no report since Mon 06:00, 1d 6h ago",
+    "devices": [
+      "bot-c"
+    ],
+    "at": "2026-08-31T06:00:00Z"
+  },
+  {
+    "kind": "duplicate",
+    "subject": "annbook",
+    "text": "reinstalled as annbook: ai-usage team forget-device 3f9a1c2e",
+    "devices": [
+      "annbook"
+    ],
+    "device_id": "d-3f9a1c2e5b7d9f1a3c5e7b9d",
+    "at": "2026-08-29T12:00:00Z",
+    "message": "annbook"
+  },
+  {
+    "kind": "old",
+    "subject": "1 device on v0.2.0",
+    "text": "srv1 · cannot read Claude quota; reinstall with install.sh",
+    "devices": [
+      "srv1"
+    ],
+    "message": "v0.4.0",
+    "limitations": [
+      "no_claude_quota",
+      "no_update_errors"
+    ]
+  },
+  {
+    "kind": "old",
+    "subject": "1 device on v0.3.4",
+    "text": "bot-a · latest v0.4.0",
+    "devices": [
+      "bot-a"
+    ],
+    "message": "v0.4.0"
+  },
+  {
+    "kind": "under",
+    "subject": "claude kim@corp.test",
+    "text": "leaves ~65% unused at this week's pace, resets Fri 12:00, in 3d",
+    "provider": "claude",
+    "account": "kim@corp.test",
+    "name": "kim",
+    "resets_at": "2026-09-04T12:00:00Z",
+    "percent": 35
+  },
+  {
+    "kind": "idle",
+    "subject": "claude max@mail.test",
+    "text": "idle 11d, paid and unused",
+    "provider": "claude",
+    "account": "max@mail.test",
+    "name": "max",
+    "at": "2026-08-21T12:00:00Z"
+  }
+]

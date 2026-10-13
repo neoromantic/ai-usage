@@ -658,7 +658,8 @@ func gapOf(seen, reads []time.Time, collected, now time.Time, own bool) *Gap {
 // what to do, when that is known: the devices that hold a Claude account all
 // run a release that reads no Claude quota, or one of them could not read
 // it, as its source says without failing. Of several, this device, then
-// the one first by name, is named.
+// the one first by name, is named. The unknown account has the reason
+// unknownReason gives, or none.
 func (m *merger) noReading(x *teamAccount) *string {
 	hs := slices.Clone(x.holders)
 	slices.SortStableFunc(hs, func(a, b *device) int {
@@ -673,6 +674,9 @@ func (m *merger) noReading(x *teamAccount) *string {
 	hs = slices.CompactFunc(hs, func(a, b *device) bool { return a == b })
 	if len(hs) == 0 {
 		return nil
+	}
+	if x.ta.Label == collect.UnknownAccount {
+		return unknownReason(x.provider, hs)
 	}
 	if x.provider == "claude" && !slices.ContainsFunc(hs, func(dv *device) bool {
 		return !slices.Contains(dv.dev.Limitations, LimitNoClaudeQuota)
@@ -692,6 +696,45 @@ func (m *merger) noReading(x *teamAccount) *string {
 		}
 	}
 	return nil
+}
+
+// unknownReason is why tokens of harness p went to no login, and where,
+// with what to do, as the first of the devices hs to say so does: its
+// source failed for a home whose logs have tokens, as the harness answered
+// that nobody is logged in to it. Without that it is nil: a device that
+// logged in since says nothing of the tokens it had before.
+func unknownReason(p string, hs []*device) *string {
+	for _, dv := range hs {
+		for _, s := range dv.dev.Sources {
+			if s.Provider != p || s.Error == nil || s.Status != "error" && s.Status != "partial" {
+				continue
+			}
+			// A device with several homes names the home first.
+			for _, part := range strings.Split(*s.Error, "; ") {
+				home, ok := strings.CutSuffix(part, p+": not logged in")
+				if !ok {
+					continue
+				}
+				where := dv.dev.Label
+				if home = strings.TrimSuffix(home, ": "); home != "" {
+					where += " (" + home + ")"
+				}
+				return strPtr("not logged in on " + where + ": " + loginAction(p))
+			}
+		}
+	}
+	return nil
+}
+
+// loginAction is how one logs in to harness p.
+func loginAction(p string) string {
+	switch p {
+	case "claude":
+		return "run claude and log in"
+	case "codex":
+		return "run codex login"
+	}
+	return "log in to " + p
 }
 
 // Outside is found over outsideSpan of an account's readings: a window that

@@ -389,6 +389,79 @@ func TestNoReadingSaysWhy(t *testing.T) {
 	}
 }
 
+// The unknown account's tokens say why no login was known for them, and
+// what to do, as the device whose harness answered that nobody is logged in
+// says; nothing when no device says so.
+func TestUnknownAccountSaysWhy(t *testing.T) {
+	f := newFixture(t, emptyState())
+	f.in.Loc = time.UTC
+	holder := func(id, host string, src *state.Source) snapshot.Doc {
+		st := emptyState()
+		addAccount(st, "claude", collect.UnknownAccount, false, nil, 100)
+		addAccount(st, "codex", collect.UnknownAccount, false, nil, 100)
+		if src != nil {
+			st.Sources["claude"], st.Sources["codex"] = *src, *src
+		}
+		return otherDoc(t, f.key, id, host, now.Add(-time.Minute), st)
+	}
+	loggedOut := func(status string, errs ...string) *state.Source {
+		return &state.Source{Status: status, Error: strings.Join(errs, "; ")}
+	}
+	for _, c := range []struct {
+		name          string
+		docs          []snapshot.Doc
+		claude, codex string
+	}{
+		{"one home", []snapshot.Doc{holder("d-abox-device", "abox", loggedOut("error", "claude: not logged in", "codex: not logged in"))},
+			"not logged in on abox: run claude and log in", "not logged in on abox: run codex login"},
+		// The home is named where the device has several.
+		{"several homes", []snapshot.Doc{holder("d-abox-device", "abox", loggedOut("partial",
+			"~/.ann/.claude: permission denied", "~/.claude-work: claude: not logged in", "~/.codex-work: codex: not logged in"))},
+			"not logged in on abox (~/.claude-work): run claude and log in", "not logged in on abox (~/.codex-work): run codex login"},
+		// The first device to say so.
+		{"two devices", []snapshot.Doc{holder("d-abox-device", "abox", nil), holder("d-bbox-device", "bbox", loggedOut("error", "claude: not logged in"))},
+			"not logged in on bbox: run claude and log in", "<nil>"},
+		// Another problem is no reason to guess at.
+		{"another problem", []snapshot.Doc{holder("d-abox-device", "abox", loggedOut("error", "claude initialize: no answer in time", "codex: app-server exited"))},
+			"<nil>", "<nil>"},
+		{"nothing known", []snapshot.Doc{holder("d-abox-device", "abox", nil)}, "<nil>", "<nil>"},
+	} {
+		r := withTeam(t, f, c.docs...)
+		if got := deref(findTeamAccount(t, r, "claude", collect.UnknownAccount).NoReading); got != c.claude {
+			t.Errorf("%s, claude: %q, want %q", c.name, got, c.claude)
+		}
+		if got := deref(findTeamAccount(t, r, "codex", collect.UnknownAccount).NoReading); got != c.codex {
+			t.Errorf("%s, codex: %q, want %q", c.name, got, c.codex)
+		}
+	}
+	// ATTENTION says it, as NO READING, and so does the JSON.
+	r := withTeam(t, f, holder("d-abox-device", "abox", loggedOut("error", "claude: not logged in")))
+	var got []string
+	for _, a := range r.Attention {
+		if a.Kind == AttentionNoReading {
+			got = append(got, a.Subject+" | "+a.Text)
+		}
+	}
+	if want := []string{"claude unknown | not logged in on abox: run claude and log in"}; !slices.Equal(got, want) {
+		t.Errorf("NO READING = %q, want %q", got, want)
+	}
+	lines := strings.Join(pageSection(Render(r, Options{Width: 80, Loc: time.UTC, Interactive: true}), "ATTENTION"), "\n")
+	if !strings.Contains(lines, "not logged in on abox: run claude and log in") {
+		t.Errorf("ATTENTION at 80:\n%s", lines)
+	}
+	// A short line keeps where to log in, and what to do.
+	r = withTeam(t, f, holder("d-abox-device", "abox", loggedOut("partial", "~/.ann/.claude: permission denied", "~/.claude-work: claude: not logged in")))
+	for w, want := range map[int]string{
+		100: "  not logged in on abox (~/.claude-work): run claude and log in",
+		80:  "  on abox (~/.claude-wor…: run claude and log in",
+	} {
+		lines := pageSection(Render(r, Options{Width: w, Loc: time.UTC, Interactive: true}), "ATTENTION")
+		if i := slices.IndexFunc(lines, func(l string) bool { return strings.HasSuffix(l, want) }); i < 0 {
+			t.Errorf("ATTENTION at %d:\n%s", w, strings.Join(lines, "\n"))
+		}
+	}
+}
+
 // TestGap: the longest time in the last 48 hours a device did not report,
 // until now, when that is over an hour.
 func TestGap(t *testing.T) {

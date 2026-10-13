@@ -121,6 +121,15 @@ func (l chunks) width() int {
 	return n
 }
 
+// text is the line's words, without style.
+func (l chunks) text() string {
+	var b strings.Builder
+	for _, c := range l {
+		b.WriteString(c.text)
+	}
+	return b.String()
+}
+
 // drawn is how much of the line String draws: how many chunks, and the text
 // of the last of them without its trailing spaces. Spaces in reverse video
 // show, so they are kept.

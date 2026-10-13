@@ -79,6 +79,7 @@ func Build(in Input) Report {
 		}
 	}
 	r.Attention = attention(r.Team, r.Collector, now)
+	describe(&r, loc)
 	return r
 }
 
@@ -86,7 +87,9 @@ func Build(in Input) Report {
 // added to it since, as Build makes them: the collector's health, the
 // windows that limit each account, the working folders of each project,
 // one each, since such a release made a project of each, and the team's
-// devices that do not update themselves. A report that has them keeps them.
+// devices that do not update themselves, and the words of each ATTENTION
+// entry and each device's note, with clocks in this device's time zone. A
+// report that has them keeps them.
 //
 // A report saved before burn has its input plus output as burn, the team's
 // marked estimated and this device's titled in tokens in+out, and its
@@ -124,6 +127,26 @@ func Fill(r *Report) {
 		fillOldBurn(r)
 	}
 	listDefaults(r)
+	describe(r, nil)
+}
+
+// describe gives each ATTENTION entry its subject and text, and each team
+// device its note, as the console words them in full, with clocks in loc,
+// nil for local time, where they have none.
+func describe(r *Report, loc *time.Location) {
+	// So wide that no form is cut, and every device of an OLD entry named.
+	const full = 1 << 16
+	p := newPage(r, Options{Loc: loc})
+	for i := range r.Attention {
+		if a := &r.Attention[i]; a.Text == "" {
+			a.Subject, a.Text = p.subject(*a).text(), p.attentionText(*a, full)[0].text()
+		}
+	}
+	for i := range r.Team.Devices {
+		if d := &r.Team.Devices[i]; d.Note == nil {
+			d.Note = strPtr(p.deviceNote(*d, -1).text())
+		}
+	}
 }
 
 // savedBeforeBurn says report r was saved by a release before
