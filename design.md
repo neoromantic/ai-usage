@@ -241,6 +241,8 @@ The popover answers the same questions as the page, in the same order, in 400 po
 
 The menu bar item is a ring of what is left of the tightest window, drawn from 12 o'clock like a battery, with its percent left, the time until its reset, or nothing, as Settings picks. It is a template image, in the menu bar's own color, until a window runs out or will. One that will is an orange arc over an orange tint; one that is out, the most urgent, is the strongest mark, a solid red disc with a white cross, and the item shows the time until it is back.
 
+A notification says the same once, as it happens: a window runs out before its reset, or is out. Its title is the verdict's sentence with the window always named, "Claude mira · 7d runs out ~Sat 10:28", and its body when, as clock times, since a notification is read later than it comes. Each window gets one per period and state, never one per run, and a notification about a window takes the place of the one before it. Out is worth saying at once; runs out, by default, only within a day of it, since a forecast early in a long window moves with each reading. Notifications are about this Mac's subscriptions unless Settings asks for the team's, when the body also names the device that uses the account most, as Limits does. A click opens the popover on that account.
+
 ## Visual system
 
 ### Color

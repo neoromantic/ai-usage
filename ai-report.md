@@ -81,7 +81,6 @@ These PitStop behaviors are out, even though the project does them:
 
 - A separate unencrypted feed of anonymous totals, with no team, device, or account label. The team file stays encrypted.
 - Opt-out telemetry back to the project.
-- A notifier when a window runs out or will run out. The report only lists such windows under ATTENTION.
 - Account switching, after monitoring works.
 - A web report on the relay's site. The page gets the team key from the URL fragment or from what the person pastes, never from the server. It verifies and unseals the snapshots in the browser. The relay keeps serving only sealed, signed snapshots.
 - What changed since the last look, next to each number the report shows.
@@ -221,6 +220,7 @@ Done, in short:
   - Codex: a rollout several account homes hold, as Orca links them, goes to the account Codex's thread table names as its creator (`creator_account_id`), before the weekly reset is matched.
   - A run without a network says so once, `offline:` and the first failure, in place of each harness's and the relay's errors. A run without problems clears the last error, and `last_error_at` tells the team when it happened.
 - **Menu bar app** (`macos/`): on macOS 14 and later, `install.sh` also puts AI Usage, a SwiftUI menu bar app, in `~/Applications` and opens it, and self-update keeps it at the binary's release (`ai-usage_darwin_app.zip`, universal and ad-hoc signed). It shows `ai-usage report --json` and changes settings through the same commands a terminal would, so every number, state, forecast, window that limits an account (`limits`), and the collector's health (`collector.health`) comes from the Go report. It starts at login. `AI_USAGE_NO_APP=1` installs without it.
+  - Notifications: when a window is `out` or `over` in `attention`, the app posts a notification with the account, the window, and when it runs out or is back. Settings picks which: `out` ones (on by default); `over` ones whose `at`, or `resets_at` when it runs out then, is within a day (the default), at any time, or never; and whose: this Mac's subscriptions (team accounts with `current`, the default) or the team's (every team account with a reading), where the body also names the account's `busiest` device and how many more `users` it has. It says each window once per period and state: once when it runs out before its reset, once more when it is out, and again only after a reset, which the window's `resets_at` tells, give or take half the window's length. A forecast that dips under 100% and rises again in the same period says nothing new. What it said stays in the app's settings, so a restart repeats nothing. A click opens the popover on the account's row in Limits. macOS asks for permission at the first notification, or when a notification is turned on; a refusal stands, and the app asks no more.
 
 Deferred or not done. These are cumbersome, or they need an action outside this repository:
 
