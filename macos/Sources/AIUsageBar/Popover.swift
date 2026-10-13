@@ -5,7 +5,8 @@ import SwiftUI
 /// The window under the menu bar item: a verdict on the subscriptions and
 /// the collector's status on top, chips for what else asks for something,
 /// then three tabs. The body is as tall as Limits, the tab it opens on and
-/// the one people open it for; a longer list scrolls inside it.
+/// the one people open it for; a longer list scrolls inside it. The alerts
+/// list takes the body's place at the same height.
 struct PopoverView: View {
     @EnvironmentObject private var store: Store
     @Environment(\.popoverMaxHeight) private var maxHeight
@@ -22,8 +23,17 @@ struct PopoverView: View {
                 }
                 Divider()
                 TabPicker().measure(ChromeHeight.self)
-                TabStack(report: report)
-                    .frame(height: bodyHeight)
+                ZStack(alignment: .top) {
+                    TabStack(report: report)
+                        .opacity(store.showsAlerts ? 0 : 1)
+                        .allowsHitTesting(!store.showsAlerts)
+                        .disabled(store.showsAlerts)
+                        .accessibilityHidden(store.showsAlerts)
+                    if store.showsAlerts {
+                        AlertsView(report: report)
+                    }
+                }
+                .frame(height: bodyHeight)
             } else {
                 Divider()
                 EmptyStateView()
@@ -116,13 +126,15 @@ private struct AnchorView: NSViewRepresentable {
 
 // MARK: - Tabs
 
-/// The tabs, and ⌘1 to ⌘3 to pick one while the popover is open.
+/// The tabs, and ⌘1 to ⌘3 to pick one while the popover is open. None is
+/// chosen while the alerts list shows; any of them closes it.
 private struct TabPicker: View {
     @EnvironmentObject private var store: Store
 
     var body: some View {
-        Picker("View", selection: $store.tab) {
-            ForEach(Tab.allCases) { Text($0.title).tag($0) }
+        let selection = Binding<Tab?>(get: { store.showsAlerts ? nil : store.tab }, set: { $0.map { store.tab = $0 } })
+        Picker("View", selection: selection) {
+            ForEach(Tab.allCases) { Text($0.title).tag(Optional($0)) }
         }
         .pickerStyle(.segmented)
         .controlSize(.regular)
@@ -236,21 +248,29 @@ private struct TabBottom: View {
 
 // MARK: - Header
 
+/// The verdict, and the status and refresh buttons at the end of its title:
+/// the line under the title runs under them, so that what it says keeps
+/// its room.
 private struct Header: View {
     @EnvironmentObject private var store: Store
+    @ViewState private var trailing: CGFloat = 0
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        ZStack(alignment: .topTrailing) {
             if let r = store.report {
-                VerdictButton(report: r)
+                VerdictButton(report: r, trailing: trailing + 8)
             } else {
                 let (symbol, title) = emptyTitle
-                VerdictLabel(symbol: symbol.map { ($0, Color.secondary) }, title: title, subline: nil)
+                VerdictLabel(symbol: symbol.map { ($0, Color.secondary) }, title: title, subline: nil, trailing: trailing + 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            StatusButton()
-            RefreshButton()
+            HStack(alignment: .top, spacing: 8) {
+                StatusButton()
+                RefreshButton()
+            }
+            .background(GeometryReader { g in Color.clear.preference(key: TrailingWidth.self, value: g.size.width) })
         }
+        .onPreferenceChange(TrailingWidth.self) { trailing = $0 }
         .padding(.top, 12)
         .padding(.bottom, 10)
         .padding(.horizontal, Metrics.inset)
@@ -277,11 +297,24 @@ private struct Header: View {
     }
 }
 
-/// A symbol, a title, and a line under it.
+/// The width of the status and refresh buttons.
+private struct TrailingWidth: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// A symbol, a title, and a line under it, which ends in room for the
+/// alerts link. The title keeps clear of the buttons at its end.
 private struct VerdictLabel: View {
     let symbol: (name: String, color: Color)?
     let title: String
     let subline: String?
+    var alerts = 0
+    let trailing: CGFloat
+    /// Whether the title and line take their whole width.
+    var fixed = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -297,15 +330,65 @@ private struct VerdictLabel: View {
                     .font(.title3.weight(.semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                if let subline, !subline.isEmpty {
-                    Text(subline)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    .fixedSize(horizontal: fixed, vertical: false)
+                    .padding(.trailing, trailing)
+                if alerts > 0 || subline?.isEmpty == false {
+                    HStack(spacing: 8) {
+                        if let subline, !subline.isEmpty {
+                            Text(subline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .fixedSize(horizontal: fixed, vertical: false)
+                        }
+                        // The link shows over this place, out of the
+                        // verdict's button.
+                        if alerts > 0 {
+                            AlertsLink.text(alerts)
+                                .fixedSize()
+                                .hidden()
+                                .anchorPreference(key: LinkBounds.self, value: .bounds) { $0 }
+                        }
+                    }
+                    .font(.callout)
                 }
             }
         }
+    }
+}
+
+/// Where the alerts link goes in the verdict.
+private struct LinkBounds: PreferenceKey {
+    static let defaultValue: Anchor<CGRect>? = nil
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = value ?? nextValue()
+    }
+}
+
+/// "11 alerts ›" at the end of the verdict's line: a click shows every
+/// alert in place of the tab's body, and another closes the list.
+private struct AlertsLink: View {
+    @EnvironmentObject private var store: Store
+    let count: Int
+
+    static func text(_ count: Int) -> Text {
+        Text(count == 1 ? "1 alert ›" : "\(count) alerts ›")
+    }
+
+    var body: some View {
+        Button {
+            store.showsAlerts.toggle()
+        } label: {
+            Self.text(count)
+                .font(.callout)
+                .foregroundStyle(Color.accentColor)
+                .fixedSize()
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(store.showsAlerts ? "Back to \(store.tab.title)" : "Every alert in the report")
+        .accessibilityLabel(count == 1 ? "1 alert" : "\(count) alerts")
+        .accessibilityHint(store.showsAlerts ? "Closes the list of alerts" : "Shows every alert in the report")
     }
 }
 
@@ -313,9 +396,11 @@ private struct VerdictLabel: View {
 private struct VerdictButton: View {
     @EnvironmentObject private var store: Store
     let report: Report
+    let trailing: CGFloat
 
     var body: some View {
         let v = Verdict(report, now: store.now)
+        let alerts = report.attention.count
         Button {
             store.tab = .limits
             if let p = v.provider, let l = v.label {
@@ -329,10 +414,11 @@ private struct VerdictButton: View {
             // leads it in place of the title's end; the reading's age
             // stays.
             ViewThatFits(in: .horizontal) {
-                VerdictLabel(symbol: symbol(v.kind), title: v.title, subline: v.subline).fixedSize()
-                VerdictLabel(symbol: symbol(v.kind), title: v.title, subline: v.shortSubline).fixedSize()
-                VerdictLabel(symbol: symbol(v.kind), title: v.compactTitle, subline: v.compactSubline).fixedSize()
-                VerdictLabel(symbol: symbol(v.kind), title: v.compactTitle, subline: v.compactSubline)
+                VerdictLabel(symbol: symbol(v.kind), title: v.title, subline: v.subline, alerts: alerts, trailing: trailing, fixed: true)
+                VerdictLabel(symbol: symbol(v.kind), title: v.title, subline: v.shortSubline, alerts: alerts, trailing: trailing, fixed: true)
+                VerdictLabel(symbol: symbol(v.kind), title: v.compactTitle, subline: v.compactSubline, alerts: alerts, trailing: trailing,
+                             fixed: true)
+                VerdictLabel(symbol: symbol(v.kind), title: v.compactTitle, subline: v.compactSubline, alerts: alerts, trailing: trailing)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
@@ -341,6 +427,16 @@ private struct VerdictButton: View {
         .help(help)
         .accessibilityLabel(v.title + (v.subline.isEmpty ? "" : ". " + v.subline))
         .accessibilityHint("Shows the subscription in Limits")
+        .overlayPreferenceValue(LinkBounds.self) { bounds in
+            GeometryReader { g in
+                if let bounds {
+                    let r = g[bounds]
+                    AlertsLink(count: alerts)
+                        .frame(width: r.width, height: r.height)
+                        .offset(x: r.minX, y: r.minY)
+                }
+            }
+        }
     }
 
     private func symbol(_ kind: Verdict.Kind) -> (String, Color) {
@@ -358,8 +454,8 @@ private struct VerdictButton: View {
         let kinds: [Attention.Kind: String] = [.out: "out", .over: "over", .tight: "tight", .outside: "outside", .noReading: "no reading"]
         return report.attention.compactMap { a -> String? in
             guard let word = kinds[a.kind] else { return nil }
-            let t = AttentionText(a, report: report, now: store.now)
-            return "\(t.subject): \(word) · \(t.detail)"
+            let t = AttentionText(a, report: report)
+            return "\(t.subject): \(word)" + (t.detail.isEmpty ? "" : " · \(t.detail)")
         }.joined(separator: "\n")
     }
 }
@@ -499,7 +595,7 @@ enum StatusMenu {
         if let r = store.report {
             let c = r.collector
             for a in entries {
-                let t = AttentionText(a, report: r, now: store.now)
+                let t = AttentionText(a, report: r)
                 let text = r.solo ? t.detail.prefix(1).uppercased() + t.detail.dropFirst() : "\(t.subject): \(t.detail)"
                 let item = NSMenuItem(title: text.count > 64 ? text.prefix(63) + "…" : text, action: nil, keyEquivalent: "")
                 item.isEnabled = false
@@ -677,7 +773,7 @@ private struct ChipRow: View {
             return c.health.first { $0.item == item }.map { HealthLine($0, c, now: store.now).help } ?? ""
         case .errors, .silent, .collector, .reinstall, .duplicate:
             return chip.entries.map { a in
-                let t = AttentionText(a, report: report, now: store.now)
+                let t = AttentionText(a, report: report)
                 return "\(t.subject): \(t.detail)"
             }.joined(separator: "\n")
         case .notUpdating:

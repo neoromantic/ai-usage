@@ -28,9 +28,13 @@ let solo = try Report.decode(Data(contentsOf: demo.appendingPathComponent("solo.
 equal("team schema", team.schemaVersion, 4)
 equal("team generated_at", team.generatedAt, time("2026-09-24T13:40:00Z"))
 equal("team attention", team.attention.map(\.kind.rawValue), ["out", "out", "over", "over", "tight", "error", "error", "no_reading", "silent", "old", "idle"])
-// IDLE, a kind this app does not show yet, keeps its name: it gets no chip,
-// and the verdict does not count it.
-equal("idle kind", team.attention.last?.kind, .other("idle"))
+// IDLE, a paid subscription no team device has used for a week, gets no
+// chip, and the verdict does not count it.
+equal("idle kind", team.attention.last?.kind, .idle)
+// Each entry has the subject and text its console line says in full; an
+// entry from an older ai-usage has neither.
+equal("attention words", [team.attention[2].subject, team.attention[2].text],
+      ["codex bots@studio.dev", "runs out ~Fri 08:59 at this week's pace, 2d 17h before reset"])
 equal("team devices", team.team.devices.count, 12)
 equal("team providers", team.team.providers.map(\.provider), ["claude", "codex", "grok", "hermes"])
 equal("team matrix", [team.team.matrix.columns.count, team.team.matrix.rows.count], [7, 12])
@@ -196,6 +200,22 @@ equal("migration", [MenuBarShows.migrated(showPercent: false, shows: nil), MenuB
 let teamVerdict = Verdict(team, now: team.generatedAt, timeZone: berlin)
 equal("team verdict", [teamVerdict.title, teamVerdict.subline], ["Claude mira · 5h is out", "Back in 1h 25m · Thu 17:05 · +3 more"])
 check("team verdict opens its account", teamVerdict.kind == .out && teamVerdict.more == 3 && teamVerdict.provider == "claude" && teamVerdict.label == "mira@studio.dev")
+// The alerts list: every entry in the report's order, a subscription as
+// this app names it, a device as the report does, the text as the report
+// has it, and what a click opens.
+let alerts = AlertLine.lines(team)
+equal("alerts order", alerts.map(\.attention.kind.rawValue), team.attention.map(\.kind.rawValue))
+equal("alert subjects", alerts.map(\.text.subject), ["Claude mira · 5h", "Codex leo", "Codex bots", "Claude mira", "Codex mira", "build-01", "leo-air",
+                                                     "Claude unknown", "courier", "1 device on v0.3.4", "Grok 7f3b9c21"])
+equal("alert texts", alerts.map(\.text.detail), team.attention.map(\.text))
+check("alert targets", alerts.map(\.target) == [
+    .limits(provider: "claude", label: "mira@studio.dev"), .limits(provider: "codex", label: "leo@studio.dev"),
+    .limits(provider: "codex", label: "bots@studio.dev"), .limits(provider: "claude", label: "mira@studio.dev"),
+    .limits(provider: "codex", label: "mira@studio.dev"), .devices(["build-01"]), .devices(["leo-air"]), .notRead(provider: "claude"),
+    .devices(["courier"]), .devices(["leo-air"]), .limits(provider: "grok", label: "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64"),
+])
+// The list's last line is the subscription the calm verdict names.
+equal("most room", Room.most(team).map { "\($0.text) \($0.account.label)" }, "Most room: Grok 7f3b9c21 · 100% 7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64")
 let soloVerdict = Verdict(solo, now: solo.generatedAt, timeZone: berlin)
 equal("solo verdict", [soloVerdict.title, soloVerdict.subline],
       ["Claude mira · Fable runs out ~Thu 23:55", "2d 1h before its reset · +1 more"])
@@ -391,18 +411,12 @@ equal("v0.4 forecast", [forecast04?.basis, forecast04?.pace.map { "\($0)" }], ["
 equal("v0.4 attention", v04.attention.map(\.kind.rawValue), ["out", "tight", "outside", "no_reading", "duplicate", "old", "someday"])
 check("v0.4 kinds", v04.attention.map(\.kind) == [.out, .tight, .outside, .noReading, .duplicate, .old, .other("someday")])
 equal("v0.4 attention fields", [v04.attention[4].deviceId, v04.attention[5].limitations.first], ["d-3f9a1c2e7b5d", "no_claude_quota"])
-// Each new kind in the words of the report's ATTENTION line.
-let texts = v04.attention.map { AttentionText($0, report: v04, now: v04.generatedAt, timeZone: berlin) }
+// An entry from an ai-usage that does not word its entries: the subject
+// is the devices it is about, and the text its message, or nothing.
+let texts = v04.attention.map { AttentionText($0, report: v04) }
 equal("attention subjects", texts.map(\.subject), ["Claude mira · 5h", "Claude mira", "Codex mira", "Claude leo", "courier", "leo-air", ""])
-equal("attention texts", texts.dropFirst().map(\.detail), [
-    "~88% at reset Sun 01:00 at the last day's pace",
-    "+12 points in 9h, no team device spent",
-    "leo-air runs v0.3.0: reinstall with install.sh",
-    "reinstalled as courier-2: ai-usage team forget-device 3f9a1c2e",
-    "on v0.3.4 · cannot read Claude quota; reinstall with install.sh",
-    "a kind from a later release",
-])
-check("reinstall has no update alert", texts[5].alert == nil)
+equal("attention texts", texts.dropFirst().map(\.detail), ["", "", "leo-air runs v0.3.0: reinstall with install.sh", "courier-2", "v0.4.0",
+                                                           "a kind from a later release"])
 // A 5h window forecast at its recent pace says the recent, as the report does.
 let tight5h = try edited("team.json") { json in
     var o = objects(json) { o in
@@ -415,12 +429,7 @@ let tight5h = try edited("team.json") { json in
     o["attention"] = [["kind": "tight", "provider": "claude", "account": "mira@studio.dev", "name": "mira", "window": "5h", "resets_at": "2026-09-24T12:00:00Z", "percent": 95]]
     return o
 }
-let tight5hText = AttentionText(tight5h.attention[0], report: tight5h, now: tight5h.generatedAt, timeZone: berlin)
-check("5h tight line at the recent pace", tight5hText.detail.hasSuffix(" at the recent pace"))
 equal("5h window's recent pace", tight5h.teamAccount(provider: "claude", label: "mira@studio.dev")?.quota?.windows.first { $0.name == "5h" }?.recentPace, "the recent")
-// The pace a tight line names: this week's without the recent basis.
-let tightWeek = AttentionText(v034.attention[0], report: v034, now: v034.generatedAt, timeZone: berlin)
-equal("out text unchanged", tightWeek.detail, "back Thu 17:05 (in 1h 25m)")
 let chips04 = Chip.chips(v04)
 equal("v0.4 chips", chips04.map { "\($0.text) \($0.state) \($0.devices)" },
       ["1 needs reinstall tight [\"leo-air\"]", "1 reinstalled unknown [\"courier\"]"])

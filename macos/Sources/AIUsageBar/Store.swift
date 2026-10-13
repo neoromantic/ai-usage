@@ -59,7 +59,10 @@ final class Store: ObservableObject {
     @Published private(set) var cliPath: String?
 
     // What the popover shows, kept while the app runs.
-    @Published var tab = Tab.limits
+    /// Picking a tab, or anything that opens one, closes the alerts list.
+    @Published var tab = Tab.limits {
+        didSet { showsAlerts = false }
+    }
     /// The period of Usage and Projects.
     @Published var period = Period.week
     @Published var usageMode = UsageMode.devices
@@ -70,6 +73,8 @@ final class Store: ObservableObject {
     @Published var expanded: String?
     @Published var deviceFilter: DeviceFilter?
     @Published var showAllProjects = false
+    /// Whether every alert shows in place of the tab's body.
+    @Published var showsAlerts = false
     /// A row to scroll to in Limits, set with the verdict's click.
     @Published var scrollTarget: String?
 
@@ -117,6 +122,7 @@ final class Store: ObservableObject {
         expanded = nil
         deviceFilter = nil
         showAllProjects = false
+        showsAlerts = false
         scrollTarget = nil
     }
 

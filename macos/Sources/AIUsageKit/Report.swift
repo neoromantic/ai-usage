@@ -145,6 +145,10 @@ extension Int: AbsentValue {
     public static var absent: Int { 0 }
 }
 
+extension String: AbsentValue {
+    public static var absent: String { "" }
+}
+
 extension Array: AbsentValue {
     public static var absent: [Element] { [] }
 }
@@ -162,12 +166,12 @@ extension KeyedDecodingContainer {
 public struct Attention: Decodable, Sendable {
     /// The kinds, most urgent first, as the report orders them.
     public enum Kind: Hashable, Decodable, Sendable {
-        case out, over, tight, outside, error, noReading, silent, duplicate, old, under
+        case out, over, tight, outside, error, noReading, silent, duplicate, old, under, idle
         /// A kind this app does not know, by its name: a later ai-usage
         /// can add one within schema version 4.
         case other(String)
 
-        private static let known: [Kind] = [.out, .over, .tight, .outside, .error, .noReading, .silent, .duplicate, .old, .under]
+        private static let known: [Kind] = [.out, .over, .tight, .outside, .error, .noReading, .silent, .duplicate, .old, .under, .idle]
 
         public init(rawValue: String) {
             self = Self.known.first { $0.rawValue == rawValue } ?? .other(rawValue)
@@ -190,12 +194,18 @@ public struct Attention: Decodable, Sendable {
             case .duplicate: return "duplicate"
             case .old: return "old"
             case .under: return "under"
+            case .idle: return "idle"
             case .other(let name): return name
             }
         }
     }
 
     public let kind: Kind
+    /// What the entry is about and what to know, as the console's
+    /// ATTENTION line says them in full, with clocks in this Mac's time
+    /// zone; empty from an ai-usage that does not word its entries.
+    @Absent public var subject: String
+    @Absent public var text: String
     public let provider: String?
     public let account: String?
     public let name: String?

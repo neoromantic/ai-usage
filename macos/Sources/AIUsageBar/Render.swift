@@ -31,6 +31,9 @@ enum Renderer {
             if let key = firstLimitRow(report) {
                 states.append(("limits-expanded", { $0.tab = .limits }, { $0.expanded = key }))
             }
+            if !report.attention.isEmpty {
+                states.append(("alerts", { $0.tab = .limits }, { $0.showsAlerts = true }))
+            }
             if report.solo {
                 if let p = report.providers.first(where: { $0.accounts.contains { $0.shown.value.quarter > 0 } }),
                    let a = p.accounts.first(where: { $0.shown.value.quarter > 0 }) {

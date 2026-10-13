@@ -74,6 +74,7 @@ private struct NotRead: View {
             .padding(.leading, Metrics.slot)
             .help(accounts.map(details).joined(separator: "\n"))
             .accessibilityLabel(spoken)
+            .id("unread:\(provider)")
     }
 
     private var line: Text {
