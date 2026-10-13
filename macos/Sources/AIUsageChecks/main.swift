@@ -27,19 +27,22 @@ let team = try Report.decode(Data(contentsOf: demo.appendingPathComponent("team.
 let solo = try Report.decode(Data(contentsOf: demo.appendingPathComponent("solo.json")))
 equal("team schema", team.schemaVersion, 4)
 equal("team generated_at", team.generatedAt, time("2026-09-24T13:40:00Z"))
-equal("team attention", team.attention.map(\.kind.rawValue), ["out", "out", "over", "over", "tight", "error", "silent", "old"])
+equal("team attention", team.attention.map(\.kind.rawValue), ["out", "out", "over", "over", "tight", "error", "error", "no_reading", "silent", "old", "idle"])
+// IDLE, a kind this app does not show yet, keeps its name: it gets no chip,
+// and the verdict does not count it.
+equal("idle kind", team.attention.last?.kind, .other("idle"))
 equal("team devices", team.team.devices.count, 12)
 equal("team providers", team.team.providers.map(\.provider), ["claude", "codex", "grok", "hermes"])
-equal("team matrix", [team.team.matrix.columns.count, team.team.matrix.rows.count], [6, 12])
+equal("team matrix", [team.team.matrix.columns.count, team.team.matrix.rows.count], [7, 12])
 equal("team projects", team.projects.count, 6)
 // Projects next to each other in one folder show as a group under its name;
 // the ones on their own follow as "Other", in the report's order.
 let sections = ProjectSection.sections(team.projects, home: "/Users/mira")
-equal("project sections", sections.map { "\($0.title ?? "-") \($0.grouped) \($0.projects.count)" }, ["orbit true 3", "Other false 3"])
+equal("project sections", sections.map { "\($0.title ?? "-") \($0.grouped) \($0.projects.count)" }, ["orbit true 3", "Home true 2", "Other false 1"])
 equal("project group folder", sections.first?.folder, "~/src/orbit")
 let homeRun = team.projects.filter { !$0.path.contains("/src/") }
 equal("home group", ProjectSection.sections(homeRun, home: "/Users/mira").map { $0.title ?? "-" }, ["Home"])
-equal("no group", ProjectSection.sections(Array(team.projects.suffix(3)), home: "/Users/mira").map { $0.title ?? "-" }, ["-"])
+equal("no group", ProjectSection.sections(Array(team.projects.suffix(2)), home: "/Users/mira").map { $0.title ?? "-" }, ["-"])
 check("team is not solo", !team.solo)
 check("solo is solo", solo.solo && solo.team.pulledAt == nil)
 equal("solo this device", solo.thisDevice?.label, "mira-mbp")
@@ -81,8 +84,11 @@ check("older report updates", older.team.devices.allSatisfy { !$0.notUpdating })
 
 // The subscriptions with no window known now: never read, or each window
 // that limits it has reset since its reading or is not in it. Another
-// window's reset alone leaves the account known.
-check("demo quotas known", team.team.providers.allSatisfy { $0.accounts.allSatisfy { $0.tightest != nil } })
+// window's reset alone leaves the account known. The tokens no login was
+// known for have no reading, so no row of their own: the report's reason
+// shows in the line of those not read.
+check("demo quotas known", team.team.providers.allSatisfy { $0.accounts.allSatisfy { $0.tightest != nil || $0.label == "unknown" } })
+check("unknown has no row", team.teamAccount(provider: "claude", label: "unknown").map { $0.quota == nil && LimitLine($0) == nil && $0.noReading != nil } == true)
 func withQuota(_ label: String, _ edit: @escaping ([String: Any]) -> Any) throws -> TeamAccount? {
     try edited("team.json") { objects($0) { o in
         guard o["label"] as? String == label, o["busiest"] != nil, let q = o["quota"] as? [String: Any] else { return o }
@@ -176,7 +182,7 @@ equal("menu spoken", [summary?.spoken(now: team.generatedAt), resets.spoken(now:
 // The tightest window of each account is the one the summary picks from,
 // the first of equals.
 equal("tightest", team.team.providers.flatMap { p in p.accounts.map { "\(p.provider) \($0.name) \($0.tightest?.name ?? "-")" } },
-      ["claude mira 5h", "claude leo 7d", "codex leo 7d", "codex bots 7d", "codex mira 7d", "grok 7f3b9c21 7d", "hermes openai-codex 7d"])
+      ["claude mira 5h", "claude leo 7d", "claude unknown -", "codex leo 7d", "codex bots 7d", "codex mira 7d", "grok 7f3b9c21 7d", "hermes openai-codex 7d"])
 equal("tightest of an older report", older.teamAccount(provider: "claude", label: "mira@studio.dev")?.tightest?.name, "7d")
 equal("solo tightest", solo.teamAccount(provider: "claude", label: "mira@studio.dev")?.tightest?.name, "7d Fable")
 // Settings from before the menu bar had modes: the percent switched off
@@ -202,7 +208,7 @@ let calm = try edited("team.json") { json in
     return o
 }
 let calmVerdict = Verdict(calm, now: calm.generatedAt, timeZone: berlin)
-equal("calm verdict", [calmVerdict.title, calmVerdict.subline, calmVerdict.label], ["All on track", "Most room: Grok 7f3b9c21 · 94%", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64"])
+equal("calm verdict", [calmVerdict.title, calmVerdict.subline, calmVerdict.label], ["All on track", "Most room: Grok 7f3b9c21 · 100%", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64"])
 let unread = try edited("team.json") { json in
     var o = objects(json) { o in o["quota"] != nil ? o.merging(["quota": NSNull()]) { $1 } : o } as! [String: Any]
     o["attention"] = (o["attention"] as! [[String: Any]]).filter { !["out", "over", "under"].contains($0["kind"] as? String) }
@@ -215,8 +221,8 @@ check("verdict without windows", noneVerdict.kind == .none && noneVerdict.title 
 // an older release that updates itself gets none.
 let chips = Chip.chips(team)
 equal("team chips", chips.map { "\($0.text) \($0.symbol) \($0.state) \($0.devices)" },
-      ["1 error xmark.circle.fill out [\"leo-air\"]", "1 not reporting antenna.radiowaves.left.and.right.slash tight [\"courier\"]"])
-check("team chip kinds", chips.map(\.kind) == [.errors, .silent] && chips.map(\.short) == ["1", "1"])
+      ["2 errors xmark.circle.fill out [\"build-01\", \"leo-air\"]", "1 not reporting antenna.radiowaves.left.and.right.slash tight [\"courier\"]"])
+check("team chip kinds", chips.map(\.kind) == [.errors, .silent] && chips.map(\.short) == ["2", "1"])
 equal("refresh chip first", Chip.chips(team, refreshFailed: true).first?.text, "Can't read report")
 equal("solo chips", Chip.chips(solo).count, 0)
 let leoAir = team.teamDevice(named: "leo-air")!.device
@@ -233,7 +239,7 @@ let broken = try edited("team.json") { json in
 }
 equal("health chip", Chip.chips(broken).first.map { "\($0.text) \($0.state)" }, "Relay failing out")
 // This Mac's failing relay is the health chip's alone, not an error too.
-equal("failing relay said once", Chip.chips(broken).map(\.text), ["Relay failing", "1 error", "1 not reporting"])
+equal("failing relay said once", Chip.chips(broken).map(\.text), ["Relay failing", "2 errors", "1 not reporting"])
 let toolFails = try edited("solo.json") { json in
     var o = json as! [String: Any]
     let this = (o["collector"] as! [String: Any])["device_label"] as! String
@@ -286,7 +292,7 @@ check("v0.3.4 accounts fall back", v034.team.providers.allSatisfy { $0.accounts.
 } })
 check("v0.3.4 team not estimated", !v034.team.estimated && v034.team.estimatedReason == nil && v034.team.heldBackBy.isEmpty)
 check("v0.3.4 forecast basis", v034.teamAccount(provider: "claude", label: "mira@studio.dev")?.quota?.main?.forecast?.basis == nil)
-equal("v0.3.4 attention", v034.attention.map(\.kind.rawValue), ["out", "out", "over", "over", "tight", "error", "silent", "old"])
+equal("v0.3.4 attention", v034.attention.map(\.kind.rawValue), ["out", "out", "over", "over", "tight", "error", "error", "no_reading", "silent", "old", "idle"])
 
 /// Usage, or a share, of every period times f.
 func scaled(_ v: Any?, _ f: Double) -> Any {
@@ -408,7 +414,7 @@ let calm04 = try edited("team.json") { json in
     return o
 }
 equal("calm verdict with a tight window", Verdict(calm04, now: calm04.generatedAt, timeZone: berlin).subline,
-      "Most room: Grok 7f3b9c21 · 94% · 1 tight")
+      "Most room: Grok 7f3b9c21 · 100% · 1 tight")
 
 // Notifications: the out and over windows of this Mac's subscriptions, as
 // attention lists them, with the main window named; another device's are
