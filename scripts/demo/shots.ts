@@ -345,9 +345,10 @@ async function shootTour() {
 }
 
 // app draws the macOS menu bar app with its own renderer: its item in the
-// menu bar over the popover, the popover's tabs, and the menu bar's looks,
-// each dark and light, and for posts the three tabs side by side on the
-// backdrop. Only on macOS, with Xcode or the Command Line Tools.
+// menu bar over the popover, the popover's tabs, the menu bar's looks, and
+// Settings' General pane, each dark and light, and for posts the three
+// tabs side by side on the backdrop. Only on macOS, with Xcode or the
+// Command Line Tools.
 async function app() {
   if (process.platform !== "darwin") return;
   const macos = join(root, "macos");
@@ -361,6 +362,7 @@ async function app() {
     ["popover-usage", "app-usage"],
     ["popover-projects", "app-projects"],
     ["menubar-states", "app-menubar"],
+    ["settings-general", "app-settings"],
   ];
   for (const [from, to] of pictures) {
     await $`cp -f ${join(drawn, from + "-dark.png")} ${join(out, to + ".png")}`;

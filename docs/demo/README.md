@@ -41,6 +41,7 @@ TZ=Europe/Berlin ai-usage report --from docs/demo/solo.json --plain --width 110
 | `menubar.png`, `menubar-light.png` | the macOS menu bar app for the team: its item in the menu bar, and under it the popover on Limits, dark and light; the README's picture of the app |
 | `app-limits.png`, `app-usage.png`, `app-projects.png` | the app's three tabs, each with `-light.png` beside it |
 | `app-menubar.png`, `app-menubar-light.png` | the app's item in the menu bar in each state: on track, tight, used up, stale, over, out, time until reset, no reading, and the ring alone |
+| `app-settings.png`, `app-settings-light.png` | the app's Settings on General: what the menu bar shows, notifications, this Mac's name and opening at login, and the versions |
 | `social/app-tabs.png` | the app's three tabs side by side on a backdrop, for posts |
 | `social/architecture.png` | how a team's numbers travel, drawn from `scripts/demo/diagram.html` |
 | `social/*.png` | the pictures marked for posts, on a backdrop; the README shows these |

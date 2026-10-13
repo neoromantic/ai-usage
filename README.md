@@ -37,7 +37,7 @@ ai-usage is one small binary for macOS, Linux, and Windows. The system scheduler
 - **Private by design.** The relay sees tools, plans, and numbers. Names, emails, and project paths are encrypted with the team key, and every snapshot is signed. See [Privacy](#privacy).
 - **Nothing to run or look after.** No daemon, no account, no config file. One line installs it, and it schedules and updates itself.
 - **Spends none of your quota.** It asks the tools you already have instead of calling Anthropic, OpenAI, or xAI, and never reads your credentials. Asking Claude Code for its usage spends no tokens. See [Other data folders](#other-data-folders).
-- **A menu bar app on macOS.** A ring in the menu bar shows what is left; a click says what is out or runs out, and when. See [Menu bar app](#menu-bar-app).
+- **A menu bar app on macOS.** A ring in the menu bar shows what is left; a click says what is out or runs out, and when, and a notification says it once as it happens. See [Menu bar app](#menu-bar-app).
 - **JSON for agents,** with a versioned schema, so an agent can pick the account with room. See [JSON for agents](#json-for-agents).
 
 ## Quick start
@@ -214,9 +214,16 @@ On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/A
 
 A click on a row opens its details: each window with its forecast, a device's release, tools, and errors, a project's sessions. Color means a problem only: red is out, orange runs out before the reset, yellow is tight. `⌘1` to `⌘3` switch the tabs and `⌘R` collects now.
 
-**Settings** does what the terminal commands do: this Mac's name in the team (`ai-usage name`), the names of accounts (`ai-usage alias`), the relay (`ai-usage relay`), the team key, open at login, what the menu bar shows, and updates.
+**Notifications** say when a window is out, "Claude mira · 5h is out", with when it is back, and when one will run out before its reset, "Claude mira · 7d runs out ~Sat 10:28", with how long before its reset. They are the windows the report's ATTENTION marks out and over, and Settings picks which: When a Window Is Out (on by default); When a Window Will Run Out, Within a Day (the default), Any Time, or Never, since a forecast early in a long window can say it runs out days ahead and change by the next reading; and Subscriptions, This Mac's (the default), those logged in here, or The Team's, every subscription with a reading, bots' included, where a notification also names the device that uses it most, "used on build-01 +9". Each window gets one notification per period and state, not one at every run: a forecast that dips under 100% and rises again says nothing new, and after its reset a window starts over. The app remembers what it said in its settings, so a restart says nothing twice. A click on a notification opens the popover on that subscription in Limits, when the menu bar has room to show the app's item. macOS asks for permission when there is first something to say, or when you turn a notification on; when you decline, the app asks no more, and Settings says where to turn notifications on.
 
-The app computes nothing itself. It runs `ai-usage report --json` every minute and when the popover opens, and shows what the report says: forecasts, states, what needs attention, and the collector's health. It finds the binary through the launch agent, or shows the install command when there is none. To go without it, install with `AI_USAGE_NO_APP=1`, or remove it as [Uninstall](#uninstall) shows; self-update does not bring it back.
+**Settings** does what the terminal commands do: this Mac's name in the team (`ai-usage name`), the names of accounts (`ai-usage alias`), the relay (`ai-usage relay`), the team key, open at login, what the menu bar shows, notifications, and updates.
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/demo/app-settings-light.png">
+  <img alt="Settings, General: what the menu bar shows, notifications when a window is out or will run out and for whose subscriptions, this Mac's name, open at login, and the versions" src="docs/demo/app-settings.png" width="460">
+</picture>
+
+The app computes nothing itself. It runs `ai-usage report --json` every minute and when the popover opens, and shows what the report says: forecasts, states, what needs attention, and the collector's health. Its notifications come from the same report. It finds the binary through the launch agent, or shows the install command when there is none. To go without it, install with `AI_USAGE_NO_APP=1`, or remove it as [Uninstall](#uninstall) shows; self-update does not bring it back.
 
 ## Install
 
