@@ -38,11 +38,7 @@ public struct Verdict: Equatable, Sendable {
         let urgent = r.attention.filter { $0.kind == .out || $0.kind == .over }
         let first = urgent.first { $0.kind == .out } ?? urgent.first
         if let a = first {
-            let account = a.provider.flatMap { r.teamAccount(provider: $0, label: a.account ?? "") }
-            var subject = Format.provider(a.provider ?? "") + " " + (a.name ?? a.account ?? "")
-            if let w = a.window {
-                subject += " · " + (account?.quota?.shortName(w) ?? w)
-            }
+            let subject = AttentionText(a, report: r).subject
             var parts: [String] = []
             // How long before its reset a window runs out goes first when
             // the line is short of room.
@@ -88,8 +84,7 @@ public struct Verdict: Equatable, Sendable {
             return
         }
         more = 0
-        let accounts = r.team.providers.flatMap { p in p.accounts.filter(\.subscription).map { (p.provider, $0) } }
-        guard accounts.contains(where: { $0.1.tightest != nil }) else {
+        guard r.team.providers.contains(where: { $0.accounts.contains { $0.subscription && $0.tightest != nil } }) else {
             kind = .none
             title = "No limits read yet"
             subline = "Claude Code, Codex and Grok report them after first use"
@@ -99,16 +94,10 @@ public struct Verdict: Equatable, Sendable {
         }
         kind = .calm
         title = "All on track"
-        var room: (provider: String, account: TeamAccount, window: Quota.Window)?
-        for (p, a) in accounts where a.state != "out" && a.state != "over" {
-            guard let w = a.tightest else { continue }
-            if room.map({ Format.percentLeft(w) > Format.percentLeft($0.window) }) ?? true {
-                room = (p, a, w)
-            }
-        }
+        let room = Room.most(r)
         var parts: [String] = []
         if let room {
-            parts.append("Most room: \(Format.provider(room.provider)) \(room.account.name) · \(Format.left(room.window))")
+            parts.append(room.text)
         }
         // A window of this Mac's that ends nearly full comes before the
         // ones left mostly unused.
@@ -345,82 +334,26 @@ public struct ProjectSection: Sendable {
     }
 }
 
-/// What an attention entry is about and what to know, in a sentence. The
-/// kinds since v0.4.0 say it in the words of the report's ATTENTION lines,
-/// in their fullest form.
+/// What an attention entry is about and what to know: the subscription as
+/// this app names it, or what the report says the entry is about, and the
+/// report's own words, as its ATTENTION line has them in full.
 public struct AttentionText: Sendable {
-    public var subject = ""
-    /// What asks for something, first: how long the devices on an older
-    /// release have not updated.
-    public var alert: String?
-    public var detail = ""
+    public let subject: String
+    /// The report's text; an older report's message, or nothing.
+    public let detail: String
 
-    public init(_ a: Attention, report r: Report, now: Date, timeZone: TimeZone = .current) {
-        let clock = { (t: Date) in Format.clock(t, now: now, timeZone: timeZone) }
-        let from = { (t: Date) in Format.duration(abs(t.timeIntervalSince(now))) }
-        let stale = a.readingAgeSeconds.map { " · reading \(Format.duration(TimeInterval($0))) old" } ?? ""
-        let devices = a.devices ?? []
-        switch a.kind {
-        case .out, .over, .tight, .under, .outside, .noReading:
-            let account = a.provider.flatMap { r.teamAccount(provider: $0, label: a.account ?? "") }
-            subject = Format.provider(a.provider ?? "") + " " + (a.name ?? a.account ?? "")
+    public init(_ a: Attention, report r: Report) {
+        if let p = a.provider {
+            var subject = Format.provider(p) + " " + (a.name ?? a.account ?? "")
             if let w = a.window {
+                let account = r.teamAccount(provider: p, label: a.account ?? "")
                 subject += " · " + (account?.quota?.shortName(w) ?? w)
             }
-        default:
-            subject = devices.joined(separator: ", ")
+            self.subject = subject
+        } else {
+            subject = a.subject.isEmpty ? (a.devices ?? []).joined(separator: ", ") : a.subject
         }
-        switch a.kind {
-        case .out:
-            detail = (a.at.map { "back \(clock($0)) (in \(from($0)))" } ?? "until its reset") + stale
-        case .over:
-            if let at = a.at, let reset = a.resetsAt, reset.timeIntervalSince(at) >= 60 {
-                detail = (at > now ? "runs out" : "ran out") + " ~\(clock(at)), \(Format.duration(reset.timeIntervalSince(at))) before its reset"
-                    + " · resets \(clock(reset))" + stale
-            } else {
-                detail = "runs out at its reset" + stale
-            }
-        case .tight:
-            let at = "~\(Int(a.percent ?? 0))% at reset" + (a.resetsAt.map { " " + clock($0) } ?? "")
-            detail = at + " at \(Self.pace(a, r)) pace" + stale
-        case .outside:
-            let points = "+\(Int((a.percent ?? 0).rounded())) points"
-            detail = points + (a.at.map { " in " + Format.age($0, now: now) } ?? "") + ", no team device spent"
-        case .under:
-            let unused = a.percent.map { "~\(max(100 - Int($0), 0))% would go unused" } ?? "some would go unused"
-            detail = unused + (a.resetsAt.map { " · resets \(clock($0))" } ?? "") + stale
-        case .error:
-            detail = a.message ?? "failing"
-        case .noReading:
-            detail = a.message ?? "no reading"
-        case .silent:
-            detail = a.at.map { "no report since \(clock($0)) (\(from($0)) ago)" } ?? "no report for a day"
-            if let m = a.message {
-                detail += " · last error: \(m)"
-            }
-        case .duplicate:
-            detail = "reinstalled as " + (a.message ?? "another device")
-            if let id = a.deviceId {
-                detail += ": " + Self.forgetCommand(id)
-            }
-        case .old:
-            let versions = Set(devices.compactMap { r.teamDevice(named: $0)?.collectorVersion }).sorted()
-            let on = devices.count == 1 && versions.count == 1
-                ? "on \(versions[0])"
-                : "\(devices.count) devices on " + (versions.count == 1 ? versions[0] : "older releases")
-            if let lack = Self.lack(a.limitations) {
-                detail = on + " · " + lack + "; reinstall with install.sh"
-                return
-            }
-            detail = on + " · " + (a.message.map { "latest \($0)" } ?? "a newer release is out")
-            // The report sets the time once a device has had the runs to
-            // update and has not.
-            if let at = a.at {
-                alert = "Not updated for " + (devices.count > 1 ? "up to " : "") + from(at)
-            }
-        case .other:
-            detail = a.message ?? ""
-        }
+        detail = a.text.isEmpty ? a.message ?? "" : a.text
     }
 
     /// The command that forgets a reinstalled device's old record, with
@@ -429,23 +362,65 @@ public struct AttentionText: Sendable {
         let hex = id.hasPrefix("d-") ? id.dropFirst(2) : Substring(id)
         return "ai-usage team forget-device " + hex.prefix(8)
     }
+}
 
-    /// The first of a release's limitations in words, as the report's
-    /// ATTENTION line says it.
-    public static func lack(_ limitations: [String]) -> String? {
-        if limitations.contains("no_claude_quota") { return "cannot read Claude quota" }
-        if limitations.contains("no_update_errors") { return "does not report update errors" }
-        return nil
+/// An entry of the alerts list: every attention entry, in the report's
+/// order, and what a click on it opens.
+public struct AlertLine: Sendable {
+    public enum Target: Equatable, Sendable {
+        /// A subscription's row in Limits.
+        case limits(provider: String, label: String)
+        /// The line in Limits of a provider's subscriptions with no window
+        /// read, which names this one.
+        case notRead(provider: String)
+        /// The devices in Usage.
+        case devices([String])
+        case none
     }
 
-    /// The pace a tight line forecasts at: the recent one, when the
-    /// forecast takes it, else the week's, or the window's when it is not a
-    /// week long.
-    private static func pace(_ a: Attention, _ r: Report) -> String {
-        let q = a.provider.flatMap { r.teamAccount(provider: $0, label: a.account ?? "") }?.quota
-        let named = a.window.map { name in q?.windows.first { $0.name == name } }
-        guard let w = named ?? q?.main else { return "this week's" }
-        if w.forecast?.basis == "recent" { return w.recentPace }
-        return (w.minutes ?? (w.name == "7d" ? 10080 : 0)) == 10080 ? "this week's" : "this window's"
+    public let attention: Attention
+    public let text: AttentionText
+    public let target: Target
+
+    public static func lines(_ r: Report) -> [AlertLine] {
+        r.attention.map { a in
+            AlertLine(attention: a, text: AttentionText(a, report: r), target: target(a, r))
+        }
+    }
+
+    private static func target(_ a: Attention, _ r: Report) -> Target {
+        if let p = a.provider {
+            guard let account = r.teamAccount(provider: p, label: a.account ?? ""), account.subscription else { return .none }
+            return LimitLine(account) == nil ? .notRead(provider: p) : .limits(provider: p, label: account.label)
+        }
+        let devices = a.devices ?? []
+        return devices.isEmpty ? .none : .devices(devices)
+    }
+}
+
+/// The subscription with the most left of the window that limits it most,
+/// among those not out and not running out: the verdict's when all is on
+/// track, and the alerts list's last line.
+public struct Room: Sendable {
+    public let provider: String
+    public let account: TeamAccount
+    public let window: Quota.Window
+
+    /// "Claude mira".
+    public var name: String { Format.provider(provider) + " " + account.name }
+
+    public var text: String { "Most room: \(name) · \(Format.left(window))" }
+
+    public static func most(_ r: Report) -> Room? {
+        var room: Room?
+        for p in r.team.providers {
+            for a in p.accounts where a.subscription && a.state != "out" && a.state != "over" {
+                guard let w = a.tightest else { continue }
+                if room.map({ Format.percentLeft(w) > Format.percentLeft($0.window) }) ?? true {
+                    room = Room(provider: p.provider, account: a, window: w)
+                }
+            }
+        }
+        return room
     }
 }
