@@ -119,13 +119,15 @@ Recorded on 2026-09-23 with the owner, and brought up to date on 2026-09-24. Not
 
 ## Implementation status
 
-Status as of 2026-10-13, at v0.5.0. The Go code in this repository implements version 1. See `README.md` for use and `docs/` for the JSON schema, the relay, and releasing. Everything above is covered except the items listed below. After it was built, the code went through an adversarial review against this document, and the confirmed findings were fixed. A real end-to-end run with two devices and a local relay passed: token sums, a quota that is not summed, the offline backlog, and `forget-device`.
+Status as of 2026-10-13, at v0.5.1. The Go code in this repository implements version 1. See `README.md` for use and `docs/` for the JSON schema, the relay, and releasing. Everything above is covered except the items listed below. After it was built, the code went through an adversarial review against this document, and the confirmed findings were fixed. A real end-to-end run with two devices and a local relay passed: token sums, a quota that is not summed, the offline backlog, and `forget-device`.
 
 On 2026-09-26 the code was refactored as [refactoring.md](refactoring.md) lays out, for shorter code without support for releases before v0.2.3; the snapshot, the relay protocol, and the JSON (`schema_version` 4) stayed as they were.
 
 v0.4.0 makes weighted tokens the report's headline in place of input plus output, and keeps every older device in sight of the team; "v0.4.0" at the end of the list below says what changed.
 
 v0.5.0 adds UTILIZATION, how full each window got before each reset, shared across the team behind the same kind of gate, and the menu bar app's notifications; it measures a window's pace over a tenth of the window at least, and reads log lines over 32 MiB. "v0.5.0" at the end of the list below says what changed.
+
+v0.5.1 puts the words of each ATTENTION line and each device's NOTE in the report, adds IDLE, and has the menu bar app show every alert and the details behind it in those words; on macOS 27, an update no longer costs a scheduled run. "v0.5.1" at the end of the list below says what changed.
 
 Done, in short:
 
@@ -228,7 +230,7 @@ Done, in short:
   - Forecasts measure each pace over a tenth of the window at least, as "Accounts and quota" says, so a week a provider resets early and that is used a little in its first hours, or a reading just after the window sat at 0%, no longer forecasts it to run out.
   - A log line over 32 MiB is read squeezed instead of counted as malformed, and one still over the limit is counted apart, as `N lines too long to read`, as "Logs" says. The Claude parse cache moves to `claude-v2.gob`, so every transcript is read again once, and the ledger counts nothing twice.
   - Go 1.26 or newer builds it, with `toolchain go1.26.9` in `go.mod`, which is also the Go Vercel builds the relay with.
-- **Next release**, after v0.5.0
+- **v0.5.1**
   - The report now has the words the app used to build itself (#6): each ATTENTION entry has `subject` and `text`, its line as the console says it with room for everything, and each team device `note`, its NOTE in the status view. Clocks in them are in the time zone of the machine that made the report; `report --from` fills them in for a report saved without them. All of it is worked out when the report is made, so the snapshot does not change.
   - Tokens that went to no login (`unknown`) have a `no_reading` that names the device, and the folder where it has several, whose harness answered that nobody is logged in, with how to log in, as NO READING in ATTENTION. Without such an answer, it says nothing rather than guess.
   - IDLE, a quiet ATTENTION kind ranked with UNDER and shown dim: a paid subscription with a reading that no team device has used for 7 days, by its last activity, where nothing says someone outside the team does. Not for `unknown`, Hermes, or a free plan; it takes the place of UNDER for that subscription.
