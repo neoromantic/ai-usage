@@ -193,10 +193,10 @@ A window:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `percent` | number | the window's `percent` plus `pace` times the hours from the reading to the reset, as a whole percent up to `999`. With the `window` pace from the window's start, that is `percent` divided by `elapsed`. Over 100 means demand is larger than the quota: the window runs out before it resets |
+| `percent` | number | the window's `percent` plus `pace` times the hours from the reading to the reset, as a whole percent up to `999`. With the `window` pace from the window's start, past its first tenth, that is `percent` divided by `elapsed`. Over 100 means demand is larger than the quota: the window runs out before it resets |
 | `elapsed` | number | the share of the window that had passed at the reading, from 0 to 1. The window began at `resets_at` minus its length, which is `minutes`, else the length its name starts with, such as `5h` or `7d` |
 | `runs_out_at` | time | when the window reaches 100% at that pace, when the forecast is over 100 before it is rounded and the window is not full yet; `null` otherwise. A forecast of exactly 100 runs out at the reset, and has none |
-| `basis` | string | the pace taken: `window`, the average since the window began, or since its last reading at 0% after that; or `recent`, the least-squares slope of its readings of the last 24 hours, when they span an hour or more and it is faster. A report from an earlier release has none: read it as `window` |
+| `basis` | string | the pace taken: `window`, the average since the window began, or since its last reading at 0% after that, over a tenth of the window at least: what was used in less counts as used over that tenth; or `recent`, the least-squares slope of its readings of the last 24 hours, when they span a tenth of the window, at least an hour and at most 20 hours, and it is faster. A report from an earlier release has none: read it as `window` |
 | `pace` | number | that pace, in percent of the window an hour |
 
 The readings are this device's samples and the team's reads of the last 2 days, of the same window and reset, and the reading itself; a drop of more than 2 points between two starts them again. The average includes nights and weekends, so one busy hour does not raise an alarm, and the recent pace catches a window that fills faster.
