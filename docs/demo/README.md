@@ -6,8 +6,8 @@ Every machine, person, account, and number here is made up. The pictures in the 
 
 Two reports, saved as `ai-usage --json` prints them:
 
-- **`solo.json`**: one developer, `mira-mbp`, with Claude Max, ChatGPT Pro, and SuperGrok. Claude runs out on Saturday, 12 hours before its weekly reset, and its Fable limit runs out tonight. Codex has room, and Grok is paid for but almost unused.
-- **`team.json`**: a small studio. It has two laptops (`mira-mbp` and `leo-air`) and a Linux server, `build-01`. Nine Hermes bots run in containers of their own (`scout`, `editor`, `herald`, …), and all of them bill through one Codex login, `bots@studio.dev`. That login runs out on Friday, nearly 3 days before its reset. Mira's Claude 5-hour window is full, and at the last day's pace her week runs out on Saturday; her Codex week ends tight. Leo's Codex Plus is out, and his laptop runs v0.3.4, an older release whose Codex fails and which sends no weighted tokens, so its totals are estimated (`~`). The `courier` bot has not reported since yesterday.
+- **`solo.json`**: one developer, `mira-mbp`, with Claude Max, ChatGPT Pro, and SuperGrok. Claude runs out on Saturday, 12 hours before its weekly reset, and its Fable limit runs out tonight. Codex has room, and Grok is paid for but almost unused. Over the quarter, Claude's week ran out 5 times in 13, and once she was away from the laptop for half a week (`~`); her Codex and Grok never got past 71%.
+- **`team.json`**: a small studio. It has two laptops (`mira-mbp` and `leo-air`) and a Linux server, `build-01`. Nine Hermes bots run in containers of their own (`scout`, `editor`, `herald`, …), and all of them bill through one Codex login, `bots@studio.dev`. That login runs out on Friday, nearly 3 days before its reset. Mira's Claude 5-hour window is full, and at the last day's pace her week runs out on Saturday; her Codex week ends tight. Leo's Codex Plus is out, and his laptop runs v0.3.4, an older release whose Codex fails and which sends no weighted tokens, so its totals are estimated (`~`). Since that release reads no quota cycles, no machine sends them, and UTILIZATION shows Mira's own, with a line saying why. The `courier` bot has not reported since yesterday.
 
 `scripts/demo/main.go` builds both with the code that builds a real report, from made-up readings and token logs. Their forecasts, ATTENTION, and matrix therefore agree with the numbers, as they would in a real run. Every report is taken at Thursday 24 September 2026, 15:40 in Berlin.
 
@@ -34,6 +34,7 @@ TZ=Europe/Berlin ai-usage report --from docs/demo/solo.json --plain --width 110
 | `team-help.png` | the interactive view's help, `?` |
 | `solo.png` | one developer's page, with USAGE in place of the matrix |
 | `solo-forecast.png` | the solo page's top: the forecast lines |
+| `solo-utilization.png` | UTILIZATION alone: how full each window got before each reset over the quarter |
 | `install.png` | `curl … \| sh` through the first report and the guide printed under it, for `solo.json`'s developer |
 | `relay-view.png` | what the relay keeps for `mira-mbp`, trimmed: names, emails, and paths sealed, numbers plain |
 | `json.png` | `ai-usage --json` through `jq`: what an agent reads |
@@ -57,7 +58,7 @@ bun scripts/demo/shots.ts team-bots  # the pictures whose names start so
 The script regenerates the two reports and builds `ai-usage`. It shows each picture's report the way a person would see it: printed, or in the interactive view in a tmux of its own, with keys pressed. The terminal's text and colors become an HTML page, which agent-browser photographs in Chrome. The PNGs are then redrawn in 256 colors, at about half the size. It needs Go, bun, tmux, agent-browser, jq, and ffmpeg, and on macOS Xcode or the Command Line Tools for the app's pictures.
 
 - **Another picture:** add an entry to `shots` in `scripts/demo/shots.ts`: the report, the width, the flags or keys, and whether it is for posts and the README.
-- **Another story:** add a report in `scripts/demo/main.go`: its machines, their logins and readings, and how much each spends a day on which project.
+- **Another story:** add a report in `scripts/demo/main.go`: its machines, their logins and readings, how full their windows got before each reset, and how much each spends a day on which project.
 - **The first run and the relay's view:** `go run ./scripts/demo guide 110` prints the solo report with the guide a first run prints under it, and `go run ./scripts/demo snapshot` the snapshot `mira-mbp` would publish, sealed with a made-up team key. `install` and `relay-view` are made from them.
 - **After a change to the report's schema:** run the script again. `--from` refuses a report of another `schema_version`.
 
