@@ -230,7 +230,7 @@ team.matrix team.matrix.columns team.matrix.columns.burn team.matrix.columns.bur
 team.matrix.columns.label team.matrix.columns.name team.matrix.columns.no_quota
 team.matrix.columns.percent team.matrix.columns.provider team.matrix.columns.state team.matrix.columns.usage
 team.matrix.columns.usage.30d team.matrix.columns.usage.7d team.matrix.columns.usage.90d team.matrix.columns.usage.today
-team.matrix.columns.window_burn team.matrix.columns.window_tokens
+team.matrix.columns.window_burn team.matrix.columns.window_start team.matrix.columns.window_tokens
 team.matrix.rows team.matrix.rows.burn team.matrix.rows.burn.30d team.matrix.rows.burn.7d team.matrix.rows.burn.90d team.matrix.rows.burn.today
 team.matrix.rows.burn_estimated team.matrix.rows.burn_share team.matrix.rows.burn_share.30d team.matrix.rows.burn_share.7d team.matrix.rows.burn_share.90d team.matrix.rows.burn_share.today
 team.matrix.rows.cells team.matrix.rows.cells.burn team.matrix.rows.cells.burn.30d team.matrix.rows.cells.burn.7d team.matrix.rows.cells.burn.90d team.matrix.rows.cells.burn.today
@@ -258,7 +258,7 @@ team.providers.accounts.per_device.tokens.input team.providers.accounts.per_devi
 team.providers.accounts.per_device.usage team.providers.accounts.per_device.usage.30d team.providers.accounts.per_device.usage.7d
 team.providers.accounts.per_device.usage.90d team.providers.accounts.per_device.usage.today
 team.providers.accounts.plan team.providers.accounts.quota
-team.providers.accounts.quota.age_seconds team.providers.accounts.quota.device team.providers.accounts.quota.from team.providers.accounts.quota.observed_at
+team.providers.accounts.quota.age_seconds team.providers.accounts.quota.device team.providers.accounts.quota.device_id team.providers.accounts.quota.from team.providers.accounts.quota.observed_at
 team.providers.accounts.quota.stale team.providers.accounts.quota.windows
 team.providers.accounts.quota.windows.forecast team.providers.accounts.quota.windows.forecast.basis team.providers.accounts.quota.windows.forecast.elapsed
 team.providers.accounts.quota.windows.forecast.pace team.providers.accounts.quota.windows.forecast.percent team.providers.accounts.quota.windows.forecast.runs_out_at

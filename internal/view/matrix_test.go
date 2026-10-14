@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
 
@@ -82,11 +83,12 @@ func TestMatrix(t *testing.T) {
 	if want := []string{"codex:bots", "claude:ann", "hermes:hermes"}; !reflect.DeepEqual(cols, want) {
 		t.Fatalf("columns = %v", cols)
 	}
-	if c := mx.Columns[2]; !c.NoQuota || c.Label != "" || c.Usage.Week != 500_000 || c.Percent != nil {
+	if c := mx.Columns[2]; !c.NoQuota || c.Label != "" || c.Usage.Week != 500_000 || c.Percent != nil || c.WindowStart != nil {
 		t.Fatalf("no quota column = %+v", c)
 	}
+	// The window's tokens count from when it began, which the column says.
 	if c := mx.Columns[0]; c.Percent == nil || *c.Percent != 40 || c.State != StateTight || c.Usage.Week != 5_000_000 || c.WindowTokens != 4_000_000 ||
-		c.Burn != c.Usage || c.WindowBurn != c.WindowTokens {
+		c.Burn != c.Usage || c.WindowBurn != c.WindowTokens || c.WindowStart == nil || !c.WindowStart.Equal(start) {
 		t.Fatalf("codex column = %+v", c)
 	}
 	// Rows by tokens in 7 days: build spent 3.5M, this device 5M.
@@ -124,6 +126,23 @@ func TestMatrix(t *testing.T) {
 	}
 	if h := findTeamAccount(t, r, "hermes", "openrouter"); h.Subscription {
 		t.Fatalf("hermes is a subscription: %+v", h)
+	}
+}
+
+// A subscription whose main window is not known, never read or reset
+// since its reading, has no window start, and no tokens since one.
+func TestMatrixWindowStartUnknown(t *testing.T) {
+	st := emptyState()
+	addAccount(st, "codex", "sam@mail.test", true, nil, 0)
+	reset := &state.Quota{At: now.Add(-8 * 24 * time.Hour), Source: "harness", Windows: []snapshot.Window{week7(30, now.Add(-24*time.Hour))}}
+	addAccount(st, "claude", "kim@mail.test", true, reset, 0)
+	spend(st, "codex", "sam@mail.test", "/w", 1_000_000, now.Add(-time.Hour))
+	spend(st, "claude", "kim@mail.test", "/w", 1_000_000, now.Add(-time.Hour))
+	mx := Build(newFixture(t, st).in).Team.Matrix
+	for _, label := range []string{"sam@mail.test", "kim@mail.test"} {
+		if c := mx.Columns[column(t, mx, label)]; c.WindowStart != nil || c.WindowTokens != 0 || c.Usage.Week == 0 {
+			t.Errorf("%s column = %+v", label, c)
+		}
 	}
 }
 

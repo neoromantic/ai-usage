@@ -173,6 +173,7 @@ Claude's `homes` include the Claude Code home the Claude desktop app keeps for e
 | `source` | string | `harness` when the tool answered a command, `cache` when it came from the tool's own cache file, `log` when it came from the tool's logs, `rejection` when Claude refused requests because windows were full: those windows alone at 100%, as of the newest refusal, until they reset; only on this device's accounts |
 | `from` | string | the tool whose account took the reading, when it is the reading of the account in `link`, unchanged, observation time included; absent otherwise. With no reading for that account, `quota` is `null` |
 | `device` | string | the device whose reading is newest, as `host (user)`; only on team accounts |
+| `device_id` | string | that device's id, as a team device's `device`, so a reader can tell this device's reading from another's; only on team accounts |
 | `windows` | list | the windows the tool reported; see below |
 
 A window:
@@ -358,6 +359,7 @@ A column:
 | `usage` | object | the team's input plus output tokens on it in each period, what Hermes spent through the login included |
 | `window_tokens` | number | the team's input plus output tokens since the main window began, what Hermes spent through the login included |
 | `burn`, `window_burn` | | the same as weighted tokens |
+| `window_start` | time | when the main window began, which `window_tokens` and `window_burn` count from: its `resets_at` less its length; `null` when no main window is known, as in a no-quota column, or with no reading of it, or one that has reset since |
 
 A row:
 
@@ -397,6 +399,7 @@ A cell:
 - `subject` and `text` on every `attention` entry, `note` on a team device, and the `idle` kind in `attention`, so that a reader can show what the console says instead of wording it again. The `unknown` account's `no_reading` now says where nobody is logged in, and what to do. A report from an earlier release has no `subject`, `text`, or `note`, and no `idle` entry; `ai-usage report --from` fills in the first three, with clocks in the time zone it runs in. No field changed meaning, so the version stays 4.
 - `stopped` on a forecast, for a run-out time that has passed with nobody on the team spending on the account since. The `over` entry's `text` then says the window would run out then, and the entry has `reading_age_seconds` however old the reading is. `recent` in `basis` is now the readings' gain since the newest one a day old, in place of their least-squares slope: still the last day's pace. A report from an earlier release has no `stopped`; `ai-usage report --from` fills it in. No field changed meaning, so the version stays 4.
 - `folders` on a project. A project is now a git repository, with its subfolders and linked worktrees, where each working folder was one; `path` is the project's folder, and `folders` says how many working folders count under it. A report from an earlier release has a project for each working folder and no `folders`: read a missing one as `1`, as `ai-usage report --from` fills it in. Every field keeps its type, and a project's numbers still sum its sessions, so the version stays 4.
+- `window_start` on a matrix column, and `device_id` on a team account's `quota`, so that a reader can say since when a window's tokens count, and whether this device or another took a reading, without working them out again. A report from an earlier release has neither: read them as `null`. No field changed meaning, so the version stays 4.
 
 ## Example
 
@@ -602,6 +605,7 @@ A shortened report from a team of two:
               "age_seconds": 780,
               "stale": false,
               "device": "bo-laptop (bo)",
+              "device_id": "d-8e41d07c5a2b93f6e1d4c7a0",
               "windows": [
                 {
                   "name": "7d",
@@ -682,7 +686,8 @@ A shortened report from a team of two:
           "usage": { "today": 2100000, "7d": 25000000, "30d": 27800000, "90d": 27800000 },
           "window_tokens": 13500000,
           "burn": { "today": 11500000, "7d": 136900000, "30d": 152250000, "90d": 152250000 },
-          "window_burn": 73930000
+          "window_burn": 73930000,
+          "window_start": "2026-08-28T12:00:00Z"
         },
         {
           "provider": "claude",
@@ -694,7 +699,8 @@ A shortened report from a team of two:
           "usage": { "today": 900000, "7d": 4200000, "30d": 4900000, "90d": 4900000 },
           "window_tokens": 3600000,
           "burn": { "today": 4280000, "7d": 19970000, "30d": 23300000, "90d": 23300000 },
-          "window_burn": 17120000
+          "window_burn": 17120000,
+          "window_start": "2026-08-28T12:00:00Z"
         }
       ],
       "rows": [

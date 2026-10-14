@@ -136,6 +136,9 @@ func matrixColumns(providers []TeamProvider, byProv map[string]map[string]*teamA
 				p := mw.Percent
 				c.Percent = &p
 			}
+			if x := byProv[tp.Provider][snapshot.LabelKey(a.Label)]; x != nil && x.main != "" {
+				c.WindowStart = timePtr(x.start)
+			}
 			index[colKey{tp.Provider, a.Label, false}] = len(cols)
 			cols = append(cols, c)
 		}
