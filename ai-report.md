@@ -119,7 +119,7 @@ Recorded on 2026-09-23 with the owner, and brought up to date on 2026-09-24. Not
 
 ## Implementation status
 
-Status as of 2026-10-14, at v0.6.1. The Go code in this repository implements version 1. See `README.md` for use and `docs/` for the JSON schema, the relay, and releasing. Everything above is covered except the items listed below. After it was built, the code went through an adversarial review against this document, and the confirmed findings were fixed. A real end-to-end run with two devices and a local relay passed: token sums, a quota that is not summed, the offline backlog, and `forget-device`.
+Status as of 2026-10-15, at v0.6.2. The Go code in this repository implements version 1. See `README.md` for use and `docs/` for the JSON schema, the relay, and releasing. Everything above is covered except the items listed below. After it was built, the code went through an adversarial review against this document, and the confirmed findings were fixed. A real end-to-end run with two devices and a local relay passed: token sums, a quota that is not summed, the offline backlog, and `forget-device`.
 
 On 2026-09-26 the code was refactored as [refactoring.md](refactoring.md) lays out, for shorter code without support for releases before v0.2.3; the snapshot, the relay protocol, and the JSON (`schema_version` 4) stayed as they were.
 
@@ -133,7 +133,7 @@ v0.6.0 gives the menu bar app a Team window, the report's matrix of every device
 
 v0.6.1 measures a long window's pace over a day at least, takes the recent pace from the readings' gain over the last day, and no longer says a window ran out on a reading nobody spent on since; the menu bar app gets a Team button, a button for its menu, and a menu in sections. "v0.6.1" at the end of the list below says what changed.
 
-The next release has the menu bar app say who spent a window, when it was last used, and where its reading is from, from fields the report adds for it. "Next release" at the end of the list below says what changed.
+v0.6.2 has the menu bar app say who spent a window, when it was last used, and where its reading is from, from fields the report adds for it. "v0.6.2" at the end of the list below says what changed.
 
 Done, in short:
 
@@ -249,7 +249,7 @@ Done, in short:
   - A window a day long or longer measures both paces over a day at least, a shorter one over a tenth of it, so a burst in the first hours of a week no longer reads as over (#18). Before then, only a forecast that is over already shows: a window a day long, which no provider has now, shows only that.
   - The recent pace is what the readings gained from the newest one a day old or older to the current one, over the hours between them, in place of the least-squares slope of the last day's readings, which a burst and then a quiet stretch made steeper than the day was. Steady readings give the same forecast as before.
   - A forecast whose run-out time has passed with nobody on the team spending on the account since, by its `last_active_at`, is `stopped` in the JSON: ATTENTION says the window "would run out ~Tue 05:18 at this week's pace", with the reading's age, rather than that it ran out, and sorts it after the other OVER lines. The menu bar app says the same in its verdict and its row, and sends no notification for it. A window at 100% is out either way. An app from v0.6.0 or before does not know `stopped`, and says such a window ran out.
-- **Next release**, after v0.6.1
+- **v0.6.2**
   - A matrix column has `window_start`, when the main window its `window_tokens` and `window_burn` count from began, and a team account's `quota` has `device_id`, the id of the device whose reading is newest (#20). The snapshot does not change.
   - The menu bar app's details of a subscription come from AIUsageKit, with checks: who spent the main window, the busiest two first and the rest as "+8 more", since its `window_start`, dropping the start, then the second device, when the line has no room; the forecast of the window that runs out with its pace, "would reach 108% at reset" when it is `stopped`; when it was last used; and the reading's age and device only when the reading is stale, another device's by `device_id`, through another login, or what a stopped forecast stands on. The app no longer works out a window's start. A report without the new fields shows no start, and a team's reading names its device, as before.
 - **Menu bar app** (`macos/`): on macOS 14 and later, `install.sh` also puts AI Usage, a SwiftUI menu bar app, in `~/Applications` and opens it, and self-update keeps it at the binary's release (`ai-usage_darwin_app.zip`, universal and ad-hoc signed). It shows `ai-usage report --json` and changes settings through the same commands a terminal would, so every number, state, forecast, window that limits an account (`limits`), and the collector's health (`collector.health`) comes from the Go report. It starts at login. `AI_USAGE_NO_APP=1` installs without it.
