@@ -119,7 +119,7 @@ Recorded on 2026-09-23 with the owner, and brought up to date on 2026-09-24. Not
 
 ## Implementation status
 
-Status as of 2026-10-13, at v0.6.0. The Go code in this repository implements version 1. See `README.md` for use and `docs/` for the JSON schema, the relay, and releasing. Everything above is covered except the items listed below. After it was built, the code went through an adversarial review against this document, and the confirmed findings were fixed. A real end-to-end run with two devices and a local relay passed: token sums, a quota that is not summed, the offline backlog, and `forget-device`.
+Status as of 2026-10-14, at v0.6.1. The Go code in this repository implements version 1. See `README.md` for use and `docs/` for the JSON schema, the relay, and releasing. Everything above is covered except the items listed below. After it was built, the code went through an adversarial review against this document, and the confirmed findings were fixed. A real end-to-end run with two devices and a local relay passed: token sums, a quota that is not summed, the offline backlog, and `forget-device`.
 
 On 2026-09-26 the code was refactored as [refactoring.md](refactoring.md) lays out, for shorter code without support for releases before v0.2.3; the snapshot, the relay protocol, and the JSON (`schema_version` 4) stayed as they were.
 
@@ -131,7 +131,7 @@ v0.5.1 puts the words of each ATTENTION line and each device's NOTE in the repor
 
 v0.6.0 gives the menu bar app a Team window, the report's matrix of every device against every subscription and each device's status, and lets the menu bar's ring track the team's subscriptions; the binary, the report, and the snapshot are as in v0.5.1. "v0.6.0" at the end of the list below says what changed.
 
-The next release measures a long window's pace over a day at least, takes the recent pace from the readings' gain over the last day, and no longer says a window ran out on a reading nobody spent on since. "Next release" at the end of the list below says what changed.
+v0.6.1 measures a long window's pace over a day at least, takes the recent pace from the readings' gain over the last day, and no longer says a window ran out on a reading nobody spent on since; the menu bar app gets a Team button, a button for its menu, and a menu in sections. "v0.6.1" at the end of the list below says what changed.
 
 Done, in short:
 
@@ -242,7 +242,7 @@ Done, in short:
   - macOS 27: an update no longer costs a scheduled run when a run a person starts installs it, and a run a person starts repairs an agent launchd refused, as "Binary and scheduling" says. `status` and `schedule status` say when launchd refused the agent.
 - **v0.6.0**
   - The menu bar app has a Team window (#8), from the status menu, `⌘D`, and Usage, for a team of more than one device: Usage lays out `team.matrix`, its rows, columns, order, and numbers, with heat shading on the console's log scale and sortable columns, and Status each `team.devices` entry with its `note`. Settings' Track makes the menu bar's ring follow the team's subscriptions in place of this Mac's.
-- **Next release**, after v0.6.0
+- **v0.6.1**
   - The menu bar app's ways in show: a team's Team window has a Team button beside the popover's tabs, in place of the ⤢ in Usage, and the header has a ⋯ pull-down for the menu beside the status dot, which still opens it too. The menu puts its items under section headers, Attention, Status, Actions, Open in Terminal, and AI Usage, with a symbol for each action, at most 8 lines of a chip's messages, and the shortcuts. Settings' About names the app and its version once, and the command-line tool's release only when it is another one or the tool is not found.
   - A window a day long or longer measures both paces over a day at least, a shorter one over a tenth of it, so a burst in the first hours of a week no longer reads as over (#18). Before then, only a forecast that is over already shows: a window a day long, which no provider has now, shows only that.
   - The recent pace is what the readings gained from the newest one a day old or older to the current one, over the hours between them, in place of the least-squares slope of the last day's readings, which a burst and then a quiet stretch made steeper than the day was. Steady readings give the same forecast as before.
