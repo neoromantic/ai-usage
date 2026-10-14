@@ -1426,6 +1426,7 @@
               "age_seconds": 240,
               "stale": false,
               "device": "mira-mbp (mira)",
+              "device_id": "d-demo-solo",
               "windows": [
                 {
                   "name": "5h",
@@ -1748,6 +1749,7 @@
               "age_seconds": 240,
               "stale": false,
               "device": "mira-mbp (mira)",
+              "device_id": "d-demo-solo",
               "windows": [
                 {
                   "name": "5h",
@@ -2051,6 +2053,7 @@
               "age_seconds": 240,
               "stale": false,
               "device": "mira-mbp (mira)",
+              "device_id": "d-demo-solo",
               "windows": [
                 {
                   "name": "7d",
@@ -2254,7 +2257,8 @@
             "30d": 615808147,
             "90d": 1595152143
           },
-          "window_burn": 102025361
+          "window_burn": 102025361,
+          "window_start": "2026-09-19T23:00:00Z"
         },
         {
           "provider": "codex",
@@ -2276,7 +2280,8 @@
             "30d": 362892078,
             "90d": 870905555
           },
-          "window_burn": 36775533
+          "window_burn": 36775533,
+          "window_start": "2026-09-22T08:40:00Z"
         },
         {
           "provider": "grok",
@@ -2298,7 +2303,8 @@
             "30d": 11377825,
             "90d": 11377825
           },
-          "window_burn": 619430
+          "window_burn": 619430,
+          "window_start": "2026-09-19T11:40:00Z"
         }
       ],
       "rows": [

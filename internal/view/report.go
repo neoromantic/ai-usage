@@ -286,9 +286,10 @@ type Quota struct {
 	Source string `json:"source,omitempty"`
 	// From names the provider whose linked account took the reading.
 	From string `json:"from,omitempty"`
-	// Device is the device whose reading is newest.
-	Device  string   `json:"device,omitempty"`
-	Windows []Window `json:"windows"`
+	// Device is the device whose reading is newest, and DeviceID its id.
+	Device   string   `json:"device,omitempty"`
+	DeviceID string   `json:"device_id,omitempty"`
+	Windows  []Window `json:"windows"`
 }
 
 // Forecast states. A window at 100% is out; otherwise the state is the band
@@ -631,6 +632,9 @@ type Column struct {
 	// Burn and WindowBurn are the same as weighted tokens.
 	Burn       Usage `json:"burn"`
 	WindowBurn int64 `json:"window_burn"`
+	// WindowStart is when the main window began, which WindowTokens and
+	// WindowBurn count from; nil when no main window is known.
+	WindowStart *time.Time `json:"window_start"`
 }
 
 type Row struct {

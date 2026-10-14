@@ -81,7 +81,7 @@ func TestTeamAddsTokensAndTakesNewestReadingOfEachWindow(t *testing.T) {
 	if len(ws) != 2 || ws[0].Percent != 70 || !ws[0].ObservedAt.Equal(now.Add(-10*time.Minute)) || ws[1].Percent != 10 || !ws[1].ObservedAt.Equal(now.Add(-2*time.Hour)) || !ws[1].Main {
 		t.Fatalf("ann windows = %+v", ws)
 	}
-	if ann.Quota.Device != "otherbox (kim)" || !ann.Quota.ObservedAt.Equal(now.Add(-10*time.Minute)) {
+	if ann.Quota.Device != "otherbox (kim)" || ann.Quota.DeviceID != "d-other-device" || !ann.Quota.ObservedAt.Equal(now.Add(-10*time.Minute)) {
 		t.Fatalf("ann quota = %+v", ann.Quota)
 	}
 	var provs []string

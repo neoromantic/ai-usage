@@ -38,10 +38,11 @@ type teamAccount struct {
 }
 
 type winReading struct {
-	w    snapshot.Window
-	at   time.Time
-	dev  string
-	from string
+	w     snapshot.Window
+	at    time.Time
+	dev   string
+	devID string
+	from  string
 }
 
 // devAccount is one account on one device doc, or the part of a Hermes
@@ -354,7 +355,7 @@ func (m *merger) addAccounts(dv *device, d snapshot.Doc) {
 			link = m.local[state.Key(a.Provider, l)]
 			x.local = link
 		}
-		x.addReading(a, dv.name, link)
+		x.addReading(a, dv, link)
 		x.cycles = append(x.cycles, a.Cycles...)
 		for _, u := range a.Linked {
 			addLinked(m.linked, a.Provider, l, u.Provider, m.open(u.Label), dv.name, u)
@@ -365,9 +366,9 @@ func (m *merger) addAccounts(dv *device, d snapshot.Doc) {
 	}
 }
 
-// addReading merges a's reading, sent by device dev, into the newest
+// addReading merges a's reading, sent by device dv, into the newest
 // reading of each window, and keeps link when a's reading is the newest.
-func (x *teamAccount) addReading(a snapshot.Account, dev string, link *Link) {
+func (x *teamAccount) addReading(a snapshot.Account, dv *device, link *Link) {
 	if a.QuotaAt == nil {
 		return
 	}
@@ -377,7 +378,7 @@ func (x *teamAccount) addReading(a snapshot.Account, dev string, link *Link) {
 			x.order = append(x.order, w.Name)
 		}
 		if cur == nil || a.QuotaAt.After(cur.at) {
-			x.wins[w.Name] = &winReading{w: w, at: *a.QuotaAt, dev: dev, from: a.QuotaFrom}
+			x.wins[w.Name] = &winReading{w: w, at: *a.QuotaAt, dev: dv.name, devID: dv.dev.Device, from: a.QuotaFrom}
 		}
 	}
 	if len(a.Windows) > 0 && a.QuotaAt.After(x.qAt) {
@@ -521,7 +522,7 @@ func (x *teamAccount) quota(provider string, pts []pacePoint, now time.Time) *Qu
 		}
 	}
 	var q *Quota
-	q, x.ta.State = quotaOf(Quota{Device: newest.dev, From: newest.from}, provider, rs, pts, newest.at, now)
+	q, x.ta.State = quotaOf(Quota{Device: newest.dev, DeviceID: newest.devID, From: newest.from}, provider, rs, pts, newest.at, now)
 	return q
 }
 

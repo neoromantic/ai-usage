@@ -2076,6 +2076,7 @@
               "age_seconds": 180,
               "stale": false,
               "device": "mira-mbp (mira)",
+              "device_id": "d-demo-mira",
               "windows": [
                 {
                   "name": "5h",
@@ -2399,6 +2400,7 @@
               "age_seconds": 660,
               "stale": false,
               "device": "leo-air (leo)",
+              "device_id": "d-demo-leo",
               "windows": [
                 {
                   "name": "5h",
@@ -2585,6 +2587,7 @@
               "age_seconds": 18000,
               "stale": false,
               "device": "leo-air (leo)",
+              "device_id": "d-demo-leo",
               "windows": [
                 {
                   "name": "5h",
@@ -2701,6 +2704,7 @@
               "age_seconds": 240,
               "stale": false,
               "device": "scout (hermes)",
+              "device_id": "d-demo-bot-scout",
               "windows": [
                 {
                   "name": "5h",
@@ -3063,6 +3067,7 @@
               "age_seconds": 180,
               "stale": false,
               "device": "mira-mbp (mira)",
+              "device_id": "d-demo-mira",
               "windows": [
                 {
                   "name": "5h",
@@ -3366,6 +3371,7 @@
               "age_seconds": 180,
               "stale": false,
               "device": "mira-mbp (mira)",
+              "device_id": "d-demo-mira",
               "windows": [
                 {
                   "name": "7d",
@@ -3575,6 +3581,7 @@
               "stale": false,
               "from": "codex",
               "device": "scout (hermes)",
+              "device_id": "d-demo-bot-scout",
               "windows": [
                 {
                   "name": "5h",
@@ -3925,7 +3932,8 @@
             "30d": 1365679715,
             "90d": 3355751841
           },
-          "window_burn": 188459249
+          "window_burn": 188459249,
+          "window_start": "2026-09-21T00:40:00Z"
         },
         {
           "provider": "codex",
@@ -3947,7 +3955,8 @@
             "30d": 292869190,
             "90d": 717870048
           },
-          "window_burn": 37678791
+          "window_burn": 37678791,
+          "window_start": "2026-09-20T20:40:00Z"
         },
         {
           "provider": "codex",
@@ -3969,7 +3978,8 @@
             "30d": 140910671,
             "90d": 283737311
           },
-          "window_burn": 21053322
+          "window_burn": 21053322,
+          "window_start": "2026-09-18T09:12:00Z"
         },
         {
           "provider": "claude",
@@ -3991,7 +4001,8 @@
             "30d": 606385172,
             "90d": 1710565822
           },
-          "window_burn": 88124454
+          "window_burn": 88124454,
+          "window_start": "2026-09-19T23:00:00Z"
         },
         {
           "provider": "claude",
@@ -4013,7 +4024,8 @@
             "30d": 310892826,
             "90d": 801532519
           },
-          "window_burn": 41149111
+          "window_burn": 41149111,
+          "window_start": "2026-09-21T15:40:00Z"
         },
         {
           "provider": "claude",
@@ -4035,7 +4047,8 @@
             "30d": 20161782,
             "90d": 20161782
           },
-          "window_burn": 0
+          "window_burn": 0,
+          "window_start": null
         },
         {
           "provider": "grok",
@@ -4057,7 +4070,8 @@
             "30d": 8436980,
             "90d": 8436980
           },
-          "window_burn": 0
+          "window_burn": 0,
+          "window_start": "2026-09-22T15:40:00Z"
         }
       ],
       "rows": [
