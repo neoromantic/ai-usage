@@ -43,9 +43,10 @@ TZ=Europe/Berlin ai-usage report --from docs/demo/solo.json --plain --width 110
 | `app-alerts.png`, `app-alerts-light.png` | the app's alerts, every entry of ATTENTION in place of Limits, with the subscription with the most room under them |
 | `app-details.png`, `app-details-light.png` | the app's Limits with the details of a subscription that runs out open: its countdown, each window, the forecast, who spent the window, and when it was last used |
 | `app-menubar.png`, `app-menubar-light.png` | the app's item in the menu bar in each state: on track, tight, used up, stale, over, out, time until reset, no reading, and the ring alone |
+| `app-menu.png`, `app-menu-light.png` | the app's menu, opened from the popover's ⋯: the collector's status and this Mac, then its actions, Terminal's views, Settings, and Quit, each under its header |
 | `app-team.png`, `app-team-light.png` | the app's Team window on Usage: every device against every subscription over 7 days, shaded by tokens |
 | `app-team-status.png`, `app-team-status-light.png` | the app's Team window on Status: each device's user, release, last report, tools, tokens in each period, and note |
-| `app-settings.png`, `app-settings-light.png` | the app's Settings on General: what the menu bar shows and tracks, notifications, this Mac's name and opening at login, and the versions |
+| `app-settings.png`, `app-settings-light.png` | the app's Settings on General: what the menu bar shows and tracks, notifications, this Mac's name and opening at login, and About: the app's version and where the command-line tool is |
 | `social/app-tabs.png` | the app's three tabs side by side on a backdrop, for posts |
 | `social/architecture.png` | how a team's numbers travel, drawn from `scripts/demo/diagram.html` |
 | `social/*.png` | the pictures marked for posts, on a backdrop; the README shows these |
@@ -75,6 +76,7 @@ The menu bar app draws its own pictures with `AIUsageBar --render REPORT OUTDIR`
 - `team-usage-LOOK.png`, `team-share-LOOK.png`, and `team-status-LOOK.png`, the Team window on Usage in tokens and in shares, and on Status; a report of one device has none
 - `settings-PANE-LOOK.png`, each Settings pane: `general`, `accounts`, and `team`
 - `menubar-LOOK.png`, the app's item in the menu bar with the popover on Limits under it, and `menubar-states-LOOK.png`, the item in each state
+- `menu-LOOK.png`, the menu that ⋯ opens. AppKit draws a menu only while it is open, so it shows on the screen for a moment, in the corner away from the pointer, and is drawn from its window; with no screen to show it on, as over SSH, the renderer says so and draws the rest
 
 ```sh
 cd macos
