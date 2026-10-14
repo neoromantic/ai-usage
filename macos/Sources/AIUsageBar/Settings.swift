@@ -305,11 +305,15 @@ struct GeneralSettings: View {
                 }
             }
             Section("About") {
-                LabeledContent("AI Usage", value: Bundle.main.shortVersion)
-                LabeledContent("ai-usage") {
+                // The app's version once; the command-line tool's only when
+                // it is another release, or missing.
+                let about = AboutVersion(app: store.appVersion, cli: cliVersion ?? store.report?.collector.version,
+                                         found: store.cliPath != nil)
+                LabeledContent("AI Usage") {
                     VStack(alignment: .trailing, spacing: 4) {
                         HStack(spacing: 8) {
-                            Text(cliVersion ?? store.report?.collector.version ?? Format.none)
+                            Text(about.version)
+                                .textSelection(.enabled)
                             if store.updating {
                                 ProgressView().controlSize(.small)
                             } else {
@@ -319,7 +323,15 @@ struct GeneralSettings: View {
                                     Task { await store.update() }
                                 }
                                 .disabled(store.cliPath == nil && !store.demo)
+                                .help("Runs ai-usage update, which brings ai-usage and this app to the latest release")
                             }
+                        }
+                        if let note = about.note {
+                            Text(note)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.trailing)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         if let r = store.updateResult, !store.updating {
                             Label(r.text, systemImage: r.failed ? "xmark.circle.fill" : "checkmark")
@@ -331,26 +343,24 @@ struct GeneralSettings: View {
                         }
                     }
                 }
-                LabeledContent("Location") {
-                    if let path = store.cliPath {
+                if let path = store.cliPath {
+                    LabeledContent("Command-Line Tool") {
                         HStack(spacing: 4) {
                             Text(path)
                                 .font(.system(.subheadline, design: .monospaced))
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                                 .textSelection(.enabled)
-                                .help(path)
+                                .help("ai-usage, which collects what the app shows: \(path)")
                             IconButton(symbol: "folder", help: "Show in Finder") {
                                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
                             }
                         }
-                    } else {
-                        Text("Not found").foregroundStyle(.secondary)
                     }
                 }
             }
         }
-        .pane(height: 683)
+        .pane(height: 647)
         .onAppear {
             login = LoginItem.status
             notifier.refreshStatus()

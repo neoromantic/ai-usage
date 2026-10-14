@@ -78,9 +78,11 @@ final class Store: ObservableObject {
     /// A row to scroll to in Limits, set with the verdict's click.
     @Published var scrollTarget: String?
 
-    /// The popover's window, and the view the status menu opens under.
+    /// The popover's window, and the views the menu opens under: the
+    /// status, and the menu's own button.
     weak var popoverWindow: NSWindow?
     weak var statusAnchor: NSView?
+    weak var menuAnchor: NSView?
 
     let demo: Bool
     private var fetchedAt = Date.distantPast
@@ -97,6 +99,8 @@ final class Store: ObservableObject {
         self.report = report
         phase = .ready
         now = report.generatedAt
+        // Where the installer puts ai-usage, in the report's user's home.
+        cliPath = home + "/.local/bin/ai-usage"
     }
 
     /// A store without a report, for pictures of the popover's empty states.
@@ -115,6 +119,12 @@ final class Store: ObservableObject {
     /// check failed.
     var updateHealth: Collector.Health? {
         report?.collector.health.first { $0.item == "update" && ($0.status == "available" || $0.status == "failed") }
+    }
+
+    /// This app's version; in a demo, the report's release, as an app that
+    /// ai-usage installed has.
+    var appVersion: String {
+        demo ? report.map { AboutVersion.bare($0.collector.version) } ?? "dev" : Bundle.main.shortVersion
     }
 
     /// Whether the popover shows its rows as they first open: none

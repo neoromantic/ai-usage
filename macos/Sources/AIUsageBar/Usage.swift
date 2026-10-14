@@ -54,20 +54,6 @@ struct UsageTopLine: View {
                     Text(store.usageMode.menuTitle)
                 }
             }
-            if !report.solo {
-                Button {
-                    TeamWindow.show()
-                } label: {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .frame(width: 18, height: 18)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-                .help("Team Window (⌘D): every device against every subscription")
-                .accessibilityLabel("Team Window")
-            }
         }
     }
 }

@@ -128,20 +128,20 @@ private struct AnchorView: NSViewRepresentable {
 // MARK: - Tabs
 
 /// The tabs, and ⌘1 to ⌘3 to pick one while the popover is open. None is
-/// chosen while the alerts list shows; any of them closes it.
+/// chosen while the alerts list shows; any of them closes it. A team's
+/// Team window has its button beside them.
 private struct TabPicker: View {
     @EnvironmentObject private var store: Store
 
     var body: some View {
-        let selection = Binding<Tab?>(get: { store.showsAlerts ? nil : store.tab }, set: { $0.map { store.tab = $0 } })
-        Picker("View", selection: selection) {
-            ForEach(Tab.allCases) { Text($0.title).tag(Optional($0)) }
+        // Where larger text leaves no room for the Team button's symbol,
+        // its word stays.
+        ViewThatFits(in: .horizontal) {
+            row(symbol: true)
+            row(symbol: false)
         }
-        .pickerStyle(.segmented)
-        .controlSize(.regular)
-        .labelsHidden()
-        .fixedSize()
         .frame(maxWidth: .infinity)
+        .padding(.horizontal, Metrics.inset)
         .padding(.vertical, 10)
         .background {
             ForEach(Array(Tab.allCases.enumerated()), id: \.element) { i, tab in
@@ -152,6 +152,47 @@ private struct TabPicker: View {
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
+    }
+
+    private func row(symbol: Bool) -> some View {
+        let selection = Binding<Tab?>(get: { store.showsAlerts ? nil : store.tab }, set: { $0.map { store.tab = $0 } })
+        return HStack(spacing: 8) {
+            Picker("View", selection: selection) {
+                ForEach(Tab.allCases) { Text($0.title).tag(Optional($0)) }
+            }
+            .pickerStyle(.segmented)
+            .controlSize(.regular)
+            .labelsHidden()
+            .fixedSize()
+            if let r = store.report, AppMenu.buttons(r).contains(.team) {
+                TeamButton(symbol: symbol)
+            }
+        }
+    }
+}
+
+/// The Team window: the whole team on one screen, every device against
+/// every subscription. ⌘D opens it too.
+private struct TeamButton: View {
+    let symbol: Bool
+
+    var body: some View {
+        Button {
+            TeamWindow.show()
+        } label: {
+            if symbol {
+                Label("Team", systemImage: AppAction.team.symbol)
+            } else {
+                Text("Team")
+            }
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.regular)
+        .fixedSize()
+        .keyboardShortcut("d")
+        .help("Team Window (⌘D)")
+        .accessibilityLabel("Team Window")
+        .accessibilityHint("Opens every device against every subscription in a window")
     }
 }
 
@@ -249,9 +290,9 @@ private struct TabBottom: View {
 
 // MARK: - Header
 
-/// The verdict, and the status and refresh buttons at the end of its title:
-/// the line under the title runs under them, so that what it says keeps
-/// its room.
+/// The verdict, and the status, refresh, and menu buttons at the end of its
+/// title: the line under the title runs under them, so that what it says
+/// keeps its room.
 private struct Header: View {
     @EnvironmentObject private var store: Store
     @ViewState private var trailing: CGFloat = 0
@@ -266,8 +307,11 @@ private struct Header: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack(alignment: .top, spacing: 8) {
-                StatusButton()
+                if store.report != nil {
+                    StatusButton()
+                }
                 RefreshButton()
+                MenuButton()
             }
             .background(GeometryReader { g in Color.clear.preference(key: TrailingWidth.self, value: g.size.width) })
         }
@@ -276,12 +320,10 @@ private struct Header: View {
         .padding(.bottom, 10)
         .padding(.horizontal, Metrics.inset)
         .background {
-            // The shortcuts work while the popover is open, without the menu.
+            // The shortcuts work while the popover is open, without the
+            // menu; the Team button has its own.
             Group {
                 Button("Settings") { SettingsWindow.show() }.keyboardShortcut(",")
-                if store.report.map({ !$0.solo }) ?? false {
-                    Button("Team Window") { TeamWindow.show() }.keyboardShortcut("d")
-                }
                 Button("Quit") { NSApp.terminate(nil) }.keyboardShortcut("q")
             }
             .opacity(0)
@@ -465,7 +507,8 @@ private struct VerdictButton: View {
 }
 
 /// The collector's status: a dot in the color of its worst part, and how
-/// long ago it collected. A click opens the status menu.
+/// long ago it collected. A click opens the menu under it, as the menu's
+/// own button does.
 private struct StatusButton: View {
     @EnvironmentObject private var store: Store
 
@@ -487,10 +530,6 @@ private struct StatusButton: View {
                             .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 4)
-                } else {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
                 }
             }
             .frame(height: 24)
@@ -500,6 +539,7 @@ private struct StatusButton: View {
         .background(AnchorView { view in store.statusAnchor = view })
         .help(help)
         .accessibilityLabel(spoken)
+        .accessibilityHint("Opens the menu")
     }
 
     private func age(_ c: Collector) -> String {
@@ -507,13 +547,12 @@ private struct StatusButton: View {
     }
 
     private var help: String {
-        guard let c = store.report?.collector else { return "Settings and Quit" }
-        guard let at = c.lastRunAt else { return "Never collected" }
+        guard let c = store.report?.collector, let at = c.lastRunAt else { return "Never collected" }
         return "Updated \(Format.ago(at, now: store.now)) · \(Format.clock(at, now: store.now))"
     }
 
     private var spoken: String {
-        guard let c = store.report?.collector else { return "Settings and Quit" }
+        guard let c = store.report?.collector else { return "Status" }
         var s = "Status: " + (c.lastRunAt.map { t in
             store.now.timeIntervalSince(t) < 60 ? "collected just now" : "collected \(Format.spokenDuration(store.now.timeIntervalSince(t))) ago"
         } ?? "never collected")
@@ -550,14 +589,50 @@ private struct RefreshButton: View {
     }
 }
 
-/// The menu under the status: each part of the collector, this Mac, and
-/// what the app does. An AppKit menu, so each item keeps its colored dot.
+/// The app's menu, as a pull-down's mark and chevron: the collector's
+/// status, Collect Now, the Team window, Terminal's views, Settings, and
+/// Quit.
+private struct MenuButton: View {
+    @EnvironmentObject private var store: Store
+
+    var body: some View {
+        Button {
+            StatusMenu.show(store, under: store.menuAnchor)
+        } label: {
+            HStack(spacing: 2) {
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 14))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 7, weight: .bold))
+            }
+            .frame(height: 24)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.secondary)
+        .background(AnchorView { view in store.menuAnchor = view })
+        .help(help)
+        .accessibilityLabel("Menu")
+        .accessibilityHint("Opens the status, actions, Settings, and Quit")
+    }
+
+    private var help: String {
+        guard let r = store.report else { return "Settings and Quit" }
+        return "Status, Collect Now, " + (AppMenu.buttons(r).contains(.team) ? "Team Window, " : "") + "Terminal, Settings, and Quit"
+    }
+}
+
+/// The app's menu, under the status or its own button: the entries of the
+/// chip it opens from, each part of the collector, and this Mac, then what
+/// the app does, in sections under headers. An AppKit menu, so each status
+/// line keeps its colored dot.
 @MainActor
 enum StatusMenu {
     /// The menu, with the entries of the chip it opens from, or in solo,
-    /// where no list shows them, with this Mac's errors.
-    static func show(_ store: Store, entries: [Attention]? = nil) {
-        guard let anchor = store.statusAnchor else { return }
+    /// where no list shows them, with this Mac's errors. It opens under the
+    /// view given, else the status, with their trailing edges in line.
+    static func show(_ store: Store, entries: [Attention]? = nil, under view: NSView? = nil) {
+        guard let anchor = view ?? store.statusAnchor else { return }
         var shown: [Attention] = []
         if let entries {
             shown = entries
@@ -566,7 +641,7 @@ enum StatusMenu {
         }
         let menu = build(store, entries: shown)
         let y = anchor.isFlipped ? anchor.bounds.height + 4 : -4
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: y), in: anchor)
+        menu.popUp(positioning: nil, at: NSPoint(x: min(anchor.bounds.width - menu.size.width, 0), y: y), in: anchor)
     }
 
     /// The worst state among the collector's parts.
@@ -589,67 +664,108 @@ enum StatusMenu {
         case "error": return .systemRed
         case "warn": return .systemYellow
         case "info": return .systemBlue
-        default: return NSColor.secondaryLabelColor.withAlphaComponent(0.5)
+        // A line that says something is dim already, and its dot with it.
+        default: return .systemGray
         }
     }
 
-    private static func build(_ store: Store, entries: [Attention]) -> NSMenu {
+    static func build(_ store: Store, entries: [Attention]) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
         if let r = store.report {
             let c = r.collector
-            for a in entries {
-                let t = AttentionText(a, report: r)
-                let text = r.solo ? t.detail.prefix(1).uppercased() + t.detail.dropFirst() : "\(t.subject): \(t.detail)"
-                let item = NSMenuItem(title: text.count > 64 ? text.prefix(63) + "…" : text, action: nil, keyEquivalent: "")
-                item.isEnabled = false
-                item.image = dot(a.kind == .error ? .systemRed : .systemYellow)
-                item.toolTip = text
-                menu.addItem(item)
-            }
             if !entries.isEmpty {
+                menu.addItem(.sectionHeader(title: "Attention"))
+                let text = { (a: Attention) -> String in
+                    let t = AttentionText(a, report: r)
+                    return r.solo ? t.detail.prefix(1).uppercased() + t.detail.dropFirst() : "\(t.subject): \(t.detail)"
+                }
+                let (shown, more) = AppMenu.capped(entries)
+                for a in shown {
+                    let s = text(a)
+                    menu.addItem(line(s.count > 64 ? s.prefix(63) + "…" : s, image: dot(a.kind == .error ? .systemRed : .systemYellow), help: s))
+                }
+                if more > 0 {
+                    menu.addItem(line("\(more) more", image: nil, help: entries.suffix(more).map(text).joined(separator: "\n")))
+                }
                 menu.addItem(.separator())
             }
+            menu.addItem(.sectionHeader(title: "Status"))
             for h in c.health {
-                let line = HealthLine(h, c, now: store.now)
-                let item = NSMenuItem(title: line.text, action: nil, keyEquivalent: "")
-                item.isEnabled = false
-                item.image = dot(nsColor(h.state))
-                item.toolTip = line.help
-                menu.addItem(item)
+                let l = HealthLine(h, c, now: store.now)
+                menu.addItem(line(l.text, image: dot(nsColor(h.state)), help: l.help))
             }
-            let this = NSMenuItem(title: "This Mac: \(c.deviceLabel)" + (r.solo ? "" : " · \(r.team.devices.count) devices"), action: nil, keyEquivalent: "")
-            this.isEnabled = false
-            this.toolTip = "Team \(c.team)"
-            menu.addItem(this)
-            menu.addItem(.separator())
-            menu.addItem(action("Collect Now", key: "r", enabled: !store.collecting) { Task { await store.collect() } })
-            if let h = store.updateHealth {
-                let title = "Update ai-usage" + (h.release.map { " to \($0)" } ?? "") + "…"
-                menu.addItem(action(title, enabled: !store.updating) { Task { await store.update() } })
-            }
-            // Alone, this Mac is the only device, which Usage shows whole.
-            if !r.solo {
-                menu.addItem(action("Team Window…", key: "d") { TeamWindow.show() })
-            }
-            menu.addItem(.separator())
-            // The whole report, interactive, where the popover shows a
-            // glance: alone, this Mac is the only device.
-            let views: [(String, [String], String)] = [
-                ("Open Report in Terminal", [], "AI Usage Report"),
-                ("Device Status in Terminal", ["--devices"], "AI Usage Devices"),
-                ("All Projects in Terminal", ["--projects"], "AI Usage Projects"),
-            ].filter { !r.solo || $0.1 != ["--devices"] }
-            for (title, flags, name) in views {
-                let item = action(title, enabled: store.cliPath != nil) { store.openInTerminal(["report"] + flags, named: name) }
-                item.toolTip = (["ai-usage report"] + flags).joined(separator: " ")
-                menu.addItem(item)
-            }
+            menu.addItem(line("This Mac: \(c.deviceLabel)" + (r.solo ? "" : " · \(r.team.devices.count) devices"),
+                              image: symbol("laptopcomputer"), help: "Team \(c.team)"))
             menu.addItem(.separator())
         }
-        menu.addItem(action("Settings…", key: ",") { SettingsWindow.show() })
-        menu.addItem(action("Quit AI Usage", key: "q") { NSApp.terminate(nil) })
+        for (i, section) in AppMenu.sections(store.report, update: store.updateHealth).enumerated() {
+            if i > 0 {
+                menu.addItem(.separator())
+            }
+            menu.addItem(.sectionHeader(title: section.title))
+            for a in section.actions {
+                menu.addItem(item(a, store))
+            }
+        }
         return menu
+    }
+
+    /// A line that says something and does nothing.
+    private static func line(_ title: String, image: NSImage?, help: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        item.image = image
+        item.toolTip = help
+        showImage(item)
+        return item
+    }
+
+    private static func item(_ a: AppAction, _ store: Store) -> NSMenuItem {
+        let enabled: Bool
+        switch a {
+        case .collect: enabled = !store.collecting
+        case .update: enabled = !store.updating
+        case .report, .devices, .projects: enabled = store.cliPath != nil
+        case .team, .settings, .quit: enabled = true
+        }
+        let item = action(a.title, key: a.key, enabled: enabled) { perform(a, store) }
+        item.image = symbol(a.symbol)
+        showImage(item)
+        if let t = a.terminal {
+            item.toolTip = (["ai-usage"] + t.args).joined(separator: " ")
+        }
+        return item
+    }
+
+    private static func perform(_ a: AppAction, _ store: Store) {
+        switch a {
+        case .collect: Task { await store.collect() }
+        case .update: Task { await store.update() }
+        case .team: TeamWindow.show()
+        case .report, .devices, .projects:
+            if let t = a.terminal {
+                store.openInTerminal(t.args, named: t.name)
+            }
+        case .settings: SettingsWindow.show()
+        case .quit: NSApp.terminate(nil)
+        }
+    }
+
+    private static func symbol(_ name: String) -> NSImage? {
+        NSImage(systemSymbolName: name, accessibilityDescription: nil)
+    }
+
+    /// Has macOS 27 show the item's image too. By default it leaves a menu
+    /// item's symbol out (preferredImageVisibility is .automatic), and the
+    /// symbols are how the menu's actions read at a glance. The SDKs before
+    /// macOS 27 do not have the property, so it is set by name, 1 being
+    /// .visible, and only where the item answers to its setter: on an older
+    /// macOS this does nothing.
+    private static func showImage(_ item: NSMenuItem) {
+        if item.responds(to: NSSelectorFromString("setPreferredImageVisibility:")) {
+            item.setValue(1, forKey: "preferredImageVisibility")
+        }
     }
 
     private static func dot(_ color: NSColor) -> NSImage {
@@ -732,7 +848,7 @@ struct HealthLine {
 // MARK: - Chips
 
 /// What else asks for something, besides the subscriptions: a click shows
-/// the devices it is about, or the status menu.
+/// the devices it is about, or the menu.
 private struct ChipRow: View {
     @EnvironmentObject private var store: Store
     let chips: [Chip]

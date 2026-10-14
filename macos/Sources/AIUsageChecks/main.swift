@@ -652,6 +652,44 @@ equal("sorted by today", status.lines(sortedBy: .tokens(.today), ascending: fals
 equal("team header", TeamHeader(team, period: .week, unit: matrix.unit).text, "12 devices · 2 errors · 1 not reporting · 7 Days UTC · M weighted tokens")
 equal("team header share", TeamHeader(team, period: .today, unit: shares.unit).text, "12 devices · 2 errors · 1 not reporting · Today UTC · % of column total")
 
+// The Team window is a team's alone: a button beside the popover's tabs and
+// an item of the menu, with ⌘D. One device has neither, nor the device
+// status view in Terminal.
+equal("team buttons", AppMenu.buttons(team), [.team])
+equal("solo buttons", AppMenu.buttons(solo), [])
+equal("team menu", AppMenu.sections(team).map { "\($0.title): " + $0.actions.map(\.title).joined(separator: ", ") }, [
+    "Actions: Collect Now, Team Window…",
+    "Open in Terminal: Report, Device Status, All Projects",
+    "AI Usage: Settings…, Quit AI Usage",
+])
+equal("solo menu", AppMenu.sections(solo).map(\.actions), [[.collect], [.report, .projects], [.settings, .quit]])
+equal("menu without a report", AppMenu.sections(nil).map(\.actions), [[.settings, .quit]])
+equal("menu shortcuts", AppMenu.sections(team).flatMap(\.actions).map(\.key), ["r", "d", "", "", "", ",", "q"])
+check("menu symbols", AppMenu.sections(team).flatMap(\.actions).allSatisfy { !$0.symbol.isEmpty })
+equal("terminal views", [AppAction.report, .devices, .projects].map { $0.terminal?.args.joined(separator: " ") }, ["report", "report --devices", "report --projects"])
+// A release to install comes after Collect Now.
+let available = try edited("team.json") { objects($0) { $0["item"] as? String == "update" ? $0.merging(["status": "available", "state": "info", "release": "v0.7.0"]) { $1 } : $0 } }
+equal("menu update", AppMenu.sections(available, update: available.collector.health.first { $0.item == "update" }).first?.actions.map(\.title),
+      ["Collect Now", "Update ai-usage to v0.7.0…", "Team Window…"])
+// The menu's entries stop short of the screen: past 8, 7 and a line of the
+// rest.
+equal("menu entries capped", [3, 8, 9, 12].map { n -> String in
+    let c = AppMenu.capped(Array(0..<n))
+    return "\(c.shown.count)+\(c.more)"
+}, ["3+0", "8+0", "7+2", "7+5"])
+
+// About says the app's name and version once, and the command-line tool's
+// release only when it is another one, or the tool is missing.
+let about = { (app: String, cli: String?, found: Bool) -> [String?] in
+    let a = AboutVersion(app: app, cli: cli, found: found)
+    return [a.version, a.note]
+}
+equal("about one release", about("0.6.0", "v0.6.0", true), ["0.6.0", nil])
+equal("about another release", about("0.6.0", "v0.5.1", true), ["0.6.0", "Command-line tool v0.5.1: updates with Check for Updates"])
+equal("about a build from source", about("dev", "v0.6.0", true), ["dev", "Command-line tool v0.6.0: updates with Check for Updates"])
+equal("about before the tool's version", about("0.6.0", nil, true), ["0.6.0", nil])
+equal("about without the tool", about("0.6.0", nil, false), ["0.6.0", "Command-line tool not found"])
+
 // The locator, on a made-up home.
 let fm = FileManager.default
 let tmp = fm.temporaryDirectory.appendingPathComponent("ai-usage-checks-\(ProcessInfo.processInfo.processIdentifier)")
