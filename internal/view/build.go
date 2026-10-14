@@ -78,6 +78,7 @@ func Build(in Input) Report {
 			a.Name = teamName(r.Team, r.Providers[i].Provider, a.Label)
 		}
 	}
+	stopRunOuts(&r, now)
 	r.Attention = attention(r.Team, r.Collector, now)
 	describe(&r, loc)
 	return r
@@ -86,10 +87,11 @@ func Build(in Input) Report {
 // Fill gives a report saved by an earlier release of this schema the fields
 // added to it since, as Build makes them: the collector's health, the
 // windows that limit each account, the working folders of each project,
-// one each, since such a release made a project of each, and the team's
-// devices that do not update themselves, and the words of each ATTENTION
-// entry and each device's note, with clocks in this device's time zone. A
-// report that has them keeps them.
+// one each, since such a release made a project of each, the team's
+// devices that do not update themselves, the forecasts whose run-out time
+// passed with no spend since, and the words of each ATTENTION entry and
+// each device's note, with clocks in this device's time zone. A report that
+// has them keeps them.
 //
 // A report saved before burn has its input plus output as burn, the team's
 // marked estimated and this device's titled in tokens in+out, and its
@@ -126,6 +128,7 @@ func Fill(r *Report) {
 	if old {
 		fillOldBurn(r)
 	}
+	stopRunOuts(r, r.GeneratedAt)
 	listDefaults(r)
 	describe(r, nil)
 }

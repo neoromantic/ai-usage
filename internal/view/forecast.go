@@ -144,6 +144,44 @@ func forecast(w snapshot.Window, at time.Time, pts []pacePoint) *Forecast {
 	return f
 }
 
+// stopRunOuts marks the forecasts of r whose run-out time has passed by now
+// while the team last spent on the account before it, on the team's
+// accounts and this device's: at that pace the window would have run out
+// then, but no spend took it there. This device's accounts go by the
+// team's spend, which counts every device's. A window at 100% is out, and
+// has no run-out time.
+func stopRunOuts(r *Report, now time.Time) {
+	for i := range r.Team.Providers {
+		for j := range r.Team.Providers[i].Accounts {
+			a := &r.Team.Providers[i].Accounts[j]
+			stopForecasts(a.Quota, a.LastActiveAt, now)
+		}
+	}
+	for i := range r.Providers {
+		for j := range r.Providers[i].Accounts {
+			a := &r.Providers[i].Accounts[j]
+			last := a.LastActiveAt
+			if ta := accountOf(&r.Team, r.Providers[i].Provider, a.Label); ta != nil {
+				last = ta.LastActiveAt
+			}
+			stopForecasts(a.Quota, last, now)
+		}
+	}
+}
+
+// stopForecasts marks the forecasts of q that stopped by now, as
+// stopRunOuts says, when the team last spent on the account at last.
+func stopForecasts(q *Quota, last *time.Time, now time.Time) {
+	if q == nil {
+		return
+	}
+	for _, w := range q.Windows {
+		if f := w.Forecast; f != nil && f.RunsOutAt != nil && !f.RunsOutAt.After(now) && (last == nil || last.Before(*f.RunsOutAt)) {
+			f.Stopped = true
+		}
+	}
+}
+
 // pacePoint is one reading of a window, from this device's samples or the
 // team's reads.
 type pacePoint struct {

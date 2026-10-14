@@ -98,15 +98,24 @@ func idLike(s string) bool {
 // teamName is an account's short name in the team, or its default name
 // when the team view does not hold it.
 func teamName(t Team, provider, label string) string {
-	for _, p := range t.Providers {
-		if p.Provider != provider {
+	if a := accountOf(&t, provider, label); a != nil {
+		return a.Name
+	}
+	return ShortName(label)
+}
+
+// accountOf is the team's account of provider with label, or nil.
+func accountOf(t *Team, provider, label string) *TeamAccount {
+	for i := range t.Providers {
+		tp := &t.Providers[i]
+		if tp.Provider != provider {
 			continue
 		}
-		for _, a := range p.Accounts {
-			if a.Label == label {
-				return a.Name
+		for j := range tp.Accounts {
+			if tp.Accounts[j].Label == label {
+				return &tp.Accounts[j]
 			}
 		}
 	}
-	return ShortName(label)
+	return nil
 }

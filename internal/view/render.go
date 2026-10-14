@@ -272,18 +272,7 @@ func (p *page) percent(v *float64) string {
 
 // account is the team account of provider with label, or nil.
 func (p *page) account(provider, label string) *TeamAccount {
-	for i := range p.r.Team.Providers {
-		tp := &p.r.Team.Providers[i]
-		if tp.Provider != provider {
-			continue
-		}
-		for j := range tp.Accounts {
-			if tp.Accounts[j].Label == label {
-				return &tp.Accounts[j]
-			}
-		}
-	}
-	return nil
+	return accountOf(&p.r.Team, provider, label)
 }
 
 // device is the team device with the ID or label, or nil.

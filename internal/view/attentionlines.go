@@ -229,8 +229,9 @@ func (p *page) forms(parts ...string) []chunks {
 }
 
 // overForms is what to know about a window forecast to run out before its
-// reset; old is how old its reading is, and short the same in fewer words,
-// or both are empty.
+// reset, or that would have run out had the team kept spending on it; old
+// is how old its reading is, and short the same in fewer words, or both
+// are empty.
 func (p *page) overForms(a Attention, old, short string) []chunks {
 	pace := " at " + p.pace(a) + " pace"
 	// At a forecast of exactly 100% the window runs out at its reset,
@@ -249,7 +250,11 @@ func (p *page) overForms(a Attention, old, short string) []chunks {
 		return p.forms(s+pace+old, s+old, s+short, s)
 	}
 	verb := "runs out ~"
-	if !at.After(p.now) {
+	switch {
+	case stopped(&p.r.Team, a):
+		// Nobody spent on it since: it did not run out.
+		verb = "would run out ~"
+	case !at.After(p.now):
 		verb = "ran out ~"
 	}
 	s := verb + p.clock(*at)
@@ -466,7 +471,13 @@ func (p *page) pace(a Attention) string {
 // window is the named window of an account, or its main window when name
 // is empty; nil when the report does not hold it.
 func (p *page) window(provider, label, name string) *Window {
-	acct := p.account(provider, label)
+	return windowOf(&p.r.Team, provider, label, name)
+}
+
+// windowOf is the named window of a team account, or its main window when
+// name is empty; nil when the team does not hold it.
+func windowOf(t *Team, provider, label, name string) *Window {
+	acct := accountOf(t, provider, label)
 	if acct == nil || acct.Quota == nil {
 		return nil
 	}
@@ -479,6 +490,16 @@ func (p *page) window(provider, label, name string) *Window {
 		}
 	}
 	return nil
+}
+
+// stopped says an over entry is of a window whose forecast is Stopped: it
+// would have run out at its pace, but the team stopped spending before.
+func stopped(t *Team, a Attention) bool {
+	if a.Kind != AttentionOver {
+		return false
+	}
+	w := windowOf(t, a.Provider, a.Account, a.Window)
+	return w != nil && w.Forecast != nil && w.Forecast.Stopped
 }
 
 // windowName is how a window other than the main one is named on the page:
