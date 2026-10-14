@@ -512,30 +512,39 @@ struct DetailGrid<Content: View>: View {
     }
 }
 
-/// A line of a detail grid; nothing for no value.
+/// A line of a detail grid; nothing for no value. A value in several
+/// forms, the longest first, shows the first that fits.
 struct DetailLine: View {
     let label: String
-    let value: Text?
+    let forms: [Text]
     var help = ""
 
     init(_ label: String, _ value: Text?, help: String = "") {
-        (self.label, self.value, self.help) = (label, value, help)
+        (self.label, self.forms, self.help) = (label, value.map { [$0] } ?? [], help)
     }
 
     init(_ label: String, _ value: String?, help: String = "") {
         self.init(label, value.map { Text($0) }, help: help)
     }
 
+    init(_ label: String, forms: [String], help: String = "") {
+        (self.label, self.forms, self.help) = (label, forms.map { Text($0) }, help)
+    }
+
     var body: some View {
-        if let value {
+        if !forms.isEmpty {
             GridRow {
                 Text(label)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
-                value
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .help(help)
+                ViewThatFits(in: .horizontal) {
+                    ForEach(Array(forms.enumerated()), id: \.offset) { _, form in
+                        form
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+                .help(help)
             }
         }
     }

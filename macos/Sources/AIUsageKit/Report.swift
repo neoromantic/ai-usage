@@ -279,7 +279,10 @@ public struct Quota: Decodable, Sendable {
     public let stale: Bool
     public let source: String?
     public let from: String?
+    /// The device whose reading is newest, as `host (user)`, on a team
+    /// account, and its id; nil from an ai-usage that does not say.
     public let device: String?
+    @Absent public var deviceId: String?
     public let windows: [Window]
 
     public var main: Window? { windows.first(where: \.main) }
@@ -578,6 +581,10 @@ public struct Matrix: Decodable, Sendable {
         public let windowTokens: Int
         @Absent public var burn: Usage?
         @Absent public var windowBurn: Int?
+        /// When the main window began, which the window's tokens count
+        /// from; nil when no main window is known, or from an ai-usage that
+        /// does not say.
+        @Absent public var windowStart: Date?
     }
 
     public struct Row: Decodable, Sendable {

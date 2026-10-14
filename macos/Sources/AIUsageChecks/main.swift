@@ -349,14 +349,61 @@ equal("a run-out that runs out first", runOut(wouldRunOut, "claude", "mira@studi
 equal("a run-out that would have", runOut(try edited("solo.json") { stopping($0, ["7d", "7d Fable"]) }, "claude", "mira@studio.dev")
     .map { "\($0.window.name) \($0.stopped)" }, "7d true")
 
+// A subscription's details, as the report has them: who spent the main
+// window since the column says it began, busiest first, in forms that drop
+// the start, then the second device, for a narrow line; the forecast of the
+// window that runs out with its pace; when it was last used; and the
+// reading, only when it is old, another device's, or what a stopped
+// forecast stands on.
+func details(_ r: Report, _ p: String, _ l: String) -> SubscriptionDetails? {
+    guard let a = r.teamAccount(provider: p, label: l), let line = LimitLine(a) else { return nil }
+    return SubscriptionDetails(provider: p, account: a, line: line, report: r, now: r.generatedAt, timeZone: berlin)
+}
+let bots = details(team, "codex", "bots@studio.dev")
+equal("this window", bots?.thisWindow?.forms,
+      ["build-01 84M, scout 35M, +8 more · since 21 Sep 02:40", "build-01 84M, scout 35M, +8 more", "build-01 84M, +9 more"])
+equal("this window's tooltip", bots?.thisWindow?.help.components(separatedBy: "\n").prefix(3).joined(separator: " / "),
+      "7d window since 21 Sep 02:40, weighted tokens: / build-01 84M / scout 35M")
+equal("forecast line", bots?.forecast, "164% at reset · this week's pace")
+equal("last used", bots?.lastUsed, "20m ago")
+equal("another device's reading", bots?.reading?.text, "4m old, from scout (hermes)")
+let miraDetails = details(team, "claude", "mira@studio.dev")
+equal("this Mac's window", miraDetails?.thisWindow?.forms.first, "mira-mbp 72M, build-01 16M · since 20 Sep 01:00")
+equal("last day's pace", miraDetails?.forecast, "113% at reset · the last day's pace")
+check("this Mac's fresh reading says nothing", miraDetails != nil && miraDetails?.reading == nil)
+equal("leo's reading", details(team, "claude", "leo@studio.dev")?.reading?.text, "11m old, from leo-air (leo)")
+// Nobody spent on Grok this window: no line of who did, and no forecast.
+let grok = details(team, "grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64")
+check("nobody spent the window", grok != nil && grok?.thisWindow == nil && grok?.forecast == nil && grok?.lastUsed == "9d ago")
+// Alone, the tokens: who spent them goes without saying.
+let soloDetails = details(solo, "claude", "mira@studio.dev")
+equal("solo window", soloDetails?.thisWindow?.forms, ["102M · since 20 Sep 01:00", "102M"])
+equal("solo forecast of another window", soloDetails?.forecast, "Fable 141% at reset · this week's pace")
+check("solo reading says nothing", soloDetails?.reading == nil)
+// A stale reading says how old, in the tight color, without this Mac's name.
+let staleSolo = try edited("solo.json") { objects($0) { o in o["windows"] != nil ? o.merging(["stale": true]) { $1 } : o } }
+equal("stale reading", details(staleSolo, "claude", "mira@studio.dev")?.reading.map { [$0.text, "\($0.stale)"] }, ["4m old", "true"])
+// A forecast nobody spent on since it would have run out: where it was
+// headed, with the reading it stands on.
+let stoppedDetails = details(try edited("solo.json") { stopping($0, ["7d", "7d Fable"]) }, "claude", "mira@studio.dev")
+equal("stopped forecast line", stoppedDetails?.forecast, "would reach 108% at reset · this week's pace")
+equal("stopped forecast's reading", stoppedDetails?.reading.map { [$0.text, "\($0.stale)"] }, ["4m old", "false"])
+equal("a window that still runs out", details(wouldRunOut, "claude", "mira@studio.dev")?.forecast, "108% at reset · this week's pace")
+// A subscription the matrix has no column for has no line of who spent it.
+let noColumn = try edited("team.json") { objects($0) { o in
+    o["label"] as? String == "bots@studio.dev" && o["window_tokens"] != nil ? o.merging(["label": "gone@studio.dev"]) { $1 } : o
+} }
+check("no column", details(noColumn, "codex", "bots@studio.dev").map { $0.thisWindow == nil && $0.forecast != nil } == true)
+
 // Two reports of the same team: one as v0.3.4 printed it, with no
 // weighted tokens, and one as v0.4.0 prints it, with every field it added.
 // The lists show what the report sent, and say which it is. An entry's
 // device_id is new too, but a matrix row has had one all along.
 let added: Set<String> = ["burn", "fresh", "burn_days", "burn_share", "window_burn", "covered_since", "active_sessions", "transcript_gaps",
                           "estimated", "held_back_by", "estimated_reason", "burn_estimated", "gap", "replaced_by", "limitations",
-                          "no_reading", "outside", "basis", "pace"]
-let stripped = { (json: Any) in objects(json) { $0.filter { !added.contains($0.key) } } }
+                          "no_reading", "outside", "basis", "pace", "window_start"]
+// A reading's device_id is new too.
+let stripped = { (json: Any) in objects(json) { o in o.filter { !added.contains($0.key) && !($0.key == "device_id" && o["windows"] != nil) } } }
 let v034 = try edited("team.json", stripped)
 let v034Solo = try edited("solo.json", stripped)
 equal("v0.3.4 label", v034.tokenLabel, "tokens in+out")
@@ -375,6 +422,17 @@ check("v0.3.4 accounts fall back", v034.team.providers.allSatisfy { $0.accounts.
 } })
 check("v0.3.4 team not estimated", !v034.team.estimated && v034.team.estimatedReason == nil && v034.team.heldBackBy.isEmpty)
 check("v0.3.4 forecast basis", v034.teamAccount(provider: "claude", label: "mira@studio.dev")?.quota?.main?.forecast?.basis == nil)
+// With no weighted tokens, the window's tokens in+out; with no start, no
+// "since"; with no reading's device id, a team's reading names its device,
+// which may be another.
+check("v0.3.4 window start and reading device", v034.team.matrix.columns.allSatisfy { $0.windowStart == nil }
+    && v034.team.providers.allSatisfy { $0.accounts.allSatisfy { $0.quota?.deviceId == nil } })
+let bots034 = details(v034, "codex", "bots@studio.dev")
+equal("v0.3.4 this window", bots034?.thisWindow?.forms, ["build-01 17M, scout 7M, +8 more", "build-01 17M, +9 more"])
+equal("v0.3.4 this window's tooltip", bots034?.thisWindow?.help.components(separatedBy: "\n").first, "7d window, tokens in+out:")
+equal("v0.3.4 forecast line", details(v034, "claude", "mira@studio.dev")?.forecast, "113% at reset · this week's pace")
+equal("v0.3.4 reading", details(v034, "claude", "mira@studio.dev")?.reading?.text, "3m old, from mira-mbp (mira)")
+check("v0.3.4 solo reading", details(v034Solo, "claude", "mira@studio.dev").map { $0.reading == nil && $0.thisWindow?.forms == ["10M"] } == true)
 equal("v0.3.4 attention", v034.attention.map(\.kind.rawValue), ["out", "out", "over", "over", "tight", "error", "error", "no_reading", "silent", "old", "idle"])
 
 /// Usage, or a share, of every period times f.
