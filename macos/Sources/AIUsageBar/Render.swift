@@ -3,9 +3,9 @@ import AppKit
 import SwiftUI
 
 /// Draws the popover, in each of its tabs, states, and empty states, the
-/// menu bar item, and the settings panes to PNGs at twice their size, light
-/// and dark, with "now" at the report's time. Each tab is drawn as tall as
-/// the popover may be, as the app shows it, and whole, as "-full".
+/// menu bar item, its menu, and the settings panes to PNGs at twice their
+/// size, light and dark, with "now" at the report's time. Each tab is drawn
+/// as tall as the popover may be, as the app shows it, and whole, as "-full".
 @MainActor
 enum Renderer {
     static func run(_ file: URL, into dir: URL) -> Int32 {
@@ -136,6 +136,9 @@ enum Renderer {
                     let view = pane.view.environmentObject(store).background(Color(nsColor: .windowBackgroundColor))
                     try write(view, appearance, to: png("settings-\(pane.title.lowercased())"))
                 }
+                reset(store)
+                let entries = report.solo ? report.attention.filter { $0.kind == .error || $0.kind == .silent } : []
+                writeMenu(StatusMenu.build(store, entries: entries), appearance, to: png("menu"))
             }
         } catch {
             fputs("AIUsageBar: \(error.localizedDescription)\n", stderr)
@@ -318,6 +321,35 @@ enum Renderer {
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         }
         try draw(frame, to: url)
+    }
+
+    /// The menu, open: AppKit draws a menu only while it is open, so it
+    /// shows on the screen for a moment, in the corner away from the
+    /// pointer, where no item is chosen, and is drawn from its window. With
+    /// no screen to show it on, as over SSH, there is no picture.
+    private static func writeMenu(_ menu: NSMenu, _ appearance: NSAppearance.Name, to url: URL) {
+        try? FileManager.default.removeItem(at: url)
+        NSApp.appearance = NSAppearance(named: appearance)
+        defer { NSApp.appearance = nil }
+        guard let screen = NSScreen.main else { return }
+        let f = screen.visibleFrame, pointer = NSEvent.mouseLocation, size = menu.size
+        let x = pointer.x < f.midX ? f.maxX - size.width - 20 : f.minX + 20
+        let y = pointer.y < f.midY ? f.maxY - 20 : f.minY + size.height + 20
+        let window = NSWindow(contentRect: NSRect(x: x, y: y, width: 1, height: 1), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        // The main actor's work runs while the menu tracks the mouse.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            if let w = NSApp.windows.first(where: { $0.isVisible && String(describing: type(of: $0)).contains("Menu") }), let v = w.contentView {
+                try? draw(v, to: url)
+            }
+            menu.cancelTracking()
+        }
+        menu.popUp(positioning: nil, at: .zero, in: window.contentView)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            fputs("AIUsageBar: the menu did not open, so \(url.lastPathComponent) is not drawn\n", stderr)
+        }
     }
 
     /// Lays a view out in an offscreen window and draws it with AppKit, which,
