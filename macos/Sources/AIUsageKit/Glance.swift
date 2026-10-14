@@ -51,8 +51,10 @@ public struct Verdict: Equatable, Sendable {
             } else {
                 kind = .over
                 if let at = a.at {
-                    title = subject + (at > now ? " runs out ~" : " ran out ~") + clock(at)
-                    compact = (subject + (at > now ? " runs out" : " ran out"), "~" + clock(at))
+                    // A run-out nobody spent on since did not happen.
+                    let verb = r.window(of: a)?.forecast?.stopped == true ? " would run out" : at > now ? " runs out" : " ran out"
+                    title = subject + verb + " ~" + clock(at)
+                    compact = (subject + verb, "~" + clock(at))
                     // The reset's clock is the row's countdown, and the
                     // verdict's tooltip.
                     if let reset = a.resetsAt {
@@ -274,6 +276,9 @@ public struct LimitLine: Sendable {
     public struct RunOut: Sendable {
         public let window: Quota.Window
         public let at: Date
+        /// The run-out passed with no spend since: it would have run out
+        /// then, but nothing says it did.
+        public var stopped: Bool { window.forecast?.stopped == true }
     }
 
     /// The window the bar and percent show.
@@ -290,7 +295,9 @@ public struct LimitLine: Sendable {
     public let unreadMain: Quota.Window?
     /// For an over account no window stops, the window that runs out
     /// first: the earliest run-out the report forecasts among the window
-    /// shown and the others, the one shown first of equals.
+    /// shown and the others, the one shown first of equals, and one that
+    /// would have run out with nobody spending since only when none other
+    /// runs out.
     public let runsOut: RunOut?
 
     /// Nil for an account with no window known that limits it.
@@ -307,7 +314,8 @@ public struct LimitLine: Sendable {
         blocking = shown.state == "out" ? nil : others.first { $0.state == "out" }
         unreadMain = main?.known == true ? nil : main
         runsOut = a.state != "over" || blocking != nil || shown.state == "out" ? nil
-            : ([shown] + others).compactMap { w in w.forecast?.runsOutAt.map { RunOut(window: w, at: $0) } }.min { $0.at < $1.at }
+            : ([shown] + others).compactMap { w in w.forecast?.runsOutAt.map { RunOut(window: w, at: $0) } }
+            .min { ($0.stopped ? 1 : 0, $0.at) < ($1.stopped ? 1 : 0, $1.at) }
     }
 }
 
