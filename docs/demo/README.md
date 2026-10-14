@@ -41,7 +41,7 @@ TZ=Europe/Berlin ai-usage report --from docs/demo/solo.json --plain --width 110
 | `menubar.png`, `menubar-light.png` | the macOS menu bar app for the team: its item in the menu bar, and under it the popover on Limits, dark and light; the README's picture of the app |
 | `app-limits.png`, `app-usage.png`, `app-projects.png` | the app's three tabs, each with `-light.png` beside it |
 | `app-alerts.png`, `app-alerts-light.png` | the app's alerts, every entry of ATTENTION in place of Limits, with the subscription with the most room under them |
-| `app-details.png`, `app-details-light.png` | the app's Limits with the details of a subscription that runs out open: its countdown, each window, the forecast, who spent the window, and when it was last used |
+| `app-details.png`, `app-details-light.png` | the app's Limits with the details of a subscription that runs out open: its countdown, each window, the forecast, the bot that took its reading, who spent the window, and when it was last used |
 | `app-menubar.png`, `app-menubar-light.png` | the app's item in the menu bar in each state: on track, tight, used up, stale, over, out, time until reset, no reading, and the ring alone |
 | `app-menu.png`, `app-menu-light.png` | the app's menu, opened from the popover's ⋯: the collector's status and this Mac, then its actions, Terminal's views, Settings, and Quit, each under its header |
 | `app-team.png`, `app-team-light.png` | the app's Team window on Usage: every device against every subscription over 7 days, shaded by tokens |
