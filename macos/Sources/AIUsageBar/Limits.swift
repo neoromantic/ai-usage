@@ -320,38 +320,30 @@ private struct LimitRow: View {
     /// A line for each thing the row does not show: the account's login,
     /// each window, where the one that runs out is headed and at what pace,
     /// what fills it from outside the team, how old the reading is and who
-    /// read it, who spent the window so far, when it was last used, and
-    /// why it is idle or not read. A caveat has its line whatever the line
-    /// under the row says.
+    /// read it when that says something, who spent the window so far, when
+    /// it was last used, and why it is idle or not read. A caveat has its
+    /// line whatever the line under the row says.
     private var details: some View {
         let a = account
+        let more = SubscriptionDetails(provider: provider, account: a, line: line, report: report, now: now)
         return DetailGrid {
             DetailLine("Account", accountValue)
             ForEach(orderedWindows, id: \.name) { w in
                 DetailLine(short(w), windowValue(w), help: windowHelp(w))
             }
-            DetailLine("Forecast", forecast)
+            DetailLine("Forecast", more.forecast)
             DetailLine("Outside", outsideWords.map { Text($0).foregroundColor(Palette.text("tight")) })
-            DetailLine("Reading", reading)
-            if let spent = thisWindow {
-                DetailLine("This window", spent.text, help: spent.help)
+            DetailLine("Reading", more.reading.map(reading))
+            if let spent = more.thisWindow {
+                DetailLine("This window", forms: spent.forms, help: spent.help)
             }
-            DetailLine("Last used", a.lastActiveAt.map { Format.ago($0, now: now) })
+            DetailLine("Last used", more.lastUsed)
             DetailLine("Idle", idle)
             DetailLine("Not read", a.noReading)
             ForEach(Array(a.linkedUsage.enumerated()), id: \.offset) { _, l in
                 DetailLine(Format.provider(l.provider), linked(l))
             }
         }
-    }
-
-    /// Where the window that runs out is headed by its reset, and the pace
-    /// the report's forecast takes: "164% at reset · this week's pace", with
-    /// its name when it is not the window shown.
-    private var forecast: String? {
-        let over = line.runsOut?.window ?? ([shown] + line.others).first { $0.state == "over" && $0.forecast?.runsOutAt != nil }
-        guard let w = over, let f = w.forecast else { return nil }
-        return (w.name == shown.name ? "" : short(w) + " ") + "\(Int(f.percent))% at reset · \(w.pace) pace"
     }
 
     /// Why the report calls the account idle: "9d, paid and unused".
@@ -431,53 +423,11 @@ private struct LimitRow: View {
         w.forecast?.stopped == true ? "would run out ~" : at > now ? "runs out ~" : "ran out ~"
     }
 
-    /// How old the newest reading is, and the device that took it, as the
-    /// report names it with its user: "20m old, from mira-mbp (mira)", "via
-    /// the Codex login" when it is that login's. The age takes the tight
+    /// The reading's age and where it came from, the age in the tight
     /// color when a window's reading is stale.
-    private var reading: Text? {
-        guard let q = quota else { return nil }
-        let age = Text("\(Format.duration(now.timeIntervalSince(q.observedAt))) old")
-        var rest = q.device.map { ", from \($0)" } ?? ""
-        if let from = q.from {
-            rest += " via the \(Format.provider(from)) login"
-        }
-        return (q.stale ? age.foregroundColor(Palette.text("tight")) : age) + Text(rest)
-    }
-
-    /// The devices that spent the main window since it began, busiest
-    /// first, as the report's table has them: "build-01 84M, scout 35M +7 ·
-    /// since 21 Sep 02:40"; alone, the tokens. The tooltip has all of them.
-    private var thisWindow: (text: String, help: String)? {
-        let m = report.team.matrix
-        guard let col = m.columns.firstIndex(where: { $0.provider == provider && $0.label == account.label }) else { return nil }
-        let used = m.rows.enumerated().compactMap { i, r -> (i: Int, device: String, tokens: Int)? in
-            guard col < r.cells.count, r.cells[col].shownWindow.value > 0 else { return nil }
-            return (i, r.device, r.cells[col].shownWindow.value)
-        }.sorted { $0.tokens != $1.tokens ? $0.tokens > $1.tokens : $0.i < $1.i }
-        guard !used.isEmpty else { return nil }
-        let items = used.map { "\($0.device) \(Format.tokensM($0.tokens))" }
-        let since = windowStart.map { " · since " + sinceText($0) } ?? ""
-        let text = solo ? Format.tokensM(m.columns[col].shownWindow.value) + since
-            : items.prefix(2).joined(separator: ", ") + (items.count > 2 ? " +\(items.count - 2)" : "") + since
-        let head = "\(short(quota?.main ?? shown)) window" + (windowStart.map { " since " + sinceText($0) } ?? "") + ", \(m.columns[col].shownWindow.label):"
-        return (text, ([head] + items).joined(separator: "\n"))
-    }
-
-    /// When the main window began: its length before its reset.
-    private var windowStart: Date? {
-        guard let w = quota?.main, let reset = w.resetsAt, let length = w.length else { return nil }
-        return reset.addingTimeInterval(-Double(length) * 60)
-    }
-
-    /// A start within the last day as the clock, else as the date: "21 Sep
-    /// 02:40", so that it does not read as the reset's weekday.
-    private func sinceText(_ t: Date) -> String {
-        guard now.timeIntervalSince(t) >= 86400 else { return clock(t) }
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "d MMM HH:mm"
-        return f.string(from: t)
+    private func reading(_ r: SubscriptionDetails.Reading) -> Text {
+        let age = Text(r.age)
+        return (r.stale ? age.foregroundColor(Palette.text("tight")) : age) + Text(r.source)
     }
 
     /// "312 sessions through it on 9 devices".
