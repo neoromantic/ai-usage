@@ -87,13 +87,13 @@
     {
       "kind": "over",
       "subject": "claude mira@studio.dev",
-      "text": "runs out ~Sat 10:28 at the last day's pace, 14h 31m before reset",
+      "text": "runs out ~Sat 11:12 at the last day's pace, 13h 47m before reset",
       "provider": "claude",
       "account": "mira@studio.dev",
       "name": "mira",
-      "at": "2026-09-26T08:28:35.1159618Z",
+      "at": "2026-09-26T09:12:45.6Z",
       "resets_at": "2026-09-26T23:00:00Z",
-      "percent": 114
+      "percent": 113
     },
     {
       "kind": "tight",
@@ -214,11 +214,11 @@
                 "reset": false,
                 "state": "over",
                 "forecast": {
-                  "percent": 114,
+                  "percent": 113,
                   "elapsed": 0.6584325396825397,
-                  "runs_out_at": "2026-09-26T08:28:35.1159618Z",
+                  "runs_out_at": "2026-09-26T09:12:45.6Z",
                   "basis": "recent",
-                  "pace": 0.9799402855851439
+                  "pace": 0.9633911368015414
                 }
               }
             ]
@@ -2108,11 +2108,11 @@
                   "reset": false,
                   "state": "over",
                   "forecast": {
-                    "percent": 114,
+                    "percent": 113,
                     "elapsed": 0.6584325396825397,
-                    "runs_out_at": "2026-09-26T08:28:35.1159618Z",
+                    "runs_out_at": "2026-09-26T09:12:45.6Z",
                     "basis": "recent",
-                    "pace": 0.9799402855851439
+                    "pace": 0.9633911368015414
                   }
                 }
               ]

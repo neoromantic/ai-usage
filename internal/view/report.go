@@ -293,7 +293,8 @@ type Quota struct {
 // Forecast states. A window at 100% is out; otherwise the state is the band
 // its forecast falls in. Unknown is a window with no forecast: it reset
 // since it was read, its length or reset time is unknown, or less than a
-// tenth of it has passed and it is not over.
+// tenth of it, or of a window a day or longer a day too, has passed and it
+// is not over.
 const (
 	StateOut     = "out"
 	StateOver    = "over"
@@ -342,8 +343,8 @@ type Forecast struct {
 	// window runs out at its reset, and this is nil.
 	RunsOutAt *time.Time `json:"runs_out_at"`
 	// Basis is the pace the forecast takes: "window", the average since the
-	// window began, or "recent", the pace of the last day's readings where
-	// it is faster.
+	// window began, or "recent", the pace since the newest reading a day
+	// old where it is faster.
 	Basis string `json:"basis"`
 	// Pace is that pace, in percent of the window an hour.
 	Pace float64 `json:"pace"`

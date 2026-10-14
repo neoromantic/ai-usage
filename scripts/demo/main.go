@@ -141,7 +141,7 @@ func teamReport() view.Report {
 	// Her Claude week filled faster over the last day than before: at that
 	// pace it runs out, though at the week's it would not.
 	mira.runs("claude", "mira@studio.dev", "7d",
-		run{22 * time.Hour, 36}, run{16 * time.Hour, 42}, run{10 * time.Hour, 47}, run{4 * time.Hour, 53})
+		run{26 * time.Hour, 33}, run{22 * time.Hour, 36}, run{16 * time.Hour, 42}, run{10 * time.Hour, 47}, run{4 * time.Hour, 53})
 	mira.account("codex", "mira@studio.dev", "pro", true, now.Add(-3*time.Minute),
 		window("5h", 9, 5*time.Hour, 4*time.Hour+5*time.Minute),
 		window("7d", 47, week, 3*24*time.Hour+7*time.Hour))
