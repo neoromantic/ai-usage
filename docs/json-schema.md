@@ -84,12 +84,12 @@ A `health` entry:
 
 ### attention
 
-Each entry is one thing that needs attention, from the team's view of each subscription and device. The report lists them most urgent first, by `kind` in the order of this table; within a kind, the earliest `at` first, which for an `over` without `at` is its `resets_at`, and for `idle` puts the longest idle first, the highest `percent` first for `tight` and `outside`, the lowest forecast first for `under`, and by device for `error`. The fields that apply depend on the kind; the others are absent. Every entry has `subject` and `text`, the console's words for it. A reader should skip a kind it does not know.
+Each entry is one thing that needs attention, from the team's view of each subscription and device. The report lists them most urgent first, by `kind` in the order of this table, with an `over` entry whose window's forecast is `stopped` after the other `over` entries; within a kind, the earliest `at` first, which for an `over` without `at` is its `resets_at`, and for `idle` puts the longest idle first, the highest `percent` first for `tight` and `outside`, the lowest forecast first for `under`, and by device for `error`. The fields that apply depend on the kind; the others are absent. Every entry has `subject` and `text`, the console's words for it. A reader should skip a kind it does not know.
 
 | `kind` | When | Fields |
 | --- | --- | --- |
 | `out` | a window of a subscription is at 100% | `provider`, `account`, `name`, `window`; `at` is when it resets |
-| `over` | a window of a subscription will run out by its reset, at its pace | `provider`, `account`, `name`, `window`; `at` is when it runs out, absent when it runs out at its reset, `resets_at` when it resets, `percent` its forecast |
+| `over` | a window of a subscription will run out by its reset, at its pace | `provider`, `account`, `name`, `window`; `at` is when it runs out, absent when it runs out at its reset, `resets_at` when it resets, `percent` its forecast. When the forecast is `stopped`, `at` has passed and `text` says the window would run out then |
 | `tight` | a window of a subscription logged in on this device will end its reset in the `tight` state | `provider`, `account`, `name`, `window`; `resets_at` is when it resets, `percent` its forecast |
 | `outside` | a subscription has `outside` set: a window filled while no team device spent on it | `provider`, `account`, `name`; `at` is when it began to rise, `percent` how many points it rose |
 | `error` | a device's collector or one of its tools fails; on this device, also a run a bug stopped before it could report, its relay, or its update check; on an `old` device that is not silent, its update check. A quota that could not be read is not an error | `devices` names the device; `message` is the error, which starts with `relay` or `update` when it is theirs; `at` is when that error happened, when its collector says (v0.4.0 on) |
@@ -100,7 +100,7 @@ Each entry is one thing that needs attention, from the team's view of each subsc
 | `under` | past half of a subscription's main window, its forecast is under 50% | `provider`, `account`, `name`; `resets_at` is when it resets, `percent` its forecast |
 | `idle` | no team device has used a subscription with a reading for 7 days, by its `last_active_at`, and nothing says someone outside the team does: it has no `outside`, and its main window is under 1% or began before that last use. Not the `unknown` account, a Hermes account, or a free plan. It has no `under` entry then | `provider`, `account`, `name`; `at` is when a team device last used it |
 
-A window is one with `limits`: the account's main one, or one that limits it more. An `over`, `tight`, or `under` entry has `reading_age_seconds` when its window's reading is stale, and an `out` entry when its reading is over 6 hours old, as the provider can reset a full window early.
+A window is one with `limits`: the account's main one, or one that limits it more. An `over`, `tight`, or `under` entry has `reading_age_seconds` when its window's reading is stale, an `over` entry also when its window's forecast is `stopped`, and an `out` entry when its reading is over 6 hours old, as the provider can reset a full window early.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -116,7 +116,7 @@ A window is one with `limits`: the account's main one, or one that limits it mor
 | `at` | time | as the table says for each kind |
 | `resets_at` | time | when the window resets |
 | `percent` | number | the window's forecast at its reset, or the points an `outside` window rose |
-| `reading_age_seconds` | number | how old the reading is, when it is stale |
+| `reading_age_seconds` | number | how old the reading is, as the paragraph above the table says when |
 | `message` | string | an error's text, the error a silent device last reported, why a subscription has no reading, the device that replaced a duplicate, or the newest release |
 | `limitations` | list of strings | what the releases of the devices of an `old` entry cannot do, as a team device's `limitations` says |
 
@@ -190,17 +190,18 @@ A window:
 | `reset` | bool | the window has reset since it was read, so how full it is now is not known; its `state` is `unknown` and `forecast` is `null` |
 | `unread` | bool | a Claude 5-hour or weekly window the newest reading does not cover, because a request refused for a full window reads that window alone. Its `percent` is 0, `resets_at` and `forecast` are `null`, and its `state` is `unknown`. Absent when `false` |
 | `state` | string | see [states](#states) |
-| `forecast` | object | how full the window will be at its reset if it is used from now on at its pace; see below. `null` when the length or the reset time is unknown, when it has reset, and in its first tenth unless it is over already |
+| `forecast` | object | how full the window will be at its reset if it is used from now on at its pace; see below. `null` when the length or the reset time is unknown, when it has reset, and in its first tenth, or its first day in a window a day long or longer, unless it is over already |
 
 `forecast`:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `percent` | number | the window's `percent` plus `pace` times the hours from the reading to the reset, as a whole percent up to `999`. With the `window` pace from the window's start, past its first tenth, that is `percent` divided by `elapsed`. Over 100 means demand is larger than the quota: the window runs out before it resets |
+| `percent` | number | the window's `percent` plus `pace` times the hours from the reading to the reset, as a whole percent up to `999`. With the `window` pace from the window's start, past its first tenth or day, that is `percent` divided by `elapsed`. Over 100 means demand is larger than the quota: the window runs out before it resets |
 | `elapsed` | number | the share of the window that had passed at the reading, from 0 to 1. The window began at `resets_at` minus its length, which is `minutes`, else the length its name starts with, such as `5h` or `7d` |
 | `runs_out_at` | time | when the window reaches 100% at that pace, when the forecast is over 100 before it is rounded and the window is not full yet; `null` otherwise. A forecast of exactly 100 runs out at the reset, and has none |
-| `basis` | string | the pace taken: `window`, the average since the window began, or since its last reading at 0% after that, over a tenth of the window at least: what was used in less counts as used over that tenth; or `recent`, the least-squares slope of its readings of the last 24 hours, when they span a tenth of the window, at least an hour and at most 20 hours, and it is faster. A report from an earlier release has none: read it as `window` |
+| `basis` | string | the pace taken: `window`, the average since the window began, or since its last reading at 0% after that, over a tenth of the window at least, and a day at least in a window a day long or longer: what was used in less counts as used over those hours; or `recent`, what its readings gained from the newest one a day old or older, else the oldest, to the reading, over the hours between them, when those are as many and it is faster. A report from an earlier release has none: read it as `window` |
 | `pace` | number | that pace, in percent of the window an hour |
+| `stopped` | bool | `runs_out_at` has passed, and nobody on the team spent on the account since, by its `last_active_at`: at that pace the window would have run out then, but nothing says it did. Its `state` stays `over`. Absent when `false`. A reader that does not know it says the window ran out |
 
 The readings are this device's samples and the team's reads of the last 2 days, of the same window and reset, and the reading itself; a drop of more than 2 points between two starts them again. The average includes nights and weekends, so one busy hour does not raise an alarm, and the recent pace catches a window that fills faster.
 
@@ -213,7 +214,7 @@ The readings are this device's samples and the team's reads of the last 2 days, 
 | `tight` | its forecast is 85% to 99% |
 | `ok` | its forecast is 50% to 84% |
 | `under` | its forecast is below 50% |
-| `unknown` | there is no forecast: no reading, a window that has reset since it was read or that the reading does not cover, an unknown length or reset time, or less than a tenth of the window gone and not over |
+| `unknown` | there is no forecast: no reading, a window that has reset since it was read or that the reading does not cover, an unknown length or reset time, or less than a tenth of the window gone, or a day of a window a day long or longer, and not over |
 
 ### projects
 
@@ -394,6 +395,7 @@ A cell:
 - Weighted tokens, in v0.4.0: `burn` beside every `usage`, with `burn_days`, `window_burn`, and `burn_share` beside `days`, `window_tokens`, and `share`; `fresh` and `transcript_gaps` on this device's accounts, `fresh` and `active_sessions` on projects, and `covered_since` on a provider. On the team, `estimated`, `held_back_by`, and `estimated_reason`; `burn_estimated` on devices, accounts, and rows; and on a device `last_error_at`, `gap`, `replaced_by`, and `limitations`, and on an account `no_reading` and `outside`. This device's own `burn` counts local periods, as the conventions at the top say. Lists are now ordered by weighted tokens. No field changed meaning, so the version stays 4. A report from an earlier release has no weighted tokens: `ai-usage report --from` gives each object whose `burn` is all zero and `usage` is not its `usage` as `burn`, and its `days`, `share`, and `window_tokens` as `burn_days`, `burn_share`, and `window_burn`, marks the team devices, team accounts, and matrix rows it filled `burn_estimated` and the team `estimated`, with `estimated_reason` saying the report was saved by an earlier release, gives each project its `sessions` as `active_sessions` in every period, and titles this device's PROJECTS and USAGE in tokens in+out.
 - Quota cycles, in v0.5.0: `utilization` on a team account, and `cycles_held_back_by` and `cycles_reason` on the team. A report from an earlier release has none: read a missing `utilization` as `[]`, and a missing `cycles_held_back_by` and `cycles_reason` as `[]` and `null`, as `ai-usage report --from` fills them in. No field changed meaning, so the version stays 4.
 - `subject` and `text` on every `attention` entry, `note` on a team device, and the `idle` kind in `attention`, so that a reader can show what the console says instead of wording it again. The `unknown` account's `no_reading` now says where nobody is logged in, and what to do. A report from an earlier release has no `subject`, `text`, or `note`, and no `idle` entry; `ai-usage report --from` fills in the first three, with clocks in the time zone it runs in. No field changed meaning, so the version stays 4.
+- `stopped` on a forecast, for a run-out time that has passed with nobody on the team spending on the account since. The `over` entry's `text` then says the window would run out then, and the entry has `reading_age_seconds` however old the reading is. `recent` in `basis` is now the readings' gain since the newest one a day old, in place of their least-squares slope: still the last day's pace. A report from an earlier release has no `stopped`; `ai-usage report --from` fills it in. No field changed meaning, so the version stays 4.
 - `folders` on a project. A project is now a git repository, with its subfolders and linked worktrees, where each working folder was one; `path` is the project's folder, and `folders` says how many working folders count under it. A report from an earlier release has a project for each working folder and no `folders`: read a missing one as `1`, as `ai-usage report --from` fills it in. Every field keeps its type, and a project's numbers still sum its sessions, so the version stays 4.
 
 ## Example
