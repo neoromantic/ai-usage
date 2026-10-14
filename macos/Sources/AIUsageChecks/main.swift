@@ -241,6 +241,31 @@ equal("stale verdict", [ranOutVerdict.title, ranOutVerdict.subline, ranOutVerdic
       ["Claude mira · Fable ran out ~Thu 05:18", "2d 19h before its reset · reading 1d 12h old · +1 more", "reading 1d 12h old · +1 more"])
 equal("stale verdict compact", [ranOutVerdict.compactTitle, ranOutVerdict.compactSubline],
       ["Claude mira · Fable ran out", "~Thu 05:18 · reading 1d 12h old · +1 more"])
+// A run-out that passed with nobody spending on the account since did not
+// happen: the report says it would have run out then. An app before the
+// report said so says it ran out, as above.
+func stopping(_ json: Any, _ windows: Set<String>) -> Any {
+    objects(json) { o in
+        guard windows.contains(o["name"] as? String ?? ""), var f = o["forecast"] as? [String: Any], f["runs_out_at"] is String else { return o }
+        f["runs_out_at"] = "2026-09-24T03:18:00Z"
+        f["stopped"] = true
+        return o.merging(["forecast": f]) { $1 }
+    }
+}
+let wouldRunOut = try edited("solo.json") { json in
+    var o = stopping(json, ["7d Fable"]) as! [String: Any]
+    var attention = o["attention"] as! [[String: Any]]
+    attention[0]["at"] = "2026-09-24T03:18:00Z"
+    attention[0]["reading_age_seconds"] = 129_600
+    o["attention"] = attention
+    return o
+}
+check("stopped forecast", wouldRunOut.window(of: wouldRunOut.attention[0])?.forecast?.stopped == true && solo.window(of: solo.attention[0])?.forecast?.stopped == false)
+let wouldRunOutVerdict = Verdict(wouldRunOut, now: wouldRunOut.generatedAt, timeZone: berlin)
+equal("would run out verdict", [wouldRunOutVerdict.title, wouldRunOutVerdict.subline],
+      ["Claude mira · Fable would run out ~Thu 05:18", "2d 19h before its reset · reading 1d 12h old · +1 more"])
+equal("would run out verdict compact", [wouldRunOutVerdict.compactTitle, wouldRunOutVerdict.compactSubline],
+      ["Claude mira · Fable would run out", "~Thu 05:18 · reading 1d 12h old · +1 more"])
 let calm = try edited("team.json") { json in
     var o = json as! [String: Any]
     o["attention"] = (o["attention"] as! [[String: Any]]).filter { !["out", "over", "tight"].contains($0["kind"] as? String) }
@@ -318,6 +343,11 @@ let sameRunOut = try edited("solo.json") { objects($0) { o in
     return o.merging(["forecast": f]) { $1 }
 } }
 equal("run-out tie goes to the shown window", runOut(sameRunOut, "claude", "mira@studio.dev")?.window.name, "7d")
+// A run-out nobody spent on since counts only when no other window runs
+// out.
+equal("a run-out that runs out first", runOut(wouldRunOut, "claude", "mira@studio.dev").map { "\($0.window.name) \($0.stopped)" }, "7d false")
+equal("a run-out that would have", runOut(try edited("solo.json") { stopping($0, ["7d", "7d Fable"]) }, "claude", "mira@studio.dev")
+    .map { "\($0.window.name) \($0.stopped)" }, "7d true")
 
 // Two reports of the same team: one as v0.3.4 printed it, with no
 // weighted tokens, and one as v0.4.0 prints it, with every field it added.
@@ -476,6 +506,10 @@ equal("over notice's reset", teamNotices.last?.resetsAt, time("2026-09-26T23:00:
 equal("over notice's run-out", teamNotices.last?.runsOutAt, time("2026-09-26T09:12:45.6Z"))
 equal("solo notices", WindowNotice.notices(solo, always, now: solo.generatedAt, timeZone: berlin).map(\.title),
       ["Claude mira · 7d Fable runs out ~Thu 23:55", "Claude mira · 7d runs out ~Sat 12:46"])
+// Nothing new happened to a window that would have run out with nobody
+// spending since.
+equal("no notice of what would have run out", WindowNotice.notices(wouldRunOut, always, now: wouldRunOut.generatedAt, timeZone: berlin).map(\.title),
+      ["Claude mira · 7d runs out ~Sat 12:46"])
 let atReset = try edited("team.json") { json in
     var o = json as! [String: Any]
     o["attention"] = [["kind": "over", "provider": "claude", "account": "mira@studio.dev", "name": "mira", "resets_at": "2026-09-26T23:00:00Z",

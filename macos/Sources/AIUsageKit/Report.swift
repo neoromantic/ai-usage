@@ -352,6 +352,10 @@ public struct Forecast: Decodable, Sendable {
     @Absent public var basis: String?
     /// That pace, in percent of the window an hour.
     @Absent public var pace: Double?
+    /// Whether runsOutAt has passed with no spend on the account since: the
+    /// window would have run out then at that pace, but nothing says it
+    /// did. False from an ai-usage that does not say.
+    @Absent public var stopped: Bool
 }
 
 /// Tokens in the report's four periods: input plus output as `usage`,

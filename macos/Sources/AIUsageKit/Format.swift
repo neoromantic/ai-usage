@@ -175,6 +175,15 @@ extension Report {
     public func teamDevice(named label: String) -> TeamDevice? {
         team.devices.first { $0.label == label }
     }
+
+    /// The window an attention entry is about: the one it names, else its
+    /// account's main one.
+    public func window(of a: Attention) -> Quota.Window? {
+        guard let provider = a.provider, let label = a.account,
+              let quota = teamAccount(provider: provider, label: label)?.quota else { return nil }
+        let name = a.window ?? quota.main?.name
+        return quota.windows.first { $0.name == name }
+    }
 }
 
 /// What a list shows of an item's tokens, and the words for them: the

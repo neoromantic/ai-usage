@@ -94,9 +94,10 @@ public struct WindowNotice: Equatable, Sendable {
     public var thread: String { "\(provider)/\(label)" }
 
     /// The notices the report's attention calls for, of those the settings
-    /// ask for: each window that is out or runs out before its reset, in
-    /// the report's order, of the subscriptions logged in on this Mac or of
-    /// the whole team. A team's notice says which device uses the account
+    /// ask for: each window that is out or runs out before its reset, but
+    /// not one that would have run out with nobody spending since, in the
+    /// report's order, of the subscriptions logged in on this Mac or of the
+    /// whole team. A team's notice says which device uses the account
     /// most, as Limits does.
     public static func notices(_ r: Report, _ settings: NoticeSettings = NoticeSettings(), now: Date,
                                timeZone: TimeZone = .current) -> [WindowNotice] {
@@ -114,6 +115,9 @@ public struct WindowNotice: Equatable, Sendable {
             // The report names the window only when it is not the main one.
             let name = a.window ?? account.quota?.main?.name ?? ""
             let window = account.quota?.windows.first { $0.name == name }
+            // A window whose run-out passed with nobody spending since did
+            // not run out, and nothing is new to say of it.
+            if kind == .over && window?.forecast?.stopped == true { return nil }
             let subject = Format.provider(provider) + " " + (a.name ?? label) + (name.isEmpty ? "" : " · " + name)
             let title: String
             var parts: [String] = []
