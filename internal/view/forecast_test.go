@@ -92,45 +92,62 @@ func TestForecastRunsOutAtRoundedHundred(t *testing.T) {
 }
 
 func TestForecastCapsAt999(t *testing.T) {
-	reset := now.Add(week - time.Hour)
-	if w := readWindow(week7(95, reset), now, now, nil); w.State != StateOver || w.Forecast.Percent != MaxForecast {
+	// 95% of a 5-hour window in its first minute counts as used over its
+	// first half hour: over ten times the window.
+	five := now.Add(5*time.Hour - time.Minute)
+	if w := readWindow(snapshot.Window{Name: "5h", Percent: 95, Minutes: 300, ResetsAt: &five}, now, now, nil); w.State != StateOver || w.Forecast.Percent != MaxForecast {
 		t.Fatalf("forecast = %s %+v", w.State, w.Forecast)
 	}
-	// At the very start of a window, what was used counts as used over its
-	// first tenth: 1% is too early to say, 10% is over.
-	if w := readWindow(week7(1, now.Add(week)), now, now, nil); w.State != StateUnknown || w.Forecast != nil {
-		t.Fatalf("1%% at the start = %s %+v", w.State, w.Forecast)
+	// At the very start of a week, what was used counts as used over its
+	// first day: 12% is too early to say, 13% is over.
+	if w := readWindow(week7(12, now.Add(week)), now, now, nil); w.State != StateUnknown || w.Forecast != nil {
+		t.Fatalf("12%% at the start = %s %+v", w.State, w.Forecast)
 	}
-	if w := readWindow(week7(10, now.Add(week)), now, now, nil); w.State != StateOver || w.Forecast.Percent != 110 {
-		t.Fatalf("10%% at the start = %s %+v", w.State, w.Forecast)
+	if w := readWindow(week7(13, now.Add(week)), now, now, nil); w.State != StateOver || w.Forecast.Percent != 104 {
+		t.Fatalf("13%% at the start = %s %+v", w.State, w.Forecast)
 	}
 }
 
-func TestForecastInTheFirstTenth(t *testing.T) {
-	// 5% into the week. What was used counts as used over its first tenth:
-	// the forecast is used × 10.5.
+// A week's forecast shows once a day of it has passed, a night as well as
+// a working day; before, only one over already does.
+func TestForecastInTheFirstDay(t *testing.T) {
+	// 5% into the week, 8.4 hours. What was used counts as used over its
+	// first day: the forecast is used × 183.6 ÷ 24.
 	reset := now.Add(time.Duration(0.95 * float64(week)))
 	for _, c := range []struct {
 		used  float64
 		state string
 	}{
-		{3, StateUnknown}, // 32%: too early to say
-		{5, StateUnknown}, // 53%
-		{9, StateUnknown}, // 95%
-		{10, StateOver},   // 105%: over already
+		{3, StateUnknown},  // 23%: too early to say
+		{9, StateUnknown},  // 69%
+		{13, StateUnknown}, // 99%
+		{14, StateOver},    // 107%: over already
 		{100, StateOut},
 	} {
 		w := readWindow(week7(c.used, reset), now, now, nil)
 		if w.State != c.state {
-			t.Errorf("%v%% used in the first tenth: %s, want %s", c.used, w.State, c.state)
+			t.Errorf("%v%% used in the first day: %s, want %s", c.used, w.State, c.state)
 		}
 		if c.state == StateUnknown && w.Forecast != nil {
-			t.Errorf("%v%% used in the first tenth: forecast %+v", c.used, w.Forecast)
+			t.Errorf("%v%% used in the first day: forecast %+v", c.used, w.Forecast)
 		}
 	}
-	// A tenth in, the forecast shows.
-	if w := readWindow(week7(3, now.Add(time.Duration(0.9*float64(week)))), now, now, nil); w.State != StateUnder || w.Forecast.Percent != 30 {
+	// A tenth of the week is not a day: 13% in 16.8 hours, 130% at that
+	// pace, is 95% over a day.
+	if w := readWindow(week7(13, now.Add(time.Duration(0.9*float64(week)))), now, now, nil); w.State != StateUnknown || w.Forecast != nil {
 		t.Fatalf("a tenth in: %s %+v", w.State, w.Forecast)
+	}
+	// A day in, the forecast shows.
+	if w := readWindow(week7(3, now.Add(week-24*time.Hour)), now, now, nil); w.State != StateUnder || w.Forecast.Percent != 21 {
+		t.Fatalf("a day in: %s %+v", w.State, w.Forecast)
+	}
+	// A window a day long never has a day behind it: its forecast shows
+	// once it is over, half of it used in its first 12 hours is 75%.
+	day := now.Add(12 * time.Hour)
+	for pct, want := range map[float64]string{50: StateUnknown, 70: StateOver} {
+		if w := readWindow(snapshot.Window{Name: "1d", Percent: pct, Minutes: 24 * 60, ResetsAt: &day}, now, now, nil); w.State != want {
+			t.Errorf("a day-long window at %v%%: %s %+v, want %s", pct, w.State, w.Forecast, want)
+		}
 	}
 }
 
@@ -355,13 +372,15 @@ func pt(at time.Time, pct float64, reset time.Time) pacePoint {
 
 // A week left idle at first, then used fast: the average since the week
 // began says tight, but the pace since it was idle, and faster still the
-// pace of the last day, runs it out a day before the reset.
+// pace since the reading a day before, runs it out most of a day before
+// the reset.
 func TestForecastFromTheRecentPace(t *testing.T) {
 	open := time.Date(2026, 9, 21, 15, 0, 0, 0, time.UTC) // a Monday
 	reset := open.Add(week)
 	at := time.Date(2026, 9, 27, 12, 14, 0, 0, time.UTC)
 	pts := []pacePoint{
 		pt(time.Date(2026, 9, 25, 22, 30, 0, 0, time.UTC), 0, reset),
+		pt(time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC), 13, reset),
 		pt(time.Date(2026, 9, 26, 12, 30, 0, 0, time.UTC), 14, reset),
 		pt(time.Date(2026, 9, 26, 22, 15, 0, 0, time.UTC), 29, reset),
 		pt(time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC), 79, reset),
@@ -374,8 +393,9 @@ func TestForecastFromTheRecentPace(t *testing.T) {
 	if w.State != StateOver || f.Percent <= 100 || f.Basis != BasisRecent || f.RunsOutAt == nil || !f.RunsOutAt.Before(reset) {
 		t.Fatalf("with the readings: %s %+v", w.State, f)
 	}
-	// 2.9 points an hour: the 20 left go in under 7 hours.
-	if f.Pace < 2.8 || f.Pace > 3 || f.RunsOutAt.Sub(at) > 7*time.Hour || f.Percent != math.Round(80+f.Pace*reset.Sub(at).Hours()) {
+	// 67 points in the 24¼ hours since 12:00 the day before, 2.8 an hour:
+	// the 20 left go in under 8 hours.
+	if math.Abs(f.Pace-67/at.Sub(pts[1].At).Hours()) > 1e-9 || f.RunsOutAt.Sub(at) > 8*time.Hour || f.Percent != math.Round(80+f.Pace*reset.Sub(at).Hours()) {
 		t.Fatalf("pace %v, runs out at %v, forecast %v", f.Pace, f.RunsOutAt, f.Percent)
 	}
 	// The share of the week gone stays the week's.
@@ -426,18 +446,31 @@ func TestForecastEarlyInAWeekIsNotOver(t *testing.T) {
 	if w := readWindow(week7(1, reset), now, now, pts); w.State != StateUnknown || w.Forecast != nil {
 		t.Fatalf("40 minutes' use: %s %+v", w.State, w.Forecast)
 	}
+	// A burst of 13 points in the first 8 hours, then nothing until the
+	// 20th: 120% over the 18 hours since the last reading at 0%, and as
+	// much at the pace of the readings since, but that is a working day,
+	// not a day and a night: 93% over a day, too early to say.
+	reset = now.Add(week - 20*time.Hour)
+	open = reset.Add(-week)
+	pts = []pacePoint{pt(open.Add(5*time.Minute), 0, reset), pt(open.Add(2*time.Hour), 0, reset)}
+	for h, pct := range []float64{5, 10, 13, 13, 13, 13, 13, 13} {
+		pts = append(pts, pt(open.Add(time.Duration(4+2*h)*time.Hour), pct, reset))
+	}
+	if w := readWindow(week7(13, reset), now, now, pts); w.State != StateUnknown || w.Forecast != nil {
+		t.Fatalf("a burst in the first 20 hours: %s %+v", w.State, w.Forecast)
+	}
 	// 30% of the week used by its 12th hour is over: it runs out in
-	// 100 ÷ 30 × 16.8 hours from 16.8 hours before the reading.
+	// 100 ÷ 30 × 24 hours from a day before the reading.
 	reset = now.Add(week - 12*time.Hour)
 	w := readWindow(week7(30, reset), now, now, nil)
-	if f := w.Forecast; w.State != StateOver || f.Percent != 309 || f.Basis != BasisWindow || f.RunsOutAt == nil || f.RunsOutAt.Sub(now).Round(time.Minute) != 39*time.Hour+12*time.Minute {
+	if f := w.Forecast; w.State != StateOver || f.Percent != 225 || f.Basis != BasisWindow || f.RunsOutAt == nil || f.RunsOutAt.Sub(now) != 56*time.Hour {
 		t.Fatalf("a heavy start: %s %+v", w.State, f)
 	}
 }
 
-// A window that sat at 0% past its first tenth fills from its last reading
-// at 0%, over a tenth of the window at least: 2 points read 20 minutes
-// after it are not 6 points an hour.
+// A window that sat at 0% past its first day fills from its last reading
+// at 0%, over a day at least: 2 points read 20 minutes after it are not 6
+// points an hour.
 func TestForecastRightAfterAnIdleStretch(t *testing.T) {
 	reset := now.Add(time.Duration(0.75 * float64(week))) // a quarter of the week gone
 	pts := []pacePoint{
@@ -446,34 +479,84 @@ func TestForecastRightAfterAnIdleStretch(t *testing.T) {
 		pt(now.Add(-40*time.Minute), 0, reset),
 		pt(now.Add(-20*time.Minute), 0, reset),
 	}
-	// 2 points over 16.8 hours, 126 hours before the reset: 17%.
+	// 2 points over 24 hours, 126 hours before the reset: 13%.
 	w := readWindow(week7(2, reset), now, now, pts)
-	if f := w.Forecast; w.State != StateUnder || f.Percent != 17 || f.Basis != BasisWindow || math.Abs(f.Pace-2/16.8) > 1e-9 {
+	if f := w.Forecast; w.State != StateUnder || f.Percent != 13 || f.Basis != BasisWindow || math.Abs(f.Pace-2.0/24) > 1e-9 {
 		t.Fatalf("after an idle stretch: %s %+v", w.State, f)
 	}
 }
 
-// The last day's pace needs readings that span a tenth of the window, an
-// hour at least: a weekly window's needs 16.8 hours of them, so a device
-// that slept through the night does not take its morning for the pace.
-func TestRecentPaceNeedsATenthOfTheWindow(t *testing.T) {
+// The last day's pace runs from the newest reading a day old, and needs
+// its readings to span the window's minSpan: a weekly window's a day, so
+// neither a device that slept through the night nor a working day reads
+// as the pace of the week.
+func TestRecentPaceNeedsADay(t *testing.T) {
 	reset := now.Add(3 * 24 * time.Hour) // 4 days of the week gone
-	// 14 points in 14 hours: too short a span, so the week's average.
-	w := readWindow(week7(24, reset), now, now, []pacePoint{pt(now.Add(-14*time.Hour), 10, reset)})
-	if f := w.Forecast; w.State != StateUnder || f.Basis != BasisWindow || f.Percent != 42 {
-		t.Fatalf("14 hours of readings: %s %+v", w.State, f)
+	// 20 points in 20 hours: too short a span, so the week's average.
+	w := readWindow(week7(30, reset), now, now, []pacePoint{pt(now.Add(-20*time.Hour), 10, reset)})
+	if f := w.Forecast; w.State != StateOK || f.Basis != BasisWindow || f.Percent != 53 {
+		t.Fatalf("20 hours of readings: %s %+v", w.State, f)
 	}
-	// 17 points in 17 hours: 1 an hour, 72 more by the reset.
-	w = readWindow(week7(24, reset), now, now, []pacePoint{pt(now.Add(-17*time.Hour), 7, reset)})
-	if f := w.Forecast; w.State != StateTight || f.Basis != BasisRecent || f.Percent != 96 {
-		t.Fatalf("17 hours of readings: %s %+v", w.State, f)
+	// 24 points in 24 hours: 1 an hour, 72 more by the reset.
+	w = readWindow(week7(30, reset), now, now, []pacePoint{pt(now.Add(-24*time.Hour), 6, reset)})
+	if f := w.Forecast; w.State != StateOver || f.Basis != BasisRecent || f.Percent != 102 {
+		t.Fatalf("a day of readings: %s %+v", w.State, f)
 	}
-	// A 5-hour window's pace needs an hour of readings, as it did.
+	// From the newest reading a day old or older: 25 points in 25 hours.
+	pts := []pacePoint{pt(now.Add(-30*time.Hour), 1, reset), pt(now.Add(-25*time.Hour), 5, reset), pt(now.Add(-12*time.Hour), 20, reset)}
+	w = readWindow(week7(30, reset), now, now, pts)
+	if f := w.Forecast; f.Basis != BasisRecent || f.Pace != 1 || f.Percent != 102 {
+		t.Fatalf("readings of 30 hours: %s %+v", w.State, f)
+	}
+	// A 5-hour window's pace needs a tenth of it: half an hour of
+	// readings, 20 points an hour, 60 more by the reset.
 	five := now.Add(3 * time.Hour)
-	pts := []pacePoint{{At: now.Add(-time.Hour), Window: "5h", ResetsAt: &five, Percent: 10}}
-	w = readWindow(snapshot.Window{Name: "5h", Percent: 30, Minutes: 300, ResetsAt: &five}, now, now, pts)
-	if f := w.Forecast; w.State != StateTight || f.Basis != BasisRecent || f.Percent != 90 {
-		t.Fatalf("an hour of a 5-hour window: %s %+v", w.State, f)
+	reading := snapshot.Window{Name: "5h", Percent: 30, Minutes: 300, ResetsAt: &five}
+	pts = []pacePoint{{At: now.Add(-30 * time.Minute), Window: "5h", ResetsAt: &five, Percent: 20}}
+	if f := readWindow(reading, now, now, pts).Forecast; f.Basis != BasisRecent || f.Percent != 90 {
+		t.Fatalf("half an hour of a 5-hour window: %+v", f)
+	}
+	// 20 minutes are too few: the window's average, 30% in 2 hours.
+	pts = []pacePoint{{At: now.Add(-20 * time.Minute), Window: "5h", ResetsAt: &five, Percent: 22}}
+	if f := readWindow(reading, now, now, pts).Forecast; f.Basis != BasisWindow || f.Percent != 75 {
+		t.Fatalf("20 minutes of a 5-hour window: %+v", f)
+	}
+}
+
+// A burst and then a plateau within the last day is the day's pace from
+// its first reading to its last, not the slope of a line through them,
+// which a step in the middle of the day makes half as steep again.
+func TestRecentPaceOfABurstThenAPlateau(t *testing.T) {
+	reset := now.Add(2 * 24 * time.Hour) // 5 days of the week gone
+	var pts []pacePoint
+	for h := 26; h > 0; h-- {
+		pct := 45.0
+		if h <= 12 {
+			pct = 60
+		}
+		pts = append(pts, pt(now.Add(-time.Duration(h)*time.Hour), pct, reset))
+	}
+	// 15 points in the 24 hours since the reading a day before: 0.625 an
+	// hour, 30 more by the reset, against the week's 84%.
+	w := readWindow(week7(60, reset), now, now, pts)
+	if f := w.Forecast; w.State != StateTight || f.Basis != BasisRecent || f.Pace != 0.625 || f.Percent != 90 || f.RunsOutAt != nil {
+		t.Fatalf("a burst then a plateau: %s %+v", w.State, f)
+	}
+}
+
+// Readings at a steady pace give the forecast they always did: the pace
+// from the first reading of the day to the last is the pace of every one.
+func TestRecentPaceOfSteadyReadings(t *testing.T) {
+	reset := now.Add(3 * 24 * time.Hour) // 4 days of the week gone
+	// 0.8 points an hour for the last 2 days, a reading every 15 minutes,
+	// after 20 points before.
+	var pts []pacePoint
+	for m := 48 * 60; m > 0; m -= 15 {
+		pts = append(pts, pt(now.Add(-time.Duration(m)*time.Minute), 20+0.8*float64(48*60-m)/60, reset))
+	}
+	w := readWindow(week7(58.4, reset), now, now, pts)
+	if f := w.Forecast; w.State != StateOver || f.Basis != BasisRecent || math.Abs(f.Pace-0.8) > 1e-9 || f.Percent != 116 || f.RunsOutAt == nil || f.RunsOutAt.Sub(now).Round(time.Minute) != 52*time.Hour {
+		t.Fatalf("steady readings: %s %+v", w.State, f)
 	}
 }
 
@@ -483,27 +566,47 @@ func TestForecastAfterADrop(t *testing.T) {
 	reset := now.Add(3 * 24 * time.Hour)
 	pts := []pacePoint{
 		pt(now.Add(-40*time.Hour), 60, reset),
-		pt(now.Add(-30*time.Hour), 67, reset),
-		pt(now.Add(-20*time.Hour), 10, reset),
-		pt(now.Add(-10*time.Hour), 14, reset),
+		pt(now.Add(-34*time.Hour), 67, reset),
+		pt(now.Add(-28*time.Hour), 4, reset),
+		pt(now.Add(-14*time.Hour), 11, reset),
 	}
 	series := paceSeries(week7(18, reset), now, pts)
 	var got []float64
 	for _, p := range series {
 		got = append(got, p.Percent)
 	}
-	if !reflect.DeepEqual(got, []float64{10, 14, 18}) {
+	if !reflect.DeepEqual(got, []float64{4, 11, 18}) {
 		t.Fatalf("series = %v", got)
 	}
-	// 0.4 points an hour since the drop, faster than the week's average.
+	// 0.5 points an hour since the drop, faster than the week's average.
 	w := readWindow(week7(18, reset), now, now, pts)
-	if f := w.Forecast; f.Basis != BasisRecent || math.Abs(f.Pace-0.4) > 1e-9 || f.Percent != 47 {
+	if f := w.Forecast; f.Basis != BasisRecent || math.Abs(f.Pace-0.5) > 1e-9 || f.Percent != 54 {
 		t.Fatalf("after the drop: %+v", f)
 	}
 }
 
+// A window that sat at 0% until a day or more ago has one pace since: the
+// recent pace starts at the reading the average starts at, and the forecast
+// takes the window's, whatever the rounding.
+func TestRecentPaceFromTheLastZero(t *testing.T) {
+	reset := now.Add(5 * 24 * time.Hour)
+	for idle := 25; idle <= 40; idle++ {
+		for used := 1.0; used <= 30; used++ {
+			pts := []pacePoint{
+				pt(now.Add(-47*time.Hour), 0, reset),
+				pt(now.Add(-time.Duration(idle)*time.Hour), 0, reset),
+				pt(now.Add(-12*time.Hour), used/2, reset),
+			}
+			w := readWindow(week7(used, reset), now, now, pts)
+			if f := w.Forecast; f == nil || f.Basis != BasisWindow {
+				t.Fatalf("%v%% %dh after the last 0%%: %+v", used, idle, f)
+			}
+		}
+	}
+}
+
 // Only readings of the window's current period count, one per time, and
-// the pace needs an hour of them.
+// the pace needs the span asked of them.
 func TestPaceSeries(t *testing.T) {
 	reset := now.Add(3 * 24 * time.Hour)
 	other := reset.Add(-week)
@@ -519,15 +622,15 @@ func TestPaceSeries(t *testing.T) {
 	if len(series) != 2 || series[0].Percent != 10 || !series[1].At.Equal(now) {
 		t.Fatalf("series = %+v", series)
 	}
-	if _, ok := recentSlope(series[:1], now, slopeMin); ok {
-		t.Fatal("a slope from one reading")
+	if _, ok := recentPace(series[:1], now, time.Hour); ok {
+		t.Fatal("a pace from one reading")
 	}
-	if _, ok := recentSlope([]pacePoint{pt(now.Add(-50*time.Minute), 10, reset), pt(now, 12, reset)}, now, slopeMin); ok {
-		t.Fatal("a slope from 50 minutes")
+	if _, ok := recentPace([]pacePoint{pt(now.Add(-50*time.Minute), 10, reset), pt(now, 12, reset)}, now, time.Hour); ok {
+		t.Fatal("a pace from 50 minutes")
 	}
 	// A pace that falls is no pace.
-	if s, ok := recentSlope([]pacePoint{pt(now.Add(-2*time.Hour), 14, reset), pt(now, 13, reset)}, now, slopeMin); !ok || s != 0 {
-		t.Fatalf("falling slope = %v %v", s, ok)
+	if s, ok := recentPace([]pacePoint{pt(now.Add(-2*time.Hour), 14, reset), pt(now, 13, reset)}, now, time.Hour); !ok || s != 0 {
+		t.Fatalf("falling pace = %v %v", s, ok)
 	}
 }
 
@@ -541,10 +644,10 @@ func TestBuildForecastsFromSamplesAndHistory(t *testing.T) {
 	sample := func(at time.Time, pct float64) state.Sample {
 		return state.Sample{At: at, Accounts: []state.SampleAccount{{Provider: "claude", Label: "ann@acme.dev", QuotaAt: tp(at), Windows: []snapshot.Window{week7(pct, reset)}}}}
 	}
-	f.in.Samples = []state.Sample{sample(now.Add(-18*time.Hour), 12), sample(now.Add(-9*time.Hour), 21)}
+	f.in.Samples = []state.Sample{sample(now.Add(-26*time.Hour), 4), sample(now.Add(-13*time.Hour), 17)}
 	r := withTeam(t, f)
 	for _, q := range []*Quota{findAccount(t, r, "claude", "ann@acme.dev").Quota, findTeamAccount(t, r, "claude", "ann@acme.dev").Quota} {
-		// 1 point an hour over the last 18 hours.
+		// 1 point an hour over the last 26 hours.
 		if m := mainWindow(q.Windows); m.Forecast.Basis != BasisRecent || math.Abs(m.Forecast.Pace-1) > 1e-9 || m.State != StateOver {
 			fc := m.Forecast
 			t.Fatalf("with samples: %+v", fc)
@@ -553,7 +656,7 @@ func TestBuildForecastsFromSamplesAndHistory(t *testing.T) {
 	// The team's reads hold another device's readings, spelled otherwise.
 	f.in.Samples = nil
 	f.in.Team.History = map[string][]collect.Point{collect.HistoryKey("claude", "Ann@Acme.dev"): {
-		{At: now.Add(-18 * time.Hour), Window: "7d", ResetsAt: &reset, Percent: 12},
+		{At: now.Add(-26 * time.Hour), Window: "7d", ResetsAt: &reset, Percent: 4},
 	}}
 	r = Build(f.in)
 	if fc := mainWindow(findTeamAccount(t, r, "claude", "ann@acme.dev").Quota.Windows).Forecast; fc.Basis != BasisRecent || math.Abs(fc.Pace-1) > 1e-9 {

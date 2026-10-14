@@ -471,9 +471,9 @@ let teamNotices = WindowNotice.notices(team, always, now: team.generatedAt, time
 equal("team notices", teamNotices.map { "\($0.kind) \($0.key)" }, ["out claude/mira@studio.dev/5h", "over claude/mira@studio.dev/7d"])
 equal("out notice", teamNotices.first.map { [$0.title, $0.body, $0.thread] }, ["Claude mira · 5h is out", "Back Thu 17:05 (in 1h 25m)", "claude/mira@studio.dev"])
 check("out notice's period", teamNotices.first?.resetsAt == time("2026-09-24T15:05:00Z") && teamNotices.first?.length == 5 * 3600)
-equal("over notice", teamNotices.last.map { [$0.title, $0.body] }, ["Claude mira · 7d runs out ~Sat 10:28", "14h 31m before its reset · resets Sun 01:00"])
+equal("over notice", teamNotices.last.map { [$0.title, $0.body] }, ["Claude mira · 7d runs out ~Sat 11:12", "13h 47m before its reset · resets Sun 01:00"])
 equal("over notice's reset", teamNotices.last?.resetsAt, time("2026-09-26T23:00:00Z"))
-equal("over notice's run-out", teamNotices.last?.runsOutAt, time("2026-09-26T08:28:35.1159618Z"))
+equal("over notice's run-out", teamNotices.last?.runsOutAt, time("2026-09-26T09:12:45.6Z"))
 equal("solo notices", WindowNotice.notices(solo, always, now: solo.generatedAt, timeZone: berlin).map(\.title),
       ["Claude mira · 7d Fable runs out ~Thu 23:55", "Claude mira · 7d runs out ~Sat 12:46"])
 let atReset = try edited("team.json") { json in

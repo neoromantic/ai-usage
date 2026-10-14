@@ -53,47 +53,56 @@ const (
 	BasisRecent = "recent"
 )
 
-// The pace of the recent readings is the least-squares slope of those over
-// slopeSpan before the reading, when they span a tenth of the window, at
-// least slopeMin and at most slopeMax. A drop of more than dropPoints
-// between two readings of one period starts the series again: the provider
-// took use back.
+// The recent pace is the pace of the readings of the last recentSpan
+// before the reading, from the newest one that old or older on, when they
+// span the window's minSpan. A drop of more than dropPoints between two
+// readings of one period starts the series again: the provider took use
+// back.
 const (
-	slopeSpan  = 24 * time.Hour
-	slopeMin   = time.Hour
-	slopeMax   = 20 * time.Hour
+	recentSpan = 24 * time.Hour
 	dropPoints = 2
 )
+
+// minSpan is the shortest time either pace of a window that long is
+// measured over: a tenth of the window, and a day at least for a window of
+// a day or longer, so that its pace takes in a night as well as a working
+// day.
+func minSpan(length time.Duration) time.Duration {
+	if length >= recentSpan {
+		return max(length/10, recentSpan)
+	}
+	return length / 10
+}
 
 // forecast is how full w will be at its reset if it is used from its
 // reading on at its pace: the faster of its average since it began, or
 // since its last reading at 0% after that, and the pace of its readings of
-// the last day, pts with the reading itself. Either pace is measured over a
-// tenth of the window at least, so the first busy hours of a week do not
+// the last day, pts with the reading itself. Either pace is measured over
+// the window's minSpan at least, so the first busy hours of a week do not
 // read as the pace of the week. There is none without the window's length
-// and reset time, and none in its first tenth unless it is over already.
+// and reset time, and none in its first minSpan unless it is over already.
 func forecast(w snapshot.Window, at time.Time, pts []pacePoint) *Forecast {
 	start, ok := w.Start()
 	if !ok {
 		return nil
 	}
 	reset := *w.ResetsAt
-	tenth := w.Length() / 10
+	span := minSpan(w.Length())
 	elapsed := float64(at.Sub(start)) / float64(w.Length())
 	elapsed = min(max(elapsed, 0), 1)
 	used := max(w.Percent, 0)
 	series := paceSeries(w, at, pts)
 	// The average runs from the window's start, or from the last reading
 	// at 0% after it: a window left idle at first fills from there. It runs
-	// over a tenth of the window at least: what was used in less counts as
-	// used over that tenth.
+	// over the window's minSpan at least: what was used in less counts as
+	// used over that span.
 	from := start
 	for _, p := range series {
 		if p.Percent <= 0 && p.At.After(from) {
 			from = p.At
 		}
 	}
-	if early := at.Add(-tenth); from.After(early) {
+	if early := at.Add(-span); from.After(early) {
 		from = early
 	}
 	left := reset.Sub(at).Hours()
@@ -106,12 +115,14 @@ func forecast(w snapshot.Window, at time.Time, pts []pacePoint) *Forecast {
 		f.Pace = used / at.Sub(from).Hours()
 	}
 	raw := avg
-	need := min(max(tenth, slopeMin), slopeMax)
-	if slope, ok := recentSlope(series, at, need); ok && used+slope*left > avg {
-		raw, f.Pace, f.Basis = used+slope*left, slope, BasisRecent
+	// avg is used + f.Pace × left, so the faster pace gives the larger
+	// forecast. Comparing the paces keeps a tie the window's: from the last
+	// reading at 0%, both divide the same points by the same hours.
+	if pace, ok := recentPace(series, at, span); ok && pace > f.Pace {
+		raw, f.Pace, f.Basis = used+pace*left, pace, BasisRecent
 	}
 	f.Percent = min(math.Round(raw), MaxForecast)
-	if elapsed < 0.1 && f.Percent < 100 {
+	if at.Sub(start) < span && f.Percent < 100 {
 		return nil
 	}
 	// It runs out before its reset when the forecast is over 100% before it
@@ -170,33 +181,27 @@ func paceSeries(w snapshot.Window, at time.Time, pts []pacePoint) []pacePoint {
 	return out
 }
 
-// recentSlope is the pace of the readings of the slopeSpan before at, in
-// points an hour, at least 0: the least-squares slope of percent over time.
-// It is false when they span less than need.
-func recentSlope(series []pacePoint, at time.Time, need time.Duration) (float64, bool) {
-	var ps []pacePoint
-	for _, p := range series {
-		if !p.At.Before(at.Add(-slopeSpan)) {
-			ps = append(ps, p)
+// recentPace is the pace of the readings of the recentSpan before at, from
+// the newest one that old or older on, so that they can span a day: the
+// change from the first to the last over the time between, in points an
+// hour, at least 0. It is false when they span less than need.
+func recentPace(series []pacePoint, at time.Time, need time.Duration) (float64, bool) {
+	first := 0
+	for i, p := range series {
+		if !p.At.After(at.Add(-recentSpan)) {
+			first = i
 		}
 	}
-	if len(ps) < 2 || ps[len(ps)-1].At.Sub(ps[0].At) < need {
+	ps := series[first:]
+	if len(ps) < 2 {
 		return 0, false
 	}
-	var mx, my float64
-	for _, p := range ps {
-		mx += p.At.Sub(at).Hours()
-		my += p.Percent
+	a, b := ps[0], ps[len(ps)-1]
+	span := b.At.Sub(a.At)
+	if span < need {
+		return 0, false
 	}
-	n := float64(len(ps))
-	mx, my = mx/n, my/n
-	var sxy, sxx float64
-	for _, p := range ps {
-		x := p.At.Sub(at).Hours() - mx
-		sxy += x * (p.Percent - my)
-		sxx += x * x
-	}
-	return max(sxy/sxx, 0), true
+	return max((b.Percent-a.Percent)/span.Hours(), 0), true
 }
 
 // forecastState is the band a forecast falls in.
