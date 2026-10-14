@@ -10,6 +10,7 @@
 <a href="https://t.me/usualguy"><img alt="Telegram: @usualguy" src="https://img.shields.io/badge/Telegram-@usualguy-26A5E4?logo=telegram&logoColor=white"></a>
 
 <p>
+<a href="https://au.sergeybaus.com"><b>Website</b></a> ·
 <a href="#quick-start"><b>Quick start</b></a> ·
 <a href="#what-it-shows"><b>What it shows</b></a> ·
 <a href="#install"><b>Install</b></a> ·

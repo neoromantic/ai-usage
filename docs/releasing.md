@@ -25,6 +25,10 @@ Release builds check at every scheduled run, so every collector installs the rel
 
 A tag with a suffix, such as `v1.3.0-rc.1`, becomes a prerelease. GitHub's latest release skips prereleases, so the installers and self-update skip it too. Self-update also ignores any version that is not plain `vX.Y.Z`.
 
+## After a release
+
+Add the release to the changelog of the website, [au.sergeybaus.com](https://au.sergeybaus.com): it lives in the goodit repository, in `apps/au/app/releases.ts`, and `docs/au.md` there says how. Write it the way the release notes are written, shorter, for people who have not installed ai-usage yet, with made-up names only. Merging it to goodit's `main` deploys the site.
+
 ## Release files
 
 | File | Built for |
