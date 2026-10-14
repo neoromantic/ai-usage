@@ -17,9 +17,10 @@ var attentionOrder = []string{
 }
 
 // attention is what needs attention now, most urgent first: windows that
-// are out, will run out, or will end nearly full, windows someone outside
-// the team fills, devices that fail, subscriptions in use with no reading,
-// devices that are silent or were reinstalled, devices on an older
+// are out or will run out, those that would have run out had the team kept
+// spending on them, windows that will end nearly full, windows someone
+// outside the team fills, devices that fail, subscriptions in use with no
+// reading, devices that are silent or were reinstalled, devices on an older
 // release, windows past half that will be left mostly unused, and paid
 // subscriptions no team device uses.
 func attention(t Team, c Collector, now time.Time) []Attention {
@@ -31,6 +32,11 @@ func attention(t Team, c Collector, now time.Time) []Attention {
 		}
 		switch a.Kind {
 		case AttentionOut, AttentionOver, AttentionSilent, AttentionIdle:
+			// A window that would have run out, had the team kept
+			// spending, comes after those that run out.
+			if sa, sb := stopped(&t, a), stopped(&t, b); sa != sb {
+				return sb
+			}
 			if ta, tb := when(a), when(b); !sameTime(ta, tb) {
 				return before(ta, tb)
 			}
@@ -96,8 +102,9 @@ func quotaAttention(t Team, now time.Time) []Attention {
 				}
 				// A full window is not stale, as it stays full until it
 				// resets, but the provider can reset it early: an old
-				// reading of it says how old too.
-				if w.Stale || w.State == StateOut && now.Sub(w.ObservedAt) > StaleAfter {
+				// reading of it says how old too. So does one that would
+				// have run out since, had the team kept spending.
+				if w.Stale || w.State == StateOut && now.Sub(w.ObservedAt) > StaleAfter || w.Forecast != nil && w.Forecast.Stopped {
 					at.ReadingAge = int64(now.Sub(w.ObservedAt).Seconds())
 				}
 				switch {

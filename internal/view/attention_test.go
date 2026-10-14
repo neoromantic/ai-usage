@@ -127,6 +127,84 @@ func TestAttentionOverAtResetOrder(t *testing.T) {
 	}
 }
 
+// A window whose run-out time has passed did not run out when the team
+// last spent on it before that time: it would run out then at that pace,
+// and its line says so, with the reading's age, after the windows that run
+// out, however fresh the reading. One the team spent on since ran out, and
+// a full window is out until it resets.
+func TestAttentionWouldRunOut(t *testing.T) {
+	start := now.Add(-4 * 24 * time.Hour) // 4/7 of the week gone
+	read := now.Add(-30 * time.Hour)
+	// 80% 66 hours into the week, read 30 hours ago: 204% at that pace,
+	// which runs it out 13½ hours ago, Monday 22:30.
+	weekly := func(pct float64) *state.Quota {
+		return &state.Quota{At: read, Source: "cache", Windows: []snapshot.Window{week7(pct, start.Add(week))}}
+	}
+	st := emptyState()
+	// Spent an hour after the reading, and not since.
+	addAccount(st, "claude", "ann@acme.dev", true, weekly(80), 0)
+	spend(st, "claude", "ann@acme.dev", "/work/a", 1000, read.Add(time.Hour))
+	// Spent past its run-out time: it ran out.
+	addAccount(st, "codex", "bob@mail.test", false, weekly(80), 0)
+	spend(st, "codex", "bob@mail.test", "/work/b", 1000, now.Add(-2*time.Hour))
+	// Full, and not spent on since: out all the same.
+	addAccount(st, "claude", "kim@mail.test", false, weekly(100), 0)
+	// A 5-hour window read 3 hours ago, an hour and a half into it, at
+	// 49%, 163% at that pace: it would have run out at 10:33, but its last
+	// use came before the reading.
+	five := &state.Quota{At: now.Add(-3 * time.Hour), Source: "harness", Windows: []snapshot.Window{
+		{Name: "5h", Percent: 49, Minutes: 300, ResetsAt: tp(now.Add(30 * time.Minute))},
+	}}
+	addAccount(st, "codex", "lee@corp.test", false, five, 0)
+	spend(st, "codex", "lee@corp.test", "/work/l", 1000, now.Add(-200*time.Minute))
+	f := newFixture(t, st)
+	f.in.Loc = time.UTC
+	r := Build(f.in)
+
+	var got []string
+	for _, a := range r.Attention {
+		got = append(got, a.Kind+" "+a.Name+": "+a.Text)
+	}
+	want := []string{
+		"out kim: back Fri 12:00, in 3d · reading 1d old",
+		"over bob: ran out ~Mon 22:30 at this week's pace, 3d 13h before reset · reading 1d old",
+		"over ann: would run out ~Mon 22:30 at this week's pace, 3d 13h before reset · reading 1d old",
+		"over lee: would run out ~Tue 10:33 at this window's pace, 1h 56m before reset · reading 3h old",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("attention =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	stoppedOf := func(q *Quota) bool { return mainWindow(q.Windows).Forecast.Stopped }
+	for _, c := range []struct {
+		provider, label string
+		stopped         bool
+	}{{"claude", "ann@acme.dev", true}, {"codex", "bob@mail.test", false}, {"codex", "lee@corp.test", true}} {
+		team, own := findTeamAccount(t, r, c.provider, c.label), findAccount(t, r, c.provider, c.label)
+		if stoppedOf(team.Quota) != c.stopped || stoppedOf(own.Quota) != c.stopped {
+			t.Errorf("%s: stopped %v, %v on this device, want %v", c.label, stoppedOf(team.Quota), stoppedOf(own.Quota), c.stopped)
+		}
+		if w := mainWindow(team.Quota.Windows); w.State != StateOver {
+			t.Errorf("%s: %s, want over", c.label, w.State)
+		}
+	}
+	// A report saved before stopped has it filled in.
+	b, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var old Report
+	if err := json.Unmarshal([]byte(strings.ReplaceAll(string(b), `"stopped":true,`, "")), &old); err != nil {
+		t.Fatal(err)
+	}
+	if stoppedOf(findTeamAccount(t, old, "claude", "ann@acme.dev").Quota) {
+		t.Fatal("the saved report still has stopped")
+	}
+	Fill(&old)
+	if !stoppedOf(findTeamAccount(t, old, "claude", "ann@acme.dev").Quota) || !stoppedOf(findAccount(t, old, "claude", "ann@acme.dev").Quota) {
+		t.Fatal("Fill left stopped out")
+	}
+}
+
 // The header's failing relay and update check have their errors in
 // ATTENTION, as this device's, although the run that met them read every
 // source and counts as a success.

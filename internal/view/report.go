@@ -185,7 +185,8 @@ type Attention struct {
 	// Percent is an over, tight, or under window's forecast at its reset,
 	// or how many points an outside window rose.
 	Percent *float64 `json:"percent,omitempty"`
-	// ReadingAge is how old the reading is, in seconds, when it is stale.
+	// ReadingAge is how old the reading is, in seconds, when it is stale,
+	// or when an over window's forecast is Stopped.
 	ReadingAge int64 `json:"reading_age_seconds,omitempty"`
 	// Message is an error's text, the error a silent device last reported,
 	// why a subscription has no reading, the label of the device that
@@ -342,6 +343,10 @@ type Forecast struct {
 	// forecast is over 100% before it is rounded. At exactly 100% the
 	// window runs out at its reset, and this is nil.
 	RunsOutAt *time.Time `json:"runs_out_at"`
+	// Stopped says RunsOutAt has passed, and the team last spent on the
+	// account before it: the window would run out then at that pace, but
+	// nothing says it did.
+	Stopped bool `json:"stopped,omitempty"`
 	// Basis is the pace the forecast takes: "window", the average since the
 	// window began, or "recent", the pace since the newest reading a day
 	// old where it is faster.
