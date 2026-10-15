@@ -324,7 +324,7 @@ func TestTwoCopies(t *testing.T) {
 	if !st.Schedule.Registered || st.Schedule.Error != "another ai-usage at "+script+" also runs; remove it: rm "+script || cron.writes != 1 {
 		t.Fatalf("schedule %+v after %d crontab writes", st.Schedule, cron.writes)
 	}
-	if out := d.ok("status"); !strings.Contains(out, "registered with the system scheduler") || !strings.Contains(out, "also runs") {
+	if out := strings.Join(strings.Fields(d.ok("status")), " "); !strings.Contains(out, "registered with the system scheduler") || !strings.Contains(out, "also runs") {
 		t.Fatalf("status:\n%s", out)
 	}
 
