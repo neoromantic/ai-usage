@@ -251,3 +251,60 @@ func TestTeamPlanIsTheNewestAndPerDeviceIsByTokens(t *testing.T) {
 		t.Fatal("bob is current on this device")
 	}
 }
+
+// The team's today counts from this device's local midnight once every
+// device sends its hours, whichever UTC day each hour fell on, and the UTC
+// day while a device runs a release that sends none. 7d counts UTC days.
+func TestTeamTodayCountsFromLocalMidnight(t *testing.T) {
+	zone := func(name string) *time.Location {
+		loc, err := time.LoadLocation(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return loc
+	}
+	// now is 12:00 UTC: 05:00 in Los Angeles, whose day began at 07:00 UTC,
+	// and 21:00 in Tokyo, whose day began at 15:00 UTC yesterday. Each
+	// device spent at 16:00 UTC yesterday, and at 06:00 and 10:00 UTC.
+	at := []time.Time{now.Add(-20 * time.Hour), now.Add(-6 * time.Hour), now.Add(-2 * time.Hour)}
+	for _, c := range []struct {
+		name, zone, teammate string
+		local                bool
+		today                int64
+	}{
+		{"Los Angeles", "America/Los_Angeles", "v0.7.0", true, 10},
+		{"Tokyo", "Asia/Tokyo", "v0.7.0", true, 30},
+		{"UTC", "UTC", "v0.7.0", true, 20},
+		{"a teammate on v0.6.2", "Asia/Tokyo", "v0.6.2", false, 20},
+	} {
+		st := emptyState()
+		addAccount(st, "codex", "bob", true, nil, 0)
+		spend(st, "codex", "bob", "/w", 10, at...)
+		f := newFixture(t, st)
+		f.in.Loc = zone(c.zone)
+		other := emptyState()
+		addAccount(other, "codex", "bob", true, nil, 0)
+		spend(other, "codex", "bob", "/w", 10, at...)
+		doc := otherDoc(t, f.key, "d-other-device", "otherbox", now.Add(-time.Hour), other)
+		if doc.CollectorVersion = c.teammate; collect.BeforeHours(c.teammate) {
+			doc = doc.WithoutHours()
+		}
+		r := withTeam(t, f, doc)
+		if r.Team.TodayLocal != c.local {
+			t.Fatalf("%s: today_local = %v", c.name, r.Team.TodayLocal)
+		}
+		for _, d := range r.Team.Devices {
+			if want := (Usage{Today: c.today, Week: 30, Month: 30, Quarter: 30}); d.Usage != want || d.Burn != want {
+				t.Fatalf("%s: %s usage = %+v, burn %+v, want %+v", c.name, d.Label, d.Usage, d.Burn, want)
+			}
+		}
+		if bob := findTeamAccount(t, r, "codex", "bob"); bob.Burn.Today != 2*c.today {
+			t.Fatalf("%s: the account's today = %d", c.name, bob.Burn.Today)
+		}
+		// This device's row says what its USAGE says, while the team's today
+		// is local.
+		if own := findAccount(t, r, "codex", "bob").Burn.Today; c.local && own != c.today {
+			t.Fatalf("%s: USAGE today = %d", c.name, own)
+		}
+	}
+}

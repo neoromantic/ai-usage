@@ -86,7 +86,8 @@ func newFixture(t *testing.T, st *state.State) *fixture {
 	}
 	f := &fixture{key: key, in: Input{
 		Version: "v1.2.3", RelayURL: "https://relay.example", Config: cfg, State: st, Key: key,
-		Hostname: "thisbox", OSUser: "sam", Now: now,
+		// Local days are UTC days, whatever zone the tests run in.
+		Hostname: "thisbox", OSUser: "sam", Now: now, Loc: time.UTC,
 	}}
 	f.seal(now)
 	return f

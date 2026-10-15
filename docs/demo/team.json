@@ -1369,6 +1369,7 @@
       "leo-air"
     ],
     "cycles_reason": "leo-air runs v0.3.4: it updates itself within 15 minutes",
+    "today_local": false,
     "devices": [
       {
         "device": "d-demo-mira",

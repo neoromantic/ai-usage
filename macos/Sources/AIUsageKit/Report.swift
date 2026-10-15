@@ -456,6 +456,10 @@ public struct Team: Decodable, Sendable {
     @Absent public var estimated: Bool
     @Absent public var heldBackBy: [String]
     @Absent public var estimatedReason: String?
+    /// Today is the hours since this Mac's midnight, as every device sends
+    /// its hours, instead of the report's UTC day. False from an ai-usage
+    /// before v0.7.0. 7, 30, and 90 days count UTC days either way.
+    @Absent public var todayLocal: Bool
     public let devices: [TeamDevice]
     public let providers: [TeamProvider]
     public let matrix: Matrix

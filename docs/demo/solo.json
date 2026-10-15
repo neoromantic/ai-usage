@@ -1347,6 +1347,7 @@
     "estimated_reason": null,
     "cycles_held_back_by": [],
     "cycles_reason": null,
+    "today_local": true,
     "devices": [
       {
         "device": "d-demo-solo",

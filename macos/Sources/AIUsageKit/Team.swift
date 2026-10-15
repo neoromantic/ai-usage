@@ -285,7 +285,8 @@ public struct DeviceStatusTable: Sendable {
 
 /// The Team window's header: how many devices the team has, how many fail
 /// and are not reporting, as the console's status view counts them, the
-/// period in UTC days, and what the numbers are: "12 devices · 2 errors ·
+/// period and the days it counts, UTC days but for a today that counts from
+/// this Mac's midnight, and what the numbers are: "12 devices · 2 errors ·
 /// 1 not reporting · 7 Days UTC · M weighted tokens".
 public struct TeamHeader: Equatable, Sendable {
     public let devices: Int
@@ -302,7 +303,7 @@ public struct TeamHeader: Equatable, Sendable {
         devices = ds.count
         silent = ds.filter(\.silent).count
         errors = ds.filter { !$0.silent && $0.error != nil }.count
-        self.period = period.title + " UTC"
+        self.period = period == .today && r.team.todayLocal ? period.title : period.title + " UTC"
         self.unit = unit
     }
 

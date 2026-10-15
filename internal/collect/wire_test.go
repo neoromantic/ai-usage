@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/snapshot"
+	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/relay"
 )
 
@@ -109,6 +110,49 @@ func TestCyclesWire(t *testing.T) {
 	}
 	if g := ExtendedWire(known, fp, self, time.Time{}, now); !g.Open {
 		t.Errorf("the gate of v0.4.0's fields: %+v", g)
+	}
+}
+
+// The hours' gate waits for v0.7.0 as the cycles' waits for v0.5.0, and is
+// shut while the relay refuses them, or what an older release added.
+func TestHoursWire(t *testing.T) {
+	const fp, self = "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2", "d-annbook-0001"
+	now := t0
+	doc := func(device, version string) snapshot.Doc {
+		return snapshot.Doc{Device: device, CollectorVersion: version, CollectedAt: now}
+	}
+	cache := func(docs ...snapshot.Doc) TeamCache {
+		return TeamCache{Team: fp, PulledAt: now.Add(-10 * time.Minute), Docs: docs}
+	}
+	for _, c := range []struct {
+		name  string
+		cache TeamCache
+		until time.Time
+		want  Gate
+	}{
+		{"all on v0.7.0 or later", cache(doc(self, "v0.7.0"), doc("d-srv1-a4c2e917", "v0.7.1"), doc("d-sambook-0002", "v1.0.0")), time.Time{}, Gate{Open: true}},
+		{"a device on v0.6.2", cache(doc(self, "v0.7.0"), doc("d-srv1-a4c2e917", "v0.6.2")), time.Time{},
+			Gate{HeldBack: []string{"d-srv1-a4c2e917"}, Reason: GateOld}},
+		{"a build from source of v0.6.2", cache(doc("d-srv1-a4c2e917", "v0.6.2-local+dirty")), time.Time{},
+			Gate{HeldBack: []string{"d-srv1-a4c2e917"}, Reason: GateOld}},
+		{"a development build", cache(doc("d-srv1-a4c2e917", "devel"), doc("d-sambook-0002", "v0.7.0-rc.1")), time.Time{}, Gate{Open: true}},
+		{"the relay refused the hours", cache(doc("d-srv1-a4c2e917", "v0.7.0")), now.Add(time.Hour), Gate{Reason: GateRejected, Until: now.Add(time.Hour)}},
+	} {
+		got := HoursWire(c.cache, fp, self, c.until, now)
+		if got.Open != c.want.Open || got.Reason != c.want.Reason || !got.Until.Equal(c.want.Until) || !slices.Equal(got.HeldBack, c.want.HeldBack) {
+			t.Errorf("%s: %+v, want %+v", c.name, got, c.want)
+		}
+	}
+	// A relay that refused the cycles, or the fields v0.4.0 added, refuses
+	// the hours with them.
+	for _, r := range []state.Relay{
+		{NoHoursUntil: now.Add(time.Hour)},
+		{NoCyclesUntil: now.Add(time.Hour)},
+		{NoExtUntil: now.Add(time.Hour), NoHoursUntil: now.Add(-time.Hour)},
+	} {
+		if got := NoHoursUntil(r); !got.Equal(now.Add(time.Hour)) {
+			t.Errorf("NoHoursUntil(%+v) = %v", r, got)
+		}
 	}
 }
 

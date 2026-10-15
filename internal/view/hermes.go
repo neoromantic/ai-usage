@@ -25,7 +25,9 @@ type login struct {
 // by login, so each login gets that share of them, and so does what the
 // device counted through no login, as from before it recorded logins. An
 // account that spent through no login stays whole, on its link.
-func (a devAccount) split(logins []login, shift int) []devAccount {
+//
+// periods sums a part's days, or hours, into the report's periods.
+func (a devAccount) split(logins []login, periods func(days, hours []int64) Usage) []devAccount {
 	var parts []devAccount
 	var weights, burns []int64
 	for _, l := range logins {
@@ -48,6 +50,16 @@ func (a devAccount) split(logins []login, shift int) []devAccount {
 			parts[i].burnDays = append(parts[i].burnDays, v)
 		}
 	}
+	for _, n := range a.hours {
+		for i, v := range shares(n, weights) {
+			parts[i].hours = append(parts[i].hours, v)
+		}
+	}
+	for _, n := range a.burnHours {
+		for i, v := range shares(n, burns) {
+			parts[i].burnHours = append(parts[i].burnHours, v)
+		}
+	}
 	for _, r := range a.recent {
 		tokens, burn := shares(r.Tokens, weights), shares(r.Burn, burns)
 		for i := range parts {
@@ -55,8 +67,8 @@ func (a devAccount) split(logins []login, shift int) []devAccount {
 		}
 	}
 	for i := range parts {
-		parts[i].usage = usageOf(parts[i].days, shift)
-		parts[i].burn = usageOf(parts[i].burnDays, shift)
+		parts[i].usage = periods(parts[i].days, parts[i].hours)
+		parts[i].burn = periods(parts[i].burnDays, parts[i].burnHours)
 	}
 	return parts
 }

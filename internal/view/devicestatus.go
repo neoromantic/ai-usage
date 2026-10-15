@@ -295,7 +295,7 @@ func (p *page) statusTitle(devs []*TeamDevice, edge int) (_ chunks, unit bool) {
 	count(errs, errors, p.paint("", p.th.Out, false, false))
 	count(silent, "silent", p.paint("", p.th.Tight, false, false))
 	count(old, "old", p.muted(""))
-	title = append(title, p.muted(g.sep+"by "+p.o.Period.String()+" UTC"))
+	title = append(title, p.muted(g.sep+"by "+p.teamPeriod()))
 	withUnit := append(append(chunks(nil), title...), p.muted(g.sep+"M weighted tokens"))
 
 	pills := p.viewPills()

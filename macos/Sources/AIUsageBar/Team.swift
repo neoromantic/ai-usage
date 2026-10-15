@@ -139,7 +139,7 @@ struct TeamView: View {
                 ForEach(Period.allCases) { Text($0.title).tag($0) }
             }
             .fixedSize()
-            .help("The period, in UTC days (1, 7, 3, 9)")
+            .help("The period; the header says which days it counts (1, 7, 3, 9)")
             let usage = options.segment == .usage
             Picker("Show", selection: $options.mode) {
                 ForEach(TeamMatrix.Mode.allCases) { Text($0.title).tag($0) }

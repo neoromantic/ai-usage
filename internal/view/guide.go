@@ -86,7 +86,11 @@ func weightsNote(ascii bool) string {
 // than 90 days of Claude, and how to name a Grok account known by its id.
 func guideNotes(r Report) []string {
 	var out []string
-	if len(r.Team.Devices) > 1 {
+	switch {
+	case len(r.Team.Devices) > 1 && r.Team.TodayLocal:
+		out = append(out, "USAGE and PROJECTS count your local days and rolling 7/30/90 days; "+
+			"team tables count today from your local midnight, and 7/30/90 days as UTC days, as devices send them")
+	case len(r.Team.Devices) > 1:
 		out = append(out, "USAGE and PROJECTS count your local days and rolling 7/30/90 days; "+
 			"team tables count UTC days, as devices send them")
 	}

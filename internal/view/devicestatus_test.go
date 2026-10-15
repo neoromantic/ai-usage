@@ -575,3 +575,36 @@ func TestStatusViews(t *testing.T) {
 		}
 	}
 }
+
+// The team's tables say UTC after every period but a today that counts
+// from local midnight, in the matrix and in the status view alike.
+func TestTeamTitlesSayWhichDaysTheyCount(t *testing.T) {
+	for _, c := range []struct {
+		period        Period
+		local         bool
+		matrix, state string
+	}{
+		{Today, true, "15 · today · M weighted tokens", "by today · M weighted tokens"},
+		{Today, false, "15 · today UTC · M weighted tokens", "by today UTC · M weighted tokens"},
+		{Week, true, "15 · 7d UTC · M weighted tokens", "by 7d UTC · M weighted tokens"},
+	} {
+		r := loadReport(t, "team")
+		r.Team.TodayLocal = c.local
+		o := Options{Width: 160, Loc: sampleZone, Period: c.period}
+		if got := pageSection(Render(r, o), "DEVICES")[0]; !strings.Contains(got, c.matrix) {
+			t.Errorf("%v, local %v: matrix title %q, want %q", c.period, c.local, got, c.matrix)
+		}
+		if got := pageSection(Render(r, devices(o)), "DEVICES")[0]; !strings.Contains(got, c.state) {
+			t.Errorf("%v, local %v: status title %q, want %q", c.period, c.local, got, c.state)
+		}
+	}
+	// The guide says today counts from local midnight only when it does.
+	r := loadReport(t, "team")
+	if notes := strings.Join(guideNotes(r), "\n"); strings.Contains(notes, "local midnight") {
+		t.Errorf("guide notes %q", notes)
+	}
+	r.Team.TodayLocal = true
+	if notes := strings.Join(guideNotes(r), "\n"); !strings.Contains(notes, "team tables count today from your local midnight") {
+		t.Errorf("guide notes %q", notes)
+	}
+}

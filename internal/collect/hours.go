@@ -321,6 +321,24 @@ func DaysOf(hours map[int64]int64, now time.Time) []int64 {
 	return out
 }
 
+// HoursOf lays hours out newest first: index 0 is now's UTC hour, for up to
+// snapshot.MaxHours hours. It leaves out trailing zeros.
+func HoursOf(hours map[int64]int64, now time.Time) []int64 {
+	cur := logs.HourOf(now)
+	var out []int64
+	for h, n := range hours {
+		i := cur - h
+		if i < 0 || i >= snapshot.MaxHours || n <= 0 {
+			continue
+		}
+		for int64(len(out)) <= i {
+			out = append(out, 0)
+		}
+		out[i] += n
+	}
+	return out
+}
+
 // dayNumber counts UTC days since the Unix epoch.
 func dayNumber(t time.Time) int64 { return t.Unix() / 86400 }
 

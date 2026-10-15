@@ -8,8 +8,9 @@ import (
 )
 
 // Period is the span of tokens the matrix, USAGE, and PROJECTS show. The
-// team's tables count UTC days, as devices send them; this device's own
-// USAGE and PROJECTS count its local day and the hours before now.
+// team's tables count UTC days, as devices send them, and today from local
+// midnight once every device sends its hours; this device's own USAGE and
+// PROJECTS count its local day and the hours before now.
 type Period int
 
 const (
@@ -106,6 +107,20 @@ func inLocal(h int64, p Period, now time.Time, midnight time.Time) bool {
 		return !logs.HourStart(h).Add(30 * time.Minute).Before(midnight)
 	}
 	return cur-h < p.hours()
+}
+
+// hoursToday sums the hours a device sent that count today as of now, as
+// inLocal counts them: hours newest first, from the UTC hour of collected.
+// An hour ahead of now's, from a clock ahead of this one's, is now's.
+func hoursToday(hours []int64, collected, now, midnight time.Time) int64 {
+	first, cur := logs.HourOf(collected), logs.HourOf(now)
+	var n int64
+	for i, v := range hours {
+		if inLocal(min(first-int64(i), cur), Today, now, midnight) {
+			n += v
+		}
+	}
+	return n
 }
 
 // localUsage sums hourly values, keyed by logs.HourOf, into this device's

@@ -211,16 +211,17 @@ func (s *sampler) publish(ctx context.Context, key *team.Key, device string, res
 	return ""
 }
 
-// rejectedFor is how long the fields ExtSince added, or the cycles
-// CyclesSince added, go unsent after the relay refused them.
+// rejectedFor is how long the fields ExtSince added, the cycles
+// CyclesSince added, or the hours HoursSince added, go unsent after the
+// relay refused them.
 const rejectedFor = 24 * time.Hour
 
 // syncTeam publishes this device and reads the team back. The snapshot holds
 // running totals, so publishing the newest one also covers any runs that
-// could not reach the relay. It has the cycles CyclesSince added, and the
-// fields ExtSince added, each only while its gate is open, and goes without
-// them for rejectedFor when the relay refuses them: a relay that refuses the
-// cycles is sent the rest.
+// could not reach the relay. It has the hours HoursSince added, the cycles
+// CyclesSince added, and the fields ExtSince added, each only while its gate
+// is open, and goes without them for rejectedFor when the relay refuses
+// them: a relay that refuses the hours is sent the rest.
 func syncTeam(ctx context.Context, o Options, st *state.State, device string, doc *snapshot.Doc, cache *TeamCache, now time.Time) {
 	fail := func(err error) {
 		st.Relay.LastError = shortErr(err)
@@ -243,8 +244,11 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 	}
 	var tries []try
 	fp := o.Relay.Key.Fingerprint()
-	if doc.HasCycles() && CyclesWire(*cache, fp, device, NoCyclesUntil(st.Relay), now).Open {
-		tries = append(tries, try{*doc, &st.Relay.NoCyclesUntil})
+	if doc.HasHours() && HoursWire(*cache, fp, device, NoHoursUntil(st.Relay), now).Open {
+		tries = append(tries, try{*doc, &st.Relay.NoHoursUntil})
+	}
+	if without := doc.WithoutHours(); without.HasCycles() && CyclesWire(*cache, fp, device, NoCyclesUntil(st.Relay), now).Open {
+		tries = append(tries, try{without, &st.Relay.NoCyclesUntil})
 	}
 	if without := doc.WithoutCycles(); without.Extended() && ExtendedWire(*cache, fp, device, st.Relay.NoExtUntil, now).Open {
 		tries = append(tries, try{without, &st.Relay.NoExtUntil})

@@ -315,17 +315,26 @@ func (p *page) ownUnit() string {
 	return "M weighted tokens"
 }
 
+// teamPeriod is the period the team's tables show, and what days it counts:
+// UTC days, but for a today that counts from local midnight.
+func (p *page) teamPeriod() string {
+	if p.o.Period == Today && p.r.Team.TodayLocal {
+		return Today.String()
+	}
+	return p.o.Period.String() + " UTC"
+}
+
 // gridTitle is the matrix's title line: its name, the count of its rows,
-// the period in UTC days and the unit, and the pills of its views and
-// modes, ending at edge.
+// the period and the days it counts, and the unit, and the pills of its
+// views and modes, ending at edge.
 func (p *page) gridTitle(rows, edge int) chunks {
-	g, per, share := p.g, p.o.Period, p.o.Share
+	g, share := p.g, p.o.Share
 	title := chunks{p.bold("DEVICES " + g.times + " SUBSCRIPTIONS"), p.plain("  ")}
 	unit := "M weighted tokens"
 	if share {
 		unit = "% of column total"
 	}
-	title = append(title, p.muted(strconv.Itoa(rows)+g.sep+per.String()+" UTC"+g.sep+unit))
+	title = append(title, p.muted(strconv.Itoa(rows)+g.sep+p.teamPeriod()+g.sep+unit))
 	// The views go before the matrix's modes, and are the first to go
 	// where both do not fit.
 	modes := chunks{p.pill("tokens", !share), p.plain(" "), p.pill("share", share)}

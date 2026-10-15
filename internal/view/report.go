@@ -358,12 +358,14 @@ type Forecast struct {
 
 // Usage is tokens in the report's periods. As usage, it is input plus
 // output, cache left out, in UTC days that end with the report's: today is
-// the report's UTC day, and 7d, 30d, and 90d are that many UTC days up to
-// and including it. As burn, it is weighted tokens: every kind of token,
-// each weighed by what the provider's API charges for it against input, in
-// the same UTC days on the team's objects, and in this device's local
-// periods on its own accounts and projects: today is the hours since local
-// midnight, and 7d, 30d, and 90d are the last 168, 720, and 2160 hours.
+// the report's UTC day, or, on the team's objects while Team.TodayLocal
+// says so, the hours since local midnight, and 7d, 30d, and 90d are that
+// many UTC days up to and including it. As burn, it is weighted tokens:
+// every kind of token, each weighed by what the provider's API charges for
+// it against input, in the same periods on the team's objects, and in this
+// device's local periods on its own accounts and projects: today is the
+// hours since local midnight, and 7d, 30d, and 90d are the last 168, 720,
+// and 2160 hours.
 type Usage struct {
 	Today   int64 `json:"today"`
 	Week    int64 `json:"7d"`
@@ -417,11 +419,16 @@ type Team struct {
 	// CyclesHeldBackBy are the devices whose release keeps this device from
 	// sending its quota cycles, and CyclesReason says why, and what to do,
 	// in a line, while this device has cycles the team does not get.
-	CyclesHeldBackBy []string       `json:"cycles_held_back_by"`
-	CyclesReason     *string        `json:"cycles_reason"`
-	Devices          []TeamDevice   `json:"devices"`
-	Providers        []TeamProvider `json:"providers"`
-	Matrix           Matrix         `json:"matrix"`
+	CyclesHeldBackBy []string `json:"cycles_held_back_by"`
+	CyclesReason     *string  `json:"cycles_reason"`
+	// TodayLocal says the team's today is the hours since this device's
+	// local midnight, as every device sends its hours by UTC hour, instead
+	// of the report's UTC day. A device that sent none yet counts its UTC
+	// day. 7d, 30d, and 90d count UTC days either way.
+	TodayLocal bool           `json:"today_local"`
+	Devices    []TeamDevice   `json:"devices"`
+	Providers  []TeamProvider `json:"providers"`
+	Matrix     Matrix         `json:"matrix"`
 }
 
 type TeamDevice struct {

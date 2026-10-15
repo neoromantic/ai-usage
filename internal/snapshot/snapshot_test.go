@@ -218,6 +218,34 @@ func TestWithoutCyclesIsTheOlderWireFormat(t *testing.T) {
 	}
 }
 
+// v1-hours.json is v1-cycles.json with the hours v0.7.0 added, and
+// WithoutHours is the body v0.5.0 to v0.6.2 read.
+func TestWithoutHoursIsTheOlderWireFormat(t *testing.T) {
+	read := func(name string) []byte {
+		b, err := os.ReadFile(filepath.Join("testdata", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return bytes.TrimSpace(b)
+	}
+	d, err := Decode(read("v1-hours.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.HasHours() || !d.HasCycles() || !d.Extended() {
+		t.Fatal("the hours golden has no hours or cycles")
+	}
+	if b := encode(t, d); !bytes.Equal(b, read("v1-hours.json")) {
+		t.Fatalf("the hours golden encodes to\n%s", b)
+	}
+	if b := encode(t, d.WithoutHours()); !bytes.Equal(b, read("v1-cycles.json")) {
+		t.Fatalf("WithoutHours encodes to\n%s", b)
+	}
+	if b := encode(t, d.WithoutCycles()); !bytes.Equal(b, read("v1-extended.json")) {
+		t.Fatalf("WithoutCycles encodes to\n%s", b)
+	}
+}
+
 func TestExtended(t *testing.T) {
 	at := t0.Add(-time.Hour)
 	for name, c := range map[string]struct {
@@ -233,6 +261,8 @@ func TestExtended(t *testing.T) {
 		"cycles": {func(d *Doc) {
 			d.Accounts[0].Cycles = []Cycle{{Window: "5h", ResetsAt: at, Percent: 90, LastReadAt: at.Add(-time.Hour)}}
 		}, true},
+		"hours":      {func(d *Doc) { d.Accounts[0].Hours = []int64{0, 4} }, true},
+		"burn_hours": {func(d *Doc) { d.Accounts[0].BurnHours = []int64{9} }, true},
 	} {
 		d := validDoc()
 		c.edit(&d)
@@ -242,8 +272,12 @@ func TestExtended(t *testing.T) {
 		if l := d.Legacy(); l.Extended() || l.Validate() != nil {
 			t.Errorf("%s: Legacy is extended or invalid", name)
 		}
-		if w := d.WithoutCycles(); w.HasCycles() || w.Validate() != nil || w.Extended() != (c.want && name != "cycles") {
-			t.Errorf("%s: WithoutCycles has cycles, is invalid, or lost a v0.4.0 field", name)
+		newer := name == "cycles" || strings.HasSuffix(name, "hours")
+		if w := d.WithoutCycles(); w.HasCycles() || w.HasHours() || w.Validate() != nil || w.Extended() != (c.want && !newer) {
+			t.Errorf("%s: WithoutCycles has cycles or hours, is invalid, or lost a v0.4.0 field", name)
+		}
+		if w := d.WithoutHours(); w.HasHours() || w.Validate() != nil || w.HasCycles() != d.HasCycles() {
+			t.Errorf("%s: WithoutHours has hours, is invalid, or changed the cycles", name)
 		}
 	}
 }
@@ -273,6 +307,17 @@ func TestLegacySharesNothing(t *testing.T) {
 	if len(d.Accounts[0].Cycles) != 1 {
 		t.Fatal("WithoutCycles cleared the document's own cycles")
 	}
+
+	d.Accounts[0].Hours, d.Accounts[0].BurnHours = []int64{1}, []int64{5}
+	before = encode(t, d)
+	h := d.WithoutHours()
+	h.Accounts[0].Cycles[0].Percent = 99
+	h.Accounts[0].Days[0] = 99
+	if after := encode(t, d); !bytes.Equal(after, before) || len(d.Accounts[0].Hours) != 1 {
+		t.Fatalf("changing WithoutHours changed the document:\n%s\n%s", before, after)
+	}
+	d.Accounts[0].Hours, d.Accounts[0].BurnHours = nil, nil
+	before = encode(t, d)
 
 	l := d.Legacy()
 	l.Accounts[0].Days[0] = 99

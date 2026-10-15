@@ -52,7 +52,10 @@ type devAccount struct {
 	provider, label string
 	usage           Usage
 	days            []int64
-	recent          []snapshot.Recent
+	// hours are its input plus output tokens by UTC hour, and burnHours its
+	// weighted tokens, as the device sent them.
+	hours, burnHours []int64
+	recent           []snapshot.Recent
 	// burn is its weighted tokens, by the UTC days burnDays, estimated from
 	// its input and output where estimated says so.
 	burn      Usage
@@ -91,6 +94,10 @@ type merger struct {
 	aliases map[string]snapshot.Alias
 	aliasBy map[string]string
 	behind  map[string]collect.Behind
+	// localToday says the team's today counts from midnight, where
+	// midnight is this device's, as Team.TodayLocal has it.
+	localToday bool
+	midnight   time.Time
 }
 
 func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
@@ -110,6 +117,8 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 			}
 		}
 	}
+	t.TodayLocal = localToday(docs[1:], in.State.Relay, now)
+	m.localToday, m.midnight = t.TodayLocal, localMidnight(now, m.loc())
 	// This device knows its links even when the linked account has no
 	// reading to match on the wire.
 	for _, a := range totals {
@@ -144,6 +153,29 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 	m.estimate(&t)
 	m.cyclesGate(&t)
 	return t
+}
+
+// localToday says the team's today can count from local midnight: none of
+// the other devices, whose docs are docs, runs a release before
+// collect.HoursSince, and the relay has not refused the hours not long
+// ago, so each device sends its hours, or will at its next run. Otherwise
+// today is the UTC day, as before.
+func localToday(docs []snapshot.Doc, r state.Relay, now time.Time) bool {
+	if now.Before(collect.NoHoursUntil(r)) {
+		return false
+	}
+	return !slices.ContainsFunc(docs, func(d snapshot.Doc) bool { return collect.BeforeHours(d.CollectorVersion) })
+}
+
+// periods sums an account's days on the device dv into the report's
+// periods. While the team's today counts from local midnight, it is the
+// hours since then, where dv sent its hours, and its UTC day otherwise.
+func (m *merger) periods(days, hours []int64, dv *device) Usage {
+	u := usageOf(days, dv.shift)
+	if m.localToday && len(hours) > 0 {
+		u.Today = hoursToday(hours, dv.collectedAt, m.now, m.midnight)
+	}
+	return u
 }
 
 // raw is a sealed string as it was sealed, line breaks and all.
@@ -326,9 +358,9 @@ func (m *merger) addAccounts(dv *device, d snapshot.Doc) {
 	for i, a := range d.Accounts {
 		l := labels[i]
 		x := m.account(a.Provider, l)
-		usage := usageOf(a.Days, dv.shift)
+		usage := m.periods(a.Days, a.Hours, dv)
 		burnDays, recent, estimated := m.accountBurn(d, a, l)
-		burn := usageOf(burnDays, dv.shift)
+		burn := m.periods(burnDays, a.BurnHours, dv)
 		dev.Usage = dev.Usage.add(usage)
 		dev.Burn = dev.Burn.add(burn)
 		dev.BurnEstimated = dev.BurnEstimated || estimated
@@ -360,9 +392,9 @@ func (m *merger) addAccounts(dv *device, d snapshot.Doc) {
 		for _, u := range a.Linked {
 			addLinked(m.linked, a.Provider, l, u.Provider, m.open(u.Label), dv.name, u)
 		}
-		da := devAccount{provider: a.Provider, label: l, usage: usage, days: a.Days, recent: recent,
-			burn: burn, burnDays: burnDays, estimated: estimated, last: a.LastActiveAt, link: link}
-		dv.accts = append(dv.accts, da.split(through[state.Key(a.Provider, l)], dv.shift)...)
+		da := devAccount{provider: a.Provider, label: l, usage: usage, days: a.Days, hours: a.Hours, recent: recent,
+			burn: burn, burnDays: burnDays, burnHours: a.BurnHours, estimated: estimated, last: a.LastActiveAt, link: link}
+		dv.accts = append(dv.accts, da.split(through[state.Key(a.Provider, l)], func(days, hours []int64) Usage { return m.periods(days, hours, dv) })...)
 	}
 }
 

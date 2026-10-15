@@ -224,7 +224,7 @@ team.devices.limitations team.devices.not_updating team.devices.note team.device
 team.devices.silent team.devices.sources team.devices.sources.error team.devices.sources.provider
 team.devices.sources.status team.devices.this_device team.devices.update_error team.devices.usage team.devices.usage.30d team.devices.usage.7d
 team.devices.usage.90d team.devices.usage.today
-team.cycles_held_back_by team.cycles_reason
+team.cycles_held_back_by team.cycles_reason team.today_local
 team.estimated team.estimated_reason team.held_back_by team.latest_version
 team.matrix team.matrix.columns team.matrix.columns.burn team.matrix.columns.burn.30d team.matrix.columns.burn.7d team.matrix.columns.burn.90d team.matrix.columns.burn.today
 team.matrix.columns.label team.matrix.columns.name team.matrix.columns.no_quota

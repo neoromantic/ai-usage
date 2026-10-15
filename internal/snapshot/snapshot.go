@@ -29,6 +29,7 @@ const (
 	MaxLinked         = 4
 	MaxSources        = 12
 	MaxDays           = 90
+	MaxHours          = 48
 	MaxAliases        = 48
 	MaxCycles         = 64
 	MaxSealed         = 512
@@ -69,9 +70,9 @@ type Doc struct {
 
 // Extended reports whether d carries any field a collector before v0.4.0
 // does not know, and so would drop d as undecodable: those v0.4.0 added,
-// and the cycles v0.5.0 added.
+// the cycles v0.5.0 added, and the hours v0.7.0 added.
 func (d Doc) Extended() bool {
-	if d.LastErrorAt != nil || d.HasCycles() {
+	if d.LastErrorAt != nil || d.HasCycles() || d.HasHours() {
 		return true
 	}
 	for _, a := range d.Accounts {
@@ -86,6 +87,12 @@ func (d Doc) Extended() bool {
 // v0.5.0 does not know, and so would drop d as undecodable.
 func (d Doc) HasCycles() bool {
 	return slices.ContainsFunc(d.Accounts, func(a Account) bool { return len(a.Cycles) > 0 })
+}
+
+// HasHours reports whether d carries hours, which a collector before v0.7.0
+// does not know, and so would drop d as undecodable.
+func (d Doc) HasHours() bool {
+	return slices.ContainsFunc(d.Accounts, func(a Account) bool { return len(a.Hours) > 0 || len(a.BurnHours) > 0 })
 }
 
 // Legacy is d without the fields a collector before v0.4.0 does not know:
@@ -105,16 +112,28 @@ func (d Doc) Legacy() Doc {
 }
 
 // WithoutCycles is d without the quota cycles a collector before v0.5.0
-// does not know: the body a collector from v0.4.0 on, and before v0.5.0,
-// decodes. It shares no slice with d, so either can be changed without the
-// other.
+// does not know, and without its hours: the body a collector from v0.4.0
+// on, and before v0.5.0, decodes. It shares no slice with d, so either can
+// be changed without the other.
 func (d Doc) WithoutCycles() Doc {
+	d = d.WithoutHours()
+	for i := range d.Accounts {
+		d.Accounts[i].Cycles = nil
+	}
+	return d
+}
+
+// WithoutHours is d without the hours a collector before v0.7.0 does not
+// know: the body a collector from v0.5.0 on, and before v0.7.0, decodes. It
+// shares no slice with d, so either can be changed without the other.
+func (d Doc) WithoutHours() Doc {
 	d.Sources = slices.Clone(d.Sources)
 	d.Aliases = slices.Clone(d.Aliases)
 	d.Accounts = slices.Clone(d.Accounts)
 	for i := range d.Accounts {
 		a := &d.Accounts[i]
-		a.Cycles = nil
+		a.Hours, a.BurnHours = nil, nil
+		a.Cycles = slices.Clone(a.Cycles)
 		a.Windows = slices.Clone(a.Windows)
 		a.Projects = slices.Clone(a.Projects)
 		a.Linked = slices.Clone(a.Linked)
@@ -179,6 +198,16 @@ type Account struct {
 	// trailing zeros are left out. A collector before v0.4.0 neither sends
 	// nor reads it.
 	BurnDays []int64 `json:"burn_days,omitempty"`
+	// Hours is the account's input plus output tokens on this device per
+	// UTC hour, newest first: index 0 is the UTC hour of collected_at, index
+	// 1 the hour before, and so on, for up to MaxHours hours. Trailing zeros
+	// are left out. With them a reader counts the device's day in its own
+	// time zone. A collector before v0.7.0 neither sends nor reads it.
+	Hours []int64 `json:"hours,omitempty"`
+	// BurnHours is the account's weighted tokens on this device per UTC
+	// hour, laid out as Hours is. A collector before v0.7.0 neither sends
+	// nor reads it.
+	BurnHours []int64 `json:"burn_hours,omitempty"`
 	// Recent is the account's input plus output tokens on this device since
 	// each window of its reading began, for the windows whose start is known
 	// and which had not reset when the snapshot was taken.

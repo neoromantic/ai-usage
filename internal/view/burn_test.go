@@ -184,40 +184,45 @@ func deref(s *string) string {
 }
 
 // TestHermesSplitsBurnByBurn: a Hermes account on a device divides its days
-// by the tokens that went through each login, and its burn by the burn, and
-// what it spent since a window began the same way.
+// and hours by the tokens that went through each login, and its burn by the
+// burn, and what it spent since a window began the same way.
 func TestHermesSplitsBurnByBurn(t *testing.T) {
 	a := devAccount{
 		provider: "hermes", label: "own", estimated: true,
 		days: []int64{100, 200}, burnDays: []int64{1000, 3000},
+		hours: []int64{10, 0, 20}, burnHours: []int64{100, 0, 200},
 		recent: []snapshot.Recent{{Window: "5h", Tokens: 30, Burn: 300}},
 	}
+	byDays := func(days, _ []int64) Usage { return usageOf(days, 0) }
 	parts := a.split([]login{
 		{Link{Provider: "codex", Label: "bots"}, 1, 3},
 		{Link{Provider: "claude", Label: "ann@acme.dev"}, 1, 1},
 		// Nothing went through this one: it gets no part.
 		{Link{Provider: "codex", Label: "sam"}, 0, 5},
-	}, 0)
+	}, byDays)
 	if len(parts) != 2 {
 		t.Fatalf("parts = %+v", parts)
 	}
 	for i, want := range []struct {
-		days, burn []int64
-		recent     snapshot.Recent
+		days, burn, hours, burnHours []int64
+		recent                       snapshot.Recent
 	}{
-		{[]int64{50, 100}, []int64{750, 2250}, snapshot.Recent{Window: "5h", Tokens: 15, Burn: 225}},
-		{[]int64{50, 100}, []int64{250, 750}, snapshot.Recent{Window: "5h", Tokens: 15, Burn: 75}},
+		{[]int64{50, 100}, []int64{750, 2250}, []int64{5, 0, 10}, []int64{75, 0, 150}, snapshot.Recent{Window: "5h", Tokens: 15, Burn: 225}},
+		{[]int64{50, 100}, []int64{250, 750}, []int64{5, 0, 10}, []int64{25, 0, 50}, snapshot.Recent{Window: "5h", Tokens: 15, Burn: 75}},
 	} {
 		p := parts[i]
 		if !slices.Equal(p.days, want.days) || !slices.Equal(p.burnDays, want.burn) || len(p.recent) != 1 || p.recent[0] != want.recent || !p.estimated {
 			t.Errorf("part %d = %+v", i, p)
+		}
+		if !slices.Equal(p.hours, want.hours) || !slices.Equal(p.burnHours, want.burnHours) {
+			t.Errorf("part %d hours = %v, burn hours %v", i, p.hours, p.burnHours)
 		}
 		if p.burn != usageOf(want.burn, 0) {
 			t.Errorf("part %d burn = %+v", i, p.burn)
 		}
 	}
 	// Logins that burned nothing split the burn alike.
-	parts = a.split([]login{{Link{Provider: "codex", Label: "bots"}, 1, 0}, {Link{Provider: "codex", Label: "sam"}, 3, 0}}, 0)
+	parts = a.split([]login{{Link{Provider: "codex", Label: "bots"}, 1, 0}, {Link{Provider: "codex", Label: "sam"}, 3, 0}}, byDays)
 	if !slices.Equal(parts[0].burnDays, []int64{500, 1500}) || !slices.Equal(parts[0].days, []int64{25, 50}) {
 		t.Errorf("no burn: %+v", parts[0])
 	}

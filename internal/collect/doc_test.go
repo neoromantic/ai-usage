@@ -526,3 +526,79 @@ func TestTrimDays(t *testing.T) {
 		}
 	}
 }
+
+// HoursOf lays out the last 48 UTC hours, newest first, without the zeros
+// that would end them.
+func TestHoursOf(t *testing.T) {
+	cur := t0.Unix() / 3600
+	got := HoursOf(map[int64]int64{cur: 5, cur - 2: 7, cur - 47: 1, cur - 48: 9, cur + 1: 3, cur - 3: 0}, t0)
+	want := make([]int64, 48)
+	want[0], want[2], want[47] = 5, 7, 1
+	if !slices.Equal(got, want) {
+		t.Fatalf("HoursOf = %v", got)
+	}
+	if got := HoursOf(map[int64]int64{cur - 1: 4, cur - 60: 2}, t0); !slices.Equal(got, []int64{0, 4}) {
+		t.Fatalf("HoursOf = %v", got)
+	}
+}
+
+// fitDoc fits the body a release before v0.7.0 reads as that release did,
+// then puts back the hours of the accounts it kept, and drops an account's
+// hours whole, both kinds, the longest first, while the whole is too big.
+func TestFitDocKeepsHoursLast(t *testing.T) {
+	sealed := func(c byte) string { return strings.Repeat(string(c), snapshot.MaxSealed/2) }
+	for _, c := range []struct {
+		name string
+		days int
+		cut  bool
+	}{
+		{"room for all", 7, false},
+		{"hours cut", 60, true},
+	} {
+		doc := snapshot.Doc{V: snapshot.Version, Accounts: []snapshot.Account{}, Sources: []snapshot.Source{}}
+		for i := range snapshot.MaxAccounts {
+			a := snapshot.Account{Provider: "claude", Label: sealed('A' + byte(i%26)), Windows: []snapshot.Window{}, Projects: []snapshot.Project{}}
+			for d := range c.days {
+				a.Days = append(a.Days, 100_000_000_000_000+int64(d))
+				a.BurnDays = append(a.BurnDays, 700_000_000_000_000+int64(d))
+			}
+			for h := range snapshot.MaxHours - i {
+				a.Hours = append(a.Hours, 1_000_000_000+int64(h))
+				a.BurnHours = append(a.BurnHours, 7_000_000_000+int64(h))
+			}
+			doc.Accounts = append(doc.Accounts, a)
+		}
+		without := doc.WithoutHours()
+		fitDoc(&without)
+		full := doc
+		fitDoc(&doc)
+
+		if !reflect.DeepEqual(doc.WithoutHours(), without) {
+			t.Fatalf("%s: the body without hours differs from the one v0.6.2 fits", c.name)
+		}
+		b, _ := json.Marshal(doc)
+		if len(b) > snapshot.MaxBytes {
+			t.Fatalf("%s: %d bytes", c.name, len(b))
+		}
+		cut, last := false, -1
+		for i, a := range doc.Accounts {
+			if len(a.Hours) == 0 && len(a.BurnHours) == 0 {
+				cut = true
+				// The longest go first.
+				if last >= 0 && i > last {
+					t.Fatalf("%s: account %d lost its hours after account %d kept them", c.name, i, last)
+				}
+				continue
+			}
+			if last < 0 {
+				last = i
+			}
+			if !slices.Equal(a.Hours, full.Accounts[i].Hours) || !slices.Equal(a.BurnHours, full.Accounts[i].BurnHours) {
+				t.Fatalf("%s: account %d kept part of its hours", c.name, i)
+			}
+		}
+		if cut != c.cut {
+			t.Fatalf("%s: hours cut = %v", c.name, cut)
+		}
+	}
+}

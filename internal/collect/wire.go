@@ -22,6 +22,11 @@ const ExtSince = "v0.4.0"
 // device sends them only while the whole team reads them.
 const CyclesSince = "v0.5.0"
 
+// HoursSince is the first release that reads the hours a snapshot carries.
+// An older one drops a document that has them as undecodable, so a device
+// sends them only while the whole team reads them.
+const HoursSince = "v0.7.0"
+
 // legacyDev is the version a build from source of a release before ExtSince
 // reports. One from ExtSince on reports "devel", which does not parse as a
 // release either.
@@ -39,6 +44,12 @@ func BeforeExt(version string) bool { return before(version, ExtSince) }
 // build from source of a release from ExtSince on, and before CyclesSince,
 // reports "devel" as a newer one does, so it counts as new.
 func BeforeCycles(version string) bool { return before(version, CyclesSince) }
+
+// BeforeHours says a collector of version runs a release before HoursSince,
+// or is a build from source of one, as BeforeExt tells. A build from source
+// of a release from ExtSince on, and before HoursSince, reports "devel" as
+// a newer one does, so it counts as new.
+func BeforeHours(version string) bool { return before(version, HoursSince) }
 
 // before says a collector of version runs a release before since, or is a
 // build from source of one.
@@ -60,7 +71,8 @@ const (
 const gateReadAge = 3 * time.Hour
 
 // Gate says whether this device may send the snapshot fields a release
-// added: those ExtSince added, or the cycles CyclesSince added.
+// added: those ExtSince added, the cycles CyclesSince added, or the hours
+// HoursSince added.
 type Gate struct {
 	Open bool
 	// HeldBack is the other devices of the team on a release before the
@@ -93,13 +105,33 @@ func CyclesWire(c TeamCache, fingerprint, self string, noCyclesUntil, now time.T
 	return wireGate(c, fingerprint, self, noCyclesUntil, now, BeforeCycles)
 }
 
+// HoursWire is the gate for the hours, as ExtendedWire is for the fields
+// ExtSince added: every other device must run HoursSince or later, as
+// BeforeHours tells, and the relay must not have refused them since
+// noHoursUntil was set.
+func HoursWire(c TeamCache, fingerprint, self string, noHoursUntil, now time.Time) Gate {
+	return wireGate(c, fingerprint, self, noHoursUntil, now, BeforeHours)
+}
+
+// NoHoursUntil is when the relay's refusal of the hours, or of what an
+// older release added, which a relay that refuses refuses the hours with,
+// ends.
+func NoHoursUntil(r state.Relay) time.Time {
+	return latest(r.NoHoursUntil, NoCyclesUntil(r))
+}
+
 // NoCyclesUntil is when the relay's refusal of the cycles, or of the fields
 // ExtSince added, which a relay that refuses refuses the cycles with, ends.
 func NoCyclesUntil(r state.Relay) time.Time {
-	if r.NoExtUntil.After(r.NoCyclesUntil) {
-		return r.NoExtUntil
+	return latest(r.NoCyclesUntil, r.NoExtUntil)
+}
+
+// latest is the later of a and b.
+func latest(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
 	}
-	return r.NoCyclesUntil
+	return a
 }
 
 // wireGate is the gate ExtendedWire and CyclesWire describe, for the

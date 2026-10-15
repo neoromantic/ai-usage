@@ -743,6 +743,10 @@ equal("sorted by today", status.lines(sortedBy: .tokens(.today), ascending: fals
 // The header counts the devices as the console's status view does.
 equal("team header", TeamHeader(team, period: .week, unit: matrix.unit).text, "12 devices · 2 errors · 1 not reporting · 7 Days UTC · M weighted tokens")
 equal("team header share", TeamHeader(team, period: .today, unit: shares.unit).text, "12 devices · 2 errors · 1 not reporting · Today UTC · % of column total")
+// Today counts from this Mac's midnight once every device sends its hours;
+// the other periods count UTC days.
+equal("solo today", TeamHeader(solo, period: .today, unit: "M").period, "Today")
+equal("solo week", TeamHeader(solo, period: .week, unit: "M").period, "7 Days UTC")
 
 // The Team window is a team's alone: a button beside the popover's tabs and
 // an item of the menu, with ⌘D. One device has neither, nor the device

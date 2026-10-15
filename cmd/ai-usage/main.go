@@ -14,6 +14,10 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	// The zone database, for a machine without one, as Windows and slim
+	// containers are: Claude Code tells when its windows reset in a zone by
+	// name, such as Europe/Berlin.
+	_ "time/tzdata"
 
 	"github.com/neoromantic/ai-usage/internal/probe"
 	"github.com/neoromantic/ai-usage/internal/schedule"

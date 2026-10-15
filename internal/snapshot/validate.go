@@ -130,6 +130,8 @@ func (a Account) validate() error {
 		checkList("projects", a.Projects, MaxProjects, Project.validate),
 		checkList("days", a.Days, MaxDays, checkDay),
 		checkList("burn_days", a.BurnDays, MaxDays, checkDay),
+		checkList("hours", a.Hours, MaxHours, checkDay),
+		checkList("burn_hours", a.BurnHours, MaxHours, checkDay),
 		checkList("recent", a.Recent, MaxWindows, Recent.validate),
 		checkList("cycles", a.Cycles, MaxCycles, Cycle.validate),
 		checkList("linked", a.Linked, MaxLinked, func(l Linked) error { return l.validate(a.Provider) }),
