@@ -9,7 +9,7 @@ git tag -a v1.2.3 -m v1.2.3
 git push origin v1.2.3
 ```
 
-Notes for a release go in `docs/releases/v1.2.3.md`, named after the tag and committed before it is pushed. They are written for the people who install it: what changed for them, what to do about it, and what it does not do yet, with made-up names only, since the repository is public.
+Notes for a release go in `docs/releases/v1.2.3.md`, named after the tag and committed before it is pushed. They are written for the people who install it: what changed for them, what to do about it, and what it does not do yet, with made-up names only, since the repository is public. When the release changes a claim of the README, an install command, or a picture in `docs/demo`, its notes say so, for the website (see [After a release](#after-a-release)).
 
 The workflow then:
 
@@ -27,7 +27,7 @@ A tag with a suffix, such as `v1.3.0-rc.1`, becomes a prerelease. GitHub's lates
 
 ## After a release
 
-Add the release to the changelog of the website, [au.sergeybaus.com](https://au.sergeybaus.com): it lives in the goodit repository, in `apps/au/app/releases.ts`, and `docs/au.md` there says how. Write it the way the release notes are written, shorter, for people who have not installed ai-usage yet, with made-up names only. Merging it to goodit's `main` deploys the site.
+The maintainer adds the release to the website's changelog, [au.sergeybaus.com/changelog](https://au.sergeybaus.com/changelog), written the way the release notes are, shorter, for people who have not installed ai-usage yet, with made-up names only. The website also repeats the README's claims, the install commands, and pictures from `docs/demo`; when the release notes say one of these changed, the maintainer updates the site too.
 
 ## Release files
 
