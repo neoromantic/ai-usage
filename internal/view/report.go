@@ -87,7 +87,20 @@ type Update struct {
 	Latest    *string    `json:"latest"`
 	Staged    *string    `json:"staged"`
 	Error     *string    `json:"error"`
+	// Method is how this copy updates: MethodSelf, or MethodHomebrew,
+	// where brew replaces it. A report saved before it has none until
+	// Fill gives it MethodSelf.
+	Method string `json:"method"`
+	// Command is what a person runs to update a Homebrew copy; nil for
+	// one that updates itself, and for root, whom Homebrew refuses.
+	Command *string `json:"command"`
 }
+
+// How a copy of the collector updates.
+const (
+	MethodSelf     = "self"     // it replaces itself with each release
+	MethodHomebrew = "homebrew" // brew replaces it
+)
 
 // Health items, and the statuses of each. An item is ok when nothing is
 // wrong with it.
@@ -704,4 +717,8 @@ type Input struct {
 	Samples []state.Sample
 	// Loc is the zone of this device's local days; nil is time.Local.
 	Loc *time.Location
+	// Homebrew says Homebrew installed this copy, and BrewCommand is what
+	// upgrades it, "" for root.
+	Homebrew    bool
+	BrewCommand string
 }

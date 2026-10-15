@@ -48,6 +48,12 @@ func housekeeping(ctx context.Context, d state.Dir, cfg *state.Config, st *state
 	if st.Update.Installed != "" && !selfupdate.Newer(st.Update.Installed, version) {
 		st.Update.Installed = ""
 	}
+	brew := brewPrefix() != ""
+	if brew {
+		// Only a copy that replaces itself downloads a release that can
+		// fail to install.
+		st.Update.Failed = nil
+	}
 	switch {
 	case d.Foreground():
 		// `ai-usage schedule run` is the scheduler, so the system's is not
@@ -59,13 +65,24 @@ func housekeeping(ctx context.Context, d state.Dir, cfg *state.Config, st *state
 		st.Schedule.Registered, st.Schedule.Foreground = false, false
 		st.Schedule.Error = "removed by `ai-usage schedule remove`"
 	}
+	if brew && st.RanVersion != "" && st.RanVersion != version && !selfupdate.Dev(version) {
+		// brew upgraded the binary the launch agent runs since the last
+		// run, as a brew upgrade a person runs does.
+		repairAgent(ctx, d, st, true)
+	}
+	st.RanVersion = version
 	updateRepairing(ctx, d, st, now, scheduled)
 }
 
 // updateRepairing is updateIfDue, which reports whether it checked, followed
 // by a repair of the macOS launch agent once a release it installed replaced
-// the binary the agent runs.
+// the binary the agent runs. A copy beside one Homebrew installed leaves
+// releases to that one, so the two do not take turns with the scheduler's
+// entry.
 func updateRepairing(ctx context.Context, d state.Dir, st *state.State, now time.Time, scheduled bool) bool {
+	if brewCopy() != "" {
+		return false
+	}
 	staged := st.Update.Installed
 	checked := updateIfDue(ctx, st, now, scheduled)
 	if st.Update.Installed != "" && st.Update.Installed != staged {
@@ -111,6 +128,11 @@ func updateIfDue(ctx context.Context, st *state.State, now time.Time, scheduled 
 	return true
 }
 
+// errBrewRoot is why root does not update a copy Homebrew installed.
+//
+//lint:ignore ST1005 Homebrew is a name, and the error is a whole sentence the person reads
+var errBrewRoot = errors.New("Homebrew installs are per-user; run ai-usage update as the user who installed it")
+
 func noteUpdate(st *state.State, now time.Time, res selfupdate.Result, err error) {
 	st.Update.CheckedAt = now
 	if res.Latest != "" {
@@ -133,7 +155,7 @@ func noteUpdate(st *state.State, now time.Time, res selfupdate.Result, err error
 			st.Update.Failed = &state.FailedRelease{Tag: res.Latest, At: now, Error: err.Error()}
 		}
 		if res.AppDownloaded {
-			st.Update.AppFailed = &state.FailedRelease{Tag: res.Latest, At: now, Error: err.Error()}
+			st.Update.AppFailed = &state.FailedRelease{Tag: res.AppTag, At: now, Error: err.Error()}
 		}
 	default:
 		st.Update.Failed, st.Update.AppFailed = nil, nil
@@ -143,9 +165,25 @@ func noteUpdate(st *state.State, now time.Time, res selfupdate.Result, err error
 	}
 }
 
-func cmdUpdate(ctx context.Context, stdout, stderr io.Writer) error {
+func cmdUpdate(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	fs := flags("update")
+	// The binary brew installed finishes an update with this; the help
+	// does not list it.
+	afterBrewed := fs.String("after-brew", "", "")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
 	if selfupdate.Dev(version) {
 		return errors.New("this is a development build (" + version + "); install a release to self-update")
+	}
+	if p := brewPrefix(); p != "" {
+		switch {
+		case os.Geteuid() == 0:
+			return errBrewRoot
+		case *afterBrewed != "":
+			return afterBrew(ctx, stdout, stderr)
+		}
+		return brewUpdate(ctx, p, stdout, stderr)
 	}
 	d, err := state.DefaultDir()
 	if err != nil {

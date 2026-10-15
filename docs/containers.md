@@ -12,7 +12,7 @@ Three things differ from a machine:
 
 ## Keep the home
 
-Keep the user's home on a volume or a bind mount, or point `AI_USAGE_HOME` at one. The installer puts the binary in `~/.local/bin` and the state in `~/.config/ai-usage`, so both outlive the container. Keep the binary there rather than in the image: the collector updates itself, which it can only do where it can write, and a copy in the image goes back to the image's version in every new container. The installer prefers a folder on `PATH` that the user can write to, so as root, or in an image that gives the user one outside the home, add `AI_USAGE_BIN_DIR="$HOME/.local/bin"` to the install command below.
+Keep the user's home on a volume or a bind mount, or point `AI_USAGE_HOME` at one. The installer puts the binary in `~/.local/bin` and the state in `~/.config/ai-usage`, so both outlive the container. Keep the binary there rather than in the image: the collector updates itself, which it can only do where it can write, and a copy in the image goes back to the image's version in every new container. An upgrade replaces a copy it finds on `PATH` where that copy is, and an installer before v0.8.0 put a root install in `/usr/local/bin`, so as root, or in an image that already has an `ai-usage` outside the home, add `AI_USAGE_BIN_DIR="$HOME/.local/bin"` to the install command below. Homebrew is no fit for a container: its copy updates only when someone runs `brew upgrade`.
 
 ## Install
 

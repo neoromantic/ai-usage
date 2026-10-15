@@ -307,8 +307,9 @@ struct GeneralSettings: View {
             Section("About") {
                 // The app's version once; the command-line tool's only when
                 // it is another release, or missing.
+                let update = store.report?.collector.update
                 let about = AboutVersion(app: store.appVersion, cli: cliVersion ?? store.report?.collector.version,
-                                         found: store.cliPath != nil)
+                                         found: store.cliPath != nil, homebrew: update?.homebrew == true)
                 LabeledContent("AI Usage") {
                     VStack(alignment: .trailing, spacing: 4) {
                         HStack(spacing: 8) {
@@ -323,7 +324,9 @@ struct GeneralSettings: View {
                                     Task { await store.update() }
                                 }
                                 .disabled(store.cliPath == nil && !store.demo)
-                                .help("Runs ai-usage update, which brings ai-usage and this app to the latest release")
+                                .help(update.flatMap { $0.homebrew ? $0.command : nil }
+                                    .map { "Runs ai-usage update, which runs \($0) and brings this app to its release" }
+                                    ?? "Runs ai-usage update, which brings ai-usage and this app to the latest release")
                             }
                         }
                         if let note = about.note {
@@ -344,7 +347,7 @@ struct GeneralSettings: View {
                     }
                 }
                 if let path = store.cliPath {
-                    LabeledContent("Command-Line Tool") {
+                    LabeledContent {
                         HStack(spacing: 4) {
                             Text(path)
                                 .font(.system(.subheadline, design: .monospaced))
@@ -355,6 +358,16 @@ struct GeneralSettings: View {
                             IconButton(symbol: "folder", help: "Show in Finder") {
                                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
                             }
+                        }
+                    } label: {
+                        // Homebrew installed it when the report says so; the
+                        // path gives way to it.
+                        if update?.homebrew == true {
+                            (Text("Command-Line Tool ") + Text("(Homebrew)").foregroundColor(.secondary))
+                                .lineLimit(1)
+                                .fixedSize()
+                        } else {
+                            Text("Command-Line Tool")
                         }
                     }
                 }

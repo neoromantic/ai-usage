@@ -50,19 +50,21 @@ const samplesSpan = 48 * time.Hour
 func reportInput(d state.Dir, res *collect.Result, now time.Time) view.Input {
 	samples, _ := d.LoadSamples(now.Add(-samplesSpan))
 	return view.Input{
-		Version:  version,
-		RelayURL: relayURL(res.Config),
-		Config:   res.Config,
-		State:    liveSchedule(d, res.State),
-		Key:      res.Key,
-		Doc:      res.Doc,
-		Team:     res.Team,
-		Hostname: deviceName(res.Config),
-		OSUser:   osUser(),
-		Now:      now,
-		Folders:  collect.FindProjects(d, res.State),
-		Samples:  samples,
-		Loc:      time.Local,
+		Version:     version,
+		RelayURL:    relayURL(res.Config),
+		Config:      res.Config,
+		State:       liveSchedule(d, res.State),
+		Key:         res.Key,
+		Doc:         res.Doc,
+		Team:        res.Team,
+		Hostname:    deviceName(res.Config),
+		OSUser:      osUser(),
+		Now:         now,
+		Folders:     collect.FindProjects(d, res.State),
+		Samples:     samples,
+		Loc:         time.Local,
+		Homebrew:    brewPrefix() != "",
+		BrewCommand: brewCommand(),
 	}
 }
 
@@ -73,7 +75,7 @@ func printReport(stdout io.Writer, r view.Report, jsonOut, guide bool, disp *dis
 	o := disp.options(stdout, true)
 	text := view.Text(r, o)
 	if guide {
-		text += "\n" + view.Guide(r, newScheduler().Name(), o)
+		text += "\n" + view.Guide(r, newScheduler().Name(), appMissing(context.Background()), o)
 	}
 	_, err := io.WriteString(disp.writer(stdout), text)
 	return err

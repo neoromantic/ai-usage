@@ -22,10 +22,12 @@
 # script again upgrades in place.
 #
 # The binary goes where an earlier install is, else into the first of
-# ~/.local/bin, ~/bin, /opt/homebrew/bin, and /usr/local/bin that is on PATH,
-# writable, and holds no other program named ai-usage. With none, it goes
-# into ~/.local/bin, and a marked block in the login shell's profile puts
-# that folder on PATH for new terminals.
+# ~/.local/bin and ~/bin that is on PATH, writable, and holds no other
+# program named ai-usage. With none, it goes into ~/.local/bin, and a marked
+# block in the login shell's profile puts that folder on PATH for new
+# terminals. When Homebrew installed ai-usage for this user, the script
+# stops: that copy updates with brew, unless AI_USAGE_BIN_DIR asks for a
+# second one.
 
 # Everything is inside main so a partly downloaded script does nothing.
 main() {
@@ -38,6 +40,19 @@ main() {
 	if [ "$(id -u)" = 0 ] && [ -n "$sudo_user" ] && [ "$sudo_user" != root ]; then
 		[ -n "${AI_USAGE_ALLOW_ROOT:-}" ] || fail "run the installer as $sudo_user, without sudo; it installs for the user who runs it (AI_USAGE_ALLOW_ROOT=1 installs for root)"
 		under_sudo=1
+	fi
+
+	# Two copies would take turns registering with the scheduler, and a
+	# Homebrew copy never replaces itself. Homebrew installs are per-user, so
+	# another user's, in a prefix several share, does not count.
+	if [ -z "${AI_USAGE_BIN_DIR:-}" ]; then
+		for p in "${HOMEBREW_PREFIX:-}" /opt/homebrew /usr/local /home/linuxbrew/.linuxbrew; do
+			if [ -n "$p" ] && [ -L "$p/opt/ai-usage" ] && [ -n "$(find -H "$p/opt/ai-usage" -prune -user "$(id -u)" 2>/dev/null)" ]; then
+				fail "ai-usage is installed with Homebrew ($p/bin/ai-usage); update it with
+\`brew upgrade neoromantic/tap/ai-usage\`. To use this installer instead,
+run \`brew uninstall neoromantic/tap/ai-usage\` first; the state folder and team key stay."
+			fi
+		done
 	fi
 
 	repo="neoromantic/ai-usage"
@@ -211,9 +226,10 @@ install_app() {
 # find_bin_dir prints the folder to install into. An upgrade replaces the
 # earlier binary where it is, so the scheduler entry keeps pointing at it.
 # A new install goes into a folder on PATH that is meant for a person's own
-# programs; a tool's own folder, such as ~/.cargo/bin or a node version
-# manager's, belongs to that tool. Neither replaces another program named
-# ai-usage, or a link such as Homebrew's or a version manager's shim.
+# programs; a tool's own folder, such as ~/.cargo/bin, a node version
+# manager's, or Homebrew's, belongs to that tool. Neither replaces another
+# program named ai-usage, or a link such as Homebrew's or a version
+# manager's shim.
 find_bin_dir() {
 	home=${HOME:?HOME is not set}
 	for f in "$home/.local/bin/ai-usage" "$(command -v ai-usage || true)"; do
@@ -223,7 +239,7 @@ find_bin_dir() {
 			return
 		fi
 	done
-	for d in "$home/.local/bin" "$home/bin" /opt/homebrew/bin /usr/local/bin; do
+	for d in "$home/.local/bin" "$home/bin"; do
 		if on_path "$d" && [ -d "$d" ] && [ -w "$d" ] && ! taken "$d/ai-usage"; then
 			echo "$d"
 			return

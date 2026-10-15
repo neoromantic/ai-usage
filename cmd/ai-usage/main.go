@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -19,6 +20,7 @@ import (
 	// name, such as Europe/Berlin.
 	_ "time/tzdata"
 
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/probe"
 	"github.com/neoromantic/ai-usage/internal/schedule"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
@@ -34,13 +36,34 @@ var (
 	defaultRelay = ""
 )
 
-// Tests replace these so they never run a real harness, edit the crontab, or
-// call GitHub.
+// Tests replace these so they never run a real harness, edit the crontab,
+// call GitHub, or find this machine's Homebrew.
 var (
 	clock        = time.Now
 	probeEnv     = probe.DefaultEnv
 	newScheduler = schedule.Default
-	newUpdater   = func() *selfupdate.Updater { return &selfupdate.Updater{Current: version, App: menuBarApp()} }
+	newUpdater   = func() *selfupdate.Updater {
+		u := &selfupdate.Updater{Current: version, App: menuBarApp()}
+		if p := brewPrefix(); p != "" {
+			u.Managed, u.Stable = selfupdate.Homebrew, brewOpt(p)
+		}
+		return u
+	}
+	// brewPrefix is the Homebrew prefix whose keg holds this binary, or ""
+	// when Homebrew did not install it.
+	brewPrefix = func() string {
+		exe, err := os.Executable()
+		if err != nil {
+			return ""
+		}
+		p, _ := fsutil.Homebrew(fsutil.RealPath(exe))
+		return p
+	}
+	// brewPrefixes are where a copy Homebrew did not install looks for one
+	// it did: the prefix the shell set up, and Homebrew's usual ones.
+	brewPrefixes = func() []string {
+		return []string{os.Getenv("HOMEBREW_PREFIX"), "/opt/homebrew", "/usr/local", "/home/linuxbrew/.linuxbrew"}
+	}
 )
 
 func main() {
@@ -80,7 +103,9 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	case "schedule":
 		err = cmdSchedule(ctx, args, stdout, stderr)
 	case "update":
-		err = cmdUpdate(ctx, stdout, stderr)
+		err = cmdUpdate(ctx, args, stdout, stderr)
+	case "app":
+		err = cmdApp(ctx, args, stdout, stderr)
 	case "version", "-version", "--version":
 		fmt.Fprintln(stdout, version)
 	case "help", "-h", "-help", "--help":
@@ -93,6 +118,10 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	if errors.Is(err, flag.ErrHelp) {
 		writeHelp(stdout)
 		return 0
+	}
+	var code exitCode
+	if errors.As(err, &code) {
+		return int(code)
 	}
 	if err != nil {
 		var ue usageError
@@ -109,6 +138,11 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	}
 	return 0
 }
+
+// exitCode ends a command that has said why it failed with that code.
+type exitCode int
+
+func (e exitCode) Error() string { return "exit status " + strconv.Itoa(int(e)) }
 
 type usageError string
 

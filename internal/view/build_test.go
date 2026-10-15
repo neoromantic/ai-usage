@@ -179,8 +179,8 @@ collector.last_error collector.last_error_at
 collector.last_run_at collector.last_success_at collector.os_user collector.relay
 collector.relay.last_error collector.relay.last_pull_at collector.relay.last_push_at collector.relay.pending
 collector.relay.url collector.schedule collector.schedule.error collector.schedule.foreground collector.schedule.registered
-collector.team collector.update collector.update.checked_at collector.update.error
-collector.update.latest collector.update.staged collector.version
+collector.team collector.update collector.update.checked_at collector.update.command collector.update.error
+collector.update.latest collector.update.method collector.update.staged collector.version
 generated_at
 projects projects.active_sessions projects.active_sessions.30d projects.active_sessions.7d projects.active_sessions.90d projects.active_sessions.today
 projects.burn projects.burn.30d projects.burn.7d projects.burn.90d projects.burn.today

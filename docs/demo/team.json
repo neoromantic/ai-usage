@@ -27,7 +27,9 @@
       "checked_at": "2026-09-24T11:37:00Z",
       "latest": "v0.5.0",
       "staged": null,
-      "error": null
+      "error": null,
+      "method": "self",
+      "command": null
     },
     "health": [
       {
@@ -1364,11 +1366,11 @@
     "held_back_by": [
       "leo-air"
     ],
-    "estimated_reason": "leo-air runs v0.3.4: it updates itself within 15 minutes",
+    "estimated_reason": "leo-air runs v0.3.4: it should update within 15 minutes",
     "cycles_held_back_by": [
       "leo-air"
     ],
-    "cycles_reason": "leo-air runs v0.3.4: it updates itself within 15 minutes",
+    "cycles_reason": "leo-air runs v0.3.4: it should update within 15 minutes",
     "today_local": false,
     "devices": [
       {

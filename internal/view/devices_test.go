@@ -112,7 +112,7 @@ func TestMatrixRowsAddUp(t *testing.T) {
 // ~, and TOTAL is wide enough for it; the legend says why where it fits.
 func TestMatrixEstimated(t *testing.T) {
 	r := gridTeam()
-	reason := "bot-3 runs v0.3.4: it updates itself within 15 minutes"
+	reason := "bot-3 runs v0.3.4: it should update within 15 minutes"
 	r.Team.Estimated, r.Team.EstimatedReason = true, &reason
 	for _, c := range []struct {
 		w      int
@@ -147,7 +147,7 @@ func TestMatrixEstimated(t *testing.T) {
 		}
 	}
 	// What to do too long for a line keeps its first steps whole.
-	steps := "13 devices run releases before v0.4.0: reinstall mbp-2018 with install.sh; the other 12 update themselves within 15 minutes"
+	steps := "13 devices run releases before v0.4.0: reinstall mbp-2018 with install.sh; the other 12 should update within 15 minutes"
 	r.Team.EstimatedReason = &steps
 	p = Render(r, Options{Width: 80, Loc: time.UTC})
 	if !strings.HasSuffix(p.Legend, "~ estimated: reinstall mbp-2018 with install.sh; …") {

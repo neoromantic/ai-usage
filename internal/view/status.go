@@ -9,6 +9,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 )
 
@@ -173,6 +174,10 @@ func (c *card) statusSchedule() {
 	default:
 		c.kv("schedule", c.fail(), "not registered", lipgloss.Red)
 	}
+	// A registered schedule's error is about another copy of ai-usage.
+	if col.Schedule.Registered && col.Schedule.Error != nil {
+		c.kv("", info, *col.Schedule.Error, lipgloss.Yellow)
+	}
 	// An error that already says what to run needs no second line.
 	if !col.Schedule.Registered && (col.Schedule.Error == nil || !strings.Contains(*col.Schedule.Error, "ai-usage schedule install") && !strings.Contains(*col.Schedule.Error, "ai-usage schedule run")) {
 		c.kv("", info, "register: ai-usage schedule install", lipgloss.BrightBlack)
@@ -193,6 +198,9 @@ func (c *card) statusUpdate() {
 	case up.Latest != nil && (*up.Latest == col.Version || selfupdate.Newer(col.Version, *up.Latest)):
 		// A release installed by hand can be newer than the last check saw.
 		c.kv("update", c.ok(), col.Version+" is the newest release", nil)
+	case up.Method == MethodHomebrew && up.Latest != nil:
+		// Only brew replaces a copy it installed.
+		c.kv("update", c.warn(), *up.Latest+" is out; run "+fsutil.HomebrewUpgrade+" or ai-usage update", lipgloss.Yellow)
 	default:
 		latest := "unknown"
 		if up.Latest != nil {

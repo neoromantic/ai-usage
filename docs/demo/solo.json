@@ -27,7 +27,9 @@
       "checked_at": "2026-09-24T11:36:00Z",
       "latest": "v0.5.0",
       "staged": null,
-      "error": null
+      "error": null,
+      "method": "self",
+      "command": null
     },
     "health": [
       {

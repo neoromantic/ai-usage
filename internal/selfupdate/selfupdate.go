@@ -1,7 +1,8 @@
 // Package selfupdate replaces the collector binary with the newest GitHub
 // release. The run that finds a release finishes on the old binary; the new
 // one is in place for the next run. On macOS it also brings the menu bar app
-// to the binary's release. There is no switch to turn it off.
+// to the binary's release. There is no switch to turn it off, but a binary
+// Homebrew installed is Homebrew's to replace.
 package selfupdate
 
 import (
@@ -66,7 +67,16 @@ type Updater struct {
 	// and could not install. Check does not download it again: it leaves the
 	// app as it is, with ErrAppSkipped.
 	SkipApp string
+	// Managed is Homebrew when Homebrew installed the binary, which Check
+	// then never replaces; "" when the binary is this package's to replace.
+	Managed string
+	// Stable is the path Homebrew keeps for the binary of its latest keg,
+	// where Check finds a release someone upgraded to with brew.
+	Stable string
 }
+
+// Homebrew is Updater.Managed for a binary Homebrew installed.
+const Homebrew = "homebrew"
 
 // ErrSkipped is Check's answer when the latest release is Updater.Skip.
 var ErrSkipped = errors.New("the latest release did not install at an earlier check")
@@ -118,6 +128,9 @@ type Result struct {
 	Downloaded bool
 	// AppDownloaded is the same for the release's menu bar app.
 	AppDownloaded bool
+	// AppTag is the release the check brought the menu bar app to, or
+	// tried to: the latest, or under Homebrew the binary's own.
+	AppTag string
 }
 
 func (u *Updater) fill() error {
@@ -163,7 +176,9 @@ func Dev(version string) bool {
 // Check looks up the latest release and installs it when it is newer. Once
 // the binary is at that release, it brings the menu bar app there too. An
 // error of the app's wraps ErrApp, and the Result still says what happened
-// to the binary.
+// to the binary. A binary Homebrew installed is never replaced: Check only
+// reports a release someone upgraded to with brew as installed, and brings
+// the app to the binary's own release, never ahead of it.
 func (u *Updater) Check(ctx context.Context) (Result, error) {
 	if Dev(u.Current) {
 		return Result{}, errors.New("development build; self-update applies to release builds")
@@ -171,25 +186,37 @@ func (u *Updater) Check(ctx context.Context) (Result, error) {
 	if err := u.fill(); err != nil {
 		return Result{}, err
 	}
-	cleanupOld(u.Exe)
+	if u.Managed != Homebrew {
+		cleanupOld(u.Exe)
+	}
 
 	repo, tag, err := u.latest(ctx)
 	if err != nil {
 		return Result{}, err
 	}
 	res := Result{Latest: tag}
-	app := func() (Result, error) {
+	app := func(tag string) (Result, error) {
+		res.AppTag = tag
 		res.AppDownloaded, err = u.updateApp(ctx, repo, tag)
 		return res, err
 	}
+	if u.Managed == Homebrew {
+		// Someone ran brew upgrade: the next run is the release.
+		if Newer(tag, u.Current) {
+			if v, err := Reports(ctx, u.Stable); err == nil && !Dev(v) && !Newer(tag, v) {
+				res.Installed = true
+			}
+		}
+		return app(u.Current)
+	}
 	if !Newer(tag, u.Current) {
-		return app()
+		return app(tag)
 	}
 	// A process that runs for long, such as the interactive view, can find a
 	// release that a scheduled run has already put in its place.
-	if v, err := reports(ctx, u.Exe); err == nil && !Dev(v) && !Newer(tag, v) {
+	if v, err := Reports(ctx, u.Exe); err == nil && !Dev(v) && !Newer(tag, v) {
 		res.Installed = true
-		return app()
+		return app(tag)
 	}
 	if tag == u.Skip {
 		return res, ErrSkipped
@@ -199,7 +226,16 @@ func (u *Updater) Check(ctx context.Context) (Result, error) {
 	if err != nil {
 		return res, err
 	}
-	return app()
+	return app(tag)
+}
+
+// Latest is the latest release's tag, without installing anything.
+func (u *Updater) Latest(ctx context.Context) (string, error) {
+	if err := u.fill(); err != nil {
+		return "", err
+	}
+	_, tag, err := u.latest(ctx)
+	return tag, err
 }
 
 // install downloads release tag from repo, checks it and puts it in place of
@@ -327,9 +363,9 @@ func stage(exe string, bin []byte, goos string) (string, error) {
 	return tmp.Name(), nil
 }
 
-// reports is the version a binary gives from its version command, which
+// Reports is the version a binary gives from its version command, which
 // touches no state.
-func reports(ctx context.Context, bin string) (string, error) {
+func Reports(ctx context.Context, bin string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, bin, "version").Output()
@@ -339,7 +375,7 @@ func reports(ctx context.Context, bin string) (string, error) {
 // starts runs the staged binary and requires it to report the release it
 // came from.
 func starts(ctx context.Context, bin, tag string) error {
-	v, err := reports(ctx, bin)
+	v, err := Reports(ctx, bin)
 	if err != nil {
 		return err
 	}

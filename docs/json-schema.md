@@ -47,11 +47,13 @@ Conventions:
 | `relay.last_error` | string | the last relay error |
 | `schedule.registered` | bool | the system scheduler, or `ai-usage schedule run`, runs this binary |
 | `schedule.foreground` | bool | the last scheduled run came from `ai-usage schedule run`, not the system scheduler |
-| `schedule.error` | string | why it is not registered |
+| `schedule.error` | string | why it is not registered; while it is, what is wrong beside it, such as another copy of ai-usage to remove, as `another ai-usage at /home/ann/.local/bin/ai-usage also runs; remove it: rm /home/ann/.local/bin/ai-usage` |
 | `update.checked_at` | time | the last release check |
 | `update.latest` | string | the newest release that check saw |
 | `update.staged` | string | a release already installed; the next run uses it |
 | `update.error` | string | the last update error |
+| `update.method` | string | how this copy updates: `self`, a copy the installer put in place, which replaces itself with each release, or `homebrew`, a copy Homebrew installed, which only `brew upgrade` replaces. Read a missing one as `self` |
+| `update.command` | string | what a person runs to update a `homebrew` copy, `brew upgrade neoromantic/tap/ai-usage`; `null` for a `self` copy, and as root, whom Homebrew refuses |
 | `health` | list | how the collection, the relay, and the update are doing, one entry each in that order, as the console's header shows them; see below |
 
 A `health` entry:
@@ -256,9 +258,9 @@ The report's list is sorted by `burn` in `7d`, in whole millions as the console 
 | `latest_version` | string | the newest collector release any device in the team runs, or the newest this device's update check saw, whichever is newer |
 | `estimated` | bool | the weighted tokens of some device are estimated: a release before v0.4.0 sends none, so they are worked out from its input and output, at the ratio its 90 days' tokens give. Such devices have `burn_estimated` |
 | `held_back_by` | list of strings | the devices whose release keeps this device from sending its own weighted days: until every device the team knows runs v0.4.0 or later, each device sends the snapshot an older release reads, without them |
-| `estimated_reason` | string | why totals are estimated, with what to do, in a line, such as `leo-air runs v0.3.4: it updates itself within 15 minutes`, `3 devices run releases before v0.4.0: reinstall old-mini with install.sh; the other 2 update themselves within 15 minutes`, a device that `has not reported since …: forget it with ai-usage team forget-device …`, or `the team was last read 4h ago`; `null` when `estimated` is `false` |
+| `estimated_reason` | string | why totals are estimated, with what to do, in a line, such as `leo-air runs v0.3.4: it should update within 15 minutes`, `3 devices run releases before v0.4.0: reinstall old-mini with install.sh; the other 2 should update within 15 minutes`, a device that `has not reported since …: forget it with ai-usage team forget-device …`, or `the team was last read 4h ago`; `null` when `estimated` is `false` |
 | `cycles_held_back_by` | list of strings | the devices whose release keeps every device from sending its quota cycles: until every device the team knows runs v0.5.0 or later, none sends them, and each account's `utilization` holds this device's alone |
-| `cycles_reason` | string | why `utilization` holds only this device's cycles, with what to do, in a line, such as `leo-air runs v0.4.0: it updates itself within 15 minutes`, `2 devices run releases before v0.5.0: …`, `the relay did not accept cycles; trying again Sep 2 08:00`, or `the team was last read 4h ago`; `null` when the team's cycles are in |
+| `cycles_reason` | string | why `utilization` holds only this device's cycles, with what to do, in a line, such as `leo-air runs v0.4.0: it should update within 15 minutes`, `2 devices run releases before v0.5.0: …`, `the relay did not accept cycles; trying again Sep 2 08:00`, or `the team was last read 4h ago`; `null` when the team's cycles are in |
 | `today_local` | bool | `true` when every team object's `today` is the hours since local midnight, in the time zone of the machine that made the report, rather than the report's UTC day: every other device runs v0.7.0 or later, which sends its tokens by UTC hour for the last 48 hours, and the relay took them. A device that has not sent its hours yet, as in its first run on v0.7.0, counts its UTC day. `false` otherwise, and every `today` is the UTC day. `7d`, `30d`, and `90d` count UTC days either way |
 | `devices` | list | one entry per device; see below |
 | `providers` | list | `{provider, accounts}` with each account summed across devices; see below |
@@ -402,6 +404,7 @@ A cell:
 - `folders` on a project. A project is now a git repository, with its subfolders and linked worktrees, where each working folder was one; `path` is the project's folder, and `folders` says how many working folders count under it. A report from an earlier release has a project for each working folder and no `folders`: read a missing one as `1`, as `ai-usage report --from` fills it in. Every field keeps its type, and a project's numbers still sum its sessions, so the version stays 4.
 - `window_start` on a matrix column, and `device_id` on a team account's `quota`, so that a reader can say since when a window's tokens count, and whether this device or another took a reading, without working them out again. A report from an earlier release has neither: read them as `null`. No field changed meaning, so the version stays 4.
 - `today_local` on the team, in v0.7.0: while it is `true`, a team object's `today` is the hours since local midnight instead of the report's UTC day. A report from an earlier release has no `today_local`: read it as `false`, as its `today` counts the UTC day, and `ai-usage report --from` gives it so. Every field keeps its type, and `today` keeps its UTC day wherever `today_local` is `false`, so the version stays 4.
+- `method` and `command` in `collector.update`, in v0.8.0, so that a reader says how this copy updates instead of guessing from its path: `homebrew` with the command that upgrades it, or `self` with `null`. A report from an earlier release has neither: read a missing `method` as `self` and `command` as `null`, as `ai-usage report --from` fills them in. `schedule.error` can now be set while `schedule.registered` is `true`, to say another copy of ai-usage should go. No field changed meaning, so the version stays 4.
 
 ## Example
 
@@ -429,7 +432,7 @@ A shortened report from a team of two:
       "last_error": null
     },
     "schedule": { "registered": true, "foreground": false, "error": null },
-    "update": { "checked_at": "2026-09-01T09:13:00Z", "latest": "v1.3.0", "staged": null, "error": null },
+    "update": { "checked_at": "2026-09-01T09:13:00Z", "latest": "v1.3.0", "staged": null, "error": null, "method": "self", "command": null },
     "health": [
       { "item": "collection", "status": "ok", "state": "ok", "at": "2026-09-01T12:02:00Z", "release": null },
       { "item": "relay", "status": "ok", "state": "ok", "at": "2026-09-01T12:02:00Z", "release": null },

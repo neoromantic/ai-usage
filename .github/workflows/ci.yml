@@ -104,3 +104,83 @@ jobs:
       - name: Install from a local release
         shell: bash
         run: sh .github/scripts/install-smoke.sh
+
+  # The Homebrew formula, from formula.sh, with a local build: brew installs
+  # and tests it, the binary knows brew installed it, and the formula the
+  # tap gets passes brew's style and audit. On Linux, cron runs brew's opt
+  # path, and a script copy installed later leaves it so. launchd is left
+  # to the unit tests: a runner has no one logged in at the screen.
+  brew:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+      HOMEBREW_NO_ANALYTICS: 1
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      # Linux runners have Homebrew, off PATH.
+      - if: runner.os == 'Linux'
+        run: echo /home/linuxbrew/.linuxbrew/bin >>"$GITHUB_PATH"
+      # The formula names all four binaries, so all four are built.
+      - name: Build a local release
+        run: TARGETS="darwin/amd64 darwin/arm64 linux/amd64 linux/arm64" sh .github/scripts/dist.sh v9.9.9 "$RUNNER_TEMP/dist"
+      - name: formula.sh refuses an old release and a prerelease
+        run: |
+          for tag in v0.7.0 v0.8.0-rc1; do
+            if sh .github/scripts/formula.sh "$tag" "$RUNNER_TEMP/dist/checksums.txt" >/dev/null; then
+              echo "formula.sh wrote a formula for $tag"
+              exit 1
+            fi
+          done
+      # Named in full, as people install it, so Homebrew trusts the tap.
+      - name: Install with Homebrew
+        run: |
+          brew tap-new --no-git ci/aiu
+          f="$(brew --repo ci/aiu)/Formula/ai-usage.rb"
+          sh .github/scripts/formula.sh v9.9.9 "$RUNNER_TEMP/dist/checksums.txt" "file://$RUNNER_TEMP/dist" >"$f"
+          cat "$f"
+          brew install ci/aiu/ai-usage
+          brew test ci/aiu/ai-usage
+          test "$(command -v ai-usage)" = "$(brew --prefix)/bin/ai-usage"
+          test "$(ai-usage version)" = v9.9.9
+      - name: The report says Homebrew updates it
+        run: |
+          AI_USAGE_NO_SCHEDULE=1 ai-usage </dev/null
+          ai-usage report --json >"$RUNNER_TEMP/report.json"
+          jq '.collector.update' "$RUNNER_TEMP/report.json"
+          jq -e '.collector.update.method == "homebrew" and (.collector.update.command | test("neoromantic/tap"))' "$RUNNER_TEMP/report.json"
+      # A script copy installed after the Homebrew one leaves the schedule to
+      # it and says to remove itself.
+      - if: runner.os == 'Linux'
+        name: Cron runs Homebrew's opt path
+        run: |
+          opt="$(brew --prefix)/opt/ai-usage/bin/ai-usage"
+          ai-usage schedule install
+          crontab -l
+          crontab -l | grep -F "'$opt'"
+          mkdir -p ~/.local/bin
+          cp "$RUNNER_TEMP/dist/ai-usage_linux_$(go env GOARCH)" ~/.local/bin/ai-usage
+          chmod 755 ~/.local/bin/ai-usage
+          ~/.local/bin/ai-usage </dev/null
+          crontab -l
+          crontab -l | grep -F "'$opt'"
+          if crontab -l | grep -F "$HOME/.local/bin/ai-usage"; then exit 1; fi
+          ~/.local/bin/ai-usage report --json >"$RUNNER_TEMP/script.json"
+          jq '.collector.schedule' "$RUNNER_TEMP/script.json"
+          jq -e '.collector.schedule.error | test("Homebrew")' "$RUNNER_TEMP/script.json"
+      # The text the tap gets, with GitHub's URLs. The audit is offline, so it
+      # passes before the release's files exist.
+      - name: Style and audit the formula
+        run: |
+          brew uninstall ci/aiu/ai-usage
+          sh .github/scripts/formula.sh v9.9.9 "$RUNNER_TEMP/dist/checksums.txt" >"$(brew --repo ci/aiu)/Formula/ai-usage.rb"
+          brew style ci/aiu
+          brew audit --strict --formula ci/aiu/ai-usage
+          brew untap ci/aiu

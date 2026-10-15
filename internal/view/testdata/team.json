@@ -27,7 +27,9 @@
       "checked_at": "2026-09-23T12:26:00Z",
       "latest": "v1.4.2",
       "staged": null,
-      "error": null
+      "error": null,
+      "method": "self",
+      "command": null
     },
     "health": [
       {
@@ -1275,11 +1277,11 @@
     "held_back_by": [
       "ci-runner-eu-west-build-pool-node-0042ab"
     ],
-    "estimated_reason": "ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it updates itself within 15 minutes",
+    "estimated_reason": "ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it should update within 15 minutes",
     "cycles_held_back_by": [
       "ci-runner-eu-west-build-pool-node-0042ab"
     ],
-    "cycles_reason": "ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it updates itself within 15 minutes",
+    "cycles_reason": "ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it should update within 15 minutes",
     "devices": [
       {
         "device": "d-7c3e1a9b5f2d4e8a6c0b1d3f",

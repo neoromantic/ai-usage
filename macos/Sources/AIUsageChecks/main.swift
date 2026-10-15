@@ -1,5 +1,5 @@
 // The checks of AIUsageKit: xcrun swift run AIUsageChecks [DEMO_DIR]
-// DEMO_DIR holds team.json and solo.json; it defaults to the repository's
+// DEMO_DIR holds team.json, solo.json, and homebrew.json; it defaults to the repository's
 // docs/demo. Every check prints a line; any failure exits 1.
 import AIUsageKit
 import Foundation
@@ -83,6 +83,22 @@ check("older report has no health", older.collector.health.isEmpty)
 check("older report limits nothing", older.team.providers.allSatisfy { $0.accounts.allSatisfy { $0.quota?.windows.allSatisfy { !$0.limits } ?? true } })
 equal("folders", team.projects.map(\.folders), [5, 1, 1, 1, 1, 1])
 equal("older report's folders", older.projects.map(\.folders), [0, 0, 0, 0, 0, 0])
+
+// How ai-usage updates, as the report says: never from its path. One that
+// does not say updates itself.
+let homebrew = try Report.decode(Data(contentsOf: demo.appendingPathComponent("homebrew.json")))
+equal("homebrew update", [homebrew.collector.update.method, homebrew.collector.update.command],
+      ["homebrew", "brew upgrade neoromantic/tap/ai-usage"])
+check("homebrew is homebrew", homebrew.collector.update.homebrew && !solo.collector.update.homebrew && !team.collector.update.homebrew)
+equal("self update", [solo.collector.update.method, solo.collector.update.command], ["self", nil])
+let unsaid = try edited("homebrew.json") { objects($0) { $0.filter { !["method", "command"].contains($0.key) } } }
+equal("update method unsaid", [unsaid.collector.update.method, unsaid.collector.update.command], ["self", nil])
+// A newer release's tooltip: a Homebrew copy waits for Update, which runs
+// brew; one that updates itself installs it on its next check.
+equal("homebrew available", homebrew.collector.health.last.map { "\($0.status) \($0.release ?? "-")" }, "available v0.5.1")
+equal("homebrew available help", homebrew.collector.update.available("v0.5.1", version: homebrew.collector.version),
+      "v0.5.1 is out; Update runs brew upgrade neoromantic/tap/ai-usage")
+equal("self available help", solo.collector.update.available("v0.7.0", version: "v0.6.2"), "ai-usage v0.6.2 installs v0.7.0 on its next check")
 let stuck = try edited("team.json") { objects($0) { $0["device"] as? String == team.team.devices[1].device ? $0.merging(["not_updating": true]) { $1 } : $0 } }
 equal("not updating", stuck.team.devices.map(\.notUpdating), team.team.devices.indices.map { $0 == 1 })
 check("older report updates", older.team.devices.allSatisfy { !$0.notUpdating })
@@ -686,7 +702,7 @@ equal("matrix heat", matrix.lines.map { $0.cells[0].heat }, [5, 0, 0, 5, 4, 4, 4
 equal("matrix totals", matrix.totals.map(\.text), ["285", "56", "22", "128", "62", "7", "–"])
 // TOTAL of all is the rows', as the console's; leo-air's is estimated.
 equal("matrix total", [matrix.total.text, matrix.lines[2].total.text], ["~560", "~84"])
-check("matrix estimate said", matrix.lines[2].total.help.hasSuffix("\n~ leo-air runs v0.3.4: it updates itself within 15 minutes"))
+check("matrix estimate said", matrix.lines[2].total.help.hasSuffix("\n~ leo-air runs v0.3.4: it should update within 15 minutes"))
 equal("matrix unit", matrix.unit, "M weighted tokens")
 // Share: each device's part of each column, as the report has it.
 let shares = TeamMatrix(team, period: .week, mode: .share)
@@ -780,6 +796,9 @@ let about = { (app: String, cli: String?, found: Bool) -> [String?] in
     let a = AboutVersion(app: app, cli: cli, found: found)
     return [a.version, a.note]
 }
+let homebrewAbout = AboutVersion(app: "0.6.0", cli: "v0.5.1", found: true, homebrew: homebrew.collector.update.homebrew)
+equal("about a Homebrew tool", homebrewAbout.note, "Command-line tool v0.5.1 (Homebrew): updates with Check for Updates or brew upgrade")
+equal("about a Homebrew tool of the same release", AboutVersion(app: "0.6.0", cli: "v0.6.0", found: true, homebrew: true).note, nil)
 equal("about one release", about("0.6.0", "v0.6.0", true), ["0.6.0", nil])
 equal("about another release", about("0.6.0", "v0.5.1", true), ["0.6.0", "Command-line tool v0.5.1: updates with Check for Updates"])
 equal("about a build from source", about("dev", "v0.6.0", true), ["dev", "Command-line tool v0.6.0: updates with Check for Updates"])
@@ -801,6 +820,8 @@ case "$1" in
 big) /usr/bin/head -c 200000 /dev/zero | /usr/bin/tr '\\0' a; /usr/bin/head -c 100000 /dev/zero | /usr/bin/tr '\\0' b >&2 ;;
 fail) echo "ai-usage: boom" >&2; exit 3 ;;
 usage) printf 'a name cannot contain spaces\n\nai-usage collects AI harness usage\n\nUSAGE\n  ai-usage\n' >&2; exit 2 ;;
+brew) printf '==> Upgrading neoromantic/tap/ai-usage\nai-usage: not ours\n\nError: no space left\nai-usage: brew upgrade failed: Error: no space left\n' >&2; exit 1 ;;
+lag) echo "==> Fetching neoromantic/tap/ai-usage" >&2; echo "Homebrew's formula is at v0.8.0; GitHub has v0.8.1, which reaches Homebrew soon"; exit 1 ;;
 wait) printf 'ai-usage: waiting for another run, such as the scheduled one, to finish\nai-usage: no account goes by "x"; the accounts:\n  claude  mira\n' >&2; exit 2 ;;
 echo) /bin/cat ;;
 env) printf '%s|%s' "$AI_USAGE_HOME" "$PATH" ;;
@@ -846,6 +867,16 @@ check("usage error without the help", {
 }())
 check("error without the wait", {
     do { _ = try cli.runSync(["wait"]); return false } catch { return error as? CLIError == .failed(status: 2, message: "no account goes by \"x\"; the accounts:\n  claude  mira") }
+}())
+// What brew prints comes before ai-usage's own error line; a lagging
+// formula is said on standard output.
+check("error after brew's output", {
+    do { _ = try cli.runSync(["brew"]); return false } catch { return error as? CLIError == .failed(status: 1, message: "brew upgrade failed: Error: no space left") }
+}())
+check("error said on standard output", {
+    do { _ = try cli.runSync(["lag"]); return false } catch {
+        return error as? CLIError == .failed(status: 1, message: "Homebrew's formula is at v0.8.0; GitHub has v0.8.1, which reaches Homebrew soon")
+    }
 }())
 equal("message of nothing", CLI.message(stderr: "\n"), "")
 equal("stdin", String(decoding: try cli.runSync(["echo"], input: Data("key\n".utf8)), as: UTF8.self), "key\n")

@@ -69,6 +69,10 @@ type State struct {
 	// version, relay, and homes. A run that waited for it reuses its result
 	// only when its own inputs are the same.
 	LastRunInputs string `json:"last_run_inputs,omitempty"`
+	// RanVersion is the release of the last run that collected. Another
+	// release in a later run of a Homebrew copy means brew replaced the
+	// binary the launch agent runs.
+	RanVersion string `json:"ran_version,omitempty"`
 
 	Sources map[string]Source `json:"sources"`
 	// Current maps provider and home to the account logged in there at the last run.

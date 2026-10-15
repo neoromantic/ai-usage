@@ -88,3 +88,15 @@ jobs:
             gh release create "$TAG" dist/* --draft --verify-tag --title "$TAG" --generate-notes "${flags[@]}"
           fi
           gh release edit "$TAG" --draft=false
+      # The formula in neoromantic/homebrew-tap, for brew installs. A
+      # prerelease leaves it alone; a full release fails here until the
+      # secret HOMEBREW_TAP_KEY holds the tap's deploy key, and a rerun is
+      # safe. See docs/releasing.md. brew audit reads the repository and
+      # the release from GitHub's API, with the job's token so that a shared
+      # runner's limit for anonymous calls does not fail it.
+      - name: Update the Homebrew tap
+        env:
+          TAP_KEY: ${{ secrets.HOMEBREW_TAP_KEY }}
+          TAG: ${{ github.ref_name }}
+          HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
+        run: sh .github/scripts/tap.sh "$TAG" dist/checksums.txt

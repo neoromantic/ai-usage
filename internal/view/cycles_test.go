@@ -173,7 +173,7 @@ func TestCyclesHeldBack(t *testing.T) {
 	if got := r.Team.CyclesHeldBackBy; len(got) != 1 || got[0] != "otherbox" {
 		t.Fatalf("held back by %v", got)
 	}
-	if r.Team.CyclesReason == nil || *r.Team.CyclesReason != "otherbox runs v0.4.0: it updates itself within 15 minutes" {
+	if r.Team.CyclesReason == nil || *r.Team.CyclesReason != "otherbox runs v0.4.0: it should update within 15 minutes" {
 		t.Fatalf("reason %v", r.Team.CyclesReason)
 	}
 	// The cycles a device on v0.4.0 never sends are this device's alone.
@@ -181,7 +181,7 @@ func TestCyclesHeldBack(t *testing.T) {
 		t.Fatalf("weekly cycles: %+v", c)
 	}
 	text := plainText(r, Options{Width: 120, Loc: time.UTC})
-	if !strings.Contains(text, "  only this device's cycles: otherbox runs v0.4.0: it updates itself within 15 minutes\n") {
+	if !strings.Contains(text, "  only this device's cycles: otherbox runs v0.4.0: it should update within 15 minutes\n") {
 		t.Fatalf("the page does not say why:\n%s", text)
 	}
 

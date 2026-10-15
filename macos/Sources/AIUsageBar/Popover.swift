@@ -836,7 +836,7 @@ struct HealthLine {
         case ("update", "unchecked"):
             (text, help) = ("Not checked", "ai-usage has not checked for a release yet")
         case ("update", "available"):
-            (text, help) = ("\(release) available", "ai-usage \(c.version) installs \(release) on its next check")
+            (text, help) = ("\(release) available", c.update.available(release, version: c.version))
         case ("update", "ok"):
             (text, help) = ("Up to date", "ai-usage \(c.version) is the latest release, checked \(ago)")
         default:
@@ -915,7 +915,7 @@ private struct ChipRow: View {
             }.joined(separator: "\n")
         case .notUpdating:
             let latest = report.team.latestVersion.map { "Latest \($0)" }
-            let more = chip.updating > 0 ? "\(chip.updating) more on older releases update on their own" : nil
+            let more = chip.updating > 0 ? "others on older releases should update soon" : nil
             return ([chip.devices.joined(separator: ", ") + " did not update"] + [latest, more].compactMap { $0 }).joined(separator: "\n")
         }
     }
@@ -976,6 +976,7 @@ private struct ChipButton: View {
 private struct EmptyStateView: View {
     @EnvironmentObject private var store: Store
     static let install = "curl -fsSL https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.sh | sh"
+    static let brewInstall = "brew install neoromantic/tap/ai-usage"
     @ViewState private var copied = false
     @ViewState private var showDetails = false
 
@@ -1020,6 +1021,14 @@ private struct EmptyStateView: View {
                         .buttonStyle(.borderedProminent)
                         .help("Opens Terminal and runs the command there")
                 }
+                // Homebrew, quieter: the installer is the one way for
+                // everyone.
+                (Text("Or with Homebrew: ") + Text(Self.brewInstall).font(.system(.subheadline, design: .monospaced)))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
             case .notCollected:
                 busyButton(store.collecting ? "Collecting…" : "Collect Now", busy: store.collecting) {
                     await store.collect()

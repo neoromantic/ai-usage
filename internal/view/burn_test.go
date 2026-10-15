@@ -37,7 +37,7 @@ func TestTeamEstimatedReason(t *testing.T) {
 	}{
 		{"one that updates itself", func(k *team.Key) []snapshot.Doc {
 			return []snapshot.Doc{legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4")}
-		}, nil, []string{"abox"}, "abox runs v0.3.4: it updates itself within 15 minutes"},
+		}, nil, []string{"abox"}, "abox runs v0.3.4: it should update within 15 minutes"},
 		{"one to reinstall", func(k *team.Key) []snapshot.Doc {
 			return []snapshot.Doc{legacyDoc(t, k, "d-abox-device", "abox", "v0.2.4")}
 		}, nil, []string{"abox"}, "abox runs v0.2.4: reinstall with install.sh"},
@@ -48,7 +48,7 @@ func TestTeamEstimatedReason(t *testing.T) {
 				legacyDoc(t, k, "d-cbox-device", "cbox", "v0.3.0"),
 				legacyDoc(t, k, "d-dbox-device", "dbox", "v0.3.1"),
 			}
-		}, nil, []string{"abox", "bbox", "cbox", "dbox"}, "4 devices run releases before v0.4.0: reinstall bbox with install.sh; the other 3 update themselves within 15 minutes"},
+		}, nil, []string{"abox", "bbox", "cbox", "dbox"}, "4 devices run releases before v0.4.0: reinstall bbox with install.sh; the other 3 should update within 15 minutes"},
 		// Only the old one is named to reinstall, though the others are busier.
 		{"several, one to reinstall", func(k *team.Key) []snapshot.Doc {
 			busy := func(device, host string) snapshot.Doc {
@@ -59,7 +59,7 @@ func TestTeamEstimatedReason(t *testing.T) {
 				return d
 			}
 			return []snapshot.Doc{busy("d-abox-device", "abox"), busy("d-bbox-device", "bbox"), legacyDoc(t, k, "d-cbox-device", "cbox", "v0.2.0")}
-		}, nil, []string{"abox", "bbox", "cbox"}, "3 devices run releases before v0.4.0: reinstall cbox with install.sh; the other 2 update themselves within 15 minutes"},
+		}, nil, []string{"abox", "bbox", "cbox"}, "3 devices run releases before v0.4.0: reinstall cbox with install.sh; the other 2 should update within 15 minutes"},
 		{"several, each its own way", func(k *team.Key) []snapshot.Doc {
 			gone := legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4")
 			gone.CollectedAt = now.Add(-9 * 24 * time.Hour)
@@ -69,14 +69,14 @@ func TestTeamEstimatedReason(t *testing.T) {
 			away.CollectedAt = now.Add(-2 * 24 * time.Hour)
 			return []snapshot.Doc{gone, failing, away, legacyDoc(t, k, "d-dbox-device", "dbox", "v0.2.4")}
 		}, nil, []string{"bbox", "cbox", "dbox", "abox"},
-			"4 devices run releases before v0.4.0: reinstall dbox with install.sh; forget abox with ai-usage team forget-device abox-dev; run ai-usage update on bbox, whose update fails; cbox updates itself when it next runs"},
+			"4 devices run releases before v0.4.0: reinstall dbox with install.sh; forget abox with ai-usage team forget-device abox-dev; run ai-usage update on bbox, which has not updated; cbox should update when it next runs"},
 		{"several, the busiest first", func(k *team.Key) []snapshot.Doc {
 			busy := emptyState()
 			addAccount(busy, "codex", "bob", true, nil, 5000)
 			d := otherDoc(t, k, "d-cbox-device", "cbox", now.Add(-5*time.Minute), busy).Legacy()
 			d.CollectorVersion = "v0.3.0"
 			return []snapshot.Doc{legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4"), d}
-		}, nil, []string{"cbox", "abox"}, "2 devices run releases before v0.4.0: they update themselves within 15 minutes (cbox, abox)"},
+		}, nil, []string{"cbox", "abox"}, "2 devices run releases before v0.4.0: they should update within 15 minutes (cbox, abox)"},
 		{"one gone silent", func(k *team.Key) []snapshot.Doc {
 			d := legacyDoc(t, k, "d-abox1234-device", "abox", "v0.3.4")
 			d.CollectedAt = now.Add(-9 * 24 * time.Hour)
@@ -87,7 +87,7 @@ func TestTeamEstimatedReason(t *testing.T) {
 			d := legacyDoc(t, k, "d-abox1234-device", "abox", "v0.3.4")
 			d.CollectedAt = now.Add(-2 * 24 * time.Hour)
 			return []snapshot.Doc{d}
-		}, nil, []string{"abox"}, "abox has not reported since Aug 30: it updates itself when it next runs"},
+		}, nil, []string{"abox"}, "abox has not reported since Aug 30: it should update when it next runs"},
 		{"one built from source", func(k *team.Key) []snapshot.Doc {
 			return []snapshot.Doc{legacyDoc(t, k, "d-abox-device", "abox", "dev")}
 		}, nil, []string{"abox"}, "abox runs a build from source before v0.4.0: build it again"},
@@ -95,7 +95,17 @@ func TestTeamEstimatedReason(t *testing.T) {
 			d := legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4")
 			d.LastError = k.Seal(snapshot.UpdateLine + "download failed")
 			return []snapshot.Doc{d}
-		}, nil, []string{"abox"}, "abox runs v0.3.4: its update fails; run ai-usage update on it"},
+		}, nil, []string{"abox"}, "abox runs v0.3.4 and has not updated; run ai-usage update on it"},
+		// As a device Homebrew installed waits for someone to run brew.
+		{"two that have not updated", func(k *team.Key) []snapshot.Doc {
+			var docs []snapshot.Doc
+			for _, host := range []string{"abox", "bbox"} {
+				d := legacyDoc(t, k, "d-"+host+"-device", host, "v0.3.4")
+				d.LastError = k.Seal(snapshot.UpdateLine + "download failed")
+				docs = append(docs, d)
+			}
+			return docs
+		}, nil, []string{"abox", "bbox"}, "2 devices run releases before v0.4.0: run ai-usage update on abox, bbox, which have not updated"},
 		{"refused", func(k *team.Key) []snapshot.Doc {
 			return []snapshot.Doc{legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4")}
 		}, func(f *fixture) { f.in.State.Relay.NoExtUntil = now.Add(2 * time.Hour) }, []string{"abox"},

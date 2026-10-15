@@ -42,10 +42,15 @@ func Build(in Input) Report {
 				Latest:    strPtr(st.Update.Latest),
 				Staged:    strPtr(staged(st.Update.Installed, in.Version)),
 				Error:     strPtr(st.Update.Error),
+				Method:    MethodSelf,
+				Command:   strPtr(in.BrewCommand),
 			},
 		},
 		Providers: []Provider{},
 		Projects:  []Project{},
+	}
+	if in.Homebrew {
+		r.Collector.Update.Method = MethodHomebrew
 	}
 	r.Collector.Health = health(r.Collector, now)
 
@@ -98,6 +103,7 @@ func Build(in Input) Report {
 // sessions of 90 days as the sessions active in every period, as that
 // release showed them.
 func Fill(r *Report) {
+	r.Collector.Update.Method = cmp.Or(r.Collector.Update.Method, MethodSelf)
 	if r.Collector.Health == nil {
 		r.Collector.Health = health(r.Collector, r.GeneratedAt)
 	}

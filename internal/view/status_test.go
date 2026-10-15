@@ -123,3 +123,53 @@ func TestCollectorSection(t *testing.T) {
 		t.Fatalf("unconfigured relay not shown:\n%s", status)
 	}
 }
+
+// The report says how this copy updates: by itself, or by brew, with the
+// command that runs it. A report saved before that said nothing updated
+// itself.
+func TestUpdateMethod(t *testing.T) {
+	st := emptyState()
+	st.Update = state.Update{Latest: "v1.4.0"}
+	f := newFixture(t, st)
+	r := Build(f.in)
+	if u := r.Collector.Update; u.Method != MethodSelf || u.Command != nil {
+		t.Fatalf("a copy that updates itself: method %q, command %v", u.Method, u.Command)
+	}
+	if status := StatusText(r, "", Options{Width: 100, Loc: time.UTC}); !strings.Contains(status, "newest release v1.4.0") || strings.Contains(status, "brew") {
+		t.Fatalf("status of a copy that updates itself:\n%s", status)
+	}
+
+	f.in.Homebrew, f.in.BrewCommand = true, "brew upgrade neoromantic/tap/ai-usage"
+	r = Build(f.in)
+	if u := r.Collector.Update; u.Method != MethodHomebrew || u.Command == nil || *u.Command != f.in.BrewCommand {
+		t.Fatalf("a Homebrew copy: method %q, command %v", u.Method, u.Command)
+	}
+	status := StatusText(r, "", Options{Width: 120, Loc: time.UTC})
+	if want := "v1.4.0 is out; run brew upgrade neoromantic/tap/ai-usage or ai-usage update"; !strings.Contains(status, want) {
+		t.Fatalf("status lacks %q:\n%s", want, status)
+	}
+	// Root gets no command: Homebrew installs are per-user.
+	f.in.BrewCommand = ""
+	if u := Build(f.in).Collector.Update; u.Method != MethodHomebrew || u.Command != nil {
+		t.Fatalf("a Homebrew copy run as root: method %q, command %v", u.Method, u.Command)
+	}
+
+	saved := Build(f.in)
+	saved.Collector.Update.Method = ""
+	Fill(&saved)
+	if saved.Collector.Update.Method != MethodSelf {
+		t.Fatalf("a report saved before the method: %q", saved.Collector.Update.Method)
+	}
+}
+
+// A schedule that runs although another copy of ai-usage is installed says
+// to remove that copy.
+func TestStatusScheduleOfTwoCopies(t *testing.T) {
+	st := emptyState()
+	msg := "another ai-usage at /Users/ann/.local/bin/ai-usage also runs; remove it: rm /Users/ann/.local/bin/ai-usage"
+	st.Schedule = state.Schedule{Registered: true, Error: msg}
+	status := StatusText(Build(newFixture(t, st).in), "", Options{Width: 160, Loc: time.UTC})
+	if !strings.Contains(status, "registered with the system scheduler") || !strings.Contains(status, msg) || strings.Contains(status, "register: ") {
+		t.Fatalf("status:\n%s", status)
+	}
+}

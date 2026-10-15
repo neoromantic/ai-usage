@@ -30,6 +30,8 @@ const stillRefused = "launchd refuses to start the updated binary; `ai-usage sch
 
 // ensureSchedule registers this binary and state folder unless the scheduler
 // already runs them. An entry the person commented out or disabled stays so.
+// Where Homebrew installed ai-usage and the installer did too, the scheduler
+// runs only Homebrew's copy, and each says the installer's should go.
 func ensureSchedule(ctx context.Context, d state.Dir, st *state.State, now time.Time) {
 	last := st.Schedule
 	st.Schedule.CheckedAt = now
@@ -71,7 +73,28 @@ func ensureSchedule(ctx context.Context, d state.Dir, st *state.State, now time.
 		st.Schedule.Error = err.Error() + "; keep `ai-usage schedule run` running instead, such as beside a container's other services"
 	case err != nil:
 		st.Schedule.Error = err.Error()
+	case brewCopy() != "":
+		st.Schedule.Error = yieldToBrew(brewCopy())
+	case brewPrefix() != "":
+		switch p := scriptCopy(); {
+		case p == filepath.Join(brewPrefix(), "bin", "ai-usage"):
+			st.Schedule.Error = "another ai-usage at " + p + " keeps Homebrew from linking this one; replace it: " + brewLink
+		case p != "":
+			st.Schedule.Error = "another ai-usage at " + p + " also runs; remove it: rm " + p
+		}
 	}
+}
+
+// yieldToBrew says that the copy of ai-usage Homebrew installed under prefix
+// runs the schedule, and how this copy, the installer's, goes. One in
+// Homebrew's own bin folder keeps brew from linking its copy there.
+func yieldToBrew(prefix string) string {
+	bin := filepath.Join(prefix, "bin", "ai-usage")
+	self, _ := executable()
+	if self == bin {
+		return "Homebrew's ai-usage runs the schedule, but this copy at " + bin + " keeps brew from linking it; replace this copy: " + brewLink
+	}
+	return "Homebrew's ai-usage at " + bin + " runs the schedule; remove this copy: rm " + self
 }
 
 // repairs says whether this run may have launchd start the macOS launch
@@ -114,19 +137,26 @@ func repairAgent(ctx context.Context, d state.Dir, st *state.State, replaced boo
 
 // healSchedule repairs a macOS launch agent launchd refused to start at its
 // last run, so a report a person or the menu bar app reads brings collection
-// back at once, not at the next run. The run launchd starts takes the run
-// lock itself.
+// back at once, not at the next run. A copy Homebrew installed whose last
+// collection was another release was upgraded by brew since, which launchd
+// would refuse at the next run, so it has launchd start the agent as after
+// a self-update; that run collects, so this happens once an upgrade. The run
+// launchd starts takes the run lock itself.
 func healSchedule(ctx context.Context, d state.Dir, st *state.State) {
 	if !selfupdate.Dev(version) {
-		repairAgent(ctx, d, st, false)
+		repairAgent(ctx, d, st, brewPrefix() != "" && st.RanVersion != "" && st.RanVersion != version)
 	}
 }
 
-// job is what the scheduler should run: this binary, collecting into the
-// absolute state folder, since the scheduler starts it in another directory.
+// job is what the scheduler should run: this binary, or the copy Homebrew
+// installed beside it, collecting into the absolute state folder, since the
+// scheduler starts it in another directory.
 func job(d state.Dir) (exe, home string, err error) {
 	if exe, err = executable(); err != nil {
 		return "", "", err
+	}
+	if p := brewCopy(); p != "" {
+		exe = brewOpt(p)
 	}
 	if home, err = filepath.Abs(string(d)); err != nil {
 		return "", "", err
@@ -134,12 +164,14 @@ func job(d state.Dir) (exe, home string, err error) {
 	return exe, home, nil
 }
 
+// executable is this binary, by the path Homebrew keeps for it across
+// upgrades when Homebrew installed it.
 func executable() (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return "", err
 	}
-	return fsutil.RealPath(exe), nil
+	return fsutil.HomebrewStable(fsutil.RealPath(exe)), nil
 }
 
 func cmdSchedule(ctx context.Context, args []string, stdout, stderr io.Writer) error {

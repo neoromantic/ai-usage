@@ -36,7 +36,7 @@ ai-usage is one small binary for macOS, Linux, and Windows. The system scheduler
 - **ATTENTION, only when something is wrong.** A full window, one that will run out before its reset, a machine whose tool fails or that stopped reporting, an old release, a subscription nobody uses.
 - **The whole team.** Laptops, servers, and bots in containers, every machine against every subscription, with each one's share. A colleague joins with one command. See [Teams](#teams).
 - **Private by design.** The relay sees tools, plans, and numbers. Names, emails, and project paths are encrypted with the team key, and every snapshot is signed. See [Privacy](#privacy).
-- **Nothing to run or look after.** No daemon, no account, no config file. One line installs it, and it schedules and updates itself.
+- **Nothing to run or look after.** No daemon, no account, no config file. It installs with one line or with Homebrew, and schedules itself. A script install updates itself; a Homebrew one updates with `brew upgrade` or `ai-usage update`.
 - **Spends none of your quota.** It asks the tools you already have instead of calling Anthropic, OpenAI, or xAI, and never reads your credentials. Asking Claude Code for its usage spends no tokens. See [Other data folders](#other-data-folders).
 - **A menu bar app on macOS.** A ring in the menu bar shows what is left; a click says what is out or runs out, and when, and a notification says it once as it happens. See [Menu bar app](#menu-bar-app).
 - **JSON for agents,** with a versioned schema, so an agent can pick the account with room. See [JSON for agents](#json-for-agents).
@@ -47,7 +47,17 @@ ai-usage is one small binary for macOS, Linux, and Windows. The system scheduler
 curl -fsSL https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.sh | sh
 ```
 
-That line installs `ai-usage`, registers it with launchd or cron, and prints your report. On macOS 14 and later it also installs the [menu bar app](#menu-bar-app). From then on:
+That line installs `ai-usage`, registers it with launchd or cron, and prints your report. On macOS 14 and later it also installs the [menu bar app](#menu-bar-app).
+
+Or, from v0.8.0, with [Homebrew](#homebrew) on macOS or Linux:
+
+```sh
+brew install neoromantic/tap/ai-usage
+ai-usage               # collect, register with launchd or cron, and print the report
+ai-usage app install   # on macOS 14 and later, the menu bar app
+```
+
+From then on:
 
 ```sh
 ai-usage             # collect now and open the page
@@ -111,7 +121,7 @@ SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
   GROK
 ● a4c2e917       SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  annbook           11h
 UTILIZATION  fullest % before each reset
-  only this device's cycles: ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it updates itself within 15 minutes
+  only this device's cycles: ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it should update within 15 minutes
 
   CLAUDE         CYCLES  OUT  AVG  NEWEST FIRST
 ● ann@acme.dev       13    5  86%   100  100   92  ~78  100   64   88  100   71  ~45   96  100   83
@@ -158,7 +168,7 @@ PROJECTS  annbook · by 7d · M weighted tokens · claude since Sep 2
   + 4 more
 
 ━ used  ─ left  ┃╋ even use  ┈ no reading  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
-~ stale/estimated: ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it updates itself within 15 minutes
+~ stale/estimated: ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it should update within 15 minutes
 ```
 
 </details>
@@ -185,7 +195,7 @@ When standard input and output are both terminals, `ai-usage` opens the same pag
 
 ## Menu bar app
 
-On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/Applications` and opens it. It starts at login and updates with `ai-usage`.
+On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/Applications` and opens it. With Homebrew, or after an install without it, `ai-usage app install` adds it; it then follows `ai-usage`. It starts at login and updates with `ai-usage`.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/demo/menubar-light.png">
@@ -243,14 +253,14 @@ A click on a row opens its details: each window with its forecast, and the forec
 
 **Notifications** say when a window is out, "Claude mira · 5h is out", with when it is back, and when one will run out before its reset, "Claude mira · 7d runs out ~Sat 11:12", with how long before its reset. A window whose run-out time passed with nobody on the team spending on it since gets none. They are the windows the report's ATTENTION marks out and over, and Settings picks which: When a Window Is Out (on by default); When a Window Will Run Out, Within a Day (the default), Any Time, or Never, since a forecast early in a long window can say it runs out days ahead and change by the next reading; and Subscriptions, This Mac's (the default), those logged in here, or The Team's, every subscription with a reading, bots' included, where a notification also names the device that uses it most, "used on build-01 +9". Each window gets one notification per period and state, not one at every run: a forecast that dips under 100% and rises again says nothing new, and after its reset a window starts over. The app remembers what it said in its settings, so a restart says nothing twice. A click on a notification opens the popover on that subscription in Limits, when the menu bar has room to show the app's item. macOS asks for permission when there is first something to say, or when you turn a notification on; when you decline, the app asks no more, and Settings says where to turn notifications on.
 
-**Settings** does what the terminal commands do: this Mac's name in the team (`ai-usage name`), the names of accounts (`ai-usage alias`), the relay (`ai-usage relay`), the team key, open at login, what the menu bar shows and whose subscriptions it tracks, notifications, and updates. About names the app and its version once, beside Check for Updates, which runs `ai-usage update` and so updates the app too, and says where the command-line tool is. It names the tool's release only when it is another one, "Command-line tool v0.5.1: updates with Check for Updates", or says the tool is not found.
+**Settings** does what the terminal commands do: this Mac's name in the team (`ai-usage name`), the names of accounts (`ai-usage alias`), the relay (`ai-usage relay`), the team key, open at login, what the menu bar shows and whose subscriptions it tracks, notifications, and updates. About names the app and its version once, beside Check for Updates, which runs `ai-usage update` and so updates the app too, and says where the command-line tool is, "Command-Line Tool (Homebrew)" when the report says Homebrew installed it. It names the tool's release only when it is another one, "Command-line tool v0.5.1: updates with Check for Updates", or "Command-line tool v0.5.1 (Homebrew): updates with Check for Updates or brew upgrade", or says the tool is not found. Under Homebrew, Check for Updates runs `ai-usage update`, which runs `brew upgrade neoromantic/tap/ai-usage` and brings the app to the release brew installed; it waits up to 15 minutes for it. When it fails, the app shows ai-usage's own error, not what brew printed before it.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/demo/app-settings-light.png">
   <img alt="Settings, General: what the menu bar shows and whose subscriptions it tracks, notifications when a window is out or will run out and for whose subscriptions, this Mac's name, open at login, and About with the app's version and where the command-line tool is" src="docs/demo/app-settings.png" width="460">
 </picture>
 
-The app computes nothing itself. It runs `ai-usage report --json` every minute and when the popover opens, and shows what the report says: forecasts, states, what needs attention, and the collector's health. Its notifications come from the same report. It finds the binary through the launch agent, or shows the install command when there is none. To go without it, install with `AI_USAGE_NO_APP=1`, or remove it as [Uninstall](#uninstall) shows; self-update does not bring it back.
+The app computes nothing itself. It runs `ai-usage report --json` every minute and when the popover opens, and shows what the report says: forecasts, states, what needs attention, and the collector's health. Its notifications come from the same report. The tooltip of a release that is out takes its words from the report too: "ai-usage v0.5.0 installs v0.5.1 on its next check" for a script install, and "v0.5.1 is out; Update runs brew upgrade neoromantic/tap/ai-usage" for a Homebrew one. It finds the binary through the launch agent, or shows the install command when there is none, with the Homebrew one under it. To go without it, install with `AI_USAGE_NO_APP=1`, or remove it as [Uninstall](#uninstall) shows; neither self-update nor `brew upgrade` brings it back, and `ai-usage app install` does.
 
 ## Install
 
@@ -266,6 +276,8 @@ Windows, in PowerShell:
 irm https://raw.githubusercontent.com/neoromantic/ai-usage/main/install.ps1 | iex
 ```
 
+Or with [Homebrew](#homebrew) on macOS and Linux, from v0.8.0.
+
 Releases are built for amd64 and arm64 on each OS, and the menu bar app is one build for Apple silicon and Intel Macs. The installer:
 
 1. downloads the release file for your OS and CPU, and `checksums.txt` from the same release, and on macOS 14 and later the [menu bar app](#menu-bar-app) from that release too
@@ -275,7 +287,7 @@ Releases are built for amd64 and arm64 on each OS, and the menu bar app is one b
 5. runs `ai-usage` once, which registers it with the scheduler and prints the report with a short guide under it
 6. on macOS 14 and later, puts the menu bar app in `~/Applications/AI Usage.app` in place of an earlier copy, quits the copy that runs, and opens the new one; with no one logged in at the screen, as over SSH, it says to open the app there once instead
 
-On macOS and Linux, an upgrade replaces the binary where it is: `~/.local/bin/ai-usage`, or the `ai-usage` found on `PATH` when you can write to its folder. A new install goes into the first of `~/.local/bin`, `~/bin`, `/opt/homebrew/bin`, and `/usr/local/bin` that is on your `PATH` and that you can write to, and never into a folder that belongs to another tool, such as `~/.cargo/bin`.
+On macOS and Linux, an upgrade replaces the binary where it is: `~/.local/bin/ai-usage`, or the `ai-usage` found on `PATH` when you can write to its folder. A new install goes into the first of `~/.local/bin` and `~/bin` that is on your `PATH` and that you can write to, and never into a folder that belongs to another tool, such as `~/.cargo/bin` or Homebrew's `/opt/homebrew/bin` and `/usr/local/bin`.
 
 When none of them is, the binary goes into `~/.local/bin`, and the installer adds that folder to `PATH` in the profile of your login shell, the one `$SHELL` names:
 
@@ -290,7 +302,17 @@ When none of them is, the binary goes into `~/.local/bin`, and the installer add
 
 It adds a block that starts with `# Added by the ai-usage installer`, once: running the installer again adds nothing. A new terminal finds `ai-usage` by name; in the terminal you installed from, use the full path the installer prints. With `AI_USAGE_NO_MODIFY_PATH=1`, and as root under `sudo`, where `HOME` can still be yours, it leaves profiles alone and prints the line to add.
 
-The installer replaces only its own binary. Another program named `ai-usage`, or a link such as Homebrew's or a version manager's shim, stays where it is, and the installer picks a folder as it would for a new install. When the only folder left holds one, it stops; set `AI_USAGE_BIN_DIR` then. When another `ai-usage` still comes first on your `PATH`, such as an older copy in a folder you cannot write to, the installer says so, because typing `ai-usage` runs that one.
+The installer replaces only its own binary. Another program named `ai-usage`, or a link such as a version manager's shim, stays where it is, and the installer picks a folder as it would for a new install. When the only folder left holds one, it stops; set `AI_USAGE_BIN_DIR` then. When another `ai-usage` still comes first on your `PATH`, such as an older copy in a folder you cannot write to, the installer says so, because typing `ai-usage` runs that one.
+
+When Homebrew installed ai-usage for you, which the installer tells by an `opt/ai-usage` you own under `$HOMEBREW_PREFIX`, `/opt/homebrew`, `/usr/local`, or `/home/linuxbrew/.linuxbrew`, it stops before it downloads anything. Another user's Homebrew copy, in a prefix you share, does not stop it:
+
+```
+ai-usage install: ai-usage is installed with Homebrew (/opt/homebrew/bin/ai-usage); update it with
+`brew upgrade neoromantic/tap/ai-usage`. To use this installer instead,
+run `brew uninstall neoromantic/tap/ai-usage` first; the state folder and team key stay.
+```
+
+With `AI_USAGE_BIN_DIR` set it installs a second copy anyway, which leaves the schedule to Homebrew's; see [Two copies](#two-copies).
 
 The installer asks no questions. Run it again to upgrade in place. It reads these variables:
 
@@ -326,6 +348,41 @@ On Linux the schedule needs `crontab`, which containers and some minimal systems
 
 The menu bar app is for the person at the screen, so root never gets it. When it cannot be installed, for example on macOS 13, the installer says why and the rest of the install stands.
 
+### Homebrew
+
+From v0.8.0, on macOS and Linux:
+
+```sh
+brew install neoromantic/tap/ai-usage
+ai-usage team join          # optional: paste a teammate's key, to join their team
+ai-usage relay set URL      # optional: your own relay
+ai-usage name set NAME      # optional: this machine's name in the team
+ai-usage                    # collect, register with launchd or cron, and print the report
+ai-usage app install        # on macOS 14 and later: the menu bar app
+```
+
+Homebrew installs the binary and nothing else: it runs no command of ai-usage's, so the first `ai-usage` registers the schedule, as the installer's first run does, and `ai-usage app install` adds the menu bar app. If you ran `ai-usage schedule remove` before, run `ai-usage schedule install` instead of the bare `ai-usage`, since runs leave a removed schedule removed. Homebrew is per-user: run these as the person whose usage you want to collect, not with `sudo`.
+
+Type the full name, `neoromantic/tap/ai-usage`, in every brew command. Homebrew trusts a formula from a tap outside its own by that name, and refreshes the tap before an upgrade only when it is named. If you added the tap first with `brew tap neoromantic/tap` and Homebrew asks you to trust it, `brew trust neoromantic/tap` does.
+
+The schedule names Homebrew's stable path, such as `/opt/homebrew/opt/ai-usage/bin/ai-usage`, which brew moves to each new release, so upgrades never touch the launch agent or the crontab line. A copy Homebrew installed never replaces itself; see [Updates](#updates).
+
+`ai-usage app install` puts the menu bar app of the binary's release in `~/Applications/AI Usage.app`, as the installer does, whatever installed ai-usage. It needs macOS 14 or later, refuses root and builds from source, quits a copy that runs, and opens the new one; with no one logged in at the screen, it says to open the app there once. Runs keep the app at the binary's release from then on. It says `run ai-usage first, so the app finds a report` when nothing has been collected yet, and installs the app anyway.
+
+### Two copies
+
+Homebrew's copy and one the installer put in `~/.local/bin` or `~/bin` would take turns registering with the scheduler, so the scheduler runs only Homebrew's. The installer's copy, from v0.8.0, registers Homebrew's copy in its place, as does `ai-usage schedule install` run from it, and leaves updates to Homebrew's. `ai-usage status` then says `Homebrew's ai-usage at /opt/homebrew/bin/ai-usage runs the schedule; remove this copy: rm /Users/ann/.local/bin/ai-usage`. Homebrew's copy says `another ai-usage at /Users/ann/.local/bin/ai-usage also runs; remove it: rm /Users/ann/.local/bin/ai-usage`. An installer copy before v0.8.0 updates itself to the latest release within 15 minutes, and hands over from then on. Both copies share the state folder, the team key, and the history.
+
+An installer before v0.8.0 could put its copy in `/opt/homebrew/bin` or `/usr/local/bin`, where brew then cannot link its own, and `brew install` says so. Both copies then say to run `brew link --overwrite neoromantic/tap/ai-usage`, which puts Homebrew's link in place of the installer's copy.
+
+Only your own Homebrew copy counts. Another user's, in a prefix you share, as root sees an admin's `/home/linuxbrew/.linuxbrew`, runs only that user's schedule, so your copy registers and updates itself as before.
+
+### Switch between the installer and Homebrew
+
+From the installer to Homebrew: remove the installer's copy, `rm ~/.local/bin/ai-usage`, or the path `which -a ai-usage` shows, and the block in your shell profile that starts with `# Added by the ai-usage installer`; then `brew install neoromantic/tap/ai-usage`, and run `ai-usage`. The state folder and the team key stay, so the machine stays the same device in the team.
+
+From Homebrew to the installer: `brew uninstall neoromantic/tap/ai-usage`, then run the installer again. Its first run registers the installer's copy in place of Homebrew's.
+
 ## First run
 
 The first run:
@@ -334,7 +391,7 @@ The first run:
 - generates a new team key, unless the installer joined a team, so an install starts as a team of one
 - registers with the scheduler: a line in your crontab on Linux, a launch agent on macOS, a task named `ai-usage` in Task Scheduler on Windows
 - collects and prints the report
-- prints a short guide under the report: which scheduler now collects every 15 minutes, or what to do when none could be registered; what the team and the relay see; what a weighted token weighs; when it applies, that the team's tables count UTC days, and today from your local midnight, that the ledger holds less than 90 days of Claude, or why the team's totals are estimated; and the commands worth knowing, with how to invite a colleague, how to pause the system scheduler's runs, and how to uninstall
+- prints a short guide under the report: which scheduler now collects every 15 minutes, or what to do when none could be registered; what the team and the relay see; what a weighted token weighs; when it applies, that the team's tables count UTC days, and today from your local midnight, that the ledger holds less than 90 days of Claude, or why the team's totals are estimated; and the commands worth knowing, with how to invite a colleague, `ai-usage app install` on a Mac with macOS 14 or later that does not have the menu bar app, how to pause the system scheduler's runs, and how to uninstall
 
 The guide is printed once. When the scheduler collected first, or the first run you started used `--json`, the guide comes with the next `ai-usage` that prints text; `ai-usage report` never prints it.
 
@@ -385,7 +442,7 @@ A team is one key pair. Every machine in the team stores the same private key. T
 To add a machine to your team:
 
 1. On a machine in the team, run `ai-usage team key`. It prints the private key, `aiu-team-1:…`. Anyone who has it can read the team's snapshots and publish into the team, so share it the way you would share a password.
-2. On the new machine, install with `AI_USAGE_TEAM_KEY` as shown above, or run `ai-usage team join` and paste the key.
+2. On the new machine, install with `AI_USAGE_TEAM_KEY` as shown above, or run `ai-usage team join` and paste the key, as after a Homebrew install.
 3. Make sure both machines use the same relay: `ai-usage relay show`.
 
 Joining saves the previous key as `team.key.previous`, drops the cached team, and asks the relay, if one is set, to remove this machine from the old team. `ai-usage team` lists the team's machines. `ai-usage team forget-device ID` removes a retired machine's snapshot from the relay and from this machine's team view; ID can be the start of the id, at least the 8 characters that ATTENTION shows for a reinstalled machine's old record, as `3f9a1c2e`. A snapshot that is not updated expires on its own: after 90 days, or sooner for a machine that has reported for less time than that, but never sooner than 7 days after its last update.
@@ -394,7 +451,7 @@ A key cannot be revoked. To shut someone out, start a new team and join the rema
 
 In the team view, token counts add up across machines. Quota percentages do not: an account's quota is the newest reading any machine has for it.
 
-While any machine in the team runs a release before v0.4.0, every machine sends the snapshot such a release reads, without weighted tokens, so that none drops out of its view. The team's weighted tokens are then estimated from input and output, marked `~`, and the legend names the machines holding them back and what to do: releases from v0.2.5 on update themselves within 15 minutes, or take `ai-usage update` where that fails, and older ones need `install.sh` again. A retired machine on an old release, or one silent for over a week, holds them back until `ai-usage team forget-device` forgets it.
+While any machine in the team runs a release before v0.4.0, every machine sends the snapshot such a release reads, without weighted tokens, so that none drops out of its view. The team's weighted tokens are then estimated from input and output, marked `~`, and the legend names the machines holding them back and what to do: releases from v0.2.5 on should update within 15 minutes, and one that has not, as when its update fails or Homebrew installed it, takes `ai-usage update` on it; older ones need `install.sh` again. A retired machine on an old release, or one silent for over a week, holds them back until `ai-usage team forget-device` forgets it.
 
 Likewise, while any machine runs a release before v0.5.0, no machine sends the periods UTILIZATION shows, since such a release cannot read them: each machine shows its own, and a line under the section's title names the machines holding them back and what to do. A relay that does not accept them yet, because it runs an older release, has each machine send its snapshot without them and try again a day later.
 
@@ -465,7 +522,8 @@ Or, from a clone with the Vercel CLI logged in, run `sh scripts/deploy-relay.sh`
 | `ai-usage schedule remove` | unregister, and stop later runs from registering again |
 | `ai-usage schedule status` | whether the scheduler runs this binary with this state folder, or was disabled by hand |
 | `ai-usage schedule run` | be the scheduler where there is none, as in a container: collect now and every 15 minutes until stopped |
-| `ai-usage update` | check for a release now |
+| `ai-usage update` | check for a release now; where Homebrew installed ai-usage, run `brew upgrade neoromantic/tap/ai-usage` |
+| `ai-usage app install` | add the menu bar app of this release, on macOS 14 and later, whatever installed ai-usage |
 | `ai-usage version` | print the version |
 | `ai-usage help` | print usage |
 
@@ -572,17 +630,27 @@ The state folder on your machine keeps account labels and project paths in plain
 
 ## Updates
 
-A release build checks GitHub for a new release at every scheduled run, so every machine installs a release within about 15 minutes of its publication. A run you start less than 10 minutes after a check, such as `r` in the interactive view, does not check again, even when that check failed; a failed check is tried again by the next scheduled run. The check reads which release `github.com/neoromantic/ai-usage/releases/latest` redirects to, not the GitHub API, which allows 60 requests an hour per IP address without a token: a host with many collectors behind one address would come close to that. When there is a newer `vX.Y.Z` release, it downloads the file for this OS and CPU from that release, checks it against `checksums.txt` from the same release, runs it once with `version`, and replaces its own binary only if the new one starts and reports that release. That run finishes on the old binary; the next run is the update, which launchd on macOS 27 can refuse once, as [Troubleshooting](#a-mac-missed-a-run-after-an-update) says. `ai-usage update` checks right away.
+A release build checks GitHub for a new release at every scheduled run, so every machine the installer set up installs a release within about 15 minutes of its publication; Homebrew's copies update [with brew](#with-homebrew). A run you start less than 10 minutes after a check, such as `r` in the interactive view, does not check again, even when that check failed; a failed check is tried again by the next scheduled run. The check reads which release `github.com/neoromantic/ai-usage/releases/latest` redirects to, not the GitHub API, which allows 60 requests an hour per IP address without a token: a host with many collectors behind one address would come close to that. When there is a newer `vX.Y.Z` release, it downloads the file for this OS and CPU from that release, checks it against `checksums.txt` from the same release, runs it once with `version`, and replaces its own binary only if the new one starts and reports that release. That run finishes on the old binary; the next run is the update, which launchd on macOS 27 can refuse once, as [Troubleshooting](#a-mac-missed-a-run-after-an-update) says. `ai-usage update` checks right away.
 
 The check also runs when a collection fails, for example on a state file this version cannot read, or on a bug that stops the run. A release that breaks collection can then still be replaced by the one that fixes it. Finding the latest release gives up after 30 seconds, so a slow GitHub holds up a run only that long. A download may take several minutes on a slow link; it is dropped only when no data arrives for a minute.
 
-Self-update cannot be turned off. It skips prereleases, such as `v1.3.0-rc.1`. A binary in a folder you cannot write to cannot update itself, and `ai-usage status` shows that error. A release that downloads but does not install, for example one that does not start on this machine, is not downloaded again for 6 hours, and its error stays in `ai-usage status`; runs still look for a newer release, and `ai-usage update` tries again at once. Rerunning the installer also upgrades.
+Self-update cannot be turned off for a script install. It skips prereleases, such as `v1.3.0-rc.1`. A binary in a folder you cannot write to cannot update itself, and `ai-usage status` shows that error. A release that downloads but does not install, for example one that does not start on this machine, is not downloaded again for 6 hours, and its error stays in `ai-usage status`; runs still look for a newer release, and `ai-usage update` tries again at once. Rerunning the installer also upgrades.
 
 The team sees why a machine does not update itself. While its last check failed, its snapshot carries the error, from the next run on, and the status view's NOTE shows it; on a machine that runs an older release, it is an error in ATTENTION too. Once your machine's reads of the team have found another reporting on the same older release for 7 hours, longer than any release takes to update itself, NOTE says how long it has not updated, and so does OLD in ATTENTION. The hours count from its first run found after a newer release was out, so a laptop that was closed meanwhile is not counted, and they start again after it has not reported for a day. A GitHub refusal names its reason, such as a rate limit, without your IP address.
 
 On macOS, the check also keeps the [menu bar app](#menu-bar-app) at the binary's release, once the binary is at it. When `~/Applications/AI Usage.app` is an earlier release, it downloads `ai-usage_darwin_app.zip` from the binary's release, checks it against `checksums.txt`, unpacks it beside the app, requires the unpacked app to report that release, and swaps it in with two renames. The running app sees the new version on disk and restarts into it. An app built from source, which reports no release, is left alone, and a missing one is not installed. A failure is an update error in `ai-usage status` that starts with `menu bar app:`. An app that downloads but does not install is, like a release, not downloaded again for 6 hours; `ai-usage update` tries again at once, and says what became of the binary first.
 
 The checksum guards against a broken download. It does not protect against a compromised release, since both files come from the same place.
+
+### With Homebrew
+
+A copy Homebrew installed never replaces itself: Homebrew owns its files. Each run still checks GitHub, so the report says when a release is out, `v0.8.1 is out; run brew upgrade neoromantic/tap/ai-usage or ai-usage update` in `ai-usage status`, and the JSON's `collector.update` has `"method": "homebrew"` and that command. On macOS the check keeps the menu bar app at the binary's release, never ahead of it.
+
+`ai-usage update` runs `brew upgrade neoromantic/tap/ai-usage`, with what brew prints, and so does the menu bar app's Update. When brew still has the older release, as when it read the tap a few minutes before, or `HOMEBREW_NO_AUTO_UPDATE` is set, it runs `brew update --quiet` and upgrades once more. Then the new binary brings the menu bar app to its release, has launchd start the agent so that macOS 27 refuses no scheduled run, and says `installed v0.8.1 with Homebrew; the next run uses it`, and `installed the menu bar app of v0.8.1` when it did. Otherwise it says `up to date (v0.8.1)`. brew gets 8 minutes, and the new binary 4 more to finish. When brew fails, `ai-usage update` says `brew upgrade failed:`, or `brew update failed:` for the second try, and the last line brew printed; when brew installed a release before it failed, that release still finishes first. As root, it refuses: Homebrew installs are per-user.
+
+A release reaches Homebrew a few minutes after GitHub, once the release workflow has updated the tap. Until then `ai-usage update` says `Homebrew's formula is at v0.8.0; GitHub has v0.8.1, which reaches Homebrew soon`, and exits 1, after the release brew did install, if newer than this one, has finished the update. A plain `brew upgrade` works too, and the next run notices it; see [Troubleshooting](#a-mac-missed-a-run-after-an-update).
+
+A Homebrew machine updates when someone runs `brew upgrade` or `ai-usage update` on it, not within 15 minutes. Until then it can hold back what the team turns on only once every machine runs a release that knows it, as the [Teams](#teams) section says. The report first says it `should update within 15 minutes`, as for any machine, and once it has reported on the older release for 7 hours, `mira-mbp runs v0.8.0 and has not updated; run ai-usage update on it`, and its NOTE and OLD say how long it has not updated. When a collection fails while a newer release is out, its error ends with `` — `brew upgrade neoromantic/tap/ai-usage` may fix it ``.
 
 A binary built from source reports version `devel` (`dev` before v0.4.0). It never updates itself and never registers with the scheduler on its own; run `ai-usage schedule install` for that.
 
@@ -605,6 +673,7 @@ From v0.5.1, `ai-usage` saves that run where it can:
 - A run you start that installs a release, such as `ai-usage update`, the menu bar app's Update button, `ai-usage`, or `r` in the view, has launchd start the agent at once when launchd pinned it (`has LWCR`). launchd refuses that start and repairs the pin at a second one, so no scheduled run is refused. The agent then collects, as at a scheduled run.
 - A scheduled run that installs a release cannot: launchd does not start the agent while it runs. So launchd refuses its next run. Any run you start meanwhile, such as `ai-usage`, `ai-usage status`, `ai-usage report`, or the menu bar app reading the report, has launchd start the agent then, which repairs the pin and collects.
 - `ai-usage schedule status` says when launchd refused the agent's last run, and `ai-usage status` repairs it.
+- With Homebrew, `ai-usage update` and the menu bar app's Update start the agent twice, as a self-update a run you start does. A `brew upgrade` you run yourself is like a scheduled update: the menu bar app's next read of the report, or any `ai-usage` you run, notices that the release changed since the last collection and has launchd start the agent twice, which repairs the pin.
 
 An agent launchd pinned to nothing, as on macOS 26 and earlier, is left as it is. When launchd still refuses the agent, `ai-usage status` says so, and `ai-usage schedule install` loads it again from the command line, which launchd pins to nothing until the next login. launchd still records the binary it pinned before, though, so the first run after that login can be refused once more, and launchd repairs it at the run after.
 
@@ -645,6 +714,25 @@ Remove-Item -Recurse "$env:LOCALAPPDATA\Programs\ai-usage", "$env:LOCALAPPDATA\a
 ```
 
 Then open *Edit environment variables for your account* from the Start menu and remove the `…\AppData\Local\Programs\ai-usage` entry from `Path`.
+
+With Homebrew, on macOS, the first four lines above remove the menu bar app; then, on macOS and Linux:
+
+```sh
+ai-usage schedule remove
+ai-usage team forget-device d-…
+brew uninstall neoromantic/tap/ai-usage
+brew untap neoromantic/tap                       # optional, when you use nothing else from it
+rm -r ~/Library/Application\ Support/ai-usage    # on Linux: rm -r "${XDG_CONFIG_HOME:-$HOME/.config}/ai-usage"
+```
+
+Run `ai-usage schedule remove` before `brew uninstall`: without the binary, the launch agent or crontab line stays and fails every 15 minutes, silently. If the binary is gone already, remove the schedule by hand, on macOS with
+
+```sh
+launchctl bootout gui/$(id -u)/io.github.neoromantic.ai-usage
+rm ~/Library/LaunchAgents/io.github.neoromantic.ai-usage.plist
+```
+
+and on Linux by deleting the line that ends in `# ai-usage` with `crontab -e`. After `ai-usage schedule remove`, a later install registers again only with `ai-usage schedule install`, unless you also removed the state folder.
 
 On macOS and Linux, if the installer added `~/.local/bin` to your shell profile, remove the block that starts with `# Added by the ai-usage installer`, or `conf.d/ai-usage.fish` for fish.
 

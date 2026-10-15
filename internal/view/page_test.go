@@ -422,7 +422,7 @@ func TestGuideNotes(t *testing.T) {
 		cleanup = `Claude Code deletes transcripts after 30 days: set "cleanupPeriodDays": 90 in ~/.claude/settings.json to keep 90D whole`
 	)
 	r := guideReport()
-	g := Guide(r, "cron", Options{Width: 80, Loc: time.UTC})
+	g := Guide(r, "cron", false, Options{Width: 80, Loc: time.UTC})
 	for _, l := range strings.Split(g, "\n") {
 		if w := ansi.StringWidth(l); w > 80 {
 			t.Errorf("a line of %d cells: %q", w, l)
@@ -433,18 +433,24 @@ func TestGuideNotes(t *testing.T) {
 			t.Errorf("the guide says %q: %v, want %v\n%s", s, !want, want, g)
 		}
 	}
-	if !has(Guide(r, "cron", Options{Width: 80, Loc: time.UTC, ASCII: true}), strings.ReplaceAll(weights, "–", "-")) {
+	if !has(Guide(r, "cron", false, Options{Width: 80, Loc: time.UTC, ASCII: true}), strings.ReplaceAll(weights, "–", "-")) {
 		t.Error("the ASCII guide's weights are not in ASCII")
+	}
+	// The menu bar app is offered only where it is missing, and a colleague
+	// joins with the key either way.
+	const app, join = "ai-usage app install", "they run ai-usage team join and paste it, or install with it as AI_USAGE_TEAM_KEY"
+	if !has(g, join) || has(g, app) || !has(Guide(r, "cron", true, Options{Width: 80, Loc: time.UTC}), app) {
+		t.Errorf("the guide's invitation, or its app line:\n%s", g)
 	}
 
 	// Estimated team totals: the guide repeats why, cut to the width with
 	// what to do kept.
 	est := guideReport()
 	est.Team.Estimated = true
-	why := "2 devices run releases before v0.4.0: they update themselves within 15 minutes (leoair, srv1)"
+	why := "2 devices run releases before v0.4.0: they should update within 15 minutes (leoair, srv1)"
 	est.Team.EstimatedReason = &why
-	g = Guide(est, "cron", Options{Width: 80, Loc: time.UTC})
-	if !has(g, "~ team totals estimated: 2 devices run") || !has(g, "they update themselves within 15 minutes (leoair, srv1)") {
+	g = Guide(est, "cron", false, Options{Width: 80, Loc: time.UTC})
+	if !has(g, "~ team totals estimated: 2 devices run") || !has(g, "they should update within 15 minutes (leoair, srv1)") {
 		t.Errorf("the guide of estimated totals lacks why:\n%s", g)
 	}
 	for _, l := range strings.Split(g, "\n") {
@@ -452,18 +458,18 @@ func TestGuideNotes(t *testing.T) {
 			t.Errorf("a line of %d cells: %q", w, l)
 		}
 	}
-	if has(Guide(r, "cron", Options{Width: 80, Loc: time.UTC}), "team totals estimated") {
+	if has(Guide(r, "cron", false, Options{Width: 80, Loc: time.UTC}), "team totals estimated") {
 		t.Error("the guide says totals are estimated when they are not")
 	}
 
 	// A team of one device is this device alone.
 	r.Team.Devices = []TeamDevice{{Device: "a1"}}
-	if has(Guide(r, "cron", Options{Width: 80, Loc: time.UTC}), utc) {
+	if has(Guide(r, "cron", false, Options{Width: 80, Loc: time.UTC}), utc) {
 		t.Error("the guide notes UTC days without a team")
 	}
 	r.Team.Devices = append(r.Team.Devices, TeamDevice{Device: "b2"})
 	r.Providers[0].CoveredSince = tp(now.Add(-20 * 24 * time.Hour))
-	g = Guide(r, "cron", Options{Width: 80, Loc: time.UTC})
+	g = Guide(r, "cron", false, Options{Width: 80, Loc: time.UTC})
 	if !has(g, utc) || !has(g, cleanup) {
 		t.Errorf("the guide of a team, with 20 days of claude, lacks a note:\n%s", g)
 	}
@@ -491,7 +497,7 @@ func TestGuideTranscripts(t *testing.T) {
 		if got := transcriptNote(r); got != c.want {
 			t.Errorf("%v: %q, want %q", c.gaps, got, c.want)
 		}
-		g := Guide(r, "cron", Options{Width: 80, Loc: time.UTC})
+		g := Guide(r, "cron", false, Options{Width: 80, Loc: time.UTC})
 		i := strings.Index(g, "  claude: ")
 		if (i >= 0) != (c.want != "") {
 			t.Errorf("%v: the guide's line at %d:\n%s", c.gaps, i, g)

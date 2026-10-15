@@ -52,6 +52,8 @@ const releases = "/" + Repo + "/releases"
 type fakeGitHub struct {
 	tag    string
 	assets map[string][]byte
+	// files is the release whose files are the assets, tag unless set.
+	files string
 	// repo is where the release is, Repo unless set. Repo's releases/latest
 	// then redirects there, as for a repository that was renamed or moved.
 	repo string
@@ -73,6 +75,9 @@ func (f *fakeGitHub) start(t *testing.T) *httptest.Server {
 	if f.repo == "" {
 		f.repo = Repo
 	}
+	if f.files == "" {
+		f.files = f.tag
+	}
 	served := "/" + f.repo + "/releases"
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +94,7 @@ func (f *fakeGitHub) start(t *testing.T) *httptest.Server {
 			http.Redirect(w, r, srv.URL+served+"/tag/"+f.tag, http.StatusFound)
 		case r.URL.Path == releases+"/latest":
 			http.Redirect(w, r, served+"/latest", http.StatusMovedPermanently)
-		case strings.HasPrefix(r.URL.Path, served+"/download/"+f.tag+"/"):
+		case strings.HasPrefix(r.URL.Path, served+"/download/"+f.files+"/"):
 			name := path.Base(r.URL.Path)
 			if _, ok := f.assets[name]; !ok {
 				http.NotFound(w, r)
@@ -211,7 +216,7 @@ func TestCheckInstallsNewerRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res != (Result{Latest: "v1.3.0", Installed: true, Downloaded: true}) {
+	if res != (Result{Latest: "v1.3.0", Installed: true, Downloaded: true, AppTag: "v1.3.0"}) {
 		t.Fatalf("Check = %+v", res)
 	}
 	if read(t, exe) != string(bin) {
@@ -363,7 +368,7 @@ func TestCheckFindsReleaseAlreadyInPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, err := updater(srv, exe, "v1.2.9").Check(context.Background())
-	if err != nil || res != (Result{Latest: "v1.3.0", Installed: true}) {
+	if err != nil || res != (Result{Latest: "v1.3.0", Installed: true, AppTag: "v1.3.0"}) {
 		t.Fatalf("Check = %+v, %v", res, err)
 	}
 	for p := range gh.hits {
@@ -450,7 +455,7 @@ func TestLatestRelease(t *testing.T) {
 			t.Cleanup(srv.Close)
 			res, err := updater(srv, installed(t, "ai-usage"), "v1.3.0").Check(context.Background())
 			switch {
-			case tc.ok && (err != nil || res != Result{Latest: tc.want}):
+			case tc.ok && (err != nil || res != Result{Latest: tc.want, AppTag: tc.want}):
 				t.Fatalf("Check = %+v, %v, want %s", res, err, tc.want)
 			case !tc.ok && (err == nil || !strings.Contains(err.Error(), tc.want) || res.Latest != ""):
 				t.Fatalf("Check = %+v, %v, want an error naming %q", res, err, tc.want)

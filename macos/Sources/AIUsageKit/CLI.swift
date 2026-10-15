@@ -149,7 +149,8 @@ public struct CLI: Sendable {
         }
         p.waitUntilExit()
         guard p.terminationStatus == 0 else {
-            var message = Self.message(stderr: String(decoding: err.data, as: UTF8.self))
+            var message = Self.message(stderr: String(decoding: err.data, as: UTF8.self),
+                                       stdout: String(decoding: out.data, as: UTF8.self))
             if message.isEmpty {
                 message = "ai-usage exited with status \(p.terminationStatus)"
             }
@@ -161,10 +162,20 @@ public struct CLI: Sendable {
     /// The error in what a failed command wrote to standard error: its first
     /// paragraph, since the whole help follows a usage error, without the
     /// lines that say it waited for another run, and without "ai-usage: ".
-    public static func message(stderr: String) -> String {
-        let text = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-        let paragraph = text.components(separatedBy: "\n\n").first ?? ""
+    /// What brew printed before ai-usage's own error line is left out. A
+    /// command that said why on standard output instead, as ai-usage update
+    /// does when Homebrew's formula is behind, has that as its message.
+    public static func message(stderr: String, stdout: String = "") -> String {
+        var text = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
         let waiting = ["ai-usage: waiting for another run", "ai-usage: another run"]
+        let lines = text.components(separatedBy: "\n")
+        if let own = lines.lastIndex(where: { $0.hasPrefix("ai-usage: ") && !waiting.contains(where: $0.hasPrefix) }) {
+            text = lines[own...].joined(separator: "\n")
+        } else {
+            let said = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !said.isEmpty { return said }
+        }
+        let paragraph = text.components(separatedBy: "\n\n").first ?? ""
         return paragraph.split(separator: "\n", omittingEmptySubsequences: false)
             .filter { line in !waiting.contains { line.hasPrefix($0) } }
             .map { $0.hasPrefix("ai-usage: ") ? String($0.dropFirst("ai-usage: ".count)) : String($0) }

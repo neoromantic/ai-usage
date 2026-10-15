@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/tui"
@@ -114,7 +115,11 @@ func (c collection) run(ctx context.Context) (res *collect.Result, err error) {
 	housekept := false
 	defer func() {
 		if err != nil && !housekept && ctx.Err() == nil {
-			rescue(ctx, c.d, err, c.scheduled)
+			// Homebrew's copy cannot replace itself with the release that
+			// may fix this; brew can.
+			if latest := rescue(ctx, c.d, err, c.scheduled); brewPrefix() != "" && selfupdate.Newer(latest, version) {
+				err = fmt.Errorf("%w — `%s` may fix it", err, fsutil.HomebrewUpgrade)
+			}
 		}
 	}()
 	// A panic becomes an error before the rescue reads it, so the run can
@@ -164,17 +169,18 @@ func (c collection) run(ctx context.Context) (res *collect.Result, err error) {
 
 // rescue runs when a collection failed before its housekeeping: it keeps a
 // panic as the last error and still checks for a release. A state.json that
-// does not load is left as it is, and the check is then not throttled.
-func rescue(ctx context.Context, d state.Dir, cause error, scheduled bool) {
+// does not load is left as it is, and the check is then not throttled. It
+// returns the latest release it knows of.
+func rescue(ctx context.Context, d state.Dir, cause error, scheduled bool) (latest string) {
 	var pe *panicError
 	panicked := errors.As(cause, &pe)
 	if !panicked && selfupdate.Dev(version) {
-		return
+		return ""
 	}
 	// A run that holds the lock does its own housekeeping.
 	unlock, err := d.Lock()
 	if err != nil {
-		return
+		return ""
 	}
 	defer unlock()
 	now := clock().UTC()
@@ -198,6 +204,7 @@ func rescue(ctx context.Context, d state.Dir, cause error, scheduled bool) {
 	if loaded && changed {
 		_ = d.SaveState(st)
 	}
+	return st.Update.Latest
 }
 
 // scheduledPull is how old a team read a scheduled run keeps before it

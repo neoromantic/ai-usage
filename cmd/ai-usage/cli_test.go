@@ -78,14 +78,25 @@ func hermetic(t *testing.T) {
 		hostname, osUser      func() string
 		collectOnce           func(context.Context, string, string, io.Writer) error
 		sleepCtx              func(context.Context, time.Duration) bool
-	}{version, defaultRelay, clock, probeEnv, newScheduler, newUpdater, hostname, osUser, collectOnce, sleepCtx}
+		brewPrefix            func() string
+		brewPrefixes          func() []string
+		appCommand            func(context.Context, string, ...string) ([]byte, error)
+	}{version, defaultRelay, clock, probeEnv, newScheduler, newUpdater, hostname, osUser, collectOnce, sleepCtx,
+		brewPrefix, brewPrefixes, appCommand}
 	t.Cleanup(func() {
 		version, defaultRelay, clock = saved.version, saved.defaultRelay, saved.clock
 		probeEnv, newScheduler, newUpdater = saved.probeEnv, saved.newScheduler, saved.newUpdater
 		hostname, osUser = saved.hostname, saved.osUser
 		collectOnce, sleepCtx = saved.collectOnce, saved.sleepCtx
+		brewPrefix, brewPrefixes, appCommand = saved.brewPrefix, saved.brewPrefixes, saved.appCommand
 	})
 	version, defaultRelay, clock = "devel", "", time.Now
+	// This machine's Homebrew, and its macOS, are not the test's.
+	brewPrefix = func() string { return "" }
+	brewPrefixes = func() []string { return nil }
+	appCommand = func(_ context.Context, name string, args ...string) ([]byte, error) {
+		return nil, fmt.Errorf("no %s in tests", name)
+	}
 	// A CI runner's host name can be long enough to change the layout.
 	hostname = func() string { return "test-host" }
 	osUser = func() string { return "tester" }

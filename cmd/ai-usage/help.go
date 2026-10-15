@@ -62,7 +62,8 @@ var help = []helpSection{
 			"collect every 15 minutes in the foreground, where there is no system scheduler, as in a container"},
 	}},
 	{"RELEASES", []helpLine{
-		{"ai-usage update", "check for a release now"},
+		{"ai-usage update", "check for a release now; where Homebrew installed ai-usage, `brew upgrade` it"},
+		{"ai-usage app install", "add the menu bar app of this release, on macOS 14 or later"},
 		{"ai-usage version", "print this binary's version"},
 	}},
 	{"VIEW", []helpLine{

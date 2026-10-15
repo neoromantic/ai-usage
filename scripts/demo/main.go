@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
@@ -65,7 +66,7 @@ func main() {
 		fmt.Println(string(b))
 		return
 	}
-	for name, build := range map[string]func() view.Report{"solo": solo, "team": teamReport} {
+	for name, build := range map[string]func() view.Report{"solo": solo, "team": teamReport, "homebrew": homebrew} {
 		b, err := json.MarshalIndent(build(), "", "  ")
 		if err != nil {
 			panic(err)
@@ -84,6 +85,15 @@ func solo() view.Report {
 	return soloDevice(now.Add(-4 * time.Minute)).report(nil)
 }
 
+// homebrew is solo's laptop where Homebrew installed ai-usage and a release
+// is out that brew has not installed yet, for the menu bar app's checks.
+func homebrew() view.Report {
+	d := soloDevice(now.Add(-4 * time.Minute))
+	d.brew = true
+	d.st.Update.Latest = "v0.5.1"
+	return d.report(nil)
+}
+
 // firstRun prints the solo page as the installer's first run does: the
 // report as of the run, then the guide. The width is the argument after
 // guide, and COLORFGBG says whether the terminal is light.
@@ -98,7 +108,7 @@ func firstRun() {
 	d.st.Update.Latest = ""
 	o := view.Options{Width: width, Color: true, Dark: !strings.HasSuffix(os.Getenv("COLORFGBG"), ";15")}
 	r := d.report(nil)
-	fmt.Print(view.Text(r, o) + "\n" + view.Guide(r, "launchd", o))
+	fmt.Print(view.Text(r, o) + "\n" + view.Guide(r, "launchd", false, o))
 }
 
 // soloDevice is solo's laptop, last collected at at.
@@ -243,6 +253,7 @@ type device struct {
 	folders        collect.Folders
 	spread         map[string][]string
 	samples, past  []state.Sample
+	brew           bool
 }
 
 func newDevice(rng *rand.Rand, id, host, user, home, version string, at time.Time, providers ...string) *device {
@@ -480,6 +491,9 @@ func (d *device) report(tc *collect.TeamCache) view.Report {
 		Version: d.version, RelayURL: relay, Config: cfg, State: d.st, Key: key,
 		Doc:      collect.BuildDoc(d.st, d.cycles(), key, cfg, d.host, d.user, d.version, d.at),
 		Hostname: d.host, OSUser: d.user, Now: now, Folders: d.folders, Samples: d.samples, Loc: berlin,
+	}
+	if d.brew {
+		in.Homebrew, in.BrewCommand = true, fsutil.HomebrewUpgrade
 	}
 	if tc != nil {
 		in.Team = *tc

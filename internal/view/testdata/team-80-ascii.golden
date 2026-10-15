@@ -26,7 +26,7 @@ SUBSCRIPTIONS  7 . 2 out . 1 over . 3 no reading
 * a4c2e917       ........................     ?                   -        1
 
 UTILIZATION  fullest % before each reset
-  only this device's cycles: ci-runner-...: it updates itself within 15 minutes
+  only this device's cycles: ci-runner-e...: it should update within 15 minutes
 
   CLAUDE         CYCLES  OUT  AVG  NEWEST FIRST
 * ann@acme.dev       13    5  86%   100  100   92  ~78  100   64   88  100   71
@@ -74,4 +74,4 @@ PROJECTS  annbook . by 7d . M weighted tokens . claude since Sep 2
 
 = used  - left  |+ even use  . no reading  ? unknown
 - no forecast  * here  x error  v old  . none  [] chosen
-~ stale/estimated: ci-runner-eu-west-b...: it updates itself within 15 minutes
+~ stale/estimated: ci-runner-eu-west-bu...: it should update within 15 minutes

@@ -230,9 +230,9 @@ public struct Chip: Equatable, Sendable {
             out.append(Chip(.reinstall, n == 1 ? "1 needs reinstall" : "\(n) need reinstall", short: "\(n)",
                             symbol: "arrow.down.circle.fill", state: "tight", entries: lacking))
         }
-        // A device on an older release that updates itself is lag after a
-        // release, not a problem: only those the report says do not update
-        // themselves get a chip.
+        // A device on an older release that should update soon is lag
+        // after a release, not a problem: only those the report says have
+        // not updated get a chip.
         let old = of(.old).filter(\.limitations.isEmpty)
         if let first = old.first {
             let all = devices(old)

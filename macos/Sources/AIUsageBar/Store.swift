@@ -99,8 +99,9 @@ final class Store: ObservableObject {
         self.report = report
         phase = .ready
         now = report.generatedAt
-        // Where the installer puts ai-usage, in the report's user's home.
-        cliPath = home + "/.local/bin/ai-usage"
+        // The path the launch agent names under Homebrew, or where the
+        // installer puts ai-usage in the report's user's home.
+        cliPath = report.collector.update.homebrew ? "/opt/homebrew/opt/ai-usage/bin/ai-usage" : home + "/.local/bin/ai-usage"
     }
 
     /// A store without a report, for pictures of the popover's empty states.
@@ -196,14 +197,16 @@ final class Store: ObservableObject {
     }
 
     /// Brings ai-usage, and with it this app, to the latest release, then
-    /// reads the report again.
+    /// reads the report again. Under Homebrew, ai-usage update gives brew up
+    /// to 8 minutes and the binary brew installed 4 more to finish, so the
+    /// app waits 15.
     func update() async {
         guard !demo, !updating, let cli = locate() else { return }
         updating = true
         updateResult = nil
         defer { updating = false }
         do {
-            let out = String(decoding: try await cli.run(["update"], timeout: 300), as: UTF8.self)
+            let out = String(decoding: try await cli.run(["update"], timeout: 900), as: UTF8.self)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             updateResult = (out.prefix(1).uppercased() + out.dropFirst(), false)
             await refresh()

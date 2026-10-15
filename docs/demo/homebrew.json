@@ -1,0 +1,2441 @@
+{
+  "schema_version": 4,
+  "generated_at": "2026-09-24T13:40:00Z",
+  "collector": {
+    "version": "v0.5.0",
+    "device": "d-demo-solo",
+    "device_label": "mira-mbp",
+    "os_user": "mira",
+    "team": "ugarfmfxwqrf74yfe7qppt32dy3uf5rs",
+    "last_run_at": "2026-09-24T13:36:00Z",
+    "last_success_at": "2026-09-24T13:36:00Z",
+    "last_error": null,
+    "last_error_at": null,
+    "relay": {
+      "url": "https://relay.example.com",
+      "last_push_at": "2026-09-24T13:36:00Z",
+      "last_pull_at": "2026-09-24T13:36:00Z",
+      "pending": false,
+      "last_error": null
+    },
+    "schedule": {
+      "registered": true,
+      "foreground": false,
+      "error": null
+    },
+    "update": {
+      "checked_at": "2026-09-24T11:36:00Z",
+      "latest": "v0.5.1",
+      "staged": null,
+      "error": null,
+      "method": "homebrew",
+      "command": "brew upgrade neoromantic/tap/ai-usage"
+    },
+    "health": [
+      {
+        "item": "collection",
+        "status": "ok",
+        "state": "ok",
+        "at": "2026-09-24T13:36:00Z",
+        "release": null
+      },
+      {
+        "item": "relay",
+        "status": "ok",
+        "state": "ok",
+        "at": "2026-09-24T13:36:00Z",
+        "release": null
+      },
+      {
+        "item": "update",
+        "status": "available",
+        "state": "warn",
+        "at": "2026-09-24T11:36:00Z",
+        "release": "v0.5.1"
+      }
+    ]
+  },
+  "attention": [
+    {
+      "kind": "over",
+      "subject": "claude mira · Fable",
+      "text": "runs out ~Thu 23:55 at this week's pace, 2d 1h before reset",
+      "provider": "claude",
+      "account": "mira@studio.dev",
+      "name": "mira",
+      "window": "7d Fable",
+      "at": "2026-09-24T21:55:29.032258064Z",
+      "resets_at": "2026-09-26T23:00:00Z",
+      "percent": 141
+    },
+    {
+      "kind": "over",
+      "subject": "claude mira@studio.dev",
+      "text": "runs out ~Sat 12:46 at this week's pace, 12h 13m before reset",
+      "provider": "claude",
+      "account": "mira@studio.dev",
+      "name": "mira",
+      "at": "2026-09-26T10:46:28.732394366Z",
+      "resets_at": "2026-09-26T23:00:00Z",
+      "percent": 108
+    },
+    {
+      "kind": "old",
+      "subject": "1 device on v0.5.0",
+      "text": "mira-mbp · latest v0.5.1",
+      "devices": [
+        "mira-mbp"
+      ],
+      "message": "v0.5.1"
+    },
+    {
+      "kind": "under",
+      "subject": "grok 7f3b9c21",
+      "text": "leaves ~88% unused at this week's pace, resets Sat 13:40, in 1d 22h",
+      "provider": "grok",
+      "account": "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64",
+      "name": "7f3b9c21",
+      "resets_at": "2026-09-26T11:40:00Z",
+      "percent": 12
+    }
+  ],
+  "providers": [
+    {
+      "provider": "claude",
+      "status": "ok",
+      "error": null,
+      "homes": [
+        "/Users/mira/.claude"
+      ],
+      "covered_since": "2026-06-27T07:00:00Z",
+      "accounts": [
+        {
+          "label": "mira@studio.dev",
+          "name": "mira",
+          "current": true,
+          "home": "/Users/mira/.claude",
+          "plan": "max",
+          "state": "over",
+          "quota": {
+            "observed_at": "2026-09-24T13:36:00Z",
+            "age_seconds": 240,
+            "stale": false,
+            "source": "harness",
+            "windows": [
+              {
+                "name": "5h",
+                "percent": 35,
+                "resets_at": "2026-09-24T15:50:00Z",
+                "minutes": 300,
+                "main": false,
+                "limits": false,
+                "observed_at": "2026-09-24T13:36:00Z",
+                "stale": false,
+                "reset": false,
+                "state": "ok",
+                "forecast": {
+                  "percent": 63,
+                  "elapsed": 0.5533333333333333,
+                  "runs_out_at": null,
+                  "basis": "window",
+                  "pace": 12.650602409638555
+                }
+              },
+              {
+                "name": "7d",
+                "percent": 71,
+                "resets_at": "2026-09-26T23:00:00Z",
+                "minutes": 10080,
+                "main": true,
+                "limits": true,
+                "observed_at": "2026-09-24T13:36:00Z",
+                "stale": false,
+                "reset": false,
+                "state": "over",
+                "forecast": {
+                  "percent": 108,
+                  "elapsed": 0.6583333333333333,
+                  "runs_out_at": "2026-09-26T10:46:28.732394366Z",
+                  "basis": "window",
+                  "pace": 0.6419529837251357
+                }
+              },
+              {
+                "name": "7d Fable",
+                "percent": 93,
+                "resets_at": "2026-09-26T23:00:00Z",
+                "minutes": 10080,
+                "main": false,
+                "limits": true,
+                "observed_at": "2026-09-24T13:36:00Z",
+                "stale": false,
+                "reset": false,
+                "state": "over",
+                "forecast": {
+                  "percent": 141,
+                  "elapsed": 0.6583333333333333,
+                  "runs_out_at": "2026-09-24T21:55:29.032258064Z",
+                  "basis": "window",
+                  "pace": 0.840867992766727
+                }
+              }
+            ]
+          },
+          "link": null,
+          "sessions": 295,
+          "tokens": {
+            "input": 3956460,
+            "output": 158327425,
+            "cache_read": 3958227027,
+            "cache_write": 237491967
+          },
+          "usage": {
+            "today": 1805817,
+            "7d": 14873204,
+            "30d": 62649708,
+            "90d": 162283885
+          },
+          "days": [
+            1805817,
+            3018722,
+            2235501,
+            2709126,
+            610487,
+            856932,
+            3636619,
+            3178285,
+            3330781,
+            3974084,
+            1794925,
+            902562,
+            461043,
+            2201780,
+            2399265,
+            2622056,
+            3008699,
+            1426954,
+            801440,
+            630452,
+            1946352,
+            2476979,
+            3013674,
+            2217799,
+            2033483,
+            636145,
+            1088775,
+            3313464,
+            2945590,
+            1371917,
+            2242112,
+            2973490,
+            569036,
+            984894,
+            3365480,
+            2494948,
+            3050634,
+            3644051,
+            3311332,
+            1071467,
+            786298,
+            1314247,
+            3043059,
+            2527411,
+            1513447,
+            1124960,
+            912303,
+            578721,
+            2613758,
+            2863928,
+            2563437,
+            3026234,
+            2216272,
+            1063294,
+            680236,
+            968559,
+            3168176,
+            2712179,
+            3346575,
+            2648401,
+            588069,
+            696750,
+            44430,
+            2407992,
+            2299731,
+            1756573,
+            236045,
+            488033,
+            735451,
+            1758175,
+            2104888,
+            2523608,
+            1512780,
+            1189733,
+            472410,
+            442249,
+            1689806,
+            2014287,
+            1603751,
+            295585,
+            311580,
+            95849,
+            882379,
+            2231644,
+            1521657,
+            1680916,
+            1590401,
+            2258424,
+            91725,
+            730317
+          ],
+          "burn": {
+            "today": 17749947,
+            "7d": 159708065,
+            "30d": 623596750,
+            "90d": 1595152143
+          },
+          "fresh": {
+            "today": 4448490,
+            "7d": 40025951,
+            "30d": 156285400,
+            "90d": 399775852
+          },
+          "burn_days": [
+            17749947,
+            29672047,
+            21973551,
+            26628929,
+            6000887,
+            8423263,
+            35745584,
+            31240528,
+            32739426,
+            39062645,
+            17643018,
+            8871824,
+            4531844,
+            21642164,
+            23583228,
+            25773164,
+            29573478,
+            14026099,
+            7877830,
+            6197160,
+            19131427,
+            24347198,
+            29622526,
+            21799607,
+            19987927,
+            6253065,
+            10702171,
+            32569204,
+            28953292,
+            13485114,
+            22038523,
+            29227458,
+            5593360,
+            9681082,
+            33080444,
+            24523789,
+            29985777,
+            35818630,
+            32548230,
+            10532005,
+            7729041,
+            12918294,
+            29911350,
+            24842879,
+            14876287,
+            11057755,
+            8967539,
+            5688599,
+            25691581,
+            28150561,
+            25196903,
+            29745929,
+            21784627,
+            10451697,
+            6686456,
+            9520485,
+            31141058,
+            26659002,
+            32894632,
+            26032143,
+            5780465,
+            6848747,
+            436786,
+            23669000,
+            22604868,
+            17266050,
+            2320272,
+            4797074,
+            7229125,
+            17281767,
+            20689707,
+            24805396,
+            14869716,
+            11694363,
+            4643656,
+            4347190,
+            16609738,
+            19799186,
+            15763916,
+            2905531,
+            3062683,
+            942259,
+            8673337,
+            21935652,
+            14957006,
+            16522400,
+            15632694,
+            22198885,
+            901716,
+            7178695
+          ],
+          "linked_usage": [],
+          "last_active_at": "2026-09-24T13:20:00Z",
+          "projects": [
+            {
+              "path": "/Users/mira/src/orbit/web",
+              "folders": 3,
+              "sessions": 79,
+              "tokens": {
+                "input": 2445179,
+                "output": 97825403,
+                "cache_read": 2445645752,
+                "cache_write": 146738310
+              },
+              "usage": {
+                "today": 1170809,
+                "7d": 8062209,
+                "30d": 36287973,
+                "90d": 100270582
+              },
+              "burn": {
+                "today": 11508232,
+                "7d": 88546613,
+                "30d": 362724657,
+                "90d": 985591774
+              },
+              "fresh": {
+                "today": 2884194,
+                "7d": 22191540,
+                "30d": 90906002,
+                "90d": 247008892
+              },
+              "active_sessions": {
+                "today": 1,
+                "7d": 8,
+                "30d": 30,
+                "90d": 79
+              },
+              "last_active_at": "2026-09-24T13:20:00Z"
+            },
+            {
+              "path": "/Users/mira/src/orbit/api",
+              "folders": 1,
+              "sessions": 54,
+              "tokens": {
+                "input": 958646,
+                "output": 38358024,
+                "cache_read": 958958171,
+                "cache_write": 57537197
+              },
+              "usage": {
+                "today": 581956,
+                "7d": 5151953,
+                "30d": 19674412,
+                "90d": 39316670
+              },
+              "burn": {
+                "today": 5720245,
+                "7d": 53278765,
+                "30d": 193386843,
+                "90d": 386457719
+              },
+              "fresh": {
+                "today": 1433606,
+                "7d": 13352702,
+                "30d": 48466531,
+                "90d": 96853867
+              },
+              "active_sessions": {
+                "today": 1,
+                "7d": 8,
+                "30d": 26,
+                "90d": 54
+              },
+              "last_active_at": "2026-09-24T13:20:00Z"
+            },
+            {
+              "path": "/Users/mira/notes",
+              "folders": 1,
+              "sessions": 84,
+              "tokens": {
+                "input": 493885,
+                "output": 19775263,
+                "cache_read": 494393643,
+                "cache_write": 29663132
+              },
+              "usage": {
+                "today": 53052,
+                "7d": 1599043,
+                "30d": 5972921,
+                "90d": 20269148
+              },
+              "burn": {
+                "today": 521470,
+                "7d": 17205654,
+                "30d": 60182232,
+                "90d": 199236747
+              },
+              "fresh": {
+                "today": 130690,
+                "7d": 4312049,
+                "30d": 15082725,
+                "90d": 49932280
+              },
+              "active_sessions": {
+                "today": 1,
+                "7d": 8,
+                "30d": 29,
+                "90d": 84
+              },
+              "last_active_at": "2026-09-24T08:20:00Z"
+            },
+            {
+              "path": "/Users/mira/dotfiles",
+              "folders": 1,
+              "sessions": 78,
+              "tokens": {
+                "input": 58750,
+                "output": 2368735,
+                "cache_read": 59229461,
+                "cache_write": 3553328
+              },
+              "usage": {
+                "today": 0,
+                "7d": 59999,
+                "30d": 714402,
+                "90d": 2427485
+              },
+              "burn": {
+                "today": 0,
+                "7d": 677033,
+                "30d": 7303018,
+                "90d": 23865903
+              },
+              "fresh": {
+                "today": 0,
+                "7d": 169660,
+                "30d": 1830142,
+                "90d": 5980813
+              },
+              "active_sessions": {
+                "today": 0,
+                "7d": 4,
+                "30d": 25,
+                "90d": 78
+              },
+              "last_active_at": "2026-09-20T13:20:00Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "provider": "codex",
+      "status": "ok",
+      "error": null,
+      "homes": [
+        "/Users/mira/.codex"
+      ],
+      "covered_since": "2026-06-28T07:00:00Z",
+      "accounts": [
+        {
+          "label": "mira@studio.dev",
+          "name": "mira",
+          "current": true,
+          "home": "/Users/mira/.codex",
+          "plan": "pro",
+          "state": "ok",
+          "quota": {
+            "observed_at": "2026-09-24T13:36:00Z",
+            "age_seconds": 240,
+            "stale": false,
+            "source": "harness",
+            "windows": [
+              {
+                "name": "5h",
+                "percent": 6,
+                "resets_at": "2026-09-24T17:25:00Z",
+                "minutes": 300,
+                "main": false,
+                "limits": false,
+                "observed_at": "2026-09-24T13:36:00Z",
+                "stale": false,
+                "reset": false,
+                "state": "under",
+                "forecast": {
+                  "percent": 25,
+                  "elapsed": 0.23666666666666666,
+                  "runs_out_at": null,
+                  "basis": "window",
+                  "pace": 5.070422535211268
+                }
+              },
+              {
+                "name": "7d",
+                "percent": 22,
+                "resets_at": "2026-09-29T08:40:00Z",
+                "minutes": 10080,
+                "main": true,
+                "limits": true,
+                "observed_at": "2026-09-24T13:36:00Z",
+                "stale": false,
+                "reset": false,
+                "state": "ok",
+                "forecast": {
+                  "percent": 70,
+                  "elapsed": 0.31507936507936507,
+                  "runs_out_at": null,
+                  "basis": "window",
+                  "pace": 0.4156171284634761
+                }
+              }
+            ]
+          },
+          "link": null,
+          "sessions": 129,
+          "tokens": {
+            "input": 130636082,
+            "output": 43544869,
+            "cache_read": 3919104305,
+            "cache_write": 0
+          },
+          "usage": {
+            "today": 1483677,
+            "7d": 17319101,
+            "30d": 72578331,
+            "90d": 174180951
+          },
+          "days": [
+            1483677,
+            2633007,
+            3613785,
+            3844005,
+            779806,
+            931822,
+            4032999,
+            3701790,
+            3166772,
+            4656201,
+            2931513,
+            1174317,
+            1164756,
+            4147775,
+            3152840,
+            2758927,
+            3487979,
+            3776233,
+            863484,
+            1282446,
+            2498912,
+            2283759,
+            2758782,
+            691539,
+            3133558,
+            828726,
+            668001,
+            3019880,
+            3111040,
+            0,
+            2496754,
+            3166880,
+            877440,
+            997216,
+            3018325,
+            2383294,
+            3106497,
+            2717271,
+            3457907,
+            890664,
+            248264,
+            581748,
+            965398,
+            2113053,
+            1164249,
+            2075509,
+            0,
+            839284,
+            3233775,
+            3524037,
+            1420185,
+            2753418,
+            2021881,
+            732704,
+            468775,
+            3062020,
+            2157200,
+            2535804,
+            2628505,
+            2322250,
+            0,
+            0,
+            2766819,
+            1780408,
+            2867581,
+            0,
+            1474889,
+            0,
+            0,
+            1524205,
+            2416504,
+            3040466,
+            3246094,
+            0,
+            499523,
+            958615,
+            2063920,
+            2332768,
+            2258012,
+            1990444,
+            1631149,
+            723032,
+            348350,
+            0,
+            3473603,
+            2660286,
+            3041322,
+            2069823,
+            474500
+          ],
+          "burn": {
+            "today": 7418385,
+            "7d": 93595315,
+            "30d": 368711590,
+            "90d": 870905555
+          },
+          "fresh": {
+            "today": 1483677,
+            "7d": 18719045,
+            "30d": 73742232,
+            "90d": 174180951
+          },
+          "burn_days": [
+            7418385,
+            13165038,
+            18068939,
+            19220046,
+            3899036,
+            4659134,
+            20165004,
+            18508970,
+            15833875,
+            23281033,
+            14657580,
+            5871598,
+            5823796,
+            20738903,
+            15764219,
+            13794661,
+            17439906,
+            18881179,
+            4317433,
+            6412248,
+            12494569,
+            11418815,
+            13793930,
+            3457700,
+            15667809,
+            4143635,
+            3340010,
+            15099417,
+            15555210,
+            0,
+            12483789,
+            15834408,
+            4387205,
+            4986089,
+            15091627,
+            11916493,
+            15532496,
+            13586359,
+            17289557,
+            4453336,
+            1241324,
+            2908745,
+            4826997,
+            10565276,
+            5821248,
+            10377554,
+            0,
+            4196424,
+            16168887,
+            17620191,
+            7100929,
+            13767098,
+            10109414,
+            3663523,
+            2343882,
+            15310103,
+            10786004,
+            12679033,
+            13142527,
+            11611256,
+            0,
+            0,
+            13834102,
+            8902047,
+            14337915,
+            0,
+            7374443,
+            0,
+            0,
+            7621026,
+            12082524,
+            15202335,
+            16230475,
+            0,
+            2497622,
+            4793082,
+            10319614,
+            11663853,
+            11290065,
+            9952229,
+            8155749,
+            3615172,
+            1741757,
+            0,
+            17368022,
+            13301437,
+            15206615,
+            10349119,
+            2372500
+          ],
+          "linked_usage": [],
+          "last_active_at": "2026-09-24T13:20:00Z",
+          "projects": [
+            {
+              "path": "/Users/mira/src/orbit/web",
+              "folders": 3,
+              "sessions": 75,
+              "tokens": {
+                "input": 108489118,
+                "output": 36162751,
+                "cache_read": 3254686241,
+                "cache_write": 0
+              },
+              "usage": {
+                "today": 1037539,
+                "7d": 12379031,
+                "30d": 50527746,
+                "90d": 144651869
+              },
+              "burn": {
+                "today": 5187696,
+                "7d": 65836689,
+                "30d": 255562998,
+                "90d": 723259803
+              },
+              "fresh": {
+                "today": 1037539,
+                "7d": 13167333,
+                "30d": 51112570,
+                "90d": 144651869
+              },
+              "active_sessions": {
+                "today": 1,
+                "7d": 8,
+                "30d": 29,
+                "90d": 75
+              },
+              "last_active_at": "2026-09-24T13:20:00Z"
+            },
+            {
+              "path": "/Users/mira/src/orbit/infra",
+              "folders": 1,
+              "sessions": 38,
+              "tokens": {
+                "input": 18713930,
+                "output": 6237831,
+                "cache_read": 561424244,
+                "cache_write": 0
+              },
+              "usage": {
+                "today": 446138,
+                "7d": 3633427,
+                "30d": 17473264,
+                "90d": 24951761
+              },
+              "burn": {
+                "today": 2230689,
+                "7d": 20596144,
+                "30d": 90261865,
+                "90d": 124759025
+              },
+              "fresh": {
+                "today": 446138,
+                "7d": 4119223,
+                "30d": 18052341,
+                "90d": 24951761
+              },
+              "active_sessions": {
+                "today": 1,
+                "7d": 7,
+                "30d": 28,
+                "90d": 38
+              },
+              "last_active_at": "2026-09-24T11:20:00Z"
+            },
+            {
+              "path": "/Users/mira/src/ml-playground",
+              "folders": 1,
+              "sessions": 16,
+              "tokens": {
+                "input": 3433034,
+                "output": 1144287,
+                "cache_read": 102993820,
+                "cache_write": 0
+              },
+              "usage": {
+                "today": 0,
+                "7d": 1306643,
+                "30d": 4577321,
+                "90d": 4577321
+              },
+              "burn": {
+                "today": 0,
+                "7d": 7162482,
+                "30d": 22886727,
+                "90d": 22886727
+              },
+              "fresh": {
+                "today": 0,
+                "7d": 1432489,
+                "30d": 4577321,
+                "90d": 4577321
+              },
+              "active_sessions": {
+                "today": 0,
+                "7d": 6,
+                "30d": 16,
+                "90d": 16
+              },
+              "last_active_at": "2026-09-23T11:20:00Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "provider": "grok",
+      "status": "ok",
+      "error": null,
+      "homes": [
+        "/Users/mira/.grok"
+      ],
+      "covered_since": "2026-08-26T07:00:00Z",
+      "accounts": [
+        {
+          "label": "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64",
+          "name": "7f3b9c21",
+          "current": true,
+          "home": "/Users/mira/.grok",
+          "plan": "SuperGrok",
+          "state": "under",
+          "quota": {
+            "observed_at": "2026-09-24T13:36:00Z",
+            "age_seconds": 240,
+            "stale": false,
+            "source": "harness",
+            "windows": [
+              {
+                "name": "7d",
+                "percent": 9,
+                "resets_at": "2026-09-26T11:40:00Z",
+                "minutes": 10080,
+                "main": true,
+                "limits": true,
+                "observed_at": "2026-09-24T13:36:00Z",
+                "stale": false,
+                "reset": false,
+                "state": "under",
+                "forecast": {
+                  "percent": 12,
+                  "elapsed": 0.7257936507936508,
+                  "runs_out_at": null,
+                  "basis": "window",
+                  "pace": 0.07381082558775287
+                }
+              }
+            ]
+          },
+          "link": null,
+          "sessions": 24,
+          "tokens": {
+            "input": 2395364,
+            "output": 598743,
+            "cache_read": 23954856,
+            "cache_write": 0
+          },
+          "usage": {
+            "today": 0,
+            "7d": 295396,
+            "30d": 2994107,
+            "90d": 2994107
+          },
+          "days": [
+            0,
+            0,
+            0,
+            109811,
+            28351,
+            42622,
+            114612,
+            136760,
+            202487,
+            178702,
+            120351,
+            60714,
+            32054,
+            158162,
+            0,
+            0,
+            224383,
+            173487,
+            45294,
+            40437,
+            179700,
+            196933,
+            104571,
+            182627,
+            131243,
+            65137,
+            0,
+            93011,
+            201478,
+            171180
+          ],
+          "burn": {
+            "today": 0,
+            "7d": 1339718,
+            "30d": 11377825,
+            "90d": 11377825
+          },
+          "fresh": {
+            "today": 0,
+            "7d": 352546,
+            "30d": 2994107,
+            "90d": 2994107
+          },
+          "burn_days": [
+            0,
+            0,
+            0,
+            417288,
+            107743,
+            161975,
+            435537,
+            519695,
+            769463,
+            679076,
+            457343,
+            230724,
+            121815,
+            601025,
+            0,
+            0,
+            852664,
+            659258,
+            172122,
+            153669,
+            682872,
+            748357,
+            397378,
+            693991,
+            498734,
+            247535,
+            0,
+            353443,
+            765626,
+            650492
+          ],
+          "linked_usage": [],
+          "last_active_at": "2026-09-21T13:20:00Z",
+          "projects": [
+            {
+              "path": "/Users/mira/src/ml-playground",
+              "folders": 1,
+              "sessions": 24,
+              "tokens": {
+                "input": 2395364,
+                "output": 598743,
+                "cache_read": 23954856,
+                "cache_write": 0
+              },
+              "usage": {
+                "today": 0,
+                "7d": 295396,
+                "30d": 2994107,
+                "90d": 2994107
+              },
+              "burn": {
+                "today": 0,
+                "7d": 1339718,
+                "30d": 11377825,
+                "90d": 11377825
+              },
+              "fresh": {
+                "today": 0,
+                "7d": 352546,
+                "30d": 2994107,
+                "90d": 2994107
+              },
+              "active_sessions": {
+                "today": 0,
+                "7d": 5,
+                "30d": 24,
+                "90d": 24
+              },
+              "last_active_at": "2026-09-21T13:20:00Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "provider": "hermes",
+      "status": "skipped",
+      "error": null,
+      "homes": [],
+      "covered_since": null,
+      "accounts": []
+    }
+  ],
+  "projects": [
+    {
+      "path": "/Users/mira/src/orbit/web",
+      "folders": 5,
+      "sessions": 154,
+      "tokens": {
+        "input": 110934297,
+        "output": 133988154,
+        "cache_read": 5700331993,
+        "cache_write": 146738310
+      },
+      "usage": {
+        "today": 2208348,
+        "7d": 20441240,
+        "30d": 86815719,
+        "90d": 244922451
+      },
+      "burn": {
+        "today": 16695928,
+        "7d": 154383302,
+        "30d": 618287655,
+        "90d": 1708851577
+      },
+      "fresh": {
+        "today": 3921733,
+        "7d": 35358873,
+        "30d": 142018572,
+        "90d": 391660761
+      },
+      "active_sessions": {
+        "today": 2,
+        "7d": 16,
+        "30d": 59,
+        "90d": 154
+      },
+      "providers": [
+        "claude",
+        "codex"
+      ],
+      "last_active_at": "2026-09-24T13:20:00Z"
+    },
+    {
+      "path": "/Users/mira/src/orbit/api",
+      "folders": 1,
+      "sessions": 54,
+      "tokens": {
+        "input": 958646,
+        "output": 38358024,
+        "cache_read": 958958171,
+        "cache_write": 57537197
+      },
+      "usage": {
+        "today": 581956,
+        "7d": 5151953,
+        "30d": 19674412,
+        "90d": 39316670
+      },
+      "burn": {
+        "today": 5720245,
+        "7d": 53278765,
+        "30d": 193386843,
+        "90d": 386457719
+      },
+      "fresh": {
+        "today": 1433606,
+        "7d": 13352702,
+        "30d": 48466531,
+        "90d": 96853867
+      },
+      "active_sessions": {
+        "today": 1,
+        "7d": 8,
+        "30d": 26,
+        "90d": 54
+      },
+      "providers": [
+        "claude"
+      ],
+      "last_active_at": "2026-09-24T13:20:00Z"
+    },
+    {
+      "path": "/Users/mira/src/orbit/infra",
+      "folders": 1,
+      "sessions": 38,
+      "tokens": {
+        "input": 18713930,
+        "output": 6237831,
+        "cache_read": 561424244,
+        "cache_write": 0
+      },
+      "usage": {
+        "today": 446138,
+        "7d": 3633427,
+        "30d": 17473264,
+        "90d": 24951761
+      },
+      "burn": {
+        "today": 2230689,
+        "7d": 20596144,
+        "30d": 90261865,
+        "90d": 124759025
+      },
+      "fresh": {
+        "today": 446138,
+        "7d": 4119223,
+        "30d": 18052341,
+        "90d": 24951761
+      },
+      "active_sessions": {
+        "today": 1,
+        "7d": 7,
+        "30d": 28,
+        "90d": 38
+      },
+      "providers": [
+        "codex"
+      ],
+      "last_active_at": "2026-09-24T11:20:00Z"
+    },
+    {
+      "path": "/Users/mira/notes",
+      "folders": 1,
+      "sessions": 84,
+      "tokens": {
+        "input": 493885,
+        "output": 19775263,
+        "cache_read": 494393643,
+        "cache_write": 29663132
+      },
+      "usage": {
+        "today": 53052,
+        "7d": 1599043,
+        "30d": 5972921,
+        "90d": 20269148
+      },
+      "burn": {
+        "today": 521470,
+        "7d": 17205654,
+        "30d": 60182232,
+        "90d": 199236747
+      },
+      "fresh": {
+        "today": 130690,
+        "7d": 4312049,
+        "30d": 15082725,
+        "90d": 49932280
+      },
+      "active_sessions": {
+        "today": 1,
+        "7d": 8,
+        "30d": 29,
+        "90d": 84
+      },
+      "providers": [
+        "claude"
+      ],
+      "last_active_at": "2026-09-24T08:20:00Z"
+    },
+    {
+      "path": "/Users/mira/src/ml-playground",
+      "folders": 1,
+      "sessions": 40,
+      "tokens": {
+        "input": 5828398,
+        "output": 1743030,
+        "cache_read": 126948676,
+        "cache_write": 0
+      },
+      "usage": {
+        "today": 0,
+        "7d": 1602039,
+        "30d": 7571428,
+        "90d": 7571428
+      },
+      "burn": {
+        "today": 0,
+        "7d": 8502200,
+        "30d": 34264552,
+        "90d": 34264552
+      },
+      "fresh": {
+        "today": 0,
+        "7d": 1785035,
+        "30d": 7571428,
+        "90d": 7571428
+      },
+      "active_sessions": {
+        "today": 0,
+        "7d": 11,
+        "30d": 40,
+        "90d": 40
+      },
+      "providers": [
+        "codex",
+        "grok"
+      ],
+      "last_active_at": "2026-09-23T11:20:00Z"
+    },
+    {
+      "path": "/Users/mira/dotfiles",
+      "folders": 1,
+      "sessions": 78,
+      "tokens": {
+        "input": 58750,
+        "output": 2368735,
+        "cache_read": 59229461,
+        "cache_write": 3553328
+      },
+      "usage": {
+        "today": 0,
+        "7d": 59999,
+        "30d": 714402,
+        "90d": 2427485
+      },
+      "burn": {
+        "today": 0,
+        "7d": 677033,
+        "30d": 7303018,
+        "90d": 23865903
+      },
+      "fresh": {
+        "today": 0,
+        "7d": 169660,
+        "30d": 1830142,
+        "90d": 5980813
+      },
+      "active_sessions": {
+        "today": 0,
+        "7d": 4,
+        "30d": 25,
+        "90d": 78
+      },
+      "providers": [
+        "claude"
+      ],
+      "last_active_at": "2026-09-20T13:20:00Z"
+    }
+  ],
+  "team": {
+    "pulled_at": null,
+    "latest_version": "v0.5.1",
+    "estimated": false,
+    "held_back_by": [],
+    "estimated_reason": null,
+    "cycles_held_back_by": [],
+    "cycles_reason": null,
+    "today_local": true,
+    "devices": [
+      {
+        "device": "d-demo-solo",
+        "label": "mira-mbp",
+        "os_user": "mira",
+        "this_device": true,
+        "collector_version": "v0.5.0",
+        "collected_at": "2026-09-24T13:36:00Z",
+        "age_seconds": 240,
+        "last_success_at": "2026-09-24T13:36:00Z",
+        "last_error": null,
+        "last_error_at": null,
+        "update_error": null,
+        "sources": [
+          {
+            "provider": "claude",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "codex",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "grok",
+            "status": "ok",
+            "error": null
+          },
+          {
+            "provider": "hermes",
+            "status": "skipped",
+            "error": null
+          }
+        ],
+        "error": null,
+        "silent": false,
+        "old": true,
+        "behind_since": null,
+        "not_updating": false,
+        "usage": {
+          "today": 3289494,
+          "7d": 32487701,
+          "30d": 138222146,
+          "90d": 339458943
+        },
+        "burn": {
+          "today": 25168332,
+          "7d": 233912333,
+          "30d": 990078050,
+          "90d": 2477435523
+        },
+        "burn_estimated": false,
+        "gap": null,
+        "replaced_by": null,
+        "note": "update: latest v0.5.1",
+        "limitations": []
+      }
+    ],
+    "providers": [
+      {
+        "provider": "claude",
+        "accounts": [
+          {
+            "label": "mira@studio.dev",
+            "name": "mira",
+            "alias": null,
+            "subscription": true,
+            "current": true,
+            "devices": [
+              "mira-mbp (mira)"
+            ],
+            "plan": "max",
+            "state": "over",
+            "quota": {
+              "observed_at": "2026-09-24T13:36:00Z",
+              "age_seconds": 240,
+              "stale": false,
+              "device": "mira-mbp (mira)",
+              "device_id": "d-demo-solo",
+              "windows": [
+                {
+                  "name": "5h",
+                  "percent": 35,
+                  "resets_at": "2026-09-24T15:50:00Z",
+                  "minutes": 300,
+                  "main": false,
+                  "limits": false,
+                  "observed_at": "2026-09-24T13:36:00Z",
+                  "stale": false,
+                  "reset": false,
+                  "state": "ok",
+                  "forecast": {
+                    "percent": 63,
+                    "elapsed": 0.5533333333333333,
+                    "runs_out_at": null,
+                    "basis": "window",
+                    "pace": 12.650602409638555
+                  }
+                },
+                {
+                  "name": "7d",
+                  "percent": 71,
+                  "resets_at": "2026-09-26T23:00:00Z",
+                  "minutes": 10080,
+                  "main": true,
+                  "limits": true,
+                  "observed_at": "2026-09-24T13:36:00Z",
+                  "stale": false,
+                  "reset": false,
+                  "state": "over",
+                  "forecast": {
+                    "percent": 108,
+                    "elapsed": 0.6583333333333333,
+                    "runs_out_at": "2026-09-26T10:46:28.732394366Z",
+                    "basis": "window",
+                    "pace": 0.6419529837251357
+                  }
+                },
+                {
+                  "name": "7d Fable",
+                  "percent": 93,
+                  "resets_at": "2026-09-26T23:00:00Z",
+                  "minutes": 10080,
+                  "main": false,
+                  "limits": true,
+                  "observed_at": "2026-09-24T13:36:00Z",
+                  "stale": false,
+                  "reset": false,
+                  "state": "over",
+                  "forecast": {
+                    "percent": 141,
+                    "elapsed": 0.6583333333333333,
+                    "runs_out_at": "2026-09-24T21:55:29.032258064Z",
+                    "basis": "window",
+                    "pace": 0.840867992766727
+                  }
+                }
+              ]
+            },
+            "link": null,
+            "sessions": 295,
+            "tokens": {
+              "input": 3956460,
+              "output": 158327425,
+              "cache_read": 3958227027,
+              "cache_write": 237491967
+            },
+            "usage": {
+              "today": 1805817,
+              "7d": 14873204,
+              "30d": 62649708,
+              "90d": 162283885
+            },
+            "users": 1,
+            "busiest": "mira-mbp",
+            "last_active_at": "2026-09-24T13:20:00Z",
+            "per_device": [
+              {
+                "device": "mira-mbp (mira)",
+                "device_id": "d-demo-solo",
+                "current": true,
+                "sessions": 295,
+                "tokens": {
+                  "input": 3956460,
+                  "output": 158327425,
+                  "cache_read": 3958227027,
+                  "cache_write": 237491967
+                },
+                "usage": {
+                  "today": 1805817,
+                  "7d": 14873204,
+                  "30d": 62649708,
+                  "90d": 162283885
+                },
+                "burn": {
+                  "today": 17749947,
+                  "7d": 146194208,
+                  "30d": 615808147,
+                  "90d": 1595152143
+                },
+                "last_active_at": "2026-09-24T13:20:00Z"
+              }
+            ],
+            "linked_usage": [],
+            "burn": {
+              "today": 17749947,
+              "7d": 146194208,
+              "30d": 615808147,
+              "90d": 1595152143
+            },
+            "burn_estimated": false,
+            "no_reading": null,
+            "outside": null,
+            "utilization": [
+              {
+                "window": "7d",
+                "main": true,
+                "cycles": [
+                  {
+                    "resets_at": "2026-09-19T23:00:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-09-19T22:45:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-09-12T23:00:00Z",
+                    "percent": 94,
+                    "last_read_at": "2026-09-12T22:45:00Z",
+                    "partial": false,
+                    "state": "tight"
+                  },
+                  {
+                    "resets_at": "2026-09-05T23:00:00Z",
+                    "percent": 71,
+                    "last_read_at": "2026-09-02T11:00:00Z",
+                    "partial": true,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-08-29T23:00:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-08-29T22:45:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-08-22T23:00:00Z",
+                    "percent": 88,
+                    "last_read_at": "2026-08-22T22:45:00Z",
+                    "partial": false,
+                    "state": "tight"
+                  },
+                  {
+                    "resets_at": "2026-08-15T23:00:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-08-15T22:45:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-08-08T23:00:00Z",
+                    "percent": 82,
+                    "last_read_at": "2026-08-08T22:45:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-08-01T23:00:00Z",
+                    "percent": 97,
+                    "last_read_at": "2026-08-01T22:45:00Z",
+                    "partial": false,
+                    "state": "tight"
+                  },
+                  {
+                    "resets_at": "2026-07-25T23:00:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-07-25T22:45:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-07-18T23:00:00Z",
+                    "percent": 76,
+                    "last_read_at": "2026-07-18T22:45:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-07-11T23:00:00Z",
+                    "percent": 91,
+                    "last_read_at": "2026-07-11T22:45:00Z",
+                    "partial": false,
+                    "state": "tight"
+                  },
+                  {
+                    "resets_at": "2026-07-04T23:00:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-07-04T22:45:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-06-27T23:00:00Z",
+                    "percent": 85,
+                    "last_read_at": "2026-06-27T22:45:00Z",
+                    "partial": false,
+                    "state": "tight"
+                  }
+                ],
+                "out": 5,
+                "average": 91.07692307692308
+              },
+              {
+                "window": "5h",
+                "main": false,
+                "cycles": [
+                  {
+                    "resets_at": "2026-09-24T08:50:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-09-24T08:35:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-09-24T01:50:00Z",
+                    "percent": 64,
+                    "last_read_at": "2026-09-24T01:35:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-09-23T18:50:00Z",
+                    "percent": 38,
+                    "last_read_at": "2026-09-23T18:35:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-23T11:50:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-09-23T11:35:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-09-23T04:50:00Z",
+                    "percent": 92,
+                    "last_read_at": "2026-09-23T04:35:00Z",
+                    "partial": false,
+                    "state": "tight"
+                  },
+                  {
+                    "resets_at": "2026-09-22T21:50:00Z",
+                    "percent": 55,
+                    "last_read_at": "2026-09-22T19:20:00Z",
+                    "partial": true,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-09-22T14:50:00Z",
+                    "percent": 71,
+                    "last_read_at": "2026-09-22T14:35:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-09-22T07:50:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-09-22T07:35:00Z",
+                    "partial": false,
+                    "state": "out"
+                  },
+                  {
+                    "resets_at": "2026-09-22T00:50:00Z",
+                    "percent": 47,
+                    "last_read_at": "2026-09-22T00:35:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-21T17:50:00Z",
+                    "percent": 83,
+                    "last_read_at": "2026-09-21T17:35:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-09-21T10:50:00Z",
+                    "percent": 100,
+                    "last_read_at": "2026-09-21T10:35:00Z",
+                    "partial": false,
+                    "state": "out"
+                  }
+                ],
+                "out": 4,
+                "average": 77.27272727272727
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "provider": "codex",
+        "accounts": [
+          {
+            "label": "mira@studio.dev",
+            "name": "mira",
+            "alias": null,
+            "subscription": true,
+            "current": true,
+            "devices": [
+              "mira-mbp (mira)"
+            ],
+            "plan": "pro",
+            "state": "ok",
+            "quota": {
+              "observed_at": "2026-09-24T13:36:00Z",
+              "age_seconds": 240,
+              "stale": false,
+              "device": "mira-mbp (mira)",
+              "device_id": "d-demo-solo",
+              "windows": [
+                {
+                  "name": "5h",
+                  "percent": 6,
+                  "resets_at": "2026-09-24T17:25:00Z",
+                  "minutes": 300,
+                  "main": false,
+                  "limits": false,
+                  "observed_at": "2026-09-24T13:36:00Z",
+                  "stale": false,
+                  "reset": false,
+                  "state": "under",
+                  "forecast": {
+                    "percent": 25,
+                    "elapsed": 0.23666666666666666,
+                    "runs_out_at": null,
+                    "basis": "window",
+                    "pace": 5.070422535211268
+                  }
+                },
+                {
+                  "name": "7d",
+                  "percent": 22,
+                  "resets_at": "2026-09-29T08:40:00Z",
+                  "minutes": 10080,
+                  "main": true,
+                  "limits": true,
+                  "observed_at": "2026-09-24T13:36:00Z",
+                  "stale": false,
+                  "reset": false,
+                  "state": "ok",
+                  "forecast": {
+                    "percent": 70,
+                    "elapsed": 0.31507936507936507,
+                    "runs_out_at": null,
+                    "basis": "window",
+                    "pace": 0.4156171284634761
+                  }
+                }
+              ]
+            },
+            "link": null,
+            "sessions": 129,
+            "tokens": {
+              "input": 130636082,
+              "output": 43544869,
+              "cache_read": 3919104305,
+              "cache_write": 0
+            },
+            "usage": {
+              "today": 1483677,
+              "7d": 17319101,
+              "30d": 72578331,
+              "90d": 174180951
+            },
+            "users": 1,
+            "busiest": "mira-mbp",
+            "last_active_at": "2026-09-24T13:20:00Z",
+            "per_device": [
+              {
+                "device": "mira-mbp (mira)",
+                "device_id": "d-demo-solo",
+                "current": true,
+                "sessions": 129,
+                "tokens": {
+                  "input": 130636082,
+                  "output": 43544869,
+                  "cache_read": 3919104305,
+                  "cache_write": 0
+                },
+                "usage": {
+                  "today": 1483677,
+                  "7d": 17319101,
+                  "30d": 72578331,
+                  "90d": 174180951
+                },
+                "burn": {
+                  "today": 7418385,
+                  "7d": 86595582,
+                  "30d": 362892078,
+                  "90d": 870905555
+                },
+                "last_active_at": "2026-09-24T13:20:00Z"
+              }
+            ],
+            "linked_usage": [],
+            "burn": {
+              "today": 7418385,
+              "7d": 86595582,
+              "30d": 362892078,
+              "90d": 870905555
+            },
+            "burn_estimated": false,
+            "no_reading": null,
+            "outside": null,
+            "utilization": [
+              {
+                "window": "7d",
+                "main": true,
+                "cycles": [
+                  {
+                    "resets_at": "2026-09-22T08:40:00Z",
+                    "percent": 52,
+                    "last_read_at": "2026-09-22T08:25:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-09-15T08:40:00Z",
+                    "percent": 41,
+                    "last_read_at": "2026-09-15T08:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-08T08:40:00Z",
+                    "percent": 29,
+                    "last_read_at": "2026-09-04T20:40:00Z",
+                    "partial": true,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-01T08:40:00Z",
+                    "percent": 63,
+                    "last_read_at": "2026-09-01T08:25:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-08-25T08:40:00Z",
+                    "percent": 48,
+                    "last_read_at": "2026-08-25T08:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-08-18T08:40:00Z",
+                    "percent": 37,
+                    "last_read_at": "2026-08-18T08:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-08-11T08:40:00Z",
+                    "percent": 55,
+                    "last_read_at": "2026-08-11T08:25:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-08-04T08:40:00Z",
+                    "percent": 44,
+                    "last_read_at": "2026-08-04T08:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-07-28T08:40:00Z",
+                    "percent": 71,
+                    "last_read_at": "2026-07-28T08:25:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-07-21T08:40:00Z",
+                    "percent": 39,
+                    "last_read_at": "2026-07-21T08:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-07-14T08:40:00Z",
+                    "percent": 46,
+                    "last_read_at": "2026-07-14T08:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-07-07T08:40:00Z",
+                    "percent": 58,
+                    "last_read_at": "2026-07-07T08:25:00Z",
+                    "partial": false,
+                    "state": "ok"
+                  },
+                  {
+                    "resets_at": "2026-06-30T08:40:00Z",
+                    "percent": 33,
+                    "last_read_at": "2026-06-30T08:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  }
+                ],
+                "out": 0,
+                "average": 47.38461538461539
+              },
+              {
+                "window": "5h",
+                "main": false,
+                "cycles": [
+                  {
+                    "resets_at": "2026-09-24T10:25:00Z",
+                    "percent": 34,
+                    "last_read_at": "2026-09-24T10:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-24T03:25:00Z",
+                    "percent": 12,
+                    "last_read_at": "2026-09-24T03:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-23T20:25:00Z",
+                    "percent": 27,
+                    "last_read_at": "2026-09-23T20:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-23T13:25:00Z",
+                    "percent": 8,
+                    "last_read_at": "2026-09-23T13:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-23T06:25:00Z",
+                    "percent": 41,
+                    "last_read_at": "2026-09-23T06:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-22T23:25:00Z",
+                    "percent": 19,
+                    "last_read_at": "2026-09-22T23:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-22T16:25:00Z",
+                    "percent": 22,
+                    "last_read_at": "2026-09-22T16:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-22T09:25:00Z",
+                    "percent": 15,
+                    "last_read_at": "2026-09-22T09:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-22T02:25:00Z",
+                    "percent": 30,
+                    "last_read_at": "2026-09-22T02:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-21T19:25:00Z",
+                    "percent": 9,
+                    "last_read_at": "2026-09-21T19:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-21T12:25:00Z",
+                    "percent": 26,
+                    "last_read_at": "2026-09-21T12:10:00Z",
+                    "partial": false,
+                    "state": "under"
+                  }
+                ],
+                "out": 0,
+                "average": 22.09090909090909
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "provider": "grok",
+        "accounts": [
+          {
+            "label": "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64",
+            "name": "7f3b9c21",
+            "alias": null,
+            "subscription": true,
+            "current": true,
+            "devices": [
+              "mira-mbp (mira)"
+            ],
+            "plan": "SuperGrok",
+            "state": "under",
+            "quota": {
+              "observed_at": "2026-09-24T13:36:00Z",
+              "age_seconds": 240,
+              "stale": false,
+              "device": "mira-mbp (mira)",
+              "device_id": "d-demo-solo",
+              "windows": [
+                {
+                  "name": "7d",
+                  "percent": 9,
+                  "resets_at": "2026-09-26T11:40:00Z",
+                  "minutes": 10080,
+                  "main": true,
+                  "limits": true,
+                  "observed_at": "2026-09-24T13:36:00Z",
+                  "stale": false,
+                  "reset": false,
+                  "state": "under",
+                  "forecast": {
+                    "percent": 12,
+                    "elapsed": 0.7257936507936508,
+                    "runs_out_at": null,
+                    "basis": "window",
+                    "pace": 0.07381082558775287
+                  }
+                }
+              ]
+            },
+            "link": null,
+            "sessions": 24,
+            "tokens": {
+              "input": 2395364,
+              "output": 598743,
+              "cache_read": 23954856,
+              "cache_write": 0
+            },
+            "usage": {
+              "today": 0,
+              "7d": 295396,
+              "30d": 2994107,
+              "90d": 2994107
+            },
+            "users": 1,
+            "busiest": "mira-mbp",
+            "last_active_at": "2026-09-21T13:20:00Z",
+            "per_device": [
+              {
+                "device": "mira-mbp (mira)",
+                "device_id": "d-demo-solo",
+                "current": true,
+                "sessions": 24,
+                "tokens": {
+                  "input": 2395364,
+                  "output": 598743,
+                  "cache_read": 23954856,
+                  "cache_write": 0
+                },
+                "usage": {
+                  "today": 0,
+                  "7d": 295396,
+                  "30d": 2994107,
+                  "90d": 2994107
+                },
+                "burn": {
+                  "today": 0,
+                  "7d": 1122543,
+                  "30d": 11377825,
+                  "90d": 11377825
+                },
+                "last_active_at": "2026-09-21T13:20:00Z"
+              }
+            ],
+            "linked_usage": [],
+            "burn": {
+              "today": 0,
+              "7d": 1122543,
+              "30d": 11377825,
+              "90d": 11377825
+            },
+            "burn_estimated": false,
+            "no_reading": null,
+            "outside": null,
+            "utilization": [
+              {
+                "window": "7d",
+                "main": true,
+                "cycles": [
+                  {
+                    "resets_at": "2026-09-19T11:40:00Z",
+                    "percent": 12,
+                    "last_read_at": "2026-09-19T11:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-12T11:40:00Z",
+                    "percent": 7,
+                    "last_read_at": "2026-09-12T11:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-09-05T11:40:00Z",
+                    "percent": 15,
+                    "last_read_at": "2026-09-05T11:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-08-29T11:40:00Z",
+                    "percent": 4,
+                    "last_read_at": "2026-08-29T11:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-08-22T11:40:00Z",
+                    "percent": 9,
+                    "last_read_at": "2026-08-22T11:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-08-15T11:40:00Z",
+                    "percent": 11,
+                    "last_read_at": "2026-08-15T11:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-08-08T11:40:00Z",
+                    "percent": 6,
+                    "last_read_at": "2026-08-08T11:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-08-01T11:40:00Z",
+                    "percent": 14,
+                    "last_read_at": "2026-08-01T11:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-07-25T11:40:00Z",
+                    "percent": 3,
+                    "last_read_at": "2026-07-25T11:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-07-18T11:40:00Z",
+                    "percent": 8,
+                    "last_read_at": "2026-07-18T11:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-07-11T11:40:00Z",
+                    "percent": 10,
+                    "last_read_at": "2026-07-11T11:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-07-04T11:40:00Z",
+                    "percent": 5,
+                    "last_read_at": "2026-07-04T11:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  },
+                  {
+                    "resets_at": "2026-06-27T11:40:00Z",
+                    "percent": 13,
+                    "last_read_at": "2026-06-27T11:25:00Z",
+                    "partial": false,
+                    "state": "under"
+                  }
+                ],
+                "out": 0,
+                "average": 9
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "matrix": {
+      "columns": [
+        {
+          "provider": "claude",
+          "label": "mira@studio.dev",
+          "name": "mira",
+          "no_quota": false,
+          "state": "over",
+          "percent": 71,
+          "usage": {
+            "today": 1805817,
+            "7d": 14873204,
+            "30d": 62649708,
+            "90d": 162283885
+          },
+          "window_tokens": 10379653,
+          "burn": {
+            "today": 17749947,
+            "7d": 146194208,
+            "30d": 615808147,
+            "90d": 1595152143
+          },
+          "window_burn": 102025361,
+          "window_start": "2026-09-19T23:00:00Z"
+        },
+        {
+          "provider": "codex",
+          "label": "mira@studio.dev",
+          "name": "mira",
+          "no_quota": false,
+          "state": "ok",
+          "percent": 22,
+          "usage": {
+            "today": 1483677,
+            "7d": 17319101,
+            "30d": 72578331,
+            "90d": 174180951
+          },
+          "window_tokens": 7355103,
+          "burn": {
+            "today": 7418385,
+            "7d": 86595582,
+            "30d": 362892078,
+            "90d": 870905555
+          },
+          "window_burn": 36775533,
+          "window_start": "2026-09-22T08:40:00Z"
+        },
+        {
+          "provider": "grok",
+          "label": "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64",
+          "name": "7f3b9c21",
+          "no_quota": false,
+          "state": "under",
+          "percent": 9,
+          "usage": {
+            "today": 0,
+            "7d": 295396,
+            "30d": 2994107,
+            "90d": 2994107
+          },
+          "window_tokens": 163002,
+          "burn": {
+            "today": 0,
+            "7d": 1122543,
+            "30d": 11377825,
+            "90d": 11377825
+          },
+          "window_burn": 619430,
+          "window_start": "2026-09-19T11:40:00Z"
+        }
+      ],
+      "rows": [
+        {
+          "device": "mira-mbp",
+          "device_id": "d-demo-solo",
+          "cells": [
+            {
+              "usage": {
+                "today": 1805817,
+                "7d": 14873204,
+                "30d": 62649708,
+                "90d": 162283885
+              },
+              "window_tokens": 10379653,
+              "share": {
+                "today": 100,
+                "7d": 100,
+                "30d": 100,
+                "90d": 100
+              },
+              "burn": {
+                "today": 17749947,
+                "7d": 146194208,
+                "30d": 615808147,
+                "90d": 1595152143
+              },
+              "window_burn": 102025361,
+              "burn_share": {
+                "today": 100,
+                "7d": 100,
+                "30d": 100,
+                "90d": 100
+              }
+            },
+            {
+              "usage": {
+                "today": 1483677,
+                "7d": 17319101,
+                "30d": 72578331,
+                "90d": 174180951
+              },
+              "window_tokens": 7355103,
+              "share": {
+                "today": 100,
+                "7d": 100,
+                "30d": 100,
+                "90d": 100
+              },
+              "burn": {
+                "today": 7418385,
+                "7d": 86595582,
+                "30d": 362892078,
+                "90d": 870905555
+              },
+              "window_burn": 36775533,
+              "burn_share": {
+                "today": 100,
+                "7d": 100,
+                "30d": 100,
+                "90d": 100
+              }
+            },
+            {
+              "usage": {
+                "today": 0,
+                "7d": 295396,
+                "30d": 2994107,
+                "90d": 2994107
+              },
+              "window_tokens": 163002,
+              "share": {
+                "today": null,
+                "7d": 100,
+                "30d": 100,
+                "90d": 100
+              },
+              "burn": {
+                "today": 0,
+                "7d": 1122543,
+                "30d": 11377825,
+                "90d": 11377825
+              },
+              "window_burn": 619430,
+              "burn_share": {
+                "today": null,
+                "7d": 100,
+                "30d": 100,
+                "90d": 100
+              }
+            }
+          ],
+          "usage": {
+            "today": 3289494,
+            "7d": 32487701,
+            "30d": 138222146,
+            "90d": 339458943
+          },
+          "share": {
+            "today": 100,
+            "7d": 100,
+            "30d": 100,
+            "90d": 100
+          },
+          "burn": {
+            "today": 25168332,
+            "7d": 233912333,
+            "30d": 990078050,
+            "90d": 2477435523
+          },
+          "burn_share": {
+            "today": 100,
+            "7d": 100,
+            "30d": 100,
+            "90d": 100
+          },
+          "burn_estimated": false
+        }
+      ]
+    }
+  }
+}

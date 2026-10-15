@@ -22,7 +22,7 @@ ai-usage is a Go command-line tool: a collector that the system scheduler runs e
 | `scripts/verify.sh`, `.agents/skills/verify-ai-usage/` | the checks a change needs, and the skill that says how to prove a change, with a map of the features |
 | `docs/` | the JSON reference, the relay and its protocol, containers, releasing, the release notes in `docs/releases/`, and the demo in `docs/demo/` |
 | `design.md`, `ai-report.md` | how the report looks and why; what ai-usage must do, and its implementation status |
-| `install.sh`, `install.ps1`, `.github/` | the installers; CI, the release workflow, and their scripts |
+| `install.sh`, `install.ps1`, `.github/` | the installers; CI, the release workflow, and their scripts, among them `.github/scripts/formula.sh`, the Homebrew formula, and `tap.sh`, which puts it in the tap `neoromantic/homebrew-tap` after each release |
 
 ## The repository is public
 

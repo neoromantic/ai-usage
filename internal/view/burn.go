@@ -90,7 +90,7 @@ func (m *merger) heldBackDevices(g collect.Gate) []TeamDevice {
 
 // What a device that holds back weighted days does to send them: it is
 // forgotten, reinstalled, built again from source, updated by hand, or
-// updates itself.
+// should update on its own.
 const (
 	stepForget = iota
 	stepReinstall
@@ -103,8 +103,9 @@ const (
 // device the relay no longer has a record of, or that has not reported for
 // as long as the relay keeps the least of records, may never come back, as
 // when it was reinstalled. A release before v0.2.5, which cannot say its
-// update failed, is reinstalled; a later one whose update fails is updated
-// by hand. A build from source never updates itself.
+// update failed, is reinstalled; a later one that has not updated, as when
+// its update fails or brew installed it, is updated by hand. A build from
+// source never updates itself.
 func (m *merger) heldBackStep(h TeamDevice) int {
 	switch {
 	case m.gone(h) || h.ReplacedBy != nil || m.now.Sub(h.CollectedAt) > relay.DefaultLimits().MinRecordTTL:
@@ -142,18 +143,18 @@ func (m *merger) heldBackReason(h TeamDevice, since string) string {
 	case stepRebuild:
 		return h.Label + " runs a build from source before " + since + ": build it again"
 	case stepUpdate:
-		return runs + "its update fails; run ai-usage update on it"
+		return h.Label + " runs " + h.CollectorVersion + " and has not updated; run ai-usage update on it"
 	}
 	if h.Silent {
-		return h.Label + " has not reported since " + h.CollectedAt.In(m.loc()).Format("Jan 2") + ": it updates itself when it next runs"
+		return h.Label + " has not reported since " + h.CollectedAt.In(m.loc()).Format("Jan 2") + ": it should update when it next runs"
 	}
-	return runs + "it updates itself within 15 minutes"
+	return runs + "it should update within 15 minutes"
 }
 
 // heldBackSteps is what the held-back devices hs, more than one, take:
 // those to reinstall first, so the action a short line keeps names them,
 // then those to build again, to forget, to update by hand, and the rest, which
-// update themselves.
+// should update on their own.
 func (m *merger) heldBackSteps(hs []TeamDevice) string {
 	by := make([][]string, stepSelf+1)
 	var forget []TeamDevice
@@ -177,7 +178,11 @@ func (m *merger) heldBackSteps(hs []TeamDevice) string {
 		steps = append(steps, m.forgetStep(forget))
 	}
 	if ns := by[stepUpdate]; len(ns) > 0 {
-		steps = append(steps, "run ai-usage update on "+firstNames(ns, 3)+", whose update fails")
+		which := ", which have not updated"
+		if len(ns) == 1 {
+			which = ", which has not updated"
+		}
+		steps = append(steps, "run ai-usage update on "+firstNames(ns, 3)+which)
 	}
 	ns := by[stepSelf]
 	then, it := "within 15 minutes", "within 15 minutes"
@@ -187,11 +192,11 @@ func (m *merger) heldBackSteps(hs []TeamDevice) string {
 	switch {
 	case len(ns) == 0:
 	case len(steps) == 0:
-		steps = append(steps, "they update themselves "+then+" ("+firstNames(ns, 3)+")")
+		steps = append(steps, "they should update "+then+" ("+firstNames(ns, 3)+")")
 	case len(ns) == 1:
-		steps = append(steps, ns[0]+" updates itself "+it)
+		steps = append(steps, ns[0]+" should update "+it)
 	default:
-		steps = append(steps, "the other "+strconv.Itoa(len(ns))+" update themselves "+then)
+		steps = append(steps, "the other "+strconv.Itoa(len(ns))+" should update "+then)
 	}
 	return strings.Join(steps, "; ")
 }

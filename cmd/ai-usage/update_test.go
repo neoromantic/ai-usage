@@ -26,14 +26,15 @@ import (
 // version in AIU_FAKE_RELEASE as a release would; newFakeGitHub sets that
 // to tag. While busy, the lookup of the latest release fails. The release
 // tagged badSum was uploaded broken: its binary does not match its
-// checksum. Tests change these with set.
+// checksum. The release has a menu bar app while app holds its zip. Tests
+// change these with set.
 type fakeGitHub struct {
 	*httptest.Server
 	mu                 sync.Mutex
 	tag, badSum        string
 	busy               bool
 	lookups, downloads int
-	bin                []byte
+	bin, app           []byte
 }
 
 func newFakeGitHub(t *testing.T, tag string) *fakeGitHub {
@@ -65,7 +66,17 @@ func newFakeGitHub(t *testing.T, tag string) *fakeGitHub {
 		case releases + "/download/" + g.tag + "/" + asset:
 			g.downloads++
 			_, _ = w.Write(g.bin)
+		case releases + "/download/" + g.tag + "/" + selfupdate.AppAsset:
+			if g.app == nil {
+				http.NotFound(w, r)
+				return
+			}
+			_, _ = w.Write(g.app)
 		case releases + "/download/" + g.tag + "/checksums.txt":
+			if g.app != nil {
+				appSum := sha256.Sum256(g.app)
+				fmt.Fprintf(w, "%s  %s\n", hex.EncodeToString(appSum[:]), selfupdate.AppAsset)
+			}
 			if g.tag == g.badSum {
 				fmt.Fprintf(w, "%s  %s\n", strings.Repeat("0", 64), asset)
 				return
@@ -396,7 +407,7 @@ func TestFailedAppIsNotDownloadedAgain(t *testing.T) {
 	appErr := fmt.Errorf("%w: rename: permission denied", selfupdate.ErrApp)
 	failed := func() *state.State {
 		st := &state.State{}
-		noteUpdate(st, t0, selfupdate.Result{Latest: "v1.3.0", AppDownloaded: true}, appErr)
+		noteUpdate(st, t0, selfupdate.Result{Latest: "v1.3.0", AppDownloaded: true, AppTag: "v1.3.0"}, appErr)
 		return st
 	}
 	st := failed()

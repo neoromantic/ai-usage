@@ -17,7 +17,8 @@ const guideCmd = 26
 // Guide is the few lines a new device prints once, under the first report a
 // person sees: how it collects from now on, what the team sees, and the
 // commands worth knowing. scheduler names the system scheduler, such as cron.
-func Guide(r Report, scheduler string, o Options) string {
+// app says the guide offers the macOS menu bar app, which is not installed.
+func Guide(r Report, scheduler string, app bool, o Options) string {
 	c := newCard(&r, o)
 	g := c.g
 	col := r.Collector
@@ -56,7 +57,10 @@ func Guide(r Report, scheduler string, o Options) string {
 		{"ai-usage", "collect now and show this report"},
 		{"ai-usage status", "the collector's health, with full errors"},
 		{"ai-usage name set NAME", "rename this device for the team"},
-		{"ai-usage team key", "invite a colleague: they install with this key as AI_USAGE_TEAM_KEY; share it like a password"},
+		{"ai-usage team key", "invite a colleague: they run ai-usage team join and paste it, or install with it as AI_USAGE_TEAM_KEY; share it like a password"},
+	}
+	if app {
+		cmds = append(cmds, [2]string{"ai-usage app install", "add the menu bar app, which shows this report"})
 	}
 	// Only a system scheduler's entry is paused this way. `schedule run`
 	// keeps collecting until it is stopped, and where nothing is registered

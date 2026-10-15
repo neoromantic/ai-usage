@@ -82,7 +82,7 @@ var sgr = regexp.MustCompile("\x1b\\[[0-9;]*m")
 // Every demo page fits 80 columns, and lists no project or device that
 // burned nothing.
 func TestPages(t *testing.T) {
-	for name, r := range map[string]view.Report{"solo": solo(), "team": teamReport()} {
+	for name, r := range map[string]view.Report{"solo": solo(), "team": teamReport(), "homebrew": homebrew()} {
 		for _, p := range r.Projects {
 			if p.Burn.Week <= 0 && p.Burn.Quarter <= 0 {
 				t.Errorf("%s: project %s burned nothing", name, p.Path)
@@ -96,6 +96,14 @@ func TestPages(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// The Homebrew page says how to update with brew.
+func TestHomebrew(t *testing.T) {
+	u := homebrew().Collector.Update
+	if u.Method != view.MethodHomebrew || u.Command == nil || *u.Command != "brew upgrade neoromantic/tap/ai-usage" || u.Latest == nil || *u.Latest != "v0.5.1" {
+		t.Errorf("update = %+v", u)
 	}
 }
 

@@ -173,8 +173,15 @@ else
 	# Without AI_USAGE_BIN_DIR the installer picks the folder and may edit a
 	# shell profile. Each case gets a home of its own and only the system's
 	# folders on PATH, so no real profile or earlier install is involved.
-	unset AI_USAGE_BIN_DIR ZDOTDIR XDG_CONFIG_HOME
+	unset AI_USAGE_BIN_DIR ZDOTDIR XDG_CONFIG_HOME HOMEBREW_PREFIX
 	sys=/usr/bin:/bin:/usr/sbin:/sbin
+	# The installer always looks in Homebrew's usual prefixes, so a copy
+	# Homebrew installed there for this user would stop every case below.
+	for p in /opt/homebrew /usr/local /home/linuxbrew/.linuxbrew; do
+		if [ -L "$p/opt/ai-usage" ] && [ -n "$(find -H "$p/opt/ai-usage" -prune -user "$(id -u)" 2>/dev/null)" ]; then
+			fail "Homebrew's ai-usage in $p stops the installer in the cases that follow; run this in CI, or run brew uninstall neoromantic/tap/ai-usage first"
+		fi
+	done
 	# These are about the binary; the app was checked above.
 	export AI_USAGE_NO_APP=1
 
@@ -219,6 +226,44 @@ else
 	HOME=$h PATH=$h/brew/bin:$sys SHELL=/bin/zsh sh install.sh
 	[ -L "$h/brew/bin/ai-usage" ] || fail "the installer replaced a link named ai-usage"
 	[ -x "$h/.local/bin/ai-usage" ] || fail "the installer did not install into ~/.local/bin beside a link"
+
+	# A copy Homebrew installed, which has an opt link, stops the installer
+	# before it writes anything, and it says how to update that copy.
+	h=$work/homebrew
+	mkdir -p "$h/hb/Cellar/ai-usage/9.9.9/bin" "$h/hb/opt" "$h/hb/bin"
+	cp "$built" "$h/hb/Cellar/ai-usage/9.9.9/bin/ai-usage"
+	ln -s ../Cellar/ai-usage/9.9.9 "$h/hb/opt/ai-usage"
+	ln -s ../Cellar/ai-usage/9.9.9/bin/ai-usage "$h/hb/bin/ai-usage"
+	if HOME=$h PATH=$h/hb/bin:$sys HOMEBREW_PREFIX=$h/hb SHELL=/bin/zsh sh install.sh 2>"$work/homebrew.err"; then
+		fail "the installer ran over a copy Homebrew installed"
+	fi
+	grep -qF "installed with Homebrew ($h/hb/bin/ai-usage)" "$work/homebrew.err" || fail "the installer did not name the Homebrew copy"
+	grep -qF 'brew upgrade neoromantic/tap/ai-usage' "$work/homebrew.err" || fail "the installer did not say how to update the Homebrew copy"
+	[ ! -e "$h/.local/bin/ai-usage" ] || fail "the installer installed beside a Homebrew copy"
+	[ ! -e "$h/.zshrc" ] || fail "the installer edited a profile beside a Homebrew copy"
+
+	# AI_USAGE_BIN_DIR installs a second copy all the same.
+	HOME=$h PATH=$h/hb/bin:$sys HOMEBREW_PREFIX=$h/hb SHELL=/bin/zsh AI_USAGE_BIN_DIR=$h/own sh install.sh
+	[ -x "$h/own/ai-usage" ] || fail "AI_USAGE_BIN_DIR did not install beside a Homebrew copy"
+
+	# A new install never goes into Homebrew's folders, which belong to brew,
+	# even when one is on PATH. Only a runner, which is thrown away, has the
+	# real ones written to; elsewhere the folders find_bin_dir tries are read.
+	tries=$(sed -n '/^find_bin_dir()/,/^}/p' install.sh | grep 'for d in')
+	case $tries in
+	*/opt/homebrew* | */usr/local*) fail "find_bin_dir tries a folder of Homebrew's: $tries" ;;
+	esac
+	if [ -n "${CI:-}" ]; then
+		for d in /opt/homebrew/bin /usr/local/bin; do
+			if [ -d "$d" ] && [ -w "$d" ] && [ ! -e "$d/ai-usage" ]; then
+				h=$work/brew-bin$d
+				mkdir -p "$h"
+				HOME=$h PATH=$d:$sys SHELL=/bin/zsh sh install.sh
+				[ ! -e "$d/ai-usage" ] || fail "the installer put a new copy in $d"
+				[ -x "$h/.local/bin/ai-usage" ] || fail "the installer did not use ~/.local/bin with $d on PATH"
+			fi
+		done
+	fi
 
 	# With none on PATH, the binary goes into ~/.local/bin, and the login
 	# shell's profile puts that on PATH once, however often the installer

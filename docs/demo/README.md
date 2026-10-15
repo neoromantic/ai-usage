@@ -4,12 +4,13 @@ Every machine, person, account, and number here is made up. The pictures in the 
 
 ## The reports
 
-Two reports, saved as `ai-usage --json` prints them:
+Three reports, saved as `ai-usage --json` prints them:
 
 - **`solo.json`**: one developer, `mira-mbp`, with Claude Max, ChatGPT Pro, and SuperGrok. Claude runs out on Saturday, 12 hours before its weekly reset, and its Fable limit runs out tonight. Codex has room, and Grok is paid for but almost unused. Over the quarter, Claude's week ran out 5 times in 13, and once she was away from the laptop for half a week (`~`); her Codex and Grok never got past 71%.
 - **`team.json`**: a small studio. It has two laptops (`mira-mbp` and `leo-air`) and a Linux server, `build-01`. Nine Hermes bots run in containers of their own (`scout`, `editor`, `herald`, …), and all of them bill through one Codex login, `bots@studio.dev`. That login runs out on Friday, nearly 3 days before its reset. Mira's Claude 5-hour window is full, and at the last day's pace her week runs out on Saturday; her Codex week ends tight. Leo's Codex Plus is out, and his laptop runs v0.3.4, an older release whose Codex fails and which sends no weighted tokens, so its totals are estimated (`~`). Since that release reads no quota cycles, no machine sends them, and UTILIZATION shows Mira's own, with a line saying why. The `courier` bot has not reported since yesterday. A triage job on `build-01` runs Claude Code in a folder of its own that nobody logged in to, so its tokens go to `unknown`, and ATTENTION says where to log in. Mira stopped using SuperGrok nine days ago, and ATTENTION marks it idle: paid and unused.
+- **`homebrew.json`**: `solo.json`'s laptop where Homebrew installed ai-usage, and v0.5.1 is out, which brew has not installed yet: `collector.update` has `"method": "homebrew"` and `"command": "brew upgrade neoromantic/tap/ai-usage"`. The menu bar app's checks read it, and `AIUsageBar --render docs/demo/homebrew.json OUTDIR` draws Settings' About with "Command-Line Tool (Homebrew)" at `/opt/homebrew/opt/ai-usage/bin/ai-usage`, the path Homebrew keeps for it, which the launch agent names. Every render's `popover-not-installed` shows the Homebrew command under the installer's.
 
-`scripts/demo/main.go` builds both with the code that builds a real report, from made-up readings and token logs. Their forecasts, ATTENTION, and matrix therefore agree with the numbers, as they would in a real run. Every report is taken at Thursday 24 September 2026, 15:40 in Berlin.
+`scripts/demo/main.go` builds them with the code that builds a real report, from made-up readings and token logs. Their forecasts, ATTENTION, and matrix therefore agree with the numbers, as they would in a real run. Every report is taken at Thursday 24 September 2026, 15:40 in Berlin.
 
 To show one in your own terminal, interactive view included:
 
@@ -61,7 +62,7 @@ bun scripts/demo/shots.ts            # every picture
 bun scripts/demo/shots.ts team-bots  # the pictures whose names start so
 ```
 
-The script regenerates the two reports and builds `ai-usage`. It shows each picture's report the way a person would see it: printed, or in the interactive view in a tmux of its own, with keys pressed. The terminal's text and colors become an HTML page, which agent-browser photographs in Chrome. The PNGs are then redrawn in 256 colors, at about half the size. It needs Go, bun, tmux, agent-browser, jq, and ffmpeg, and on macOS Xcode or the Command Line Tools for the app's pictures.
+The script regenerates the reports and builds `ai-usage`. It shows each picture's report the way a person would see it: printed, or in the interactive view in a tmux of its own, with keys pressed. The terminal's text and colors become an HTML page, which agent-browser photographs in Chrome. The PNGs are then redrawn in 256 colors, at about half the size. It needs Go, bun, tmux, agent-browser, jq, and ffmpeg, and on macOS Xcode or the Command Line Tools for the app's pictures.
 
 - **Another picture:** add an entry to `shots` in `scripts/demo/shots.ts`: the report, the width, the flags or keys, and whether it is for posts and the README.
 - **Another story:** add a report in `scripts/demo/main.go`: its machines, their logins and readings, how full their windows got before each reset, and how much each spends a day on which project.

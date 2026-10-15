@@ -98,6 +98,38 @@ public struct Collector: Decodable, Sendable {
         public let latest: String?
         public let staged: String?
         public let error: String?
+        /// How ai-usage updates: `self`, or `homebrew` when Homebrew
+        /// installed it; `self` from an ai-usage that does not say.
+        public let method: String
+        /// What updates a Homebrew copy, such as `brew upgrade …`; nil for
+        /// one that updates itself.
+        public let command: String?
+
+        /// Whether Homebrew installed ai-usage, as the report says: the app
+        /// never decides it from a path.
+        public var homebrew: Bool { method == "homebrew" }
+
+        private enum CodingKeys: String, CodingKey {
+            case checkedAt, latest, staged, error, method, command
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            checkedAt = try c.decodeIfPresent(Date.self, forKey: .checkedAt)
+            latest = try c.decodeIfPresent(String.self, forKey: .latest)
+            staged = try c.decodeIfPresent(String.self, forKey: .staged)
+            error = try c.decodeIfPresent(String.self, forKey: .error)
+            method = try c.decodeIfPresent(String.self, forKey: .method) ?? "self"
+            command = try c.decodeIfPresent(String.self, forKey: .command)
+        }
+
+        /// The tooltip of a newer release that is out: a copy that updates
+        /// itself installs it on its next check; a Homebrew copy waits for
+        /// Update, which runs its command.
+        public func available(_ release: String, version: String) -> String {
+            guard homebrew else { return "ai-usage \(version) installs \(release) on its next check" }
+            return "\(release) is out" + (command.map { "; Update runs \($0)" } ?? "")
+        }
     }
 
     /// How one part of the collector is doing.

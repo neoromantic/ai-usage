@@ -61,6 +61,34 @@ func (u *Updater) updateApp(ctx context.Context, repo, tag string) (downloaded b
 	return downloaded, nil
 }
 
+// InstallApp puts the menu bar app of release tag at u.App, whether or not
+// an app is there, unless one of tag or later is, or one built from source,
+// which reports no release. installed says it put the app in place.
+func (u *Updater) InstallApp(ctx context.Context, tag string) (installed bool, err error) {
+	if u.App == "" {
+		return false, errors.New("the menu bar app runs on macOS only")
+	}
+	if err := u.fill(); err != nil {
+		return false, err
+	}
+	if v, ok := bundleVersion(u.App); ok && !Newer(tag, v) {
+		return false, nil
+	}
+	dir := filepath.Dir(u.App)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return false, err
+	}
+	cleanupApp(dir)
+	downloaded, err := u.installApp(ctx, Repo, tag)
+	switch {
+	case err != nil:
+		return false, err
+	case !downloaded:
+		return false, fmt.Errorf("release %s has no menu bar app", tag)
+	}
+	return true, nil
+}
+
 // installApp downloads the menu bar app of release tag, checks it, unpacks
 // it beside u.App, and swaps it in. downloaded says it got as far as the
 // download.
@@ -113,9 +141,12 @@ func (u *Updater) installApp(ctx context.Context, repo, tag string) (downloaded 
 // swapApp puts the bundle unpacked at app in place of bundle with renames in
 // one folder: the old bundle moves to old, and back when the new one cannot
 // take its place. A running app keeps the files it has open; it notices the
-// new version on disk and restarts into it.
+// new version on disk and restarts into it. With no old bundle, the new one
+// just moves in.
 func swapApp(bundle, app, old string) error {
-	if err := os.Rename(bundle, old); err != nil {
+	if err := os.Rename(bundle, old); errors.Is(err, fs.ErrNotExist) {
+		return os.Rename(app, bundle)
+	} else if err != nil {
 		return err
 	}
 	if err := os.Rename(app, bundle); err != nil {

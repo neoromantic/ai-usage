@@ -110,13 +110,16 @@ public struct AboutVersion: Equatable, Sendable {
     public let note: String?
 
     /// app is the bundle's version, as "0.6.0"; cli is what ai-usage version
-    /// prints, as "v0.6.0", or nil before it is known.
-    public init(app: String, cli: String?, found: Bool) {
+    /// prints, as "v0.6.0", or nil before it is known; homebrew is whether
+    /// the report says Homebrew installed it.
+    public init(app: String, cli: String?, found: Bool, homebrew: Bool = false) {
         version = app
         if !found {
             note = "Command-line tool not found"
         } else if let cli, !cli.isEmpty, Self.bare(cli) != Self.bare(app) {
-            note = "Command-line tool \(cli): updates with Check for Updates"
+            note = homebrew
+                ? "Command-line tool \(cli) (Homebrew): updates with Check for Updates or brew upgrade"
+                : "Command-line tool \(cli): updates with Check for Updates"
         } else {
             note = nil
         }

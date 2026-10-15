@@ -132,9 +132,9 @@ func TestCheckUpdatesApp(t *testing.T) {
 		inPlace bool
 		want    Result
 	}{
-		{"binary at the release", "v1.3.0", false, Result{Latest: "v1.3.0", AppDownloaded: true}},
-		{"binary installed now", "v1.2.9", false, Result{Latest: "v1.3.0", Installed: true, Downloaded: true, AppDownloaded: true}},
-		{"binary installed by another run", "v1.2.9", true, Result{Latest: "v1.3.0", Installed: true, AppDownloaded: true}},
+		{"binary at the release", "v1.3.0", false, Result{Latest: "v1.3.0", AppDownloaded: true, AppTag: "v1.3.0"}},
+		{"binary installed now", "v1.2.9", false, Result{Latest: "v1.3.0", Installed: true, Downloaded: true, AppDownloaded: true, AppTag: "v1.3.0"}},
+		{"binary installed by another run", "v1.2.9", true, Result{Latest: "v1.3.0", Installed: true, AppDownloaded: true, AppTag: "v1.3.0"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			gh := appRelease(t, bin)
@@ -278,7 +278,7 @@ func TestCheckRefusesBadApps(t *testing.T) {
 					t.Fatalf("Check error = %v, want it to name %s", err, w)
 				}
 			}
-			if want := (Result{Latest: "v1.3.0", AppDownloaded: tc.downloaded}); res != want {
+			if want := (Result{Latest: "v1.3.0", AppDownloaded: tc.downloaded, AppTag: "v1.3.0"}); res != want {
 				t.Fatalf("Check = %+v, want %+v", res, want)
 			}
 			appIs(t, app, "1.2.0")
@@ -447,4 +447,93 @@ func TestBundleVersion(t *testing.T) {
 	if v, ok := bundleVersion(filepath.Join(t.TempDir(), AppBundle)); ok {
 		t.Fatalf("bundleVersion of no app = %q", v)
 	}
+}
+
+// A binary Homebrew installed is never replaced, whatever GitHub has. The
+// app follows the binary's own release, and a release someone upgraded to
+// with brew counts as installed, for the next run.
+func TestCheckUnderHomebrew(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Homebrew does not run on Windows")
+	}
+	for _, tc := range []struct {
+		name string
+		// upgraded says brew put v1.3.0 at the opt path already.
+		upgraded bool
+	}{{"not upgraded", false}, {"upgraded with brew", true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			bin := runnable(t, "v1.3.0")
+			assets := map[string][]byte{"ai-usage_darwin_amd64": bin, AppAsset: zipOf(t, appEntries("1.2.9"))}
+			assets["checksums.txt"] = []byte(sumsFor(assets))
+			gh := &fakeGitHub{tag: "v1.3.0", files: "v1.2.9", assets: assets}
+			srv := gh.start(t)
+			keg := installed(t, "ai-usage")
+			// What earlier self-updates moved aside is Homebrew's keg now.
+			if err := os.WriteFile(keg+".old", []byte("kept"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			app := installedApp(t, "1.2.0")
+			u := macUpdater(srv, keg, "v1.2.9", app)
+			u.Managed, u.Stable = Homebrew, filepath.Join(t.TempDir(), "ai-usage")
+			if tc.upgraded {
+				if err := os.WriteFile(u.Stable, bin, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			res, err := u.Check(context.Background())
+			want := Result{Latest: "v1.3.0", Installed: tc.upgraded, AppDownloaded: true, AppTag: "v1.2.9"}
+			if err != nil || res != want {
+				t.Fatalf("Check = %+v, %v; want %+v", res, err, want)
+			}
+			if read(t, keg) != "old binary" || gh.fetched("ai-usage_darwin_amd64") != 0 {
+				t.Fatal("the keg's binary was replaced")
+			}
+			onlyFiles(t, filepath.Dir(keg), "ai-usage", "ai-usage.old")
+			appIs(t, app, "1.2.9")
+		})
+	}
+}
+
+// InstallApp puts the app of a release in place whether or not one is
+// there, and leaves alone one of that release or later.
+func TestInstallApp(t *testing.T) {
+	bin := runnable(t, "v1.3.0")
+	for _, tc := range []struct {
+		name string
+		// app is the version installed; "" for none, in a folder that does
+		// not exist yet.
+		app       string
+		installed bool
+		want      string
+	}{
+		{"no app", "", true, "1.3.0"},
+		{"older app", "1.2.0", true, "1.3.0"},
+		{"same release", "1.3.0", false, "1.3.0"},
+		{"later release", "1.4.0", false, "1.4.0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gh := appRelease(t, bin)
+			srv := gh.start(t)
+			app := filepath.Join(t.TempDir(), "Applications", AppBundle)
+			if tc.app != "" {
+				app = installedApp(t, tc.app)
+			}
+			got, err := macUpdater(srv, installed(t, "ai-usage"), "v1.3.0", app).InstallApp(context.Background(), "v1.3.0")
+			if err != nil || got != tc.installed {
+				t.Fatalf("InstallApp = %v, %v; want %v", got, err, tc.installed)
+			}
+			appIs(t, app, tc.want)
+			onlyFiles(t, filepath.Dir(app), AppBundle)
+		})
+	}
+	// A release with no app says so.
+	gh := appRelease(t, bin)
+	delete(gh.assets, AppAsset)
+	gh.resum()
+	srv := gh.start(t)
+	app := filepath.Join(t.TempDir(), AppBundle)
+	if _, err := macUpdater(srv, installed(t, "ai-usage"), "v1.3.0", app).InstallApp(context.Background(), "v1.3.0"); err == nil || !strings.Contains(err.Error(), "has no menu bar app") {
+		t.Fatalf("InstallApp of a release without the app = %v", err)
+	}
+	onlyFiles(t, filepath.Dir(app))
 }
