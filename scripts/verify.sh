@@ -35,8 +35,9 @@
 # step showed stays in .verify/<time>/, and .verify/latest points at the
 # newest run.
 
-# The steps run as step_$name, which shellcheck cannot follow.
-# shellcheck disable=SC2329
+# The steps run as step_$name, which shellcheck cannot follow. Older
+# versions, as on CI's runners, call that SC2317 rather than SC2329.
+# shellcheck disable=SC2317,SC2329
 set -eu
 
 root=$(cd "$(dirname "$0")/.." && pwd)
