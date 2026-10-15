@@ -19,6 +19,7 @@ ai-usage is a Go command-line tool: a collector that the system scheduler runs e
 | `relay/`, `api/` | the relay and its client; the relay as a Vercel function |
 | `macos/` | the menu bar app, a Swift package: `AIUsageBar`, the app; `AIUsageKit`, what it reads from the report and the words it shows; `AIUsageChecks`, its checks; `build.sh` builds the bundle |
 | `scripts/demo/` | the made-up reports and every picture in `docs/demo/` |
+| `scripts/verify.sh`, `.agents/skills/verify-ai-usage/` | the checks a change needs, and the skill that says how to prove a change, with a map of the features |
 | `docs/` | the JSON reference, the relay and its protocol, containers, releasing, the release notes in `docs/releases/`, and the demo in `docs/demo/` |
 | `design.md`, `ai-report.md` | how the report looks and why; what ai-usage must do, and its implementation status |
 | `install.sh`, `install.ps1`, `.github/` | the installers; CI, the release workflow, and their scripts |
@@ -35,7 +36,9 @@ The app runs `ai-usage report --json` and shows what it says. It never works out
 
 ## Checks before a push
 
-CI, `.github/workflows/ci.yml`, runs these. Run them before every push:
+`scripts/verify.sh` runs the checks the branch's changes need and keeps what they showed in `.verify/latest/`; `scripts/verify.sh --push` runs them at the depth CI does. Run that before every push. The skill [verify-ai-usage](.agents/skills/verify-ai-usage/SKILL.md) says what each step proves, how to read its evidence, and how to drive the report, a team, and the app by hand without touching this machine's own ai-usage.
+
+CI, `.github/workflows/ci.yml`, runs these:
 
 ```sh
 gofmt -l .              # prints nothing

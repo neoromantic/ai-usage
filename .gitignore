@@ -5,3 +5,4 @@
 .vercel
 .env*.local
 /macos/.build/
+/.verify/
