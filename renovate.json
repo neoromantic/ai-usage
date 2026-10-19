@@ -1,0 +1,5 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "managed by devkit v1: edit in https://github.com/neoromantic/devkit/blob/main/templates/renovate.json",
+  "extends": ["github>neoromantic/devkit//renovate/default"]
+}

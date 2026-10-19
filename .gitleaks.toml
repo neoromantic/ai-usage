@@ -1,0 +1,11 @@
+# managed by devkit v1: edit in https://github.com/neoromantic/devkit/blob/main/templates/.gitleaks.toml
+# Repo-specific false positives go in .gitleaksignore (one finding fingerprint per line),
+# so this file stays the same everywhere.
+title = "devkit"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Lockfiles hold hashes, not secrets"
+paths = ['''(^|/)(bun\.lock|uv\.lock|go\.sum|package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$''']

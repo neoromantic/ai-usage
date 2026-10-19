@@ -1,0 +1,9 @@
+# managed by devkit v1: edit in https://github.com/neoromantic/devkit/blob/main/templates/lefthook.yml
+# Shared hooks: gitleaks and the devkit privacy scan. Install once per clone: lefthook install
+# Need repo-specific hooks? Replace this file with your own lefthook.yml that keeps the remotes block.
+remotes:
+  - git_url: https://github.com/neoromantic/devkit
+    ref: v1
+    refetch_frequency: 24h
+    configs:
+      - lefthook/lefthook.yml
