@@ -755,7 +755,7 @@ sh macos/build.sh v9.9.9-dev /tmp/ai-usage-app.zip
 ditto -x -k /tmp/ai-usage-app.zip ~/Applications
 ```
 
-How releases are built and published: [docs/releasing.md](docs/releasing.md). The requirements this project follows: [ai-report.md](ai-report.md).
+How releases are built and published: [docs/releasing.md](docs/releasing.md).
 
 ## License
 

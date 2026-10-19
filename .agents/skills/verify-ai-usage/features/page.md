@@ -28,7 +28,7 @@ For another width or flag:
 The golden files in `internal/view/testdata` match (`go` step), and the
 page in `.verify/latest/page/` reads right: words, order, alignment at 80
 columns, no line past the width. A change to what the page says also
-changes the README's pictures (`bun scripts/demo/shots.ts`) and `design.md`.
+changes the README's pictures (`bun scripts/demo/shots.ts`).
 
 ## Try
 
