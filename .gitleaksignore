@@ -1,0 +1,12 @@
+# Test false positives: made-up device IDs next to a test team key, flagged as generic-api-key.
+b82043b366924acb4ced9470ee959948ffa0e7af:internal/collect/team_test.go:generic-api-key:788
+475b0629dcf6215a4f89697fca542cfd7fe4f8ea:internal/collect/team_test.go:generic-api-key:710
+cc301690ef3c5ce62cc5f03332318ab450529eb6:internal/view/attention_test.go:generic-api-key:364
+8dc54eff2727deb79b3b3501acab5b5af9b07d5a:internal/collect/team_test.go:generic-api-key:688
+8dc54eff2727deb79b3b3501acab5b5af9b07d5a:internal/collect/team_test.go:generic-api-key:699
+cb90d69a90b41b2914d581b2f26a780fe870c5a7:internal/collect/team_test.go:generic-api-key:619
+79e47f47f7cdbddd12a0f31402ca5672ada8bf4f:internal/collect/doc_test.go:generic-api-key:122
+79e47f47f7cdbddd12a0f31402ca5672ada8bf4f:internal/collect/doc_test.go:generic-api-key:201
+79e47f47f7cdbddd12a0f31402ca5672ada8bf4f:internal/collect/team_test.go:generic-api-key:255
+79e47f47f7cdbddd12a0f31402ca5672ada8bf4f:internal/collect/team_test.go:generic-api-key:273
+79e47f47f7cdbddd12a0f31402ca5672ada8bf4f:internal/collect/team_test.go:generic-api-key:274
