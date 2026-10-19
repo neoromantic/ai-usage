@@ -184,3 +184,22 @@ jobs:
           brew style ci/aiu
           brew audit --strict --formula ci/aiu/ai-usage
           brew untap ci/aiu
+
+  # devkit's shared checks: actionlint, gitleaks and the privacy scan of the
+  # lines a change adds. zizmor waits until these workflows pin their actions
+  # by commit; see https://github.com/neoromantic/ai-usage/issues/24.
+  hygiene:
+    uses: neoromantic/devkit/.github/workflows/hygiene.yml@v1
+    permissions:
+      contents: read
+    with:
+      zizmor: false
+
+  # The one check a branch ruleset requires: every job above passed.
+  ci:
+    needs: [lint, app, test, install, brew, hygiene]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
