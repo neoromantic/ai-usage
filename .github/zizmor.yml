@@ -1,0 +1,7 @@
+# managed by devkit v1: edit in https://github.com/neoromantic/devkit/blob/main/templates/zizmor.yml
+# devkit's reusable workflows are referenced by the moving v1 tag; Renovate pins them to a digest.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "neoromantic/devkit/*": ref-pin
