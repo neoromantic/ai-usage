@@ -1,0 +1,20 @@
+# The devkit privacy scan's exceptions: made-up data that can't carry an inline
+# privacy-scan:allow comment. One path glob per line, then the rule kinds it silences.
+# Everything not listed here, and every other rule for these files, is still scanned.
+
+# Demo reports written by scripts/demo, and the demo tooling itself.
+docs/demo/*.json                        home-path
+scripts/demo/**                         home-path
+
+# Golden files and their inputs, compared byte for byte by the tests.
+internal/view/testdata/**               home-path,marker
+internal/schedule/testdata/**           home-path
+
+# Tests and the app's checks, with made-up homes such as /home/ann.
+**/*_test.go                            home-path
+macos/Sources/AIUsageChecks/main.swift  home-path
+
+# Docs whose examples show a made-up home.
+README.md                               home-path
+docs/containers.md                      home-path
+docs/json-schema.md                     home-path

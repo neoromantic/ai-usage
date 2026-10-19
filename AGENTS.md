@@ -84,6 +84,8 @@ ai-usage is a Go command-line tool: a collector that the system scheduler runs e
 
 No real data goes anywhere in it: not in code, tests, golden files, docs, pictures, release notes, or commit messages. That means no real emails, names of people, hosts, devices, or bots, no account IDs, and no names or paths of private companies or repositories. Use made-up ones, such as ann@acme.dev, mira-mbp, or srv1. The demo data is made up in `scripts/demo/main.go`, which writes `docs/demo/`; take reports and pictures from there, never from a real machine.
 
+The made-up demo reports, golden files and tests hold made-up home folders, so `.privacy-scan-ignore` exempts those files from the devkit privacy scan's home-path rule, and `.gitleaksignore` lists the made-up device IDs that gitleaks takes for keys. Add to them only for made-up data.
+
 Before every push, read the diff and the commit messages for real data. Push only your own branch. Never push an old ref or a tag, and never use `git push --tags`: a pushed tag publishes a release.
 
 ### The menu bar app shows the Go report
