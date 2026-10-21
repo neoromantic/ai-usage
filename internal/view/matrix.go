@@ -23,7 +23,7 @@ func matrix(providers []TeamProvider, byProv map[string]map[string]*teamAccount,
 	cols, index := matrixColumns(providers, byProv, devs)
 	mx := Matrix{Columns: cols, Rows: []Row{}}
 	for _, dv := range devs {
-		row := Row{Device: dv.dev.Label, DeviceID: dv.dev.Device, Cells: make([]Cell, len(mx.Columns))}
+		row := Row{Device: dv.dev.Name, DeviceID: dv.dev.Device, Cells: make([]Cell, len(mx.Columns))}
 		for _, a := range dv.accts {
 			x := billsTo(a, byProv)
 			k := colKey{a.provider, "", true}
@@ -214,7 +214,7 @@ func users(m map[string]*teamAccount, byProv map[string]map[string]*teamAccount,
 			x.ta.Users++
 			if n > best {
 				best = n
-				x.ta.Busiest = strPtr(dv.dev.Label)
+				x.ta.Busiest = strPtr(dv.dev.Name)
 			}
 		}
 	}

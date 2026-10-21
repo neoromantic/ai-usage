@@ -17,6 +17,7 @@ import (
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
+	"github.com/neoromantic/ai-usage/internal/view"
 	"github.com/neoromantic/ai-usage/relay"
 )
 
@@ -117,7 +118,7 @@ func showTeam(d state.Dir, stdout io.Writer) error {
 	for _, doc := range res.Team.Docs {
 		label, _ := res.Key.Open(doc.DeviceLabel)
 		who, _ := res.Key.Open(doc.OSUser)
-		fmt.Fprintf(stdout, "  %s  %s (%s)  collected %s  %s\n", doc.Device, snapshot.Printable(label), snapshot.Printable(who), doc.CollectedAt.Local().Format("2006-01-02 15:04"), doc.CollectorVersion)
+		fmt.Fprintf(stdout, "  %s  %s  collected %s  %s\n", doc.Device, view.DeviceName(snapshot.Printable(label), snapshot.Printable(who)), doc.CollectedAt.Local().Format("2006-01-02 15:04"), doc.CollectorVersion)
 	}
 	return nil
 }

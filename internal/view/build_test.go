@@ -176,7 +176,7 @@ attention.percent attention.provider attention.reading_age_seconds attention.res
 collector collector.device collector.device_label
 collector.health collector.health.at collector.health.item collector.health.release collector.health.state collector.health.status
 collector.last_error collector.last_error_at
-collector.last_run_at collector.last_success_at collector.os_user collector.relay
+collector.last_run_at collector.last_success_at collector.name collector.os_user collector.relay
 collector.relay.last_error collector.relay.last_pull_at collector.relay.last_push_at collector.relay.pending
 collector.relay.url collector.schedule collector.schedule.error collector.schedule.foreground collector.schedule.registered
 collector.team collector.update collector.update.checked_at collector.update.command collector.update.error
@@ -220,7 +220,7 @@ schema_version
 team team.devices team.devices.age_seconds team.devices.behind_since team.devices.burn team.devices.burn.30d team.devices.burn.7d team.devices.burn.90d team.devices.burn.today
 team.devices.burn_estimated team.devices.collected_at team.devices.collector_version
 team.devices.device team.devices.error team.devices.gap team.devices.label team.devices.last_error team.devices.last_error_at team.devices.last_success_at
-team.devices.limitations team.devices.not_updating team.devices.note team.devices.old team.devices.os_user team.devices.replaced_by
+team.devices.limitations team.devices.name team.devices.not_updating team.devices.note team.devices.old team.devices.os_user team.devices.replaced_by
 team.devices.silent team.devices.sources team.devices.sources.error team.devices.sources.provider
 team.devices.sources.status team.devices.this_device team.devices.update_error team.devices.usage team.devices.usage.30d team.devices.usage.7d
 team.devices.usage.90d team.devices.usage.today
@@ -420,7 +420,7 @@ func TestFillGivesAnEarlierReportBurn(t *testing.T) {
 		}
 	}
 	ta := &t0.Providers[0].Accounts[0]
-	ta.PerDevice = []DeviceUsage{{Device: "annbook (ann)", Usage: Usage{Week: 5, Quarter: 9}}}
+	ta.PerDevice = []DeviceUsage{{Device: "ann@annbook", Usage: Usage{Week: 5, Quarter: 9}}}
 	for i := range t0.Matrix.Columns {
 		t0.Matrix.Columns[i].Burn, t0.Matrix.Columns[i].WindowBurn = Usage{}, 0
 	}

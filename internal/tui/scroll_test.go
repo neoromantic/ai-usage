@@ -20,7 +20,7 @@ func bigTeam(t *testing.T) view.Report {
 	m := &r.Team.Matrix
 	var row view.Row
 	for _, x := range m.Rows {
-		if x.Device == "bot-i" {
+		if x.Device == "hermes@bot-i" {
 			row = x
 		}
 	}
@@ -42,15 +42,16 @@ func bigTeam(t *testing.T) view.Report {
 	for i := range 12 {
 		week := int64(1_900_000 - i*150_000)
 		u := view.Usage{Today: week / 7, Week: week, Month: 4 * week, Quarter: 11 * week}
-		name, id := fmt.Sprintf("bot-%c", 'j'+i), fmt.Sprintf("d-b%02xc1d2e3f4a5b6c7d8e9f%x0", 9+i, (9+i)%16)
+		label, id := fmt.Sprintf("bot-%c", 'j'+i), fmt.Sprintf("d-b%02xc1d2e3f4a5b6c7d8e9f%x0", 9+i, (9+i)%16)
 		cells := append([]view.Cell(nil), row.Cells...)
 		cells[lee] = view.Cell{Usage: u, WindowTokens: week / 7, Burn: u, WindowBurn: week / 7}
+		name := view.DeviceName(label, dev.OSUser)
 		m.Rows = append(m.Rows, view.Row{Device: name, DeviceID: id, Cells: cells, Usage: u, Burn: u})
 		for _, c := range []*view.Usage{&m.Columns[lee].Usage, &m.Columns[lee].Burn} {
 			c.Today, c.Week, c.Month, c.Quarter = c.Today+u.Today, c.Week+u.Week, c.Month+u.Month, c.Quarter+u.Quarter
 		}
 		d := dev
-		d.Device, d.Label, d.Usage, d.Burn = id, name, u, u
+		d.Device, d.Label, d.Name, d.Usage, d.Burn = id, label, name, u, u
 		d.Sources = append([]view.Source(nil), dev.Sources...)
 		r.Team.Devices = append(r.Team.Devices, d)
 	}

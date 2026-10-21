@@ -6,6 +6,7 @@
     "device": "d-demo-mira",
     "device_label": "mira-mbp",
     "os_user": "mira",
+    "name": "mira@mira-mbp",
     "team": "ugarfmfxwqrf74yfe7qppt32dy3uf5rs",
     "last_run_at": "2026-09-24T13:37:00Z",
     "last_success_at": "2026-09-24T13:37:00Z",
@@ -109,46 +110,46 @@
     },
     {
       "kind": "error",
-      "subject": "build-01",
-      "text": "claude: ~/triage/.claude: claude: not logged in",
-      "devices": [
-        "build-01"
-      ],
-      "message": "claude: ~/triage/.claude: claude: not logged in"
-    },
-    {
-      "kind": "error",
-      "subject": "leo-air",
+      "subject": "leo@leo-air",
       "text": "codex: app-server exited without answering",
       "devices": [
-        "leo-air"
+        "leo@leo-air"
       ],
       "message": "codex: app-server exited without answering"
     },
     {
+      "kind": "error",
+      "subject": "root@build-01",
+      "text": "claude: ~/triage/.claude: claude: not logged in",
+      "devices": [
+        "root@build-01"
+      ],
+      "message": "claude: ~/triage/.claude: claude: not logged in"
+    },
+    {
       "kind": "no_reading",
       "subject": "claude unknown",
-      "text": "not logged in on build-01 (~/triage/.claude): run claude and log in",
+      "text": "not logged in on root@build-01 (~/triage/.claude): run claude and log in",
       "provider": "claude",
       "account": "unknown",
       "name": "unknown",
-      "message": "not logged in on build-01 (~/triage/.claude): run claude and log in"
+      "message": "not logged in on root@build-01 (~/triage/.claude): run claude and log in"
     },
     {
       "kind": "silent",
-      "subject": "courier",
+      "subject": "hermes@courier",
       "text": "no report since Wed 10:28, 1d 5h ago",
       "devices": [
-        "courier"
+        "hermes@courier"
       ],
       "at": "2026-09-23T08:28:00Z"
     },
     {
       "kind": "old",
       "subject": "1 device on v0.3.4",
-      "text": "leo-air · latest v0.5.0",
+      "text": "leo@leo-air · latest v0.5.0",
       "devices": [
-        "leo-air"
+        "leo@leo-air"
       ],
       "message": "v0.5.0"
     },
@@ -1364,19 +1365,20 @@
     "latest_version": "v0.5.0",
     "estimated": true,
     "held_back_by": [
-      "leo-air"
+      "leo@leo-air"
     ],
-    "estimated_reason": "leo-air runs v0.3.4: it should update within 15 minutes",
+    "estimated_reason": "leo@leo-air runs v0.3.4: it should update within 15 minutes",
     "cycles_held_back_by": [
-      "leo-air"
+      "leo@leo-air"
     ],
-    "cycles_reason": "leo-air runs v0.3.4: it should update within 15 minutes",
+    "cycles_reason": "leo@leo-air runs v0.3.4: it should update within 15 minutes",
     "today_local": false,
     "devices": [
       {
         "device": "d-demo-mira",
         "label": "mira-mbp",
         "os_user": "mira",
+        "name": "mira@mira-mbp",
         "this_device": true,
         "collector_version": "v0.5.0",
         "collected_at": "2026-09-24T13:37:00Z",
@@ -1434,6 +1436,7 @@
         "device": "d-demo-bot-archivist",
         "label": "archivist",
         "os_user": "hermes",
+        "name": "hermes@archivist",
         "this_device": false,
         "collector_version": "v0.5.0",
         "collected_at": "2026-09-24T13:32:00Z",
@@ -1491,6 +1494,7 @@
         "device": "d-demo-build",
         "label": "build-01",
         "os_user": "root",
+        "name": "root@build-01",
         "this_device": false,
         "collector_version": "v0.5.0",
         "collected_at": "2026-09-24T13:34:00Z",
@@ -1548,6 +1552,7 @@
         "device": "d-demo-bot-concierge",
         "label": "concierge",
         "os_user": "hermes",
+        "name": "hermes@concierge",
         "this_device": false,
         "collector_version": "v0.5.0",
         "collected_at": "2026-09-24T13:28:00Z",
@@ -1605,6 +1610,7 @@
         "device": "d-demo-bot-courier",
         "label": "courier",
         "os_user": "hermes",
+        "name": "hermes@courier",
         "this_device": false,
         "collector_version": "v0.5.0",
         "collected_at": "2026-09-23T08:28:00Z",
@@ -1662,6 +1668,7 @@
         "device": "d-demo-bot-critic",
         "label": "critic",
         "os_user": "hermes",
+        "name": "hermes@critic",
         "this_device": false,
         "collector_version": "v0.5.0",
         "collected_at": "2026-09-24T13:29:00Z",
@@ -1719,6 +1726,7 @@
         "device": "d-demo-bot-editor",
         "label": "editor",
         "os_user": "hermes",
+        "name": "hermes@editor",
         "this_device": false,
         "collector_version": "v0.5.0",
         "collected_at": "2026-09-24T13:35:00Z",
@@ -1776,6 +1784,7 @@
         "device": "d-demo-bot-herald",
         "label": "herald",
         "os_user": "hermes",
+        "name": "hermes@herald",
         "this_device": false,
         "collector_version": "v0.5.0",
         "collected_at": "2026-09-24T13:34:00Z",
@@ -1833,6 +1842,7 @@
         "device": "d-demo-leo",
         "label": "leo-air",
         "os_user": "leo",
+        "name": "leo@leo-air",
         "this_device": false,
         "collector_version": "v0.3.4",
         "collected_at": "2026-09-24T13:29:00Z",
@@ -1890,6 +1900,7 @@
         "device": "d-demo-bot-scout",
         "label": "scout",
         "os_user": "hermes",
+        "name": "hermes@scout",
         "this_device": false,
         "collector_version": "v0.5.0",
         "collected_at": "2026-09-24T13:36:00Z",
@@ -1947,6 +1958,7 @@
         "device": "d-demo-bot-sentry",
         "label": "sentry",
         "os_user": "hermes",
+        "name": "hermes@sentry",
         "this_device": false,
         "collector_version": "v0.5.0",
         "collected_at": "2026-09-24T13:33:00Z",
@@ -2004,6 +2016,7 @@
         "device": "d-demo-bot-tutor",
         "label": "tutor",
         "os_user": "hermes",
+        "name": "hermes@tutor",
         "this_device": false,
         "collector_version": "v0.5.0",
         "collected_at": "2026-09-24T13:30:00Z",
@@ -2069,8 +2082,8 @@
             "subscription": true,
             "current": true,
             "devices": [
-              "build-01 (root)",
-              "mira-mbp (mira)"
+              "mira@mira-mbp",
+              "root@build-01"
             ],
             "plan": "max",
             "state": "out",
@@ -2078,7 +2091,7 @@
               "observed_at": "2026-09-24T13:37:00Z",
               "age_seconds": 180,
               "stale": false,
-              "device": "mira-mbp (mira)",
+              "device": "mira@mira-mbp",
               "device_id": "d-demo-mira",
               "windows": [
                 {
@@ -2136,11 +2149,11 @@
               "90d": 174025548
             },
             "users": 2,
-            "busiest": "mira-mbp",
+            "busiest": "mira@mira-mbp",
             "last_active_at": "2026-09-24T13:20:00Z",
             "per_device": [
               {
-                "device": "mira-mbp (mira)",
+                "device": "mira@mira-mbp",
                 "device_id": "d-demo-mira",
                 "current": true,
                 "sessions": 267,
@@ -2165,7 +2178,7 @@
                 "last_active_at": "2026-09-24T13:20:00Z"
               },
               {
-                "device": "build-01 (root)",
+                "device": "root@build-01",
                 "device_id": "d-demo-build",
                 "current": false,
                 "sessions": 55,
@@ -2394,7 +2407,7 @@
             "subscription": true,
             "current": false,
             "devices": [
-              "leo-air (leo)"
+              "leo@leo-air"
             ],
             "plan": "max",
             "state": "ok",
@@ -2402,7 +2415,7 @@
               "observed_at": "2026-09-24T13:29:00Z",
               "age_seconds": 660,
               "stale": false,
-              "device": "leo-air (leo)",
+              "device": "leo@leo-air",
               "device_id": "d-demo-leo",
               "windows": [
                 {
@@ -2460,11 +2473,11 @@
               "90d": 87400331
             },
             "users": 1,
-            "busiest": "leo-air",
+            "busiest": "leo@leo-air",
             "last_active_at": "2026-09-24T13:20:00Z",
             "per_device": [
               {
-                "device": "leo-air (leo)",
+                "device": "leo@leo-air",
                 "device_id": "d-demo-leo",
                 "current": true,
                 "sessions": 115,
@@ -2508,7 +2521,7 @@
             "subscription": true,
             "current": false,
             "devices": [
-              "build-01 (root)"
+              "root@build-01"
             ],
             "plan": null,
             "state": "unknown",
@@ -2528,11 +2541,11 @@
               "90d": 2051062
             },
             "users": 1,
-            "busiest": "build-01",
+            "busiest": "root@build-01",
             "last_active_at": "2026-09-24T13:20:00Z",
             "per_device": [
               {
-                "device": "build-01 (root)",
+                "device": "root@build-01",
                 "device_id": "d-demo-build",
                 "current": false,
                 "sessions": 20,
@@ -2565,7 +2578,7 @@
               "90d": 20161782
             },
             "burn_estimated": false,
-            "no_reading": "not logged in on build-01 (~/triage/.claude): run claude and log in",
+            "no_reading": "not logged in on root@build-01 (~/triage/.claude): run claude and log in",
             "outside": null,
             "utilization": []
           }
@@ -2581,7 +2594,7 @@
             "subscription": true,
             "current": false,
             "devices": [
-              "leo-air (leo)"
+              "leo@leo-air"
             ],
             "plan": "plus",
             "state": "out",
@@ -2589,7 +2602,7 @@
               "observed_at": "2026-09-24T08:40:00Z",
               "age_seconds": 18000,
               "stale": false,
-              "device": "leo-air (leo)",
+              "device": "leo@leo-air",
               "device_id": "d-demo-leo",
               "windows": [
                 {
@@ -2641,11 +2654,11 @@
               "90d": 56747403
             },
             "users": 1,
-            "busiest": "leo-air",
+            "busiest": "leo@leo-air",
             "last_active_at": "2026-09-24T08:20:00Z",
             "per_device": [
               {
-                "device": "leo-air (leo)",
+                "device": "leo@leo-air",
                 "device_id": "d-demo-leo",
                 "current": true,
                 "sessions": 52,
@@ -2689,16 +2702,16 @@
             "subscription": true,
             "current": false,
             "devices": [
-              "archivist (hermes)",
-              "build-01 (root)",
-              "concierge (hermes)",
-              "courier (hermes)",
-              "critic (hermes)",
-              "editor (hermes)",
-              "herald (hermes)",
-              "scout (hermes)",
-              "sentry (hermes)",
-              "tutor (hermes)"
+              "hermes@archivist",
+              "hermes@concierge",
+              "hermes@courier",
+              "hermes@critic",
+              "hermes@editor",
+              "hermes@herald",
+              "hermes@scout",
+              "hermes@sentry",
+              "hermes@tutor",
+              "root@build-01"
             ],
             "plan": "pro",
             "state": "over",
@@ -2706,7 +2719,7 @@
               "observed_at": "2026-09-24T13:36:00Z",
               "age_seconds": 240,
               "stale": false,
-              "device": "scout (hermes)",
+              "device": "hermes@scout",
               "device_id": "d-demo-bot-scout",
               "windows": [
                 {
@@ -2764,11 +2777,11 @@
               "90d": 320312477
             },
             "users": 10,
-            "busiest": "build-01",
+            "busiest": "root@build-01",
             "last_active_at": "2026-09-24T13:20:00Z",
             "per_device": [
               {
-                "device": "build-01 (root)",
+                "device": "root@build-01",
                 "device_id": "d-demo-build",
                 "current": true,
                 "sessions": 85,
@@ -2793,7 +2806,7 @@
                 "last_active_at": "2026-09-24T13:20:00Z"
               },
               {
-                "device": "archivist (hermes)",
+                "device": "hermes@archivist",
                 "device_id": "d-demo-bot-archivist",
                 "current": true,
                 "sessions": 0,
@@ -2818,7 +2831,7 @@
                 "last_active_at": null
               },
               {
-                "device": "concierge (hermes)",
+                "device": "hermes@concierge",
                 "device_id": "d-demo-bot-concierge",
                 "current": true,
                 "sessions": 0,
@@ -2843,7 +2856,7 @@
                 "last_active_at": null
               },
               {
-                "device": "courier (hermes)",
+                "device": "hermes@courier",
                 "device_id": "d-demo-bot-courier",
                 "current": true,
                 "sessions": 0,
@@ -2868,7 +2881,7 @@
                 "last_active_at": null
               },
               {
-                "device": "critic (hermes)",
+                "device": "hermes@critic",
                 "device_id": "d-demo-bot-critic",
                 "current": true,
                 "sessions": 0,
@@ -2893,7 +2906,7 @@
                 "last_active_at": null
               },
               {
-                "device": "editor (hermes)",
+                "device": "hermes@editor",
                 "device_id": "d-demo-bot-editor",
                 "current": true,
                 "sessions": 0,
@@ -2918,7 +2931,7 @@
                 "last_active_at": null
               },
               {
-                "device": "herald (hermes)",
+                "device": "hermes@herald",
                 "device_id": "d-demo-bot-herald",
                 "current": true,
                 "sessions": 0,
@@ -2943,7 +2956,7 @@
                 "last_active_at": null
               },
               {
-                "device": "scout (hermes)",
+                "device": "hermes@scout",
                 "device_id": "d-demo-bot-scout",
                 "current": true,
                 "sessions": 0,
@@ -2968,7 +2981,7 @@
                 "last_active_at": null
               },
               {
-                "device": "sentry (hermes)",
+                "device": "hermes@sentry",
                 "device_id": "d-demo-bot-sentry",
                 "current": true,
                 "sessions": 0,
@@ -2993,7 +3006,7 @@
                 "last_active_at": null
               },
               {
-                "device": "tutor (hermes)",
+                "device": "hermes@tutor",
                 "device_id": "d-demo-bot-tutor",
                 "current": true,
                 "sessions": 0,
@@ -3023,16 +3036,16 @@
                 "provider": "hermes",
                 "label": "openai-codex",
                 "devices": [
-                  "archivist (hermes)",
-                  "build-01 (root)",
-                  "concierge (hermes)",
-                  "courier (hermes)",
-                  "critic (hermes)",
-                  "editor (hermes)",
-                  "herald (hermes)",
-                  "scout (hermes)",
-                  "sentry (hermes)",
-                  "tutor (hermes)"
+                  "hermes@archivist",
+                  "hermes@concierge",
+                  "hermes@courier",
+                  "hermes@critic",
+                  "hermes@editor",
+                  "hermes@herald",
+                  "hermes@scout",
+                  "hermes@sentry",
+                  "hermes@tutor",
+                  "root@build-01"
                 ],
                 "sessions": 532,
                 "tokens": {
@@ -3061,7 +3074,7 @@
             "subscription": true,
             "current": true,
             "devices": [
-              "mira-mbp (mira)"
+              "mira@mira-mbp"
             ],
             "plan": "pro",
             "state": "tight",
@@ -3069,7 +3082,7 @@
               "observed_at": "2026-09-24T13:37:00Z",
               "age_seconds": 180,
               "stale": false,
-              "device": "mira-mbp (mira)",
+              "device": "mira@mira-mbp",
               "device_id": "d-demo-mira",
               "windows": [
                 {
@@ -3127,11 +3140,11 @@
               "90d": 143573877
             },
             "users": 1,
-            "busiest": "mira-mbp",
+            "busiest": "mira@mira-mbp",
             "last_active_at": "2026-09-24T13:20:00Z",
             "per_device": [
               {
-                "device": "mira-mbp (mira)",
+                "device": "mira@mira-mbp",
                 "device_id": "d-demo-mira",
                 "current": true,
                 "sessions": 121,
@@ -3365,7 +3378,7 @@
             "subscription": true,
             "current": true,
             "devices": [
-              "mira-mbp (mira)"
+              "mira@mira-mbp"
             ],
             "plan": "SuperGrok",
             "state": "under",
@@ -3373,7 +3386,7 @@
               "observed_at": "2026-09-24T13:37:00Z",
               "age_seconds": 180,
               "stale": false,
-              "device": "mira-mbp (mira)",
+              "device": "mira@mira-mbp",
               "device_id": "d-demo-mira",
               "windows": [
                 {
@@ -3416,7 +3429,7 @@
             "last_active_at": "2026-09-15T13:20:00Z",
             "per_device": [
               {
-                "device": "mira-mbp (mira)",
+                "device": "mira@mira-mbp",
                 "device_id": "d-demo-mira",
                 "current": true,
                 "sessions": 17,
@@ -3565,16 +3578,16 @@
             "subscription": false,
             "current": false,
             "devices": [
-              "archivist (hermes)",
-              "build-01 (root)",
-              "concierge (hermes)",
-              "courier (hermes)",
-              "critic (hermes)",
-              "editor (hermes)",
-              "herald (hermes)",
-              "scout (hermes)",
-              "sentry (hermes)",
-              "tutor (hermes)"
+              "hermes@archivist",
+              "hermes@concierge",
+              "hermes@courier",
+              "hermes@critic",
+              "hermes@editor",
+              "hermes@herald",
+              "hermes@scout",
+              "hermes@sentry",
+              "hermes@tutor",
+              "root@build-01"
             ],
             "plan": null,
             "state": "over",
@@ -3583,7 +3596,7 @@
               "age_seconds": 240,
               "stale": false,
               "from": "codex",
-              "device": "scout (hermes)",
+              "device": "hermes@scout",
               "device_id": "d-demo-bot-scout",
               "windows": [
                 {
@@ -3644,11 +3657,11 @@
               "90d": 350837158
             },
             "users": 10,
-            "busiest": "scout",
+            "busiest": "hermes@scout",
             "last_active_at": "2026-09-24T13:20:00Z",
             "per_device": [
               {
-                "device": "scout (hermes)",
+                "device": "hermes@scout",
                 "device_id": "d-demo-bot-scout",
                 "current": false,
                 "sessions": 57,
@@ -3673,7 +3686,7 @@
                 "last_active_at": "2026-09-24T13:20:00Z"
               },
               {
-                "device": "build-01 (root)",
+                "device": "root@build-01",
                 "device_id": "d-demo-build",
                 "current": false,
                 "sessions": 56,
@@ -3698,7 +3711,7 @@
                 "last_active_at": "2026-09-24T13:20:00Z"
               },
               {
-                "device": "herald (hermes)",
+                "device": "hermes@herald",
                 "device_id": "d-demo-bot-herald",
                 "current": false,
                 "sessions": 53,
@@ -3723,7 +3736,7 @@
                 "last_active_at": "2026-09-24T13:20:00Z"
               },
               {
-                "device": "sentry (hermes)",
+                "device": "hermes@sentry",
                 "device_id": "d-demo-bot-sentry",
                 "current": false,
                 "sessions": 55,
@@ -3748,7 +3761,7 @@
                 "last_active_at": "2026-09-24T13:20:00Z"
               },
               {
-                "device": "editor (hermes)",
+                "device": "hermes@editor",
                 "device_id": "d-demo-bot-editor",
                 "current": false,
                 "sessions": 49,
@@ -3773,7 +3786,7 @@
                 "last_active_at": "2026-09-24T13:20:00Z"
               },
               {
-                "device": "archivist (hermes)",
+                "device": "hermes@archivist",
                 "device_id": "d-demo-bot-archivist",
                 "current": false,
                 "sessions": 55,
@@ -3798,7 +3811,7 @@
                 "last_active_at": "2026-09-24T13:20:00Z"
               },
               {
-                "device": "tutor (hermes)",
+                "device": "hermes@tutor",
                 "device_id": "d-demo-bot-tutor",
                 "current": false,
                 "sessions": 55,
@@ -3823,7 +3836,7 @@
                 "last_active_at": "2026-09-24T13:20:00Z"
               },
               {
-                "device": "courier (hermes)",
+                "device": "hermes@courier",
                 "device_id": "d-demo-bot-courier",
                 "current": false,
                 "sessions": 51,
@@ -3848,7 +3861,7 @@
                 "last_active_at": "2026-09-23T08:20:00Z"
               },
               {
-                "device": "critic (hermes)",
+                "device": "hermes@critic",
                 "device_id": "d-demo-bot-critic",
                 "current": false,
                 "sessions": 48,
@@ -3873,7 +3886,7 @@
                 "last_active_at": "2026-09-24T13:20:00Z"
               },
               {
-                "device": "concierge (hermes)",
+                "device": "hermes@concierge",
                 "device_id": "d-demo-bot-concierge",
                 "current": false,
                 "sessions": 53,
@@ -4079,7 +4092,7 @@
       ],
       "rows": [
         {
-          "device": "build-01",
+          "device": "root@build-01",
           "device_id": "d-demo-build",
           "cells": [
             {
@@ -4306,7 +4319,7 @@
           "burn_estimated": false
         },
         {
-          "device": "mira-mbp",
+          "device": "mira@mira-mbp",
           "device_id": "d-demo-mira",
           "cells": [
             {
@@ -4533,7 +4546,7 @@
           "burn_estimated": false
         },
         {
-          "device": "leo-air",
+          "device": "leo@leo-air",
           "device_id": "d-demo-leo",
           "cells": [
             {
@@ -4760,7 +4773,7 @@
           "burn_estimated": true
         },
         {
-          "device": "scout",
+          "device": "hermes@scout",
           "device_id": "d-demo-bot-scout",
           "cells": [
             {
@@ -4987,7 +5000,7 @@
           "burn_estimated": false
         },
         {
-          "device": "herald",
+          "device": "hermes@herald",
           "device_id": "d-demo-bot-herald",
           "cells": [
             {
@@ -5214,7 +5227,7 @@
           "burn_estimated": false
         },
         {
-          "device": "sentry",
+          "device": "hermes@sentry",
           "device_id": "d-demo-bot-sentry",
           "cells": [
             {
@@ -5441,7 +5454,7 @@
           "burn_estimated": false
         },
         {
-          "device": "editor",
+          "device": "hermes@editor",
           "device_id": "d-demo-bot-editor",
           "cells": [
             {
@@ -5668,7 +5681,7 @@
           "burn_estimated": false
         },
         {
-          "device": "archivist",
+          "device": "hermes@archivist",
           "device_id": "d-demo-bot-archivist",
           "cells": [
             {
@@ -5895,7 +5908,7 @@
           "burn_estimated": false
         },
         {
-          "device": "tutor",
+          "device": "hermes@tutor",
           "device_id": "d-demo-bot-tutor",
           "cells": [
             {
@@ -6122,7 +6135,7 @@
           "burn_estimated": false
         },
         {
-          "device": "courier",
+          "device": "hermes@courier",
           "device_id": "d-demo-bot-courier",
           "cells": [
             {
@@ -6349,7 +6362,7 @@
           "burn_estimated": false
         },
         {
-          "device": "critic",
+          "device": "hermes@critic",
           "device_id": "d-demo-bot-critic",
           "cells": [
             {
@@ -6576,7 +6589,7 @@
           "burn_estimated": false
         },
         {
-          "device": "concierge",
+          "device": "hermes@concierge",
           "device_id": "d-demo-bot-concierge",
           "cells": [
             {

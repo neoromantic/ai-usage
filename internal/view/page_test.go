@@ -56,7 +56,7 @@ func TestPageAttentionIsCut(t *testing.T) {
 	resets := time.Date(2026, 9, 29, 13, 30, 0, 0, time.UTC)
 	pct := 33.0
 	r.Attention = append(r.Attention,
-		Attention{Kind: AttentionSilent, Devices: []string{"bot-e"}, At: &since},
+		Attention{Kind: AttentionSilent, Devices: []string{"hermes@bot-e"}, At: &since},
 		Attention{Kind: AttentionUnder, Provider: "codex", Account: "lee@corp.test", Name: "lee", ResetsAt: &resets, Percent: &pct})
 	static := pageSection(Render(r, Options{Width: 160, Loc: sampleZone}), "ATTENTION")
 	// What is cut is counted by kind, so a NO READING is still named.
@@ -69,7 +69,7 @@ func TestPageAttentionIsCut(t *testing.T) {
 		t.Fatalf("the interactive view does not show every line:\n%s", strings.Join(all, "\n"))
 	}
 	for _, want := range []string{
-		" SILENT      bot-e                      no report since Mon 14:02, 2d 3h ago",
+		" SILENT      hermes@bot-e               no report since Mon 14:02, 2d 3h ago",
 		" UNDER       codex lee@corp.test        leaves ~67% unused at this week's pace, resets Tue 16:30, in 5d 22h",
 	} {
 		found := false
@@ -102,13 +102,13 @@ func TestPageSilentDevice(t *testing.T) {
 	r.Attention = slices.DeleteFunc(r.Attention, func(a Attention) bool {
 		return a.Kind != AttentionOut && a.Kind != AttentionOver && a.Kind != AttentionError
 	})
-	r.Attention = append(r.Attention, Attention{Kind: AttentionSilent, Devices: []string{"bot-e"}, At: &since, Message: msg})
+	r.Attention = append(r.Attention, Attention{Kind: AttentionSilent, Devices: []string{"hermes@bot-e"}, At: &since, Message: msg})
 	for w, want := range map[int]string{
-		80:  " SILENT  bot-e                no report since Mon 14:02, 2d 3h ago",
-		84:  " SILENT  bot-e                no report since Mon 14:02 · last error: codex: not l…",
-		92:  " SILENT  bot-e                no report since Mon 14:02 · last error: codex: not logged in",
-		96:  " SILENT  bot-e                no report since Mon 14:02 · last error: codex: not logged in",
-		120: " SILENT  bot-e                no report since Mon 14:02, 2d 3h ago · last error: codex: not logged in",
+		80:  " SILENT  hermes@bot-e         no report since Mon 14:02, 2d 3h ago",
+		84:  " SILENT  hermes@bot-e         no report since Mon 14:02 · last error: codex: not l…",
+		92:  " SILENT  hermes@bot-e         no report since Mon 14:02 · last error: codex: not logged in",
+		96:  " SILENT  hermes@bot-e         no report since Mon 14:02 · last error: codex: not logged in",
+		120: " SILENT  hermes@bot-e         no report since Mon 14:02, 2d 3h ago · last error: codex: not logged in",
 	} {
 		p := Render(r, Options{Width: w, Loc: sampleZone, Interactive: true})
 		if lines := pageSection(p, "ATTENTION"); lines[len(lines)-1] != want {
@@ -116,7 +116,7 @@ func TestPageSilentDevice(t *testing.T) {
 		}
 		found := false
 		for _, l := range pageSection(p, "DEVICES") {
-			found = found || strings.HasPrefix(l, "~ bot-e ")
+			found = found || strings.HasPrefix(l, "~ hermes@bot-e ")
 		}
 		if !found {
 			t.Errorf("at %d: bot-e is not marked silent:\n%s", w, strings.Join(pageSection(p, "DEVICES"), "\n"))
@@ -244,7 +244,7 @@ func TestPageMatrixScroll(t *testing.T) {
 		!strings.Contains(m[2], "hermes") || strings.Contains(m[2], "lee") {
 		t.Errorf("scrolled by 5, shown %d:\n%s", p.MatrixShown, strings.Join(m, "\n"))
 	}
-	if !strings.HasPrefix(m[3], "  srv1 ") {
+	if !strings.HasPrefix(m[3], "  root@srv1 ") {
 		t.Errorf("the device column is not kept: %q", m[3])
 	}
 	// Past the end, the last column still shows.
@@ -308,15 +308,15 @@ func TestPageHeat(t *testing.T) {
 	}
 	// In color the top step is bold: the largest cell on the page.
 	color := Render(r, Options{Width: 120, Loc: sampleZone, Color: true})
-	if l := row(color, "srv1"); !strings.Contains(l, "\x1b[1;38;2;") || !strings.Contains(l, "m1080\x1b[m") {
+	if l := row(color, "root@srv1"); !strings.Contains(l, "\x1b[1;38;2;") || !strings.Contains(l, "m1080\x1b[m") {
 		t.Errorf("the largest cell is not bold in color: %q", l)
 	}
 	// Without color the largest of each column is bold, and nothing else.
 	mono := Render(r, Options{Width: 120, Loc: sampleZone})
-	if l := row(mono, "annbook"); !strings.Contains(l, "\x1b[1m810\x1b[m") || !strings.Contains(l, "\x1b[1m230\x1b[m") {
+	if l := row(mono, "ann@annbook"); !strings.Contains(l, "\x1b[1m810\x1b[m") || !strings.Contains(l, "\x1b[1m230\x1b[m") {
 		t.Errorf("the largest of a column is not bold: %q", l)
 	}
-	if l := row(mono, "bot-a"); strings.Contains(l, "\x1b[1m") {
+	if l := row(mono, "hermes@bot-a"); strings.Contains(l, "\x1b[1m") {
 		t.Errorf("a cell that is no column's largest is bold: %q", l)
 	}
 	for _, v := range []struct {
@@ -345,9 +345,9 @@ func TestPageHeadersDim(t *testing.T) {
 			table, prefix, title string
 			p                    Page
 		}{
-			{"PROJECTS", "  PROJECT ", "PROJECTS  annbook · by " + per.String() + " · ", Render(team, o)},
+			{"PROJECTS", "  PROJECT ", "PROJECTS  ann@annbook · by " + per.String() + " · ", Render(team, o)},
 			{"status", "  DEVICE ", "DEVICES  15 · 1 error · 1 silent · 4 old · by " + per.String() + " UTC · ", Render(team, devices(o))},
-			{"USAGE", "  CLAUDE ", "USAGE  sam-air · M weighted tokens", Render(single, o)},
+			{"USAGE", "  CLAUDE ", "USAGE  sam@sam-air · M weighted tokens", Render(single, o)},
 		} {
 			l := bodyLine(t, c.p, c.title, func(text string) bool { return strings.HasPrefix(text, c.prefix) })
 			if !strings.Contains(l, dim+head+"\x1b[m") {

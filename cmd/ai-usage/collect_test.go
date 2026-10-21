@@ -160,9 +160,9 @@ func TestCollectOfflineThenViews(t *testing.T) {
 		t.Fatalf("team devices = %+v", r.Team.Devices)
 	}
 
-	text := d.ok("report")
+	text := d.ok("report", "--width", "100")
 	for _, want := range []string{
-		"ai-usage · test-host · team " + r.Collector.Team[:8] + "  ",
+		"ai-usage · tester@test-host · team " + r.Collector.Team[:8] + "  ",
 		"\nSUBSCRIPTIONS  2 · 2 over\n",
 		"\n  /work/app  <1 ",
 	} {

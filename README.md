@@ -94,7 +94,7 @@ The team in the picture is made up. [docs/demo](docs/demo) has its report and mo
 <summary>The same page as text, for another made-up team</summary>
 
 ```
-ai-usage · annbook · team qmvrtzpa                                  ● collected 7m ago  ● relay 7m ago  ● up to date
+ai-usage · ann@annbook · team qmvrtzpa                                 ● collected 7m ago  ● relay 7m ago  ● up to date
 
 ATTENTION
  OUT      codex ann@acme.dev   back Fri 17:09, in 1d 23h
@@ -102,26 +102,27 @@ ATTENTION
  OVER     claude ann@acme.dev  runs out ~Thu 01:17 at this week's pace, 2d 23h before reset · reading 1d old
  OVER     codex sam@mail.test  runs out ~Sat 03:01 at the last day's pace, 2d 17h before reset
  OUTSIDE  codex lee@corp.test  +25 points in 20h, no team device spent
- ERROR    Mac.localdomain      codex: app-server exited without answering
+ ERROR    kim@Mac.localdomain  codex: app-server exited without answering
  +3 more: 1 no reading, 1 duplicate, 1 old
 
 SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
 
-  CLAUDE         PLAN        THIS WEEK                 LEFT  RESETS              AT RESET  DEVICES              LAST
-● ann@acme.dev   max         ━━━━━━━━━╋━━━━━━────────  ~33%  3d 7h  Sun 01:00  ~174% over   2  annbook            7m
+  CLAUDE         PLAN        THIS WEEK                 LEFT  RESETS              AT RESET  DEVICES                 LAST
+● ann@acme.dev   max         ━━━━━━━━━╋━━━━━━────────  ~33%  3d 7h  Sun 01:00  ~174% over   2  ann@annbook           7m
     Fable                    ━━━━━━━━━━━━╋━━━━━━━━━━━    0%  3d 7h  Sun 01:00         out
-  kim@corp.test  max         update Claude Code or p…     ?                             —   1  Mac.localdomain    1h
+  kim@corp.test  max         update Claude Code or p…     ?                             —   1  kim@Mac.localdoma…    1h
 
   CODEX
-● ann@acme.dev   pro         ━━━━━━━━━━━━━━━━━╋━━━━━━    0%  1d 23h Fri 17:09         out   2  annbook            1h
-  sam@mail.test  prolite     ━━━━━━╋━━━──────────────   58%  5d 2h  Mon 20:12   165% over   1  MacBook-Pro-Kim    3h
-● lee@corp.test  pro         ━━━┃────────────────────   88%  5d 22h Tue 16:30      81% ok  11  srv1              34m
-  unknown                    ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  Mac.localdomain   16m
+● ann@acme.dev   pro         ━━━━━━━━━━━━━━━━━╋━━━━━━    0%  1d 23h Fri 17:09         out   2  ann@annbook           1h
+  sam@mail.test  prolite     ━━━━━━╋━━━──────────────   58%  5d 2h  Mon 20:12   165% over   1  sam@MacBook-Pro-K…    3h
+● lee@corp.test  pro         ━━━┃────────────────────   88%  5d 22h Tue 16:30      81% ok  11  root@srv1            34m
+  unknown                    ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  kim@Mac.localdoma…   16m
 
   GROK
-● a4c2e917       SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  annbook           11h
+● a4c2e917       SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  ann@annbook          11h
+
 UTILIZATION  fullest % before each reset
-  only this device's cycles: ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it should update within 15 minutes
+  only this device's cycles: ci@ci-runner-eu-west-build-pool-node-0042ab runs v0.3…: it should update within 15 minutes
 
   CLAUDE         CYCLES  OUT  AVG  NEWEST FIRST
 ● ann@acme.dev       13    5  86%   100  100   92  ~78  100   64   88  100   71  ~45   96  100   83
@@ -136,24 +137,24 @@ UTILIZATION  fullest % before each reset
 DEVICES × SUBSCRIPTIONS  15 · 7d UTC · M weighted tokens                  ‹usage›  status   ‹tokens›  share
                         CODEX ─────────────────────────────  CLAUDE ──────────  GROK ───  NO QUOTA
                              lee      ann  unknown      sam       ann      kim  a4c2e917    hermes     TOTAL
-  srv1                      1080       53        ·        ·        25        ·         ·        49      1207
-● annbook                      ·      810        ·        ·       230        ·        17         ·      1057
-× Mac.localdomain              ·        ·      427        ·         ·      125         ·         ·       551
-↓ MacBook-Pro-Kim              ·        ·        ·      269         ·        ·         ·         ·       269
-  bot-a                      135        ·        ·        ·         ·        ·         ·         ·       135
-  bot-b                      113        ·        ·        ·         ·        ·         ·         7       119
-  bot-c                       72        ·        ·        ·         ·        ·         ·         4        76
-  bot-d                       54        ·        ·        ·         ·        ·         ·         ·        54
-  bot-e                       41        ·        ·        ·         ·        ·         ·         ·        41
-  bot-f                       32        ·        ·        ·         ·        ·         ·         ·        32
-  bot-g                       18        ·        ·        ·         ·        ·         ·         ·        18
-↓ ci-runner-eu-west-b…        18        ·        ·        ·         ·        ·         ·         ·       ~18
-  bot-h                        9        ·        ·        ·         ·        ·         ·         ·         9
-  bot-i                        2        ·        ·        ·         ·        ·         ·         ·         2
-~ Mac.localdomain              ·        ·        ·        ·         ·        ·         ·         ·         ·
+  root@srv1                 1080       53        ·        ·        25        ·         ·        49      1207
+● ann@annbook                  ·      810        ·        ·       230        ·        17         ·      1057
+× kim@Mac.localdomain          ·        ·      427        ·         ·      125         ·         ·       551
+↓ sam@MacBook-Pro-Kim          ·        ·        ·      269         ·        ·         ·         ·       269
+  hermes@bot-a               135        ·        ·        ·         ·        ·         ·         ·       135
+  hermes@bot-b               113        ·        ·        ·         ·        ·         ·         7       119
+  hermes@bot-c                72        ·        ·        ·         ·        ·         ·         4        76
+  hermes@bot-d                54        ·        ·        ·         ·        ·         ·         ·        54
+  hermes@bot-e                41        ·        ·        ·         ·        ·         ·         ·        41
+  hermes@bot-f                32        ·        ·        ·         ·        ·         ·         ·        32
+  hermes@bot-g                18        ·        ·        ·         ·        ·         ·         ·        18
+↓ ci@ci-runner-eu-wes…        18        ·        ·        ·         ·        ·         ·         ·       ~18
+  hermes@bot-h                 9        ·        ·        ·         ·        ·         ·         ·         9
+  hermes@bot-i                 2        ·        ·        ·         ·        ·         ·         ·         2
+~ kim@Mac.localdomain          ·        ·        ·        ·         ·        ·         ·         ·         ·
   TOTAL                     1572      863      427      269       256      125        17        59     ~3586
 
-PROJECTS  annbook · by 7d · M weighted tokens · claude since Sep 2
+PROJECTS  ann@annbook · by 7d · M weighted tokens · claude since Sep 2
   PROJECT                                            7D   90D  SESS  VIA            LAST
   ~/src/acme/app                                    975  3465    14  codex, claude    1h
   ~/notes                                           194   585    18  codex            3h
@@ -168,7 +169,7 @@ PROJECTS  annbook · by 7d · M weighted tokens · claude since Sep 2
   + 4 more
 
 ━ used  ─ left  ┃╋ even use  ┈ no reading  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
-~ stale/estimated: ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it should update within 15 minutes
+~ stale/estimated: ci@ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it should update within 15 minutes
 ```
 
 </details>
@@ -183,9 +184,9 @@ UTILIZATION is how full each subscription's windows got before each reset over t
 
 ![One developer's subscriptions: at this week's pace Claude runs out on Saturday, 12 hours before its reset, and its model window tonight; Codex has 78% left, and SuperGrok will leave most of its week unused](docs/demo/social/solo-forecast.png)
 
-DEVICES × SUBSCRIPTIONS is every machine against every subscription, in millions of weighted tokens over the last 7 UTC days. A weighted token weighs each kind of token by what the provider's API charges for it against input: Claude's output 5, a cache read 0.1, and a cache write 1.25, or 2 when it is kept an hour; Codex's output 8 and a cache read 0.1; Grok's output 5 and a cache read 0.25. So a session that rereads a large cache shows more than its input and output, and less than every token counted alike. It is a proxy for how much quota a session uses, not the provider's formula. NO QUOTA holds the tokens no subscription covers, such as Hermes on an API key. Columns that do not fit fold into REST, so each row's cells add up to its TOTAL. A machine on a release before v0.4.0 sends no weighted tokens, so its are estimated from its input and output: `~` marks its TOTAL and the team's, and the legend says why and what to do. The section has a second view, status: a row per machine with its user, its release, how long ago it reported, the tools it reads, its tokens today and over 7, 30, and 90 days, and a note of what is wrong with it, such as an error, an update to install, or why it does not update itself. `--devices` prints that view. With only this machine, the section is USAGE instead: a row per subscription, with today, 7 days, 30 days, and 90 days. PROJECTS lists this machine's top projects over every account; `--projects` lists all of them. A project is a git repository, with its subfolders and worktrees, those Claude Code and Codex make included; a folder outside any repository counts under the nearest folder above it that the tools worked in, and is a project of its own when there is none, never reaching up to the home folder, Downloads and folders like it, or a temporary folder. USAGE and PROJECTS count this machine's local days, and 7, 30, and 90 days as rolling hours, while the team's tables count UTC days, as machines send them, so this machine's own row there can differ. Today is the exception once every machine runs v0.7.0 or later: each sends its tokens by hour for the last two days, so the team's today counts from your own midnight, wherever each teammate is, and the title says `today` without `UTC`. Where the ledger holds less than 90 days of a tool, as when Claude Code deleted older transcripts, the PROJECTS title says since when. A dim legend at the bottom explains only the marks on screen.
+DEVICES × SUBSCRIPTIONS is every machine against every subscription, in millions of weighted tokens over the last 7 UTC days. A weighted token weighs each kind of token by what the provider's API charges for it against input: Claude's output 5, a cache read 0.1, and a cache write 1.25, or 2 when it is kept an hour; Codex's output 8 and a cache read 0.1; Grok's output 5 and a cache read 0.25. So a session that rereads a large cache shows more than its input and output, and less than every token counted alike. It is a proxy for how much quota a session uses, not the provider's formula. NO QUOTA holds the tokens no subscription covers, such as Hermes on an API key. Columns that do not fit fold into REST, so each row's cells add up to its TOTAL. A machine on a release before v0.4.0 sends no weighted tokens, so its are estimated from its input and output: `~` marks its TOTAL and the team's, and the legend says why and what to do. The section has a second view, status: a row per machine with its release, how long ago it reported, the tools it reads, its tokens today and over 7, 30, and 90 days, and a note of what is wrong with it, such as an error, an update to install, or why it does not update itself. `--devices` prints that view. With only this machine, the section is USAGE instead: a row per subscription, with today, 7 days, 30 days, and 90 days. PROJECTS lists this machine's top projects over every account; `--projects` lists all of them. A project is a git repository, with its subfolders and worktrees, those Claude Code and Codex make included; a folder outside any repository counts under the nearest folder above it that the tools worked in, and is a project of its own when there is none, never reaching up to the home folder, Downloads and folders like it, or a temporary folder. USAGE and PROJECTS count this machine's local days, and 7, 30, and 90 days as rolling hours, while the team's tables count UTC days, as machines send them, so this machine's own row there can differ. Today is the exception once every machine runs v0.7.0 or later: each sends its tokens by hour for the last two days, so the team's today counts from your own midnight, wherever each teammate is, and the title says `today` without `UTC`. Where the ledger holds less than 90 days of a tool, as when Claude Code deleted older transcripts, the PROJECTS title says since when. A dim legend at the bottom explains only the marks on screen.
 
-![The status view of DEVICES: each machine's user, release, when it last reported, the tools it reads, its tokens, and what is wrong with it](docs/demo/social/devices-status.png)
+![The status view of DEVICES: each machine's release, when it last reported, the tools it reads, its tokens, and what is wrong with it](docs/demo/social/devices-status.png)
 
 The matrix shows accounts by short names: the part of an email before the `@`, or the first 8 characters of an id. `ai-usage alias` gives an account a name for the whole team; see [Teams](#teams).
 
@@ -223,7 +224,7 @@ On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/A
 - **Usage:** the tokens of each device or each subscription, today or over 7, 30, or 90 days, in whole millions.
 - **Projects:** this Mac's repositories, their worktrees counted in, grouped by the folder they share.
 
-A click on a row opens its details: each window with its forecast, and the forecast of the one that runs out with the pace it takes, or where it was headed when nobody spent on it since; who spent the window since it began, "build-01 84M, scout 35M, +8 more · since 21 Sep 02:40", the busiest first and the rest as a count; when the subscription was last used; how old its reading is and which device took it, when the reading is old or another device's; and why the report calls it idle or could not read it, which a click on the line of the subscriptions not read also gives whole; a device's release, tools, and errors, in the words of the report's NOTE; a project's sessions. Color means a problem only: red is out, orange runs out before the reset, yellow is tight. `⌘1` to `⌘3` switch the tabs and `⌘R` collects now.
+A click on a row opens its details: each window with its forecast, and the forecast of the one that runs out with the pace it takes, or where it was headed when nobody spent on it since; who spent the window since it began, "root@build-01 84M, hermes@scout 35M, +8 more · since 21 Sep 02:40", the busiest first and the rest as a count; when the subscription was last used; how old its reading is and which device took it, when the reading is old or another device's; and why the report calls it idle or could not read it, which a click on the line of the subscriptions not read also gives whole; a device's release, tools, and errors, in the words of the report's NOTE; a project's sessions. Color means a problem only: red is out, orange runs out before the reset, yellow is tight. `⌘1` to `⌘3` switch the tabs and `⌘R` collects now.
 
 <table>
 <tr>
@@ -239,7 +240,7 @@ A click on a row opens its details: each window with its forecast, and the forec
   <img alt="The menu: Status with the collection, the relay, the update, and this Mac; Actions with Collect Now and Team Window; Open in Terminal with Report, Device Status, and All Projects; and AI Usage with Settings and Quit" src="docs/demo/app-menu.png" width="300">
 </picture>
 
-**The Team window** has the whole team on one screen, as the terminal's DEVICES does. The Team button beside the popover's tabs opens it, and so do `⌘D` and Team Window… in the menu; with only this Mac there is no team, so none of them shows. Usage puts each device against each subscription, grouped by tool, then the tokens no subscription covers and TOTAL. A cell is shaded by its tokens, a step for every half of a tenfold below the largest, as in the terminal, and its tooltip says "build-01 · Codex bots: 131M in 7 Days · 46% of column · 84M this window"; a subscription's name is in the color of its state. Status has each device's user, release (↓ when it is behind the latest), last report, the tools it reads (× for a failing one), its tokens in each period, and the report's NOTE. A click on a heading sorts the rows; until then they are in the report's order. As in the terminal, `1`, `7`, `3`, and `9` pick the period, `%` switches Usage between tokens and each device's share of its column, and `s` switches between Usage and Status. The window opens where it was last, at its size.
+**The Team window** has the whole team on one screen, as the terminal's DEVICES does. The Team button beside the popover's tabs opens it, and so do `⌘D` and Team Window… in the menu; with only this Mac there is no team, so none of them shows. Usage puts each device against each subscription, grouped by tool, then the tokens no subscription covers and TOTAL. A cell is shaded by its tokens, a step for every half of a tenfold below the largest, as in the terminal, and its tooltip says "root@build-01 · Codex bots: 131M in 7 Days · 46% of column · 84M this window"; a subscription's name is in the color of its state. Status has each device's release (↓ when it is behind the latest), last report, the tools it reads (× for a failing one), its tokens in each period, and the report's NOTE. A click on a heading sorts the rows; until then they are in the report's order. As in the terminal, `1`, `7`, `3`, and `9` pick the period, `%` switches Usage between tokens and each device's share of its column, and `s` switches between Usage and Status. The window opens where it was last, at its size.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/demo/app-team-light.png">
@@ -248,10 +249,10 @@ A click on a row opens its details: each window with its forecast, and the forec
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/demo/app-team-status-light.png">
-  <img alt="The Team window on Status: each device's user, collector version, when it last reported, its tools, its tokens today and over 7, 30, and 90 days, and the report's note" src="docs/demo/app-team-status.png">
+  <img alt="The Team window on Status: each device's collector version, when it last reported, its tools, its tokens today and over 7, 30, and 90 days, and the report's note" src="docs/demo/app-team-status.png">
 </picture>
 
-**Notifications** say when a window is out, "Claude mira · 5h is out", with when it is back, and when one will run out before its reset, "Claude mira · 7d runs out ~Sat 11:12", with how long before its reset. A window whose run-out time passed with nobody on the team spending on it since gets none. They are the windows the report's ATTENTION marks out and over, and Settings picks which: When a Window Is Out (on by default); When a Window Will Run Out, Within a Day (the default), Any Time, or Never, since a forecast early in a long window can say it runs out days ahead and change by the next reading; and Subscriptions, This Mac's (the default), those logged in here, or The Team's, every subscription with a reading, bots' included, where a notification also names the device that uses it most, "used on build-01 +9". Each window gets one notification per period and state, not one at every run: a forecast that dips under 100% and rises again says nothing new, and after its reset a window starts over. The app remembers what it said in its settings, so a restart says nothing twice. A click on a notification opens the popover on that subscription in Limits, when the menu bar has room to show the app's item. macOS asks for permission when there is first something to say, or when you turn a notification on; when you decline, the app asks no more, and Settings says where to turn notifications on.
+**Notifications** say when a window is out, "Claude mira · 5h is out", with when it is back, and when one will run out before its reset, "Claude mira · 7d runs out ~Sat 11:12", with how long before its reset. A window whose run-out time passed with nobody on the team spending on it since gets none. They are the windows the report's ATTENTION marks out and over, and Settings picks which: When a Window Is Out (on by default); When a Window Will Run Out, Within a Day (the default), Any Time, or Never, since a forecast early in a long window can say it runs out days ahead and change by the next reading; and Subscriptions, This Mac's (the default), those logged in here, or The Team's, every subscription with a reading, bots' included, where a notification also names the device that uses it most, "used on root@build-01 +9". Each window gets one notification per period and state, not one at every run: a forecast that dips under 100% and rises again says nothing new, and after its reset a window starts over. The app remembers what it said in its settings, so a restart says nothing twice. A click on a notification opens the popover on that subscription in Limits, when the menu bar has room to show the app's item. macOS asks for permission when there is first something to say, or when you turn a notification on; when you decline, the app asks no more, and Settings says where to turn notifications on.
 
 **Settings** does what the terminal commands do: this Mac's name in the team (`ai-usage name`), the names of accounts (`ai-usage alias`), the relay (`ai-usage relay`), the team key, open at login, what the menu bar shows and whose subscriptions it tracks, notifications, and updates. About names the app and its version once, beside Check for Updates, which runs `ai-usage update` and so updates the app too, and says where the command-line tool is, "Command-Line Tool (Homebrew)" when the report says Homebrew installed it. It names the tool's release only when it is another one, "Command-line tool v0.5.1: updates with Check for Updates", or "Command-line tool v0.5.1 (Homebrew): updates with Check for Updates or brew upgrade", or says the tool is not found. Under Homebrew, Check for Updates runs `ai-usage update`, which runs `brew upgrade neoromantic/tap/ai-usage` and brings the app to the release brew installed; it waits up to 15 minutes for it. When it fails, the app shows ai-usage's own error, not what brew printed before it.
 
@@ -459,7 +460,7 @@ Likewise, while any machine runs a release before v0.5.0, no machine sends the p
 
 ![DEVICES × SUBSCRIPTIONS for a made-up team: twelve machines, most of them bots, against six subscriptions and the tokens no login was known for, in millions of weighted tokens over 7 days](docs/demo/social/team-matrix.png)
 
-A machine goes by its host name; a Mac goes by the local host name in Sharing settings, which does not change with the network. `ai-usage name set NAME` gives it another, and the team sees it after the machine's next run.
+A machine goes by its host name; a Mac goes by the local host name in Sharing settings, which does not change with the network. `ai-usage name set NAME` gives it another, and the team sees it after the machine's next run. The report names each machine by the OS user ai-usage runs as, at that name: `ann@mira-mbp`, `root@build-01`. A person and their machine are one consumer, and each user or bot on a shared server reads as one of its own. A name that has an `@` in it already stays as it is.
 
 An account goes by a short name in the report: the part of an email before the `@`, or the first 8 characters of an id. To give one a name of your choosing for the whole team:
 
@@ -514,7 +515,7 @@ Or, from a clone with the Vercel CLI logged in, run `sh scripts/deploy-relay.sh`
 | `ai-usage relay set URL` | save a relay URL, `http://` or `https://` |
 | `ai-usage relay clear` | forget the saved relay |
 | `ai-usage relay serve [--addr :8080] [--client-ip-header NAME]` | run a relay; behind a reverse proxy, name the header it sets to the client's address |
-| `ai-usage name show` | print this machine's name in the team |
+| `ai-usage name show` | print this machine's name in the team, and the name the report shows, its OS user at it |
 | `ai-usage name set NAME` | name this machine in the team, instead of its host name; at most 64 characters |
 | `ai-usage name clear` | go by the host name again |
 | `ai-usage alias` | list the names the team gave accounts |
@@ -652,7 +653,7 @@ A copy Homebrew installed never replaces itself: Homebrew owns its files. Each r
 
 A release reaches Homebrew a few minutes after GitHub, once the release workflow has updated the tap. Until then `ai-usage update` says `Homebrew's formula is at v0.8.0; GitHub has v0.8.1, which reaches Homebrew soon`, and exits 1, after the release brew did install, if newer than this one, has finished the update. A plain `brew upgrade` works too, and the next run notices it; see [Troubleshooting](#a-mac-missed-a-run-after-an-update).
 
-A Homebrew machine updates when someone runs `brew upgrade` or `ai-usage update` on it, not within 15 minutes. Until then it can hold back what the team turns on only once every machine runs a release that knows it, as the [Teams](#teams) section says. The report first says it `should update within 15 minutes`, as for any machine, and once it has reported on the older release for 7 hours, `mira-mbp runs v0.8.0 and has not updated; run ai-usage update on it`, and its NOTE and OLD say how long it has not updated. When a collection fails while a newer release is out, its error ends with `` — `brew upgrade neoromantic/tap/ai-usage` may fix it ``.
+A Homebrew machine updates when someone runs `brew upgrade` or `ai-usage update` on it, not within 15 minutes. Until then it can hold back what the team turns on only once every machine runs a release that knows it, as the [Teams](#teams) section says. The report first says it `should update within 15 minutes`, as for any machine, and once it has reported on the older release for 7 hours, `mira@mira-mbp runs v0.8.0 and has not updated; run ai-usage update on it`, and its NOTE and OLD say how long it has not updated. When a collection fails while a newer release is out, its error ends with `` — `brew upgrade neoromantic/tap/ai-usage` may fix it ``.
 
 A binary built from source reports version `devel` (`dev` before v0.4.0). It never updates itself and never registers with the scheduler on its own; run `ai-usage schedule install` for that.
 

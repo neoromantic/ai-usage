@@ -54,6 +54,7 @@ type Collector struct {
 	Device        string     `json:"device"`
 	DeviceLabel   string     `json:"device_label"`
 	OSUser        string     `json:"os_user"`
+	Name          string     `json:"name"` // DeviceName of DeviceLabel and OSUser
 	Team          string     `json:"team"`
 	LastRunAt     *time.Time `json:"last_run_at"`
 	LastSuccessAt *time.Time `json:"last_success_at"`
@@ -448,6 +449,7 @@ type TeamDevice struct {
 	Device           string     `json:"device"`
 	Label            string     `json:"label"`
 	OSUser           string     `json:"os_user"`
+	Name             string     `json:"name"` // DeviceName of Label and OSUser
 	This             bool       `json:"this_device"`
 	CollectorVersion string     `json:"collector_version"`
 	CollectedAt      time.Time  `json:"collected_at"`

@@ -5,7 +5,7 @@
 - `team key` prints the team's private key; `team join` reads one from stdin
 - Each collect publishes a signed, partly sealed snapshot: `PUT /v1/teams/{team}/devices/{device}`
 - Each report pulls the team: `GET /v1/teams/{team}`; `team forget-device ID` deletes one
-- `name set` and `AI_USAGE_NAME`, the device's name; `alias`, an account's short name
+- `name set` and `AI_USAGE_NAME`, the device's name, which the report shows after its OS user, as `ann@mira-mbp`; `alias`, an account's short name
 - `relay show|set|clear`, `AI_USAGE_RELAY`; `relay serve`, a relay of one's own
 - The relay as a Vercel function in `api/`, with Upstash, limits, and caps
 

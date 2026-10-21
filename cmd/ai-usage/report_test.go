@@ -33,7 +33,7 @@ func TestReportFrom(t *testing.T) {
 	hermetic(t)
 	d := newDevice(t)
 	saved := filepath.Join("..", "..", "internal", "view", "testdata", "team.json")
-	if out := d.ok("report", "--from", saved, "--width", "120"); !strings.Contains(out, "ai-usage · annbook · team qmvrtzpa") ||
+	if out := d.ok("report", "--from", saved, "--width", "120"); !strings.Contains(out, "ai-usage · ann@annbook · team qmvrtzpa") ||
 		!strings.Contains(out, "\nDEVICES × SUBSCRIPTIONS  15 · 7d") {
 		t.Fatalf("report --from:\n%s", out)
 	}
@@ -41,7 +41,7 @@ func TestReportFrom(t *testing.T) {
 	if err := json.Unmarshal([]byte(d.ok("report", "--from", saved, "--json")), &r); err != nil {
 		t.Fatal(err)
 	}
-	if r.Collector.DeviceLabel != "annbook" || len(r.Team.Devices) != 15 {
+	if r.Collector.DeviceLabel != "annbook" || r.Collector.Name != "ann@annbook" || len(r.Team.Devices) != 15 {
 		t.Fatalf("report --from --json: %s with %d devices", r.Collector.DeviceLabel, len(r.Team.Devices))
 	}
 	if _, err := os.Stat(d.dir); !os.IsNotExist(err) {
@@ -68,7 +68,7 @@ func TestReportFrom(t *testing.T) {
 }
 
 // withoutHealthAndLimits is a saved report as a release before
-// collector.health and window limits saved it.
+// collector.health, window limits, and devices' names saved it.
 func withoutHealthAndLimits(t *testing.T, path string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(path)
@@ -80,6 +80,10 @@ func withoutHealthAndLimits(t *testing.T, path string) []byte {
 		t.Fatal(err)
 	}
 	delete(r["collector"].(map[string]any), "health")
+	delete(r["collector"].(map[string]any), "name")
+	for _, d := range r["team"].(map[string]any)["devices"].([]any) {
+		delete(d.(map[string]any), "name")
+	}
 	var strip func(any)
 	strip = func(v any) {
 		switch v := v.(type) {

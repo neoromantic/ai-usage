@@ -37,10 +37,10 @@ func TestTeamEstimatedReason(t *testing.T) {
 	}{
 		{"one that updates itself", func(k *team.Key) []snapshot.Doc {
 			return []snapshot.Doc{legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4")}
-		}, nil, []string{"abox"}, "abox runs v0.3.4: it should update within 15 minutes"},
+		}, nil, []string{"kim@abox"}, "kim@abox runs v0.3.4: it should update within 15 minutes"},
 		{"one to reinstall", func(k *team.Key) []snapshot.Doc {
 			return []snapshot.Doc{legacyDoc(t, k, "d-abox-device", "abox", "v0.2.4")}
-		}, nil, []string{"abox"}, "abox runs v0.2.4: reinstall with install.sh"},
+		}, nil, []string{"kim@abox"}, "kim@abox runs v0.2.4: reinstall with install.sh"},
 		{"several", func(k *team.Key) []snapshot.Doc {
 			return []snapshot.Doc{
 				legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4"),
@@ -48,7 +48,7 @@ func TestTeamEstimatedReason(t *testing.T) {
 				legacyDoc(t, k, "d-cbox-device", "cbox", "v0.3.0"),
 				legacyDoc(t, k, "d-dbox-device", "dbox", "v0.3.1"),
 			}
-		}, nil, []string{"abox", "bbox", "cbox", "dbox"}, "4 devices run releases before v0.4.0: reinstall bbox with install.sh; the other 3 should update within 15 minutes"},
+		}, nil, []string{"kim@abox", "kim@bbox", "kim@cbox", "kim@dbox"}, "4 devices run releases before v0.4.0: reinstall kim@bbox with install.sh; the other 3 should update within 15 minutes"},
 		// Only the old one is named to reinstall, though the others are busier.
 		{"several, one to reinstall", func(k *team.Key) []snapshot.Doc {
 			busy := func(device, host string) snapshot.Doc {
@@ -59,7 +59,7 @@ func TestTeamEstimatedReason(t *testing.T) {
 				return d
 			}
 			return []snapshot.Doc{busy("d-abox-device", "abox"), busy("d-bbox-device", "bbox"), legacyDoc(t, k, "d-cbox-device", "cbox", "v0.2.0")}
-		}, nil, []string{"abox", "bbox", "cbox"}, "3 devices run releases before v0.4.0: reinstall cbox with install.sh; the other 2 should update within 15 minutes"},
+		}, nil, []string{"kim@abox", "kim@bbox", "kim@cbox"}, "3 devices run releases before v0.4.0: reinstall kim@cbox with install.sh; the other 2 should update within 15 minutes"},
 		{"several, each its own way", func(k *team.Key) []snapshot.Doc {
 			gone := legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4")
 			gone.CollectedAt = now.Add(-9 * 24 * time.Hour)
@@ -68,34 +68,34 @@ func TestTeamEstimatedReason(t *testing.T) {
 			away := legacyDoc(t, k, "d-cbox-device", "cbox", "v0.3.4")
 			away.CollectedAt = now.Add(-2 * 24 * time.Hour)
 			return []snapshot.Doc{gone, failing, away, legacyDoc(t, k, "d-dbox-device", "dbox", "v0.2.4")}
-		}, nil, []string{"bbox", "cbox", "dbox", "abox"},
-			"4 devices run releases before v0.4.0: reinstall dbox with install.sh; forget abox with ai-usage team forget-device abox-dev; run ai-usage update on bbox, which has not updated; cbox should update when it next runs"},
+		}, nil, []string{"kim@bbox", "kim@cbox", "kim@dbox", "kim@abox"},
+			"4 devices run releases before v0.4.0: reinstall kim@dbox with install.sh; forget kim@abox with ai-usage team forget-device abox-dev; run ai-usage update on kim@bbox, which has not updated; kim@cbox should update when it next runs"},
 		{"several, the busiest first", func(k *team.Key) []snapshot.Doc {
 			busy := emptyState()
 			addAccount(busy, "codex", "bob", true, nil, 5000)
 			d := otherDoc(t, k, "d-cbox-device", "cbox", now.Add(-5*time.Minute), busy).Legacy()
 			d.CollectorVersion = "v0.3.0"
 			return []snapshot.Doc{legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4"), d}
-		}, nil, []string{"cbox", "abox"}, "2 devices run releases before v0.4.0: they should update within 15 minutes (cbox, abox)"},
+		}, nil, []string{"kim@cbox", "kim@abox"}, "2 devices run releases before v0.4.0: they should update within 15 minutes (kim@cbox, kim@abox)"},
 		{"one gone silent", func(k *team.Key) []snapshot.Doc {
 			d := legacyDoc(t, k, "d-abox1234-device", "abox", "v0.3.4")
 			d.CollectedAt = now.Add(-9 * 24 * time.Hour)
 			return []snapshot.Doc{d}
-		}, nil, []string{"abox"}, "abox has not reported since Aug 23: forget it with ai-usage team forget-device abox1234"},
+		}, nil, []string{"kim@abox"}, "kim@abox has not reported since Aug 23: forget it with ai-usage team forget-device abox1234"},
 		// A laptop off for a weekend comes back, and updates itself.
 		{"one away", func(k *team.Key) []snapshot.Doc {
 			d := legacyDoc(t, k, "d-abox1234-device", "abox", "v0.3.4")
 			d.CollectedAt = now.Add(-2 * 24 * time.Hour)
 			return []snapshot.Doc{d}
-		}, nil, []string{"abox"}, "abox has not reported since Aug 30: it should update when it next runs"},
+		}, nil, []string{"kim@abox"}, "kim@abox has not reported since Aug 30: it should update when it next runs"},
 		{"one built from source", func(k *team.Key) []snapshot.Doc {
 			return []snapshot.Doc{legacyDoc(t, k, "d-abox-device", "abox", "dev")}
-		}, nil, []string{"abox"}, "abox runs a build from source before v0.4.0: build it again"},
+		}, nil, []string{"kim@abox"}, "kim@abox runs a build from source before v0.4.0: build it again"},
 		{"one whose update fails", func(k *team.Key) []snapshot.Doc {
 			d := legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4")
 			d.LastError = k.Seal(snapshot.UpdateLine + "download failed")
 			return []snapshot.Doc{d}
-		}, nil, []string{"abox"}, "abox runs v0.3.4 and has not updated; run ai-usage update on it"},
+		}, nil, []string{"kim@abox"}, "kim@abox runs v0.3.4 and has not updated; run ai-usage update on it"},
 		// As a device Homebrew installed waits for someone to run brew.
 		{"two that have not updated", func(k *team.Key) []snapshot.Doc {
 			var docs []snapshot.Doc
@@ -105,17 +105,17 @@ func TestTeamEstimatedReason(t *testing.T) {
 				docs = append(docs, d)
 			}
 			return docs
-		}, nil, []string{"abox", "bbox"}, "2 devices run releases before v0.4.0: run ai-usage update on abox, bbox, which have not updated"},
+		}, nil, []string{"kim@abox", "kim@bbox"}, "2 devices run releases before v0.4.0: run ai-usage update on kim@abox, kim@bbox, which have not updated"},
 		{"refused", func(k *team.Key) []snapshot.Doc {
 			return []snapshot.Doc{legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4")}
-		}, func(f *fixture) { f.in.State.Relay.NoExtUntil = now.Add(2 * time.Hour) }, []string{"abox"},
+		}, func(f *fixture) { f.in.State.Relay.NoExtUntil = now.Add(2 * time.Hour) }, []string{"kim@abox"},
 			"the relay did not accept weighted days; trying again Sep 1 14:00"},
 		{"stale", func(k *team.Key) []snapshot.Doc {
 			return []snapshot.Doc{legacyDoc(t, k, "d-abox-device", "abox", "v0.3.4")}
-		}, func(f *fixture) { f.in.Team.PulledAt = now.Add(-5 * time.Hour) }, []string{"abox"}, "the team was last read 5h ago"},
+		}, func(f *fixture) { f.in.Team.PulledAt = now.Add(-5 * time.Hour) }, []string{"kim@abox"}, "the team was last read 5h ago"},
 		{"sent none yet", func(k *team.Key) []snapshot.Doc {
 			return []snapshot.Doc{legacyDoc(t, k, "d-abox-device", "abox", "v1.2.0")}
-		}, nil, nil, "abox sent no weighted days yet: its next run sends them"},
+		}, nil, nil, "kim@abox sent no weighted days yet: its next run sends them"},
 	} {
 		f := newFixture(t, emptyState())
 		f.in.Loc = time.UTC
@@ -145,7 +145,7 @@ func TestTeamEstimatedReason(t *testing.T) {
 		}
 		// At 80 columns the legend keeps what to do first.
 		if c.name == "several, one to reinstall" {
-			if l := Render(r, Options{Width: 80, Loc: time.UTC}).Legend; !strings.Contains(l, ": reinstall cbox with install.sh") {
+			if l := Render(r, Options{Width: 80, Loc: time.UTC}).Legend; !strings.Contains(l, ": reinstall kim@cbox with install.sh") {
 				t.Errorf("%s: legend at 80 columns %q", c.name, l)
 			}
 		}
@@ -181,7 +181,7 @@ func TestTeamEstimatedReason(t *testing.T) {
 	silent.CollectedAt = now.Add(-9 * 24 * time.Hour)
 	f.in.Team.Docs = append(f.in.Team.Docs, silent)
 	r = Build(f.in)
-	if want := "2 devices run releases before v0.4.0: forget cbox (cbox1234), gone-dev with ai-usage team forget-device ID on each device"; deref(r.Team.EstimatedReason) != want {
+	if want := "2 devices run releases before v0.4.0: forget kim@cbox (cbox1234), gone-dev with ai-usage team forget-device ID on each device"; deref(r.Team.EstimatedReason) != want {
 		t.Errorf("several to forget: %q, want %q", deref(r.Team.EstimatedReason), want)
 	}
 }
@@ -355,18 +355,18 @@ func TestNoReadingSaysWhy(t *testing.T) {
 		claude, codex string
 	}{
 		{"old releases", []snapshot.Doc{holder("d-abox-device", "abox", "v0.2.2", failing), holder("d-bbox-device", "bbox", "v0.2.0", nil)},
-			"abox runs v0.2.2: reinstall with install.sh", "quota read timed out on abox"},
+			"kim@abox runs v0.2.2: reinstall with install.sh", "quota read timed out on kim@abox"},
 		{"one reads quota", []snapshot.Doc{holder("d-abox-device", "abox", "v0.2.2", nil), holder("d-bbox-device", "bbox", "v1.2.0", failing)},
-			"quota read timed out on bbox", "quota read timed out on bbox"},
+			"quota read timed out on kim@bbox", "quota read timed out on kim@bbox"},
 		{"nothing known", []snapshot.Doc{holder("d-abox-device", "abox", "v1.2.0", nil)}, "<nil>", "<nil>"},
 		// A release before v0.4.0 failed the source for it.
 		{"an old Claude Code", []snapshot.Doc{holder("d-abox-device", "abox", "v0.3.4", &state.Source{Status: "partial",
 			Error: "~/.claude: claude /usage: Claude Code 2.1.42 does not cache the usage; update it to 2.1.208 or later (no cache)"})},
-			"abox runs Claude Code 2.1.42: update Claude Code to 2.1.208 or newer", "<nil>"},
+			"kim@abox runs Claude Code 2.1.42: update Claude Code to 2.1.208 or newer", "<nil>"},
 		// With another problem, which stays its error.
 		{"an old Claude Code and more", []snapshot.Doc{holder("d-abox-device", "abox", "v0.3.4", &state.Source{Status: "partial",
 			Error: "~/.sam/.claude: permission denied; ~/.claude: claude /usage: Claude Code 2.1.42 does not cache the usage; update it to 2.1.208 or later (no cache)"})},
-			"abox runs Claude Code 2.1.42: update Claude Code to 2.1.208 or newer", "<nil>"},
+			"kim@abox runs Claude Code 2.1.42: update Claude Code to 2.1.208 or newer", "<nil>"},
 	} {
 		r := withTeam(t, f, c.docs...)
 		if got := deref(findTeamAccount(t, r, "claude", "ann@acme.dev").NoReading); got != c.claude {
@@ -428,14 +428,14 @@ func TestUnknownAccountSaysWhy(t *testing.T) {
 		claude, codex string
 	}{
 		{"one home", []snapshot.Doc{holder("d-abox-device", "abox", loggedOut("error", "claude: not logged in", "codex: not logged in"))},
-			"not logged in on abox: run claude and log in", "not logged in on abox: run codex login"},
+			"not logged in on kim@abox: run claude and log in", "not logged in on kim@abox: run codex login"},
 		// The home is named where the device has several.
 		{"several homes", []snapshot.Doc{holder("d-abox-device", "abox", loggedOut("partial",
 			"~/.ann/.claude: permission denied", "~/.claude-work: claude: not logged in", "~/.codex-work: codex: not logged in"))},
-			"not logged in on abox (~/.claude-work): run claude and log in", "not logged in on abox (~/.codex-work): run codex login"},
+			"not logged in on kim@abox (~/.claude-work): run claude and log in", "not logged in on kim@abox (~/.codex-work): run codex login"},
 		// The first device to say so.
 		{"two devices", []snapshot.Doc{holder("d-abox-device", "abox", nil), holder("d-bbox-device", "bbox", loggedOut("error", "claude: not logged in"))},
-			"not logged in on bbox: run claude and log in", "<nil>"},
+			"not logged in on kim@bbox: run claude and log in", "<nil>"},
 		// Another problem is no reason to guess at.
 		{"another problem", []snapshot.Doc{holder("d-abox-device", "abox", loggedOut("error", "claude initialize: no answer in time", "codex: app-server exited"))},
 			"<nil>", "<nil>"},
@@ -457,18 +457,18 @@ func TestUnknownAccountSaysWhy(t *testing.T) {
 			got = append(got, a.Subject+" | "+a.Text)
 		}
 	}
-	if want := []string{"claude unknown | not logged in on abox: run claude and log in"}; !slices.Equal(got, want) {
+	if want := []string{"claude unknown | not logged in on kim@abox: run claude and log in"}; !slices.Equal(got, want) {
 		t.Errorf("NO READING = %q, want %q", got, want)
 	}
 	lines := strings.Join(pageSection(Render(r, Options{Width: 80, Loc: time.UTC, Interactive: true}), "ATTENTION"), "\n")
-	if !strings.Contains(lines, "not logged in on abox: run claude and log in") {
+	if !strings.Contains(lines, " on kim@abox: run claude and log in") {
 		t.Errorf("ATTENTION at 80:\n%s", lines)
 	}
 	// A short line keeps where to log in, and what to do.
 	r = withTeam(t, f, holder("d-abox-device", "abox", loggedOut("partial", "~/.ann/.claude: permission denied", "~/.claude-work: claude: not logged in")))
 	for w, want := range map[int]string{
-		100: "  not logged in on abox (~/.claude-work): run claude and log in",
-		80:  "  on abox (~/.claude-wor…: run claude and log in",
+		100: "  not logged in on kim@abox (~/.claude-work): run claude and log in",
+		80:  "  on kim@abox (~/.claude…: run claude and log in",
 	} {
 		lines := pageSection(Render(r, Options{Width: w, Loc: time.UTC, Interactive: true}), "ATTENTION")
 		if i := slices.IndexFunc(lines, func(l string) bool { return strings.HasSuffix(l, want) }); i < 0 {

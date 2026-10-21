@@ -149,7 +149,7 @@ func (m *merger) cyclesGate(t *Team) {
 	}
 	hs := m.heldBackDevices(g)
 	for _, h := range hs {
-		t.CyclesHeldBackBy = append(t.CyclesHeldBackBy, h.Label)
+		t.CyclesHeldBackBy = append(t.CyclesHeldBackBy, h.Name)
 	}
 	var reason string
 	switch {

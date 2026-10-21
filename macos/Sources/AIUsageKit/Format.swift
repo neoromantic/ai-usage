@@ -172,8 +172,10 @@ extension Report {
         team.providers.first { $0.provider == provider }?.accounts.first { $0.label == label }
     }
 
-    public func teamDevice(named label: String) -> TeamDevice? {
-        team.devices.first { $0.label == label }
+    /// The team device the report calls name, as its rows and lists do: by
+    /// its name, or by its label in a report of an ai-usage before v0.9.0.
+    public func teamDevice(named name: String) -> TeamDevice? {
+        team.devices.first { $0.name == name } ?? team.devices.first { $0.name.isEmpty && $0.label == name }
     }
 
     /// The window an attention entry is about: the one it names, else its

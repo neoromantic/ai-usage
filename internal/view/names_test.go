@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/collect"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
@@ -214,5 +215,68 @@ func TestAliasesTheReportRefuses(t *testing.T) {
 	}
 	if a := findTeamAccount(t, r, "claude", "sam@mail.test"); a.Name != "sammy" {
 		t.Fatalf("sam = %q", a.Name)
+	}
+}
+
+// A device goes by its OS user at its label, but for a label with an @
+// already, or a user that is not known; a cut name keeps its user.
+func TestDeviceName(t *testing.T) {
+	for _, c := range []struct{ label, user, want string }{
+		{"mira-mbp", "ann", "ann@mira-mbp"},
+		{"build-01", "root", "root@build-01"},
+		{"Build bot", "ci", "ci@Build bot"},
+		{"ann@mira", "ann", "ann@mira"},
+		{"srv1", "unknown", "srv1"},
+		{"srv1", "", "srv1"},
+		{unreadable, unreadable, unreadable},
+	} {
+		if got := DeviceName(c.label, c.user); got != c.want {
+			t.Errorf("DeviceName(%q, %q) = %q, want %q", c.label, c.user, got, c.want)
+		}
+	}
+	for _, c := range []struct {
+		name string
+		w    int
+		want string
+	}{
+		{"ann@mira-mbp", 20, "ann@mira-mbp"},
+		{"sam@MacBook-Pro-Kim", 15, "sam@MacBook-Pr…"},
+		{"ci@ci-runner-eu-west-build-pool", 20, "ci@ci-runner-eu-wes…"},
+		{"hermes-bot-seven@srv1", 12, "hermes…@srv1"},
+		{"a-very-long-user@build-server", 14, "a-very…@build…"},
+		{"no-user-at-all-here", 10, "no-user-a…"},
+	} {
+		if got := truncName(c.name, c.w, "…"); got != c.want || width(got) > c.w {
+			t.Errorf("truncName(%q, %d) = %q, want %q", c.name, c.w, got, c.want)
+		}
+	}
+}
+
+// Two OS users of one server are two devices, each by its own name, in the
+// matrix and in what an account lists.
+func TestDeviceNamesOfOneServer(t *testing.T) {
+	f := newFixture(t, emptyState())
+	bot := func(device, user string) snapshot.Doc {
+		st := emptyState()
+		addAccount(st, "codex", "bots@a.io", true, nil, 0)
+		spend(st, "codex", "bots@a.io", "/w", 1_000_000, now.Add(-time.Hour))
+		return collect.BuildDoc(st, nil, f.key, state.Config{Device: device}, "build-01", user, "v1.2.3", now)
+	}
+	r := withTeam(t, f, bot("d-root-device", "root"), bot("d-ci-device", "ci"))
+	var rows []string
+	for _, row := range r.Team.Matrix.Rows {
+		rows = append(rows, row.Device)
+	}
+	slices.Sort(rows)
+	if want := []string{"ci@build-01", "root@build-01", "sam@thisbox"}; !slices.Equal(rows, want) {
+		t.Errorf("rows %v, want %v", rows, want)
+	}
+	if got := findTeamAccount(t, r, "codex", "bots@a.io").Devices; !slices.Equal(got, []string{"ci@build-01", "root@build-01"}) {
+		t.Errorf("account devices %v", got)
+	}
+	for _, d := range r.Team.Devices {
+		if d.Name != DeviceName(d.Label, d.OSUser) {
+			t.Errorf("device %+v", d)
+		}
 	}
 }

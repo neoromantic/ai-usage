@@ -1,11 +1,56 @@
 package view
 
 import (
+	"cmp"
 	"strings"
 
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 )
+
+// DeviceName is what the report calls a device: the OS user its collector
+// runs as, at its label, as in ann@mira-mbp. A person and their machine are
+// one consumer, and each OS user or bot on a shared server is one of its
+// own. A label that has an @ already is the name as it is, as is one whose
+// OS user is not known.
+func DeviceName(label, osUser string) string {
+	switch osUser {
+	case "", "unknown", unreadable:
+		return label
+	}
+	if strings.Contains(label, "@") || label == unreadable {
+		return label
+	}
+	return osUser + "@" + label
+}
+
+// name is what the report calls this device, also in a report saved before
+// Name was in it.
+func (c Collector) name() string { return cmp.Or(c.Name, DeviceName(c.DeviceLabel, c.OSUser)) }
+
+// unreadable is a sealed text that does not open with the team's key.
+const unreadable = "(unreadable)"
+
+// truncName cuts a device's name to w columns: the part after its first @
+// first, down to nameKeep columns, then the part before it, so a cut name
+// still says whose and which.
+func truncName(s string, w int, ell string) string {
+	user, host, ok := strings.Cut(s, "@")
+	if !ok || width(s) <= w {
+		return truncEnd(s, w, ell)
+	}
+	keep := min(width(host), nameKeep)
+	if room := w - width(user) - 1; room >= keep {
+		return user + "@" + truncEnd(host, room, ell)
+	}
+	if w-keep-1 <= width(ell) {
+		return truncEnd(s, w, ell)
+	}
+	return truncEnd(user, w-keep-1, ell) + "@" + truncEnd(host, keep, ell)
+}
+
+// nameKeep is the least of a device's part of its name truncName keeps.
+const nameKeep = 6
 
 // addAliases keeps the newest alias of each account a device doc names.
 func (m *merger) addAliases(d snapshot.Doc) {

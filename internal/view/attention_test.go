@@ -54,9 +54,9 @@ func TestAttention(t *testing.T) {
 		"out claude sam 7d Fable",
 		"out codex sam",
 		"over codex kim",
-		"error Mac.localdomain",
-		"silent leebook",
-		"old Mac.localdomain,leebook",
+		"error kim@Mac.localdomain",
+		"silent kim@leebook",
+		"old kim@Mac.localdomain,kim@leebook",
 		"under codex bots",
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -217,8 +217,8 @@ func TestHeaderFailuresAreInAttention(t *testing.T) {
 	r := Build(f.in)
 	got := attentionList(r)
 	want := []string{
-		"error thisbox relay: service unavailable (HTTP 503)",
-		"error thisbox update: cannot write beside /opt/bin/ai-usage: permission denied",
+		"error sam@thisbox relay: service unavailable (HTTP 503)",
+		"error sam@thisbox update: cannot write beside /opt/bin/ai-usage: permission denied",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("attention =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -226,8 +226,8 @@ func TestHeaderFailuresAreInAttention(t *testing.T) {
 	page := plainText(r, Options{Width: 120, Loc: time.UTC})
 	for _, s := range []string{
 		"● relay failing  ● update check failed\n",
-		"\n ERROR  thisbox  relay: service unavailable (HTTP 503)\n",
-		"\n ERROR  thisbox  update: cannot write beside /opt/bin/ai-usage: permission denied\n",
+		"\n ERROR  sam@thisbox  relay: service unavailable (HTTP 503)\n",
+		"\n ERROR  sam@thisbox  update: cannot write beside /opt/bin/ai-usage: permission denied\n",
 	} {
 		if !strings.Contains(page, s) {
 			t.Errorf("the page lacks %q:\n%s", s, page)
@@ -262,8 +262,8 @@ func TestFailedRunIsInAttention(t *testing.T) {
 		want []string
 		line string
 	}{
-		{"a bug", 15 * time.Minute, []string{"error thisbox " + bug}, " ERROR  thisbox  " + bug},
-		{"a bug every run", 30 * time.Hour, []string{"error thisbox " + bug, "silent thisbox "}, " ERROR   thisbox  " + bug},
+		{"a bug", 15 * time.Minute, []string{"error sam@thisbox " + bug}, " ERROR  sam@thisbox  " + bug},
+		{"a bug every run", 30 * time.Hour, []string{"error sam@thisbox " + bug, "silent sam@thisbox "}, " ERROR   sam@thisbox  " + bug},
 	} {
 		st := emptyState()
 		f := newFixture(t, st)
@@ -344,6 +344,10 @@ func newKindsReport() Report {
 			{Device: "d-2f8a6c4e0b9d7f1a3c5e7b9d", Label: "srv1", CollectorVersion: "v0.2.0", CollectedAt: now, Old: true,
 				Limitations: []string{LimitNoClaudeQuota, LimitNoUpdateErrors}},
 		},
+	}
+	for i := range r.Team.Devices {
+		d := &r.Team.Devices[i]
+		d.Name = DeviceName(d.Label, d.OSUser)
 	}
 	r.Attention = attention(r.Team, r.Collector, now)
 	return r
@@ -468,7 +472,7 @@ func TestQuotaOnlyProblemIsNoError(t *testing.T) {
 	addAccount(other, "claude", "kim@corp.test", true, nil, 1000)
 	spend(other, "claude", "kim@corp.test", "/work/kim", 1000, now.Add(-2*time.Hour))
 	r := withTeam(t, f, otherDoc(t, f.key, "d-b01c1d2e3f4a5b6c7d8e9f10", "srv1", now, other))
-	want := []string{"no_reading  quota not read: the usage request timed out on srv1", "old srv1 v1.2.3"}
+	want := []string{"no_reading  quota not read: the usage request timed out on kim@srv1", "old kim@srv1 v1.2.3"}
 	if got := attentionList(r); !reflect.DeepEqual(got, want) {
 		t.Fatalf("attention = %q, want %q", got, want)
 	}

@@ -6,6 +6,7 @@
     "device": "d-7c3e1a9b5f2d4e8a6c0b1d3f",
     "device_label": "annbook",
     "os_user": "ann",
+    "name": "ann@annbook",
     "team": "qmvrtzpak7n2c5bxd3f6ghj4lwyerse2",
     "last_run_at": "2026-09-23T14:31:00Z",
     "last_success_at": "2026-09-23T14:31:00Z",
@@ -110,28 +111,28 @@
     },
     {
       "kind": "error",
-      "subject": "Mac.localdomain",
+      "subject": "kim@Mac.localdomain",
       "text": "codex: app-server exited without answering",
       "devices": [
-        "Mac.localdomain"
+        "kim@Mac.localdomain"
       ],
       "message": "codex: app-server exited without answering"
     },
     {
       "kind": "no_reading",
       "subject": "claude kim@corp.test",
-      "text": "/opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update Claude Code or put the newer one first on PATH on Mac.localdomain",
+      "text": "/opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update Claude Code or put the newer one first on PATH on kim@Mac.localdomain",
       "provider": "claude",
       "account": "kim@corp.test",
       "name": "kim",
-      "message": "/opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update Claude Code or put the newer one first on PATH on Mac.localdomain"
+      "message": "/opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update Claude Code or put the newer one first on PATH on kim@Mac.localdomain"
     },
     {
       "kind": "duplicate",
-      "subject": "Mac.localdomain",
+      "subject": "kim@Mac.localdomain",
       "text": "reinstalled as Mac.localdomain: ai-usage team forget-device e1f3a5c7",
       "devices": [
-        "Mac.localdomain"
+        "kim@Mac.localdomain"
       ],
       "device_id": "d-e1f3a5c7b9d1e3f5a7c9b1d3",
       "at": "2026-09-20T09:12:00Z",
@@ -140,11 +141,11 @@
     {
       "kind": "old",
       "subject": "3 devices on old releases",
-      "text": "Mac.localdomain, MacBook-Pro-Kim, ci-runner-eu-west-build-pool-node-0042ab · latest v1.4.2",
+      "text": "kim@Mac.localdomain, sam@MacBook-Pro-Kim, ci@ci-runner-eu-west-build-pool-node-0042ab · latest v1.4.2",
       "devices": [
-        "Mac.localdomain",
-        "MacBook-Pro-Kim",
-        "ci-runner-eu-west-build-pool-node-0042ab"
+        "kim@Mac.localdomain",
+        "sam@MacBook-Pro-Kim",
+        "ci@ci-runner-eu-west-build-pool-node-0042ab"
       ],
       "message": "v1.4.2"
     }
@@ -172,7 +173,7 @@
             "observed_at": "2026-09-23T14:20:00Z",
             "age_seconds": 1080,
             "stale": false,
-            "device": "annbook (ann)",
+            "device": "ann@annbook",
             "windows": [
               {
                 "name": "5h",
@@ -315,7 +316,7 @@
             "observed_at": "2026-09-23T14:31:00Z",
             "age_seconds": 420,
             "stale": false,
-            "device": "annbook (ann)",
+            "device": "ann@annbook",
             "windows": [
               {
                 "name": "5h",
@@ -491,7 +492,7 @@
             "observed_at": "2026-09-23T14:18:00Z",
             "age_seconds": 1200,
             "stale": false,
-            "device": "srv1 (root)",
+            "device": "root@srv1",
             "windows": [
               {
                 "name": "5h",
@@ -1275,18 +1276,19 @@
     "latest_version": "v1.4.2",
     "estimated": true,
     "held_back_by": [
-      "ci-runner-eu-west-build-pool-node-0042ab"
+      "ci@ci-runner-eu-west-build-pool-node-0042ab"
     ],
-    "estimated_reason": "ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it should update within 15 minutes",
+    "estimated_reason": "ci@ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it should update within 15 minutes",
     "cycles_held_back_by": [
-      "ci-runner-eu-west-build-pool-node-0042ab"
+      "ci@ci-runner-eu-west-build-pool-node-0042ab"
     ],
-    "cycles_reason": "ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it should update within 15 minutes",
+    "cycles_reason": "ci@ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it should update within 15 minutes",
     "devices": [
       {
         "device": "d-7c3e1a9b5f2d4e8a6c0b1d3f",
         "label": "annbook",
         "os_user": "ann",
+        "name": "ann@annbook",
         "this_device": true,
         "collector_version": "v1.4.2",
         "collected_at": "2026-09-23T14:31:00Z",
@@ -1340,6 +1342,7 @@
         "device": "d-9b1d3f5a7c9e1b3d5f7a9c1e",
         "label": "Mac.localdomain",
         "os_user": "kim",
+        "name": "kim@Mac.localdomain",
         "this_device": false,
         "collector_version": "v1.4.0",
         "collected_at": "2026-09-23T14:22:00Z",
@@ -1393,6 +1396,7 @@
         "device": "d-e1f3a5c7b9d1e3f5a7c9b1d3",
         "label": "Mac.localdomain",
         "os_user": "kim",
+        "name": "kim@Mac.localdomain",
         "this_device": false,
         "collector_version": "v1.4.0",
         "collected_at": "2026-09-20T09:12:00Z",
@@ -1449,6 +1453,7 @@
         "device": "d-4e6a8c0e2a4c6e8a0c2e4a6c",
         "label": "MacBook-Pro-Kim",
         "os_user": "sam",
+        "name": "sam@MacBook-Pro-Kim",
         "this_device": false,
         "collector_version": "v1.4.0",
         "collected_at": "2026-09-23T14:08:00Z",
@@ -1502,6 +1507,7 @@
         "device": "d-b00c1d2e3f4a5b6c7d8e9f00",
         "label": "bot-a",
         "os_user": "hermes",
+        "name": "hermes@bot-a",
         "this_device": false,
         "collector_version": "v1.4.2",
         "collected_at": "2026-09-23T14:29:00Z",
@@ -1555,6 +1561,7 @@
         "device": "d-b01c1d2e3f4a5b6c7d8e9f10",
         "label": "bot-b",
         "os_user": "hermes",
+        "name": "hermes@bot-b",
         "this_device": false,
         "collector_version": "v1.4.2",
         "collected_at": "2026-09-23T14:28:00Z",
@@ -1608,6 +1615,7 @@
         "device": "d-b02c1d2e3f4a5b6c7d8e9f20",
         "label": "bot-c",
         "os_user": "hermes",
+        "name": "hermes@bot-c",
         "this_device": false,
         "collector_version": "v1.4.2",
         "collected_at": "2026-09-23T14:27:00Z",
@@ -1664,6 +1672,7 @@
         "device": "d-b03c1d2e3f4a5b6c7d8e9f30",
         "label": "bot-d",
         "os_user": "hermes",
+        "name": "hermes@bot-d",
         "this_device": false,
         "collector_version": "v1.4.2",
         "collected_at": "2026-09-23T14:26:00Z",
@@ -1717,6 +1726,7 @@
         "device": "d-b04c1d2e3f4a5b6c7d8e9f40",
         "label": "bot-e",
         "os_user": "hermes",
+        "name": "hermes@bot-e",
         "this_device": false,
         "collector_version": "v1.4.2",
         "collected_at": "2026-09-23T14:25:00Z",
@@ -1770,6 +1780,7 @@
         "device": "d-b05c1d2e3f4a5b6c7d8e9f50",
         "label": "bot-f",
         "os_user": "hermes",
+        "name": "hermes@bot-f",
         "this_device": false,
         "collector_version": "v1.4.2",
         "collected_at": "2026-09-23T14:24:00Z",
@@ -1823,6 +1834,7 @@
         "device": "d-b06c1d2e3f4a5b6c7d8e9f60",
         "label": "bot-g",
         "os_user": "hermes",
+        "name": "hermes@bot-g",
         "this_device": false,
         "collector_version": "v1.4.2",
         "collected_at": "2026-09-23T14:23:00Z",
@@ -1876,6 +1888,7 @@
         "device": "d-b07c1d2e3f4a5b6c7d8e9f70",
         "label": "bot-h",
         "os_user": "hermes",
+        "name": "hermes@bot-h",
         "this_device": false,
         "collector_version": "v1.4.2",
         "collected_at": "2026-09-23T14:22:00Z",
@@ -1929,6 +1942,7 @@
         "device": "d-b08c1d2e3f4a5b6c7d8e9f80",
         "label": "bot-i",
         "os_user": "hermes",
+        "name": "hermes@bot-i",
         "this_device": false,
         "collector_version": "v1.4.2",
         "collected_at": "2026-09-23T14:21:00Z",
@@ -1982,6 +1996,7 @@
         "device": "d-5a1b2c3d4e5f60718293a4b5",
         "label": "ci-runner-eu-west-build-pool-node-0042ab",
         "os_user": "ci",
+        "name": "ci@ci-runner-eu-west-build-pool-node-0042ab",
         "this_device": false,
         "collector_version": "v0.3.4",
         "collected_at": "2026-09-23T14:26:00Z",
@@ -2035,6 +2050,7 @@
         "device": "d-2f8a6c4e0b9d7f1a3c5e7b9d",
         "label": "srv1",
         "os_user": "root",
+        "name": "root@srv1",
         "this_device": false,
         "collector_version": "v1.4.2",
         "collected_at": "2026-09-23T14:30:00Z",
@@ -2096,8 +2112,8 @@
             "subscription": true,
             "current": true,
             "devices": [
-              "annbook (ann)",
-              "srv1 (root)"
+              "ann@annbook",
+              "root@srv1"
             ],
             "plan": "max",
             "state": "out",
@@ -2105,7 +2121,7 @@
               "observed_at": "2026-09-23T14:20:00Z",
               "age_seconds": 1080,
               "stale": false,
-              "device": "annbook (ann)",
+              "device": "ann@annbook",
               "windows": [
                 {
                   "name": "5h",
@@ -2181,7 +2197,7 @@
               "90d": 229050000
             },
             "users": 2,
-            "busiest": "annbook",
+            "busiest": "ann@annbook",
             "last_active_at": "2026-09-23T14:31:00Z",
             "per_device": [],
             "linked_usage": [],
@@ -2424,8 +2440,8 @@
             "subscription": true,
             "current": false,
             "devices": [
-              "Mac.localdomain (kim)",
-              "Mac.localdomain (kim)"
+              "kim@Mac.localdomain",
+              "kim@Mac.localdomain"
             ],
             "plan": "max",
             "state": "unknown",
@@ -2445,11 +2461,11 @@
               "90d": 134600000
             },
             "users": 1,
-            "busiest": "Mac.localdomain",
+            "busiest": "kim@Mac.localdomain",
             "last_active_at": "2026-09-23T13:38:00Z",
             "per_device": [
               {
-                "device": "Mac.localdomain (kim)",
+                "device": "kim@Mac.localdomain",
                 "device_id": "d-e1f3a5c7b9d1e3f5a7c9b1d3",
                 "current": false,
                 "sessions": 3,
@@ -2482,7 +2498,7 @@
               "90d": 1615200000
             },
             "burn_estimated": false,
-            "no_reading": "/opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update Claude Code or put the newer one first on PATH on Mac.localdomain",
+            "no_reading": "/opt/homebrew/bin/claude is Claude Code 2.1.42 (Homebrew) but your sessions run 2.1.210: update Claude Code or put the newer one first on PATH on kim@Mac.localdomain",
             "outside": null,
             "utilization": []
           }
@@ -2498,8 +2514,8 @@
             "subscription": true,
             "current": true,
             "devices": [
-              "annbook (ann)",
-              "srv1 (root)"
+              "ann@annbook",
+              "root@srv1"
             ],
             "plan": "pro",
             "state": "out",
@@ -2507,7 +2523,7 @@
               "observed_at": "2026-09-23T14:31:00Z",
               "age_seconds": 420,
               "stale": false,
-              "device": "annbook (ann)",
+              "device": "ann@annbook",
               "windows": [
                 {
                   "name": "5h",
@@ -2564,7 +2580,7 @@
               "90d": 2079200000
             },
             "users": 2,
-            "busiest": "annbook",
+            "busiest": "ann@annbook",
             "last_active_at": "2026-09-23T13:38:00Z",
             "per_device": [],
             "linked_usage": [],
@@ -2637,7 +2653,7 @@
             "subscription": true,
             "current": false,
             "devices": [
-              "MacBook-Pro-Kim (sam)"
+              "sam@MacBook-Pro-Kim"
             ],
             "plan": "prolite",
             "state": "over",
@@ -2645,7 +2661,7 @@
               "observed_at": "2026-09-23T14:08:00Z",
               "age_seconds": 1800,
               "stale": false,
-              "device": "MacBook-Pro-Kim (sam)",
+              "device": "sam@MacBook-Pro-Kim",
               "windows": [
                 {
                   "name": "5h",
@@ -2702,7 +2718,7 @@
               "90d": 238800000
             },
             "users": 1,
-            "busiest": "MacBook-Pro-Kim",
+            "busiest": "sam@MacBook-Pro-Kim",
             "last_active_at": "2026-09-23T11:38:00Z",
             "per_device": [],
             "linked_usage": [],
@@ -2761,17 +2777,17 @@
             "subscription": true,
             "current": true,
             "devices": [
-              "bot-a (hermes)",
-              "bot-b (hermes)",
-              "bot-c (hermes)",
-              "bot-d (hermes)",
-              "bot-e (hermes)",
-              "bot-f (hermes)",
-              "bot-g (hermes)",
-              "bot-h (hermes)",
-              "bot-i (hermes)",
-              "ci-runner-eu-west-build-pool-node-0042ab (ci)",
-              "srv1 (root)"
+              "ci@ci-runner-eu-west-build-pool-node-0042ab",
+              "hermes@bot-a",
+              "hermes@bot-b",
+              "hermes@bot-c",
+              "hermes@bot-d",
+              "hermes@bot-e",
+              "hermes@bot-f",
+              "hermes@bot-g",
+              "hermes@bot-h",
+              "hermes@bot-i",
+              "root@srv1"
             ],
             "plan": "pro",
             "state": "ok",
@@ -2779,7 +2795,7 @@
               "observed_at": "2026-09-23T14:18:00Z",
               "age_seconds": 1200,
               "stale": false,
-              "device": "srv1 (root)",
+              "device": "root@srv1",
               "windows": [
                 {
                   "name": "5h",
@@ -2836,11 +2852,11 @@
               "90d": 2797800000
             },
             "users": 11,
-            "busiest": "srv1",
+            "busiest": "root@srv1",
             "last_active_at": "2026-09-23T14:04:00Z",
             "per_device": [
               {
-                "device": "ci-runner-eu-west-build-pool-node-0042ab (ci)",
+                "device": "ci@ci-runner-eu-west-build-pool-node-0042ab",
                 "device_id": "d-5a1b2c3d4e5f60718293a4b5",
                 "current": true,
                 "sessions": 2,
@@ -2959,7 +2975,7 @@
             "subscription": true,
             "current": false,
             "devices": [
-              "Mac.localdomain (kim)"
+              "kim@Mac.localdomain"
             ],
             "plan": null,
             "state": "unknown",
@@ -2979,7 +2995,7 @@
               "90d": 853200000
             },
             "users": 1,
-            "busiest": "Mac.localdomain",
+            "busiest": "kim@Mac.localdomain",
             "last_active_at": "2026-09-23T14:22:00Z",
             "per_device": [],
             "linked_usage": [],
@@ -3006,7 +3022,7 @@
             "subscription": true,
             "current": true,
             "devices": [
-              "annbook (ann)"
+              "ann@annbook"
             ],
             "plan": "SuperGrok Heavy",
             "state": "unknown",
@@ -3026,7 +3042,7 @@
               "90d": 34100000
             },
             "users": 1,
-            "busiest": "annbook",
+            "busiest": "ann@annbook",
             "last_active_at": "2026-09-23T03:38:00Z",
             "per_device": [],
             "linked_usage": [],
@@ -3053,9 +3069,9 @@
             "subscription": false,
             "current": false,
             "devices": [
-              "bot-b (hermes)",
-              "bot-c (hermes)",
-              "srv1 (root)"
+              "hermes@bot-b",
+              "hermes@bot-c",
+              "root@srv1"
             ],
             "plan": null,
             "state": "unknown",
@@ -3075,7 +3091,7 @@
               "90d": 80750000
             },
             "users": 3,
-            "busiest": "srv1",
+            "busiest": "root@srv1",
             "last_active_at": "2026-09-23T12:38:00Z",
             "per_device": [],
             "linked_usage": [],
@@ -3273,7 +3289,7 @@
       ],
       "rows": [
         {
-          "device": "srv1",
+          "device": "root@srv1",
           "device_id": "d-2f8a6c4e0b9d7f1a3c5e7b9d",
           "cells": [
             {
@@ -3528,7 +3544,7 @@
           "burn_estimated": false
         },
         {
-          "device": "annbook",
+          "device": "ann@annbook",
           "device_id": "d-7c3e1a9b5f2d4e8a6c0b1d3f",
           "cells": [
             {
@@ -3783,7 +3799,7 @@
           "burn_estimated": false
         },
         {
-          "device": "Mac.localdomain",
+          "device": "kim@Mac.localdomain",
           "device_id": "d-9b1d3f5a7c9e1b3d5f7a9c1e",
           "cells": [
             {
@@ -4038,7 +4054,7 @@
           "burn_estimated": false
         },
         {
-          "device": "MacBook-Pro-Kim",
+          "device": "sam@MacBook-Pro-Kim",
           "device_id": "d-4e6a8c0e2a4c6e8a0c2e4a6c",
           "cells": [
             {
@@ -4293,7 +4309,7 @@
           "burn_estimated": false
         },
         {
-          "device": "bot-a",
+          "device": "hermes@bot-a",
           "device_id": "d-b00c1d2e3f4a5b6c7d8e9f00",
           "cells": [
             {
@@ -4548,7 +4564,7 @@
           "burn_estimated": false
         },
         {
-          "device": "bot-b",
+          "device": "hermes@bot-b",
           "device_id": "d-b01c1d2e3f4a5b6c7d8e9f10",
           "cells": [
             {
@@ -4803,7 +4819,7 @@
           "burn_estimated": false
         },
         {
-          "device": "bot-c",
+          "device": "hermes@bot-c",
           "device_id": "d-b02c1d2e3f4a5b6c7d8e9f20",
           "cells": [
             {
@@ -5058,7 +5074,7 @@
           "burn_estimated": false
         },
         {
-          "device": "bot-d",
+          "device": "hermes@bot-d",
           "device_id": "d-b03c1d2e3f4a5b6c7d8e9f30",
           "cells": [
             {
@@ -5313,7 +5329,7 @@
           "burn_estimated": false
         },
         {
-          "device": "bot-e",
+          "device": "hermes@bot-e",
           "device_id": "d-b04c1d2e3f4a5b6c7d8e9f40",
           "cells": [
             {
@@ -5568,7 +5584,7 @@
           "burn_estimated": false
         },
         {
-          "device": "bot-f",
+          "device": "hermes@bot-f",
           "device_id": "d-b05c1d2e3f4a5b6c7d8e9f50",
           "cells": [
             {
@@ -5823,7 +5839,7 @@
           "burn_estimated": false
         },
         {
-          "device": "bot-g",
+          "device": "hermes@bot-g",
           "device_id": "d-b06c1d2e3f4a5b6c7d8e9f60",
           "cells": [
             {
@@ -6078,7 +6094,7 @@
           "burn_estimated": false
         },
         {
-          "device": "ci-runner-eu-west-build-pool-node-0042ab",
+          "device": "ci@ci-runner-eu-west-build-pool-node-0042ab",
           "device_id": "d-5a1b2c3d4e5f60718293a4b5",
           "cells": [
             {
@@ -6333,7 +6349,7 @@
           "burn_estimated": true
         },
         {
-          "device": "bot-h",
+          "device": "hermes@bot-h",
           "device_id": "d-b07c1d2e3f4a5b6c7d8e9f70",
           "cells": [
             {
@@ -6588,7 +6604,7 @@
           "burn_estimated": false
         },
         {
-          "device": "bot-i",
+          "device": "hermes@bot-i",
           "device_id": "d-b08c1d2e3f4a5b6c7d8e9f80",
           "cells": [
             {
@@ -6843,7 +6859,7 @@
           "burn_estimated": false
         },
         {
-          "device": "Mac.localdomain",
+          "device": "kim@Mac.localdomain",
           "device_id": "d-e1f3a5c7b9d1e3f5a7c9b1d3",
           "cells": [
             {

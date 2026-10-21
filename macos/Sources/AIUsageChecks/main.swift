@@ -35,7 +35,13 @@ equal("idle kind", team.attention.last?.kind, .idle)
 // entry from an older ai-usage has neither.
 equal("attention words", [team.attention[2].subject, team.attention[2].text],
       ["codex bots@studio.dev", "runs out ~Fri 08:59 at this week's pace, 2d 17h before reset"])
-equal("device notes", ["courier", "mira-mbp"].map { team.teamDevice(named: $0)?.note }, ["silent since Wed 10:28", nil])
+equal("device notes", ["hermes@courier", "mira@mira-mbp"].map { team.teamDevice(named: $0)?.note }, ["silent since Wed 10:28", nil])
+// A device goes by its OS user at its label, as the report names it in its
+// rows and lists; this Mac too.
+equal("device names", team.team.devices.prefix(3).map { "\($0.name) \($0.osUser) \($0.label)" },
+      ["mira@mira-mbp mira mira-mbp", "hermes@archivist hermes archivist", "root@build-01 root build-01"])
+check("rows name devices", team.team.matrix.rows.allSatisfy { r in team.team.devices.first { $0.device == r.deviceId }?.name == r.device })
+equal("this Mac's name", [team.collector.name, team.collector.deviceLabel], ["mira@mira-mbp", "mira-mbp"])
 equal("team devices", team.team.devices.count, 12)
 equal("team providers", team.team.providers.map(\.provider), ["claude", "codex", "grok", "hermes"])
 equal("team matrix", [team.team.matrix.columns.count, team.team.matrix.rows.count], [7, 12])
@@ -50,7 +56,7 @@ equal("home group", ProjectSection.sections(homeRun, home: "/Users/mira").map { 
 equal("no group", ProjectSection.sections(Array(team.projects.suffix(2)), home: "/Users/mira").map { $0.title ?? "-" }, ["-"])
 check("team is not solo", !team.solo)
 check("solo is solo", solo.solo && solo.team.pulledAt == nil)
-equal("solo this device", solo.thisDevice?.label, "mira-mbp")
+equal("solo this device", [solo.thisDevice?.label, solo.thisDevice?.name], ["mira-mbp", "mira@mira-mbp"])
 let over = team.attention[2]
 check("nanoseconds kept", abs(over.at!.timeIntervalSince(time("2026-09-25T06:59:45Z")) - 0.542168674) < 1e-6)
 equal("forecast runs out", team.teamAccount(provider: "codex", label: "bots@studio.dev")?.quota?.main?.forecast?.runsOutAt, over.at)
@@ -222,14 +228,14 @@ check("team verdict opens its account", teamVerdict.kind == .out && teamVerdict.
 // has it, and what a click opens.
 let alerts = AlertLine.lines(team)
 equal("alerts order", alerts.map(\.attention.kind.rawValue), team.attention.map(\.kind.rawValue))
-equal("alert subjects", alerts.map(\.text.subject), ["Claude mira · 5h", "Codex leo", "Codex bots", "Claude mira", "Codex mira", "build-01", "leo-air",
-                                                     "Claude unknown", "courier", "1 device on v0.3.4", "Grok 7f3b9c21"])
+equal("alert subjects", alerts.map(\.text.subject), ["Claude mira · 5h", "Codex leo", "Codex bots", "Claude mira", "Codex mira", "leo@leo-air",
+                                                     "root@build-01", "Claude unknown", "hermes@courier", "1 device on v0.3.4", "Grok 7f3b9c21"])
 equal("alert texts", alerts.map(\.text.detail), team.attention.map(\.text))
 check("alert targets", alerts.map(\.target) == [
     .limits(provider: "claude", label: "mira@studio.dev"), .limits(provider: "codex", label: "leo@studio.dev"),
     .limits(provider: "codex", label: "bots@studio.dev"), .limits(provider: "claude", label: "mira@studio.dev"),
-    .limits(provider: "codex", label: "mira@studio.dev"), .devices(["build-01"]), .devices(["leo-air"]), .notRead(provider: "claude"),
-    .devices(["courier"]), .devices(["leo-air"]), .limits(provider: "grok", label: "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64"),
+    .limits(provider: "codex", label: "mira@studio.dev"), .devices(["leo@leo-air"]), .devices(["root@build-01"]), .notRead(provider: "claude"),
+    .devices(["hermes@courier"]), .devices(["leo@leo-air"]), .limits(provider: "grok", label: "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64"),
 ])
 // The list's last line is the subscription the calm verdict names.
 equal("most room", Room.most(team).map { "\($0.text) \($0.account.label)" }, "Most room: Grok 7f3b9c21 · 100% 7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64")
@@ -301,13 +307,13 @@ check("verdict without windows", noneVerdict.kind == .none && noneVerdict.title 
 // an older release that updates itself gets none.
 let chips = Chip.chips(team)
 equal("team chips", chips.map { "\($0.text) \($0.symbol) \($0.state) \($0.devices)" },
-      ["2 errors xmark.circle.fill out [\"build-01\", \"leo-air\"]", "1 not reporting antenna.radiowaves.left.and.right.slash tight [\"courier\"]"])
+      ["2 errors xmark.circle.fill out [\"leo@leo-air\", \"root@build-01\"]", "1 not reporting antenna.radiowaves.left.and.right.slash tight [\"hermes@courier\"]"])
 check("team chip kinds", chips.map(\.kind) == [.errors, .silent] && chips.map(\.short) == ["2", "1"])
 equal("refresh chip first", Chip.chips(team, refreshFailed: true).first?.text, "Can't read report")
 equal("solo chips", Chip.chips(solo).count, 0)
-let leoAir = team.teamDevice(named: "leo-air")!.device
+let leoAir = team.teamDevice(named: "leo@leo-air")!.device
 let notUpdating = try edited("team.json") { objects($0) { $0["device"] as? String == leoAir && $0["os_user"] != nil ? $0.merging(["not_updating": true]) { $1 } : $0 } }
-equal("not updating chip", Chip.chips(notUpdating).last.map { "\($0.text) \($0.state) \($0.devices) \($0.updating)" }, "1 not updating tight [\"leo-air\"] 0")
+equal("not updating chip", Chip.chips(notUpdating).last.map { "\($0.text) \($0.state) \($0.devices) \($0.updating)" }, "1 not updating tight [\"leo@leo-air\"] 0")
 let broken = try edited("team.json") { json in
     var o = objects(json) { o in
         guard o["item"] as? String == "relay" else { return o }
@@ -377,17 +383,18 @@ func details(_ r: Report, _ p: String, _ l: String) -> SubscriptionDetails? {
 }
 let bots = details(team, "codex", "bots@studio.dev")
 equal("this window", bots?.thisWindow?.forms,
-      ["build-01 84M, scout 35M, +8 more · since 21 Sep 02:40", "build-01 84M, scout 35M, +8 more", "build-01 84M, +9 more"])
+      ["root@build-01 84M, hermes@scout 35M, +8 more · since 21 Sep 02:40", "root@build-01 84M, hermes@scout 35M, +8 more",
+       "root@build-01 84M, +9 more"])
 equal("this window's tooltip", bots?.thisWindow?.help.components(separatedBy: "\n").prefix(3).joined(separator: " / "),
-      "7d window since 21 Sep 02:40, weighted tokens: / build-01 84M / scout 35M")
+      "7d window since 21 Sep 02:40, weighted tokens: / root@build-01 84M / hermes@scout 35M")
 equal("forecast line", bots?.forecast, "164% at reset · this week's pace")
 equal("last used", bots?.lastUsed, "20m ago")
-equal("another device's reading", bots?.reading?.text, "4m old, from scout (hermes)")
+equal("another device's reading", bots?.reading?.text, "4m old, from hermes@scout")
 let miraDetails = details(team, "claude", "mira@studio.dev")
-equal("this Mac's window", miraDetails?.thisWindow?.forms.first, "mira-mbp 72M, build-01 16M · since 20 Sep 01:00")
+equal("this Mac's window", miraDetails?.thisWindow?.forms.first, "mira@mira-mbp 72M, root@build-01 16M · since 20 Sep 01:00")
 equal("last day's pace", miraDetails?.forecast, "113% at reset · the last day's pace")
 check("this Mac's fresh reading says nothing", miraDetails != nil && miraDetails?.reading == nil)
-equal("leo's reading", details(team, "claude", "leo@studio.dev")?.reading?.text, "11m old, from leo-air (leo)")
+equal("leo's reading", details(team, "claude", "leo@studio.dev")?.reading?.text, "11m old, from leo@leo-air")
 // Nobody spent on Grok this window: no line of who did, and no forecast.
 let grok = details(team, "grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64")
 check("nobody spent the window", grok != nil && grok?.thisWindow == nil && grok?.forecast == nil && grok?.lastUsed == "9d ago")
@@ -419,7 +426,10 @@ let added: Set<String> = ["burn", "fresh", "burn_days", "burn_share", "window_bu
                           "estimated", "held_back_by", "estimated_reason", "burn_estimated", "gap", "replaced_by", "limitations",
                           "no_reading", "outside", "basis", "pace", "window_start"]
 // A reading's device_id is new too.
-let stripped = { (json: Any) in objects(json) { o in o.filter { !added.contains($0.key) && !($0.key == "device_id" && o["windows"] != nil) } } }
+// A device's name is new too: such a report calls a device by its label.
+let stripped = { (json: Any) in objects(json) { o in o.filter {
+    !added.contains($0.key) && !($0.key == "device_id" && o["windows"] != nil) && !($0.key == "name" && o["os_user"] != nil)
+} } }
 let v034 = try edited("team.json", stripped)
 let v034Solo = try edited("solo.json", stripped)
 equal("v0.3.4 label", v034.tokenLabel, "tokens in+out")
@@ -444,10 +454,10 @@ check("v0.3.4 forecast basis", v034.teamAccount(provider: "claude", label: "mira
 check("v0.3.4 window start and reading device", v034.team.matrix.columns.allSatisfy { $0.windowStart == nil }
     && v034.team.providers.allSatisfy { $0.accounts.allSatisfy { $0.quota?.deviceId == nil } })
 let bots034 = details(v034, "codex", "bots@studio.dev")
-equal("v0.3.4 this window", bots034?.thisWindow?.forms, ["build-01 17M, scout 7M, +8 more", "build-01 17M, +9 more"])
+equal("v0.3.4 this window", bots034?.thisWindow?.forms, ["root@build-01 17M, hermes@scout 7M, +8 more", "root@build-01 17M, +9 more"])
 equal("v0.3.4 this window's tooltip", bots034?.thisWindow?.help.components(separatedBy: "\n").first, "7d window, tokens in+out:")
 equal("v0.3.4 forecast line", details(v034, "claude", "mira@studio.dev")?.forecast, "113% at reset · this week's pace")
-equal("v0.3.4 reading", details(v034, "claude", "mira@studio.dev")?.reading?.text, "3m old, from mira-mbp (mira)")
+equal("v0.3.4 reading", details(v034, "claude", "mira@studio.dev")?.reading?.text, "3m old, from mira@mira-mbp")
 check("v0.3.4 solo reading", details(v034Solo, "claude", "mira@studio.dev").map { $0.reading == nil && $0.thisWindow?.forms == ["10M"] } == true)
 equal("v0.3.4 attention", v034.attention.map(\.kind.rawValue), ["out", "out", "over", "over", "tight", "error", "error", "no_reading", "silent", "old", "idle"])
 
@@ -516,7 +526,8 @@ equal("v0.4 project", [v04.projects[0].shown.value.quarter, v04.projects[0].acti
 equal("v0.4 covered since", v04.providers[0].coveredSince, time("2026-07-01T09:00:00Z"))
 let leo04 = v04.teamDevice(named: "leo-air")!, courier04 = v04.teamDevice(named: "courier")!
 check("v0.4 estimated device", leo04.burnEstimated && leo04.limitations == ["no_claude_quota"] && leo04.shown.value.week == leo04.usage.week * 3)
-check("v0.4 estimated row", v04.team.matrix.rows.filter(\.burnEstimated).map(\.device) == ["leo-air"])
+check("v0.4 estimated row", v04.team.matrix.rows.filter(\.burnEstimated).map(\.device) == ["leo@leo-air"])
+check("v0.4 devices by label", leo04.name.isEmpty && v04.collector.name.isEmpty && v04.teamDevice(named: "leo@leo-air") == nil)
 equal("v0.4 reinstalled device", [courier04.replacedBy, courier04.gap.map { "\($0.seconds)" }], ["courier-2", "43200"])
 equal("v0.4 last error at", courier04.lastErrorAt, time("2026-09-23T08:20:00Z"))
 check("v0.3.4 last error at", v034.teamDevice(named: "courier")?.lastErrorAt == nil)
@@ -613,9 +624,9 @@ let teamWide = WindowNotice.notices(team, NoticeSettings(scope: .team), now: tea
 equal("the team's notices", teamWide.map { "\($0.kind) \($0.key)" },
       ["out claude/mira@studio.dev/5h", "out codex/leo@studio.dev/7d", "over codex/bots@studio.dev/7d"])
 equal("the team's notices' text", teamWide.map { [$0.title, $0.body] }, [
-    ["Claude mira · 5h is out", "Back Thu 17:05 (in 1h 25m) · used on mira-mbp +1"],
-    ["Codex leo · 7d is out", "Back Fri 11:12 (in 19h 32m) · used on leo-air"],
-    ["Codex bots · 7d runs out ~Fri 08:59", "2d 17h before its reset · resets Mon 02:40 · used on build-01 +9"],
+    ["Claude mira · 5h is out", "Back Thu 17:05 (in 1h 25m) · used on mira@mira-mbp +1"],
+    ["Codex leo · 7d is out", "Back Fri 11:12 (in 19h 32m) · used on leo@leo-air"],
+    ["Codex bots · 7d runs out ~Fri 08:59", "2d 17h before its reset · resets Mon 02:40 · used on root@build-01 +9"],
 ])
 
 // Settings read from defaults, each at its default until it is set.
@@ -692,9 +703,9 @@ equal("matrix names", matrix.columns.map(\.name), ["Codex bots", "Codex mira", "
 equal("matrix states", matrix.columns.map(\.state), ["over", "tight", "out", "out", "ok", nil, "under"])
 equal("matrix rows", matrix.lines.map(\.device), team.team.matrix.rows.map(\.device))
 equal("matrix row", matrix.lines[0].cells.map(\.text), ["131", "–", "–", "24", "–", "7", "–"])
-equal("matrix cell help", matrix.lines[0].cells[0].help, "build-01 · Codex bots: 131M in 7 Days · 46% of column · 84M this window")
+equal("matrix cell help", matrix.lines[0].cells[0].help, "root@build-01 · Codex bots: 131M in 7 Days · 46% of column · 84M this window")
 equal("matrix cell spoken", matrix.lines[0].cells[0].spoken, "Codex bots: 131 million weighted tokens in 7 days, 46% of column, 84 million this window")
-equal("matrix empty cell help", matrix.lines[0].cells[1].help, "build-01 · Codex mira: none in 7 Days")
+equal("matrix empty cell help", matrix.lines[0].cells[1].help, "root@build-01 · Codex mira: none in 7 Days")
 // A step of the heat map for every half of a tenfold below the largest
 // cell, as the console's.
 equal("heat steps", [1, 0.5, 0.3, 0.1, 0.03, 0.01, 0.001, 0].map { TeamMatrix.heatStep($0, top: 1) }, [5, 5, 4, 3, 2, 1, 1, 0])
@@ -702,7 +713,7 @@ equal("matrix heat", matrix.lines.map { $0.cells[0].heat }, [5, 0, 0, 5, 4, 4, 4
 equal("matrix totals", matrix.totals.map(\.text), ["285", "56", "22", "128", "62", "7", "–"])
 // TOTAL of all is the rows', as the console's; leo-air's is estimated.
 equal("matrix total", [matrix.total.text, matrix.lines[2].total.text], ["~560", "~84"])
-check("matrix estimate said", matrix.lines[2].total.help.hasSuffix("\n~ leo-air runs v0.3.4: it should update within 15 minutes"))
+check("matrix estimate said", matrix.lines[2].total.help.hasSuffix("\n~ leo@leo-air runs v0.3.4: it should update within 15 minutes"))
 equal("matrix unit", matrix.unit, "M weighted tokens")
 // Share: each device's part of each column, as the report has it.
 let shares = TeamMatrix(team, period: .week, mode: .share)
@@ -731,28 +742,29 @@ equal("no quota column", hermes.columns.last.map { [$0.id, $0.title, $0.name, $0
 
 // Sorting: by a column, ties in the report's order; none keeps it.
 let byBots = matrix.lines(sortedBy: .column(0), ascending: false).map(\.device)
-equal("sorted by a column", byBots, ["build-01", "scout", "herald", "sentry", "editor", "archivist", "tutor", "courier", "critic", "concierge", "mira-mbp", "leo-air"])
-equal("sorted up", matrix.lines(sortedBy: .column(0), ascending: true).map(\.device).prefix(3), ["mira-mbp", "leo-air", "concierge"])
-equal("sorted by device", matrix.lines(sortedBy: .device, ascending: true).map(\.device).prefix(4), ["archivist", "build-01", "concierge", "courier"])
+equal("sorted by a column", byBots, ["root@build-01", "hermes@scout", "hermes@herald", "hermes@sentry", "hermes@editor", "hermes@archivist",
+                                     "hermes@tutor", "hermes@courier", "hermes@critic", "hermes@concierge", "mira@mira-mbp", "leo@leo-air"])
+equal("sorted up", matrix.lines(sortedBy: .column(0), ascending: true).map(\.device).prefix(3), ["mira@mira-mbp", "leo@leo-air", "hermes@concierge"])
+equal("sorted by device", matrix.lines(sortedBy: .device, ascending: true).map(\.device).prefix(4), ["hermes@archivist", "hermes@concierge", "hermes@courier", "hermes@critic"])
 equal("sorted by total", matrix.lines(sortedBy: .total, ascending: false).map(\.device), matrix.lines.map(\.device))
 equal("not sorted", matrix.lines(sortedBy: nil, ascending: true).map(\.device), matrix.lines.map(\.device))
-equal("sorted by share", shares.lines(sortedBy: .column(3), ascending: false).map(\.device).prefix(3), ["mira-mbp", "build-01", "leo-air"])
+equal("sorted by share", shares.lines(sortedBy: .column(3), ascending: false).map(\.device).prefix(3), ["mira@mira-mbp", "root@build-01", "leo@leo-air"])
 
 // The status: each device as the report has it, a line each in the
 // matrix's order.
 let status = DeviceStatusTable(team)
 equal("status rows", status.lines.map(\.device), matrix.lines.map(\.device))
 let leoLine = status.lines[2]
-equal("status line", [leoLine.user, leoLine.version, leoLine.note], ["leo", "v0.3.4", "codex: app-server exited without answering"])
+equal("status line", [leoLine.device, leoLine.version, leoLine.note], ["leo@leo-air", "v0.3.4", "codex: app-server exited without answering"])
 check("status behind", leoLine.behind && status.lines.filter(\.behind).count == 1)
 equal("status tools", status.lines.prefix(3).map { $0.tools.map { $0.provider + ($0.failing ? " ×" : "") } },
       [["claude ×", "codex", "hermes"], ["claude", "codex", "grok"], ["claude", "codex ×"]])
 equal("status tokens", [leoLine.tokens.value.week, status.total.week], [83_872_070, 559_618_448])
 check("status estimated", leoLine.estimated && status.estimated)
 equal("status seen", status.lines[1].seen, time("2026-09-24T13:37:00Z"))
-equal("sorted by version", status.lines(sortedBy: .version, ascending: true).map(\.device).prefix(2), ["leo-air", "build-01"])
-equal("sorted by seen", status.lines(sortedBy: .seen, ascending: true).map(\.device).prefix(2), ["mira-mbp", "scout"])
-equal("seen longest ago", status.lines(sortedBy: .seen, ascending: true).last?.device, "courier")
+equal("sorted by version", status.lines(sortedBy: .version, ascending: true).map(\.device).prefix(2), ["leo@leo-air", "root@build-01"])
+equal("sorted by seen", status.lines(sortedBy: .seen, ascending: true).map(\.device).prefix(2), ["mira@mira-mbp", "hermes@scout"])
+equal("seen longest ago", status.lines(sortedBy: .seen, ascending: true).last?.device, "hermes@courier")
 equal("sorted by today", status.lines(sortedBy: .tokens(.today), ascending: false).first?.device,
       team.team.matrix.rows.max { $0.shown.value.today < $1.shown.value.today }?.device)
 

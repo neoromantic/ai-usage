@@ -19,7 +19,7 @@ type healthItem struct {
 func (p *page) header(pageWidth int) chunks {
 	c := p.r.Collector
 	g := p.g
-	device := p.txt(c.DeviceLabel)
+	device := p.txt(c.name())
 	left := func(dev string, team bool) chunks {
 		out := chunks{p.bold("ai-usage"), p.faint(g.sep), p.plain(dev)}
 		if team && c.Team != "" {
@@ -56,7 +56,7 @@ func (p *page) header(pageWidth int) chunks {
 		l = left(device, false)
 	}
 	if over := l.width() + 2 + r.width() - p.w; over > 0 {
-		l = left(truncEnd(device, max(width(device)-over, 6), g.ell), false)
+		l = left(truncName(device, max(width(device)-over, 6), g.ell), false)
 	}
 	edge := min(max(pageWidth, l.width()+2+r.width()), p.w)
 	return append(l, append(chunks{p.space(max(edge-l.width()-r.width(), 2))}, r...)...).cut(p.w, g.ell)

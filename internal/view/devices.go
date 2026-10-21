@@ -41,8 +41,8 @@ type gridCol struct {
 }
 
 const (
-	gridCell   = 8  // the narrowest a matrix column is
-	deviceName = 20 // the widest a device's name is
+	gridCell    = 8  // the narrowest a matrix column is
+	deviceWidth = 20 // the widest a device's name is
 	// devicesHead is how many lines are over the rows of DEVICES, in the
 	// matrix and in the status view alike: the title, the group headings,
 	// and the column headers.
@@ -124,7 +124,7 @@ func (p *page) grid() []chunks {
 	var grand Usage
 	estimated := false
 	for _, r := range rows {
-		nameW = max(nameW, min(width(p.txt(r.Device)), deviceName))
+		nameW = max(nameW, min(width(p.txt(r.Device)), deviceWidth))
 		grand = grand.add(r.Burn)
 		estimated = estimated || r.BurnEstimated
 	}
@@ -366,7 +366,7 @@ func (p *page) groupHead(name string, span int) chunks {
 // deviceLead is the start of a device's row: its mark, and its name in
 // nameW columns.
 func (p *page) deviceLead(r Row, nameW int) chunks {
-	return append(chunks{p.rowMark(r), p.space(1)}, p.left(p.plain(truncEnd(p.txt(r.Device), nameW, p.g.ell)), nameW)...)
+	return append(chunks{p.rowMark(r), p.space(1)}, p.left(p.plain(truncName(p.txt(r.Device), nameW, p.g.ell)), nameW)...)
 }
 
 // totalLead is the start of the TOTAL line: TOTAL in w columns, after the
@@ -509,7 +509,7 @@ func (p *page) usage() []chunks {
 		}
 		return line
 	}
-	out := []chunks{{p.bold("USAGE"), p.plain("  "), p.muted(p.txt(p.r.Collector.DeviceLabel) + g.sep + p.ownUnit())}}
+	out := []chunks{{p.bold("USAGE"), p.plain("  "), p.muted(p.txt(p.r.Collector.name()) + g.sep + p.ownUnit())}}
 	for i, r := range rows {
 		if i == 0 || rows[i-1].group != r.group {
 			out = append(out, nil)

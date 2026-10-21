@@ -1,4 +1,4 @@
-ai-usage · annbook · team qmvrtzpa     ● collected 7m  ● relay 7m  ● up to date
+ai-usage · ann@annbook                 ● collected 7m  ● relay 7m  ● up to date
 
 ATTENTION
  OUT      codex ann@acme.dev   back Fri 17:09, in 1d 23h
@@ -6,7 +6,7 @@ ATTENTION
  OVER     claude ann@acme.dev  runs out ~Thu 01:17, 2d 23h before reset
  OVER     codex sam@mail.test  runs out ~Sat 03:01, 2d 17h before reset
  OUTSIDE  codex lee@corp.test  +25 points in 20h, no team device spent
- ERROR    Mac.localdomain      codex: app-server exited without answering
+ ERROR    kim@Mac.localdomain  codex: app-server exited without answering
  +3 more: 1 no reading, 1 duplicate, 1 old
 
 SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
@@ -26,7 +26,7 @@ SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
 ● a4c2e917       ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                   —        1
 
 UTILIZATION  fullest % before each reset
-  only this device's cycles: ci-runner-eu-…: it should update within 15 minutes
+  only this device's cycles: ci@ci-runner-…: it should update within 15 minutes
 
   CLAUDE         CYCLES  OUT  AVG  NEWEST FIRST
 ● ann@acme.dev       13    5  86%   100  100   92  ~78  100   64   88  100   71
@@ -41,24 +41,24 @@ UTILIZATION  fullest % before each reset
 DEVICES × SUBSCRIPTIONS  15 · 7d UTC · M weighted tokens       ‹tokens›  share
                         CODEX ─────────────────────────────        +4
                              lee      ann  unknown      sam      rest     TOTAL
-  srv1                      1080       53        ·        ·        74      1207
-● annbook                      ·      810        ·        ·       247      1057
-× Mac.localdomain              ·        ·      427        ·       125       551
-↓ MacBook-Pro-Kim              ·        ·        ·      269         ·       269
-  bot-a                      135        ·        ·        ·         ·       135
-  bot-b                      113        ·        ·        ·         7       119
-  bot-c                       72        ·        ·        ·         4        76
-  bot-d                       54        ·        ·        ·         ·        54
-  bot-e                       41        ·        ·        ·         ·        41
-  bot-f                       32        ·        ·        ·         ·        32
-  bot-g                       18        ·        ·        ·         ·        18
-↓ ci-runner-eu-west-b…        18        ·        ·        ·         ·       ~18
-  bot-h                        9        ·        ·        ·         ·         9
-  bot-i                        2        ·        ·        ·         ·         2
-~ Mac.localdomain              ·        ·        ·        ·         ·         ·
+  root@srv1                 1080       53        ·        ·        74      1207
+● ann@annbook                  ·      810        ·        ·       247      1057
+× kim@Mac.localdomain          ·        ·      427        ·       125       551
+↓ sam@MacBook-Pro-Kim          ·        ·        ·      269         ·       269
+  hermes@bot-a               135        ·        ·        ·         ·       135
+  hermes@bot-b               113        ·        ·        ·         7       119
+  hermes@bot-c                72        ·        ·        ·         4        76
+  hermes@bot-d                54        ·        ·        ·         ·        54
+  hermes@bot-e                41        ·        ·        ·         ·        41
+  hermes@bot-f                32        ·        ·        ·         ·        32
+  hermes@bot-g                18        ·        ·        ·         ·        18
+↓ ci@ci-runner-eu-wes…        18        ·        ·        ·         ·       ~18
+  hermes@bot-h                 9        ·        ·        ·         ·         9
+  hermes@bot-i                 2        ·        ·        ·         ·         2
+~ kim@Mac.localdomain          ·        ·        ·        ·         ·         ·
   TOTAL                     1572      863      427      269       456     ~3586
 
-PROJECTS  annbook · by 7d · M weighted tokens · claude since Sep 2
+PROJECTS  ann@annbook · by 7d · M weighted tokens · claude since Sep 2
   PROJECT                                   7D   90D  SESS  VIA            LAST
   ~/src/acme/app                           975  3465    14  codex, claude    1h
   ~/notes                                  194   585    18  codex            3h
@@ -74,4 +74,4 @@ PROJECTS  annbook · by 7d · M weighted tokens · claude since Sep 2
 
 ━ used  ─ left  ┃╋ even use  ┈ no reading  ? unknown
 — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
-~ stale/estimated: ci-runner-eu-west-buil…: it should update within 15 minutes
+~ stale/estimated: ci@ci-runner-eu-west-b…: it should update within 15 minutes

@@ -24,6 +24,7 @@ func Build(in Input) Report {
 			Device:        in.Config.Device,
 			DeviceLabel:   in.Hostname,
 			OSUser:        in.OSUser,
+			Name:          DeviceName(in.Hostname, in.OSUser),
 			Team:          in.Key.Fingerprint(),
 			LastRunAt:     timePtr(st.LastRunAt),
 			LastSuccessAt: timePtr(st.LastSuccessAt),
@@ -94,7 +95,8 @@ func Build(in Input) Report {
 // windows that limit each account, the working folders of each project,
 // one each, since such a release made a project of each, the team's
 // devices that do not update themselves, the forecasts whose run-out time
-// passed with no spend since, and the words of each ATTENTION entry and
+// passed with no spend since, the names of this device and the team's
+// devices, and the words of each ATTENTION entry and
 // each device's note, with clocks in this device's time zone. A report that
 // has them keeps them.
 //
@@ -107,9 +109,11 @@ func Fill(r *Report) {
 	if r.Collector.Health == nil {
 		r.Collector.Health = health(r.Collector, r.GeneratedAt)
 	}
+	r.Collector.Name = r.Collector.name()
 	for i := range r.Team.Devices {
 		d := &r.Team.Devices[i]
 		d.NotUpdating = d.NotUpdating || notUpdating(*d)
+		d.Name = cmp.Or(d.Name, DeviceName(d.Label, d.OSUser))
 	}
 	fillFolders(r.Projects)
 	old := savedBeforeBurn(r)
