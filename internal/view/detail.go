@@ -1,6 +1,7 @@
 package view
 
 import (
+	"cmp"
 	"slices"
 	"strconv"
 	"strings"
@@ -47,14 +48,16 @@ func (p *page) attentionPick(a Attention) (Pick, bool) {
 
 // aboutDevice says an ATTENTION entry is about device d, alone or among
 // the devices on an old release: by its ID where it names one, else by its
-// label and the state its kind reports, as two devices can go by one name.
+// name and the state its kind reports, as two devices can go by one name.
+// A report saved by a release before names named its devices by their
+// labels.
 func aboutDevice(a Attention, d TeamDevice) bool {
 	switch {
 	case a.Account != "":
 		return false
 	case a.DeviceID != "":
 		return a.DeviceID == d.Device
-	case !slices.Contains(a.Devices, d.Label):
+	case !slices.Contains(a.Devices, d.Name) && !slices.Contains(a.Devices, d.Label):
 		return false
 	case a.Kind == AttentionSilent:
 		return d.Silent
@@ -440,7 +443,7 @@ func (p *page) accountProjects(provider string, a *TeamAccount) []chunks {
 }
 
 // deviceFacts is a device's title, its name, with its collector's state in
-// a line each: its user, its release, when it reported, what it reads, and
+// a line each: its user, when its name does not say it, its release, when it reported, what it reads, and
 // what fails on it.
 func (p *page) deviceFacts(d *TeamDevice) []chunks {
 	g := p.g
@@ -451,7 +454,10 @@ func (p *page) deviceFacts(d *TeamDevice) []chunks {
 	}
 	var facts []fact
 	add := func(key string, val ...chunk) { facts = append(facts, fact{key, val}) }
-	add("USER", p.plain(p.txt(d.OSUser)))
+	if d.Name == d.Label {
+		// A name without its user, as when the user is not known.
+		add("USER", p.plain(p.txt(d.OSUser)))
+	}
 	version := chunks{p.plain(p.txt(d.CollectorVersion))}
 	if d.Old {
 		p.mark("old")
@@ -526,7 +532,7 @@ func (p *page) deviceName(d *TeamDevice) string {
 			return r.Device
 		}
 	}
-	return d.Label
+	return cmp.Or(d.Name, d.Label)
 }
 
 // deviceAccounts are the accounts a device spent: in their current

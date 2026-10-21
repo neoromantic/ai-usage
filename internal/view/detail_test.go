@@ -59,7 +59,7 @@ func TestPicks(t *testing.T) {
 				if d == nil {
 					t.Fatalf("%s: pick of no device %q", c.name, k.Device)
 				}
-				name = d.Label
+				name = d.Name
 			default:
 				accts++
 				a := accountOf(&c.r.Team, k.Provider, k.Label)
@@ -176,7 +176,7 @@ func TestDetailContent(t *testing.T) {
 		}
 	}
 	dev := sgr.ReplaceAllString(detailText(t, team, o, kimMac), "")
-	for _, want := range []string{"DEVICE  Mac.localdomain", "USER", "kim", "VERSION", "ERROR", "ACCOUNTS", "TOTAL"} {
+	for _, want := range []string{"DEVICE  kim@Mac.localdomain", "VERSION", "ERROR", "ACCOUNTS", "TOTAL"} {
 		if !strings.Contains(dev, want) {
 			t.Errorf("device detail lacks %q:\n%s", want, dev)
 		}
@@ -191,5 +191,36 @@ func TestDetailContent(t *testing.T) {
 	month.Period = Month
 	if got := sgr.ReplaceAllString(detailText(t, team, month, kimMac), ""); !strings.Contains(got, "by 30d UTC") {
 		t.Errorf("30d detail:\n%s", got)
+	}
+}
+
+// TestAttentionPicksDevice: each ATTENTION line about one device opens it,
+// found by the device's name, or by its label in a report saved before
+// names.
+func TestAttentionPicksDevice(t *testing.T) {
+	for _, old := range []bool{false, true} {
+		team := loadReport(t, "team")
+		want := 0
+		for i, a := range team.Attention {
+			if a.Account == "" && (a.DeviceID != "" || len(a.Devices) == 1) {
+				want++
+			}
+			for j, n := range a.Devices {
+				if d := (&page{r: &team}).device("", n); old && d != nil {
+					team.Attention[i].Devices[j] = d.Label
+				}
+			}
+		}
+		p := Render(team, Options{Width: 120, Loc: sampleZone, Interactive: true})
+		head := slices.IndexFunc(p.Body, func(l string) bool { return strings.HasPrefix(sgr.ReplaceAllString(l, ""), "ATTENTION") })
+		got := 0
+		for _, k := range p.Picks {
+			if k.Device != "" && k.Line > head && k.Line <= head+len(team.Attention) {
+				got++
+			}
+		}
+		if want < 2 || got != want {
+			t.Errorf("old report %v: %d ATTENTION lines about one device, %d open it", old, want, got)
+		}
 	}
 }

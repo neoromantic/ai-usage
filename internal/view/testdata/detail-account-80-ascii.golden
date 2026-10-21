@@ -1,8 +1,8 @@
-[1mai-usage[m . annbook . team qmvrtzpa   * collected 7m  * relay 7m  * up to date
+[1mai-usage[m . ann@annbook               * collected 7m  * relay 7m  * up to date
 
 [1mCLAUDE[m  [1mann@acme.dev[m  * logged in here
   PLAN      max
-  READING   18m ago . Wed 17:20 . on annbook (ann)
+  READING   18m ago . Wed 17:20 . on ann@annbook
   LAST USE  7m ago . Wed 17:31
 
 [1mATTENTION[m
@@ -22,7 +22,7 @@
   5h          12    2  59%    38  100   71  ~52   90   12   64  100   41   77
 
 [1mDEVICES[m  2 . by 7d UTC . M weighted tokens
-  DEVICE   TODAY   7D   30D   90D  SHARE
-* annbook     48  230   968  2534    90%
-  srv1         3   25    76   214    10%
-  TOTAL       51  256  1043  2749   100%
+  DEVICE       TODAY   7D   30D   90D  SHARE
+* ann@annbook     48  230   968  2534    90%
+  root@srv1        3   25    76   214    10%
+  TOTAL           51  256  1043  2749   100%
