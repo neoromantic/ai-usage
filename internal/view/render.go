@@ -82,6 +82,11 @@ type Page struct {
 	// as with a single device, whose USAGE has no rows to keep a head over.
 	DevicesHead [2]int
 	DevicesEnd  int
+	// Picks are the rows the interactive view can open in detail, in the
+	// order of the page: an ATTENTION line about one account or device, an
+	// account's row in SUBSCRIPTIONS, UTILIZATION, or USAGE, and a device's
+	// row in DEVICES, in either view. A detail page has none.
+	Picks []Pick
 	// Width is how wide the widest line of the header and the body is. The
 	// header's right side ends there.
 	Width int
@@ -92,12 +97,15 @@ type Page struct {
 func Render(r Report, o Options) Page {
 	p := newPage(&r, o)
 	var body []chunks
+	var picks []Pick
 	// Where DEVICES heads its rows, and where it ends.
 	var devHead [2]int
 	devEnd := 0
-	sections := [][]chunks{p.attention(), p.subscriptions(), p.utilization(), p.devices(), p.projects()}
+	sections := []func() []chunks{p.attention, p.subscriptions, p.utilization, p.devices, p.projects}
 	const devices = 3
-	for i, s := range sections {
+	for i, section := range sections {
+		p.picks = nil
+		s := section()
 		if len(s) == 0 {
 			continue
 		}
@@ -109,8 +117,24 @@ func Render(r Report, o Options) Page {
 			devHead = [2]int{len(body), len(body) + devicesHead}
 			devEnd = len(body) + len(s)
 		}
+		for _, k := range p.picks {
+			k.Line += len(body)
+			picks = append(picks, k)
+		}
 		body = append(body, s...)
 	}
+	out := p.finish(body)
+	out.MatrixColumns, out.MatrixShown, out.DeviceViews = p.matrixColumns, p.matrixShown, p.deviceViews()
+	out.DevicesHead, out.DevicesEnd = devHead, devEnd
+	out.Picks = picks
+	if !o.Interactive {
+		out.Legend = p.legend()
+	}
+	return out
+}
+
+// finish cuts the body's lines to the page and puts the header over them.
+func (p *page) finish(body []chunks) Page {
 	// The width is of the lines as they are drawn, without the spaces that
 	// end some, as after an unchosen pill, so the header ends where the
 	// widest of them does.
@@ -121,14 +145,9 @@ func Render(r Report, o Options) Page {
 	}
 	head := p.header(width)
 	width = max(width, head.drawnWidth())
-	out := Page{Header: head.String(), Body: make([]string, len(body)), Width: width,
-		MatrixColumns: p.matrixColumns, MatrixShown: p.matrixShown, DeviceViews: p.deviceViews(),
-		DevicesHead: devHead, DevicesEnd: devEnd}
+	out := Page{Header: head.String(), Body: make([]string, len(body)), Width: width}
 	for i, l := range body {
 		out.Body[i] = l.String()
-	}
-	if !o.Interactive {
-		out.Legend = p.legend()
 	}
 	return out
 }
@@ -166,6 +185,9 @@ type page struct {
 	home string
 	// seen are the marks on screen, for the legend.
 	seen map[string]bool
+	// picks are the rows of the section being drawn that open a detail,
+	// by their line in it.
+	picks []Pick
 
 	matrixColumns, matrixShown int
 }

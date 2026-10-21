@@ -12,6 +12,7 @@ type utilRow struct {
 	window bool // a window's row, under its account
 	here   bool
 	name   string
+	label  string       // the account's label, on its own row
 	u      *Utilization // nil on an account whose main window has none
 }
 
@@ -62,7 +63,7 @@ func (p *page) utilization() []chunks {
 			if !a.Subscription || len(a.Utilization) == 0 {
 				continue
 			}
-			row := utilRow{here: a.Current, name: p.txt(shownLabel(a))}
+			row := utilRow{here: a.Current, name: p.txt(shownLabel(a)), label: a.Label}
 			rest := a.Utilization
 			main := rest[0].Window
 			if rest[0].Main {
@@ -104,6 +105,9 @@ func (p *page) utilization() []chunks {
 			out = append(out, chunks{p.space(2), p.bold(strings.ToUpper(grp.provider))})
 		}
 		for _, r := range grp.rows {
+			if !r.window {
+				p.pick(len(out), Pick{Provider: grp.provider, Label: r.label})
+			}
 			out = append(out, p.utilLine(l, r))
 		}
 	}

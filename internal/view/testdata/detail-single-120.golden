@@ -1,0 +1,26 @@
+[1mai-usage[m · sam@sam-air · team fp4xk2n5           ● collected 8m ago  ● no relay  ● v1.4.3 available
+
+[1mCLAUDE[m  [1msam@example.com[m  ● logged in here
+  PLAN      pro
+  READING   8m ago · Wed 17:30 · on sam@sam-air
+  LAST USE  8m ago · Wed 17:30
+
+[1mATTENTION[m
+[7m OVER  [m claude sam · 5h         runs out ~Wed 18:27 at this window's pace, 12m before reset
+[7m TIGHT [m claude sam@example.com  ~95% at reset Sat 12:00 at the last day's pace
+
+[1mWINDOWS[m  3 · how full each is, and how full it ends
+  WINDOW  USED                      LEFT  RESETS              AT RESET  PACE             RUNS OUT
+  7d      ━━━━━━━━━━━━━─┃─────────   45%  2d 18h  Sat 12:00  95% tight  0.6%/h last day  ·
+  5h      ━━━━━━━━━━━━━━━━━━╋─────   20%  1h 2m   Wed 18:40  104% over  20.9%/h avg      ~Wed 18:27
+  Opus    ──────────────┃─────────  100%  2d 18h  Sat 12:00   0% under  0.0%/h avg       ·
+
+[1mUTILIZATION[m  fullest % before each reset
+  WINDOW  CYCLES  OUT  AVG  NEWEST FIRST
+  7d           4    1  85%   100   84   91  ~66
+  5h           6    2  72%   100  100   47   73  ~25   88
+
+[1mDEVICES[m  1 · by 7d UTC · M weighted tokens
+  DEVICE       TODAY   7D  30D   90D  SHARE
+● sam@sam-air     28  170  624  1680   100%
+  TOTAL           28  170  624  1680   100%

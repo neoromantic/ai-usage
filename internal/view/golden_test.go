@@ -106,6 +106,22 @@ func TestGolden(t *testing.T) {
 			o.Color, o.Dark = true, true
 			return Text(team, o)
 		}},
+		// The interactive view's details: an account, and a device.
+		{"detail-account-120", func() string { return detailText(t, team, page(120), annClaude) }},
+		{"detail-account-80-ascii", func() string {
+			o := page(80)
+			o.ASCII = true
+			return detailText(t, team, o, annClaude)
+		}},
+		{"detail-device-80", func() string { return detailText(t, team, page(80), kimMac) }},
+		{"detail-device-120-color", func() string {
+			o := page(120)
+			o.Color, o.Dark = true, true
+			return detailText(t, team, o, kimMac)
+		}},
+		{"detail-single-120", func() string {
+			return detailText(t, single, page(120), Pick{Provider: "claude", Label: single.Team.Providers[0].Accounts[0].Label})
+		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			got := c.out()

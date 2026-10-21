@@ -1,0 +1,28 @@
+[1mai-usage[m · ann@annbook · team qmvrtzpa                   ● collected 7m ago  ● relay 7m ago  ● up to date
+
+[1mCLAUDE[m  [1mann@acme.dev[m  ● logged in here
+  PLAN      max
+  READING   18m ago · Wed 17:20 · on ann@annbook
+  LAST USE  7m ago · Wed 17:31
+
+[1mATTENTION[m
+[7m OUT  [m claude ann · Fable   back Sun 01:00, in 3d 7h
+[7m OVER [m claude ann@acme.dev  runs out ~Thu 01:17 at this week's pace, 2d 23h before reset · reading 1d old
+
+[1mWINDOWS[m  3 · how full each is, and how full it ends
+  WINDOW  USED                      LEFT  RESETS               AT RESET  PACE         RUNS OUT
+  7d      ━━━━━━━━━╋━━━━━━────────  ~33%  3d 7h   Sun 01:00  ~174% over  1.0%/h avg   ~Thu 01:17
+  5h      ━━━━━━━━━━──┃───────────   60%  2h 12m  Wed 19:50      80% ok  16.0%/h avg  ·
+  Fable   ━━━━━━━━━━━━╋━━━━━━━━━━━    0%  3d 7h   Sun 01:00         out  1.1%/h avg   ·
+
+[1mUTILIZATION[m  fullest % before each reset
+  WINDOW  CYCLES  OUT  AVG  NEWEST FIRST
+  7d          13    5  86%   100  100   92  ~78  100   64   88  100   71  ~45   96  100   83
+  Fable        3    1  64%   100   62  ~30
+  5h          12    2  59%    38  100   71  ~52   90   12   64  100   41   77    8   55
+
+[1mDEVICES[m  2 · by 7d UTC · M weighted tokens
+  DEVICE       TODAY   7D   30D   90D  SHARE
+● ann@annbook     48  230   968  2534    90%
+  root@srv1        3   25    76   214    10%
+  TOTAL           51  256  1043  2749   100%

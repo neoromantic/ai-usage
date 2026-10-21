@@ -51,8 +51,10 @@ const (
 
 // attention is what needs attention now, one line each: a badge, what it
 // is about, and what to know. The static page shows the first few.
-func (p *page) attention() []chunks {
-	as := p.r.Attention
+func (p *page) attention() []chunks { return p.attentionLines(p.r.Attention) }
+
+// attentionLines is ATTENTION with the lines of as.
+func (p *page) attentionLines(as []Attention) []chunks {
 	if len(as) == 0 {
 		return nil
 	}
@@ -89,6 +91,9 @@ func (p *page) attention() []chunks {
 				text = f
 				break
 			}
+		}
+		if k, ok := p.attentionPick(a); ok {
+			p.pick(len(out), k)
 		}
 		out = append(out, append(line, text.cut(room, p.g.ell)...))
 	}
