@@ -174,6 +174,34 @@ func TestPickFollows(t *testing.T) {
 	picked(t, m)
 }
 
+// TestPickStaysPut: a redraw does not scroll back to a pick scrolled out
+// of sight where there is no row to pick in its place, as in PROJECTS.
+func TestPickStaysPut(t *testing.T) {
+	for _, r := range []view.Report{teamReport(t), bigTeam(t)} {
+		for h := 5; h <= 21; h += 4 {
+			m := model(t, 120, h, Config{Report: r, Render: view.Render, Load: func(time.Time) (view.Report, error) { return r, nil }})
+			m = keys(t, m, "enter")
+			for {
+				from, to := m.inSight()
+				if m.picked.Line < from || m.picked.Line >= to || m.top == m.maxTop() {
+					break
+				}
+				m = update(t, m, tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+			}
+			if from, to := m.inSight(); m.picked.Line >= from && m.picked.Line < to {
+				continue
+			}
+			top := m.top
+			if m = update(t, m, loadedMsg{report: r}); m.top != top {
+				t.Fatalf("height %d: a reload scrolled the page from %d to %d, back to the pick at line %d", h, top, m.top, m.picked.Line)
+			}
+			// Back from a detail, the row is in sight again.
+			m = keys(t, m, "enter", "esc")
+			picked(t, m)
+		}
+	}
+}
+
 // TestClick: a click picks a row, and a click on the picked row opens it;
 // a click on a line that opens nothing does nothing.
 func TestClick(t *testing.T) {

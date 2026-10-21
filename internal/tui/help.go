@@ -31,7 +31,7 @@ func (m Model) helpLines() []string {
 		{"%", "weighted tokens or share in the matrix"},
 		{"s", "DEVICES as the matrix, or as each device's status"},
 		{g("↵", "Enter"), "pick a row: an account, a device, or a bot"},
-		{g("↑ ↓  g G", "up down  g G"), "move the pick, while a row is picked"},
+		{g("↑ ↓  j k  g G", "up down  j k  g G"), "move the pick, while a row is picked"},
 		{g("↵  click", "Enter  click"), "open what is picked; a click picks a row first"},
 		{"Esc  Backspace", "back: from a detail to its row, then to scrolling"},
 	}

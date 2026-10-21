@@ -123,9 +123,9 @@ func (m Model) items() []item {
 			its = append(its, item{key: vertical, action: "scroll", drop: 70})
 		}
 		if len(m.page.Picks) > 0 {
-			// It goes after share, so a team's page at 80 columns keeps
-			// refresh.
-			its = append(its, item{key: enter, action: "pick", drop: 15})
+			// It goes after share and refresh, so a team's page at 80
+			// columns keeps the one key that leads to the details.
+			its = append(its, item{key: enter, action: "pick", drop: 25})
 		}
 	}
 	if m.matrixCut() {
