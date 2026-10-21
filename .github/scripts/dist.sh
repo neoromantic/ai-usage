@@ -15,6 +15,8 @@
 # instead of ad hoc. With AI_USAGE_NOTARY_KEY too, Apple notarizes them all
 # before the checksums are taken, and the app gets its ticket stapled; see
 # .github/scripts/notarize.sh and macos/build.sh. The release does both.
+# The app builds and is notarized in the background, at the same time as the
+# binaries.
 set -eu
 
 version=${1:?usage: dist.sh VERSION [OUTDIR]}
@@ -45,17 +47,45 @@ fi
 
 mkdir -p "$out"
 rm -f "$out"/ai-usage_* "$out/checksums.txt"
+
+# The menu bar app builds, and is notarized, in the background while the
+# binaries build and are notarized, with its output in a log printed when it
+# ends. A failure on the way stops it.
+tmp=$(mktemp -d)
+app_pid=
+# PID and every process under it, such as swift build's compilers.
+kill_tree() {
+	for child in $(pgrep -P "$1"); do
+		kill_tree "$child"
+	done
+	kill "$1" 2>/dev/null || true
+}
+cleanup() {
+	if [ -n "$app_pid" ]; then
+		kill_tree "$app_pid"
+		echo "dist.sh: stopped the menu bar app's build; its output so far:" >&2
+		cat "$tmp/app.log" >&2
+	fi
+	rm -rf "$tmp"
+}
+trap cleanup EXIT
+case " $targets " in
+*" darwin/app "*)
+	if [ "$(uname -s)" = Darwin ]; then
+		echo "building ai-usage_darwin_app.zip in the background" >&2
+		# The full path, since build.sh need not work in this folder.
+		sh macos/build.sh "$version" "$(cd "$out" && pwd)/ai-usage_darwin_app.zip" >"$tmp/app.log" 2>&1 &
+		app_pid=$!
+	else
+		echo "skipping ai-usage_darwin_app.zip: the menu bar app builds only on macOS" >&2
+	fi
+	;;
+esac
+
 # The positional parameters collect the signed binaries.
 set --
 for target in $targets; do
 	if [ "$target" = darwin/app ]; then
-		if [ "$(uname -s)" != Darwin ]; then
-			echo "skipping ai-usage_darwin_app.zip: the menu bar app builds only on macOS" >&2
-			continue
-		fi
-		echo "building ai-usage_darwin_app.zip" >&2
-		# The full path, since build.sh need not work in this folder.
-		sh macos/build.sh "$version" "$(cd "$out" && pwd)/ai-usage_darwin_app.zip"
 		continue
 	fi
 	goos=${target%/*}
@@ -82,6 +112,17 @@ if [ "$#" -gt 0 ] && [ -n "${AI_USAGE_NOTARY_KEY:-}" ]; then
 	sh .github/scripts/notarize.sh "$@"
 fi
 
+if [ -n "$app_pid" ]; then
+	echo "waiting for ai-usage_darwin_app.zip" >&2
+	pid=$app_pid
+	app_pid=
+	if wait "$pid"; then status=0; else status=$?; fi
+	echo "macos/build.sh exited $status:" >&2
+	cat "$tmp/app.log" >&2
+	[ "$status" -eq 0 ] || fail "the menu bar app did not build"
+fi
+
+# Taken last, when every file is signed and notarized.
 # "sha256  file" lines, which selfupdate and both installers read.
 cd "$out"
 if command -v sha256sum >/dev/null 2>&1; then

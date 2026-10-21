@@ -1,7 +1,8 @@
 name: Release
 
-# Push a tag like v1.2.3 to publish. A tag with a suffix, like v1.2.3-rc.1,
-# becomes a prerelease: installers and self-update skip it.
+# Push a tag like v1.2.3, on a commit whose CI passed, to publish. A tag with
+# a suffix, like v1.2.3-rc.1, becomes a prerelease: installers and
+# self-update skip it.
 on:
   push:
     tags: ['v*.*.*']
@@ -14,8 +15,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Linux runs most collectors, so its tests and its binary run here too
-  # before anything is published.
+  # Linux runs most collectors. CI already tested this commit on Linux, so
+  # this job only checks that the Linux binary built for the tag reports it,
+  # beside the release job rather than before it.
   linux:
     runs-on: ubuntu-latest
     steps:
@@ -26,8 +28,6 @@ jobs:
         with:
           go-version: stable
           cache: false
-      - run: go vet ./...
-      - run: go test ./...
       - name: Build and run the Linux binary
         env:
           AI_USAGE_RELAY_URL: ${{ vars.AI_USAGE_RELAY_URL }}
@@ -36,14 +36,45 @@ jobs:
           test "$("$RUNNER_TEMP/dist/ai-usage_linux_amd64" version)" = "$GITHUB_REF_NAME"
 
   release:
-    needs: linux
     # macOS, because the menu bar app builds only there. Go cross-compiles
     # the other binaries.
     runs-on: macos-latest
-    # The only job that writes: it publishes the release.
+    # The only job that writes: it publishes the release. checks: read lets
+    # it see CI's result for the commit.
     permissions:
       contents: write
+      checks: read
     steps:
+      # vet, the tests, and the app's checks ran in CI on this very commit,
+      # on Linux and macOS, so they do not run again: the commit must have
+      # passed CI's check ci, the one the branch ruleset requires. A tag
+      # pushed right after a merge waits here for main's CI, up to 20 minutes.
+      - name: CI passed on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          deadline=$(($(date +%s) + 1200))
+          while :; do
+            run=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?check_name=ci&per_page=100" \
+              --jq '[.check_runs[] | select(.app.slug == "github-actions")] | max_by(.id) // empty | "\(.status) \(.conclusion) \(.html_url)"') ||
+              run="unknown: GitHub's API failed"
+            case $run in
+            "completed success "*)
+              echo "ci passed on $GITHUB_SHA: ${run##* }"
+              break
+              ;;
+            completed\ *)
+              echo "::error::ci did not pass on $GITHUB_SHA: $run"
+              exit 1
+              ;;
+            esac
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::ci has not passed on $GITHUB_SHA after 20 minutes: ${run:-no check run}"
+              exit 1
+            fi
+            echo "waiting for ci on $GITHUB_SHA: ${run:-no check run yet}"
+            sleep 30
+          done
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -52,11 +83,6 @@ jobs:
         with:
           go-version: stable
           cache: false
-      - run: go vet ./...
-      - run: go test ./...
-      - name: Check the menu bar app
-        working-directory: macos
-        run: xcrun swift run AIUsageChecks
       # The Developer ID certificate goes into a keychain of its own and the
       # notary key into a file, both under RUNNER_TEMP, for Build alone; the
       # step after Build deletes them. Every tag is signed and notarized, a
