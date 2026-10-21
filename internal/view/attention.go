@@ -165,28 +165,28 @@ func deviceAttention(t Team, c Collector) []Attention {
 	for _, d := range t.Devices {
 		switch {
 		case d.ReplacedBy != nil:
-			out = append(out, Attention{Kind: AttentionDuplicate, Devices: []string{d.Label}, DeviceID: d.Device, Message: *d.ReplacedBy, At: timePtr(d.CollectedAt)})
+			out = append(out, Attention{Kind: AttentionDuplicate, Devices: []string{d.Name}, DeviceID: d.Device, Message: *d.ReplacedBy, At: timePtr(d.CollectedAt)})
 			continue
 		case d.Silent:
 			// A silent device's error is the one it last reported, not what
 			// fails on it now.
-			at := Attention{Kind: AttentionSilent, Devices: []string{d.Label}, At: timePtr(d.CollectedAt)}
+			at := Attention{Kind: AttentionSilent, Devices: []string{d.Name}, At: timePtr(d.CollectedAt)}
 			if d.Error != nil {
 				at.Message = *d.Error
 			}
 			out = append(out, at)
 		case d.Error != nil:
-			out = append(out, Attention{Kind: AttentionError, Devices: []string{d.Label}, Message: *d.Error, At: errorAt(d)})
+			out = append(out, Attention{Kind: AttentionError, Devices: []string{d.Name}, Message: *d.Error, At: errorAt(d)})
 		}
 		if d.This {
 			for _, e := range collectorErrors(c, d.CollectedAt) {
-				out = append(out, Attention{Kind: AttentionError, Devices: []string{d.Label}, Message: e})
+				out = append(out, Attention{Kind: AttentionError, Devices: []string{d.Name}, Message: e})
 			}
 		}
 		// On a device that is not old, a failed release check is only a
 		// note in the status view.
 		if d.Old && d.UpdateError != nil && !d.Silent {
-			out = append(out, Attention{Kind: AttentionError, Devices: []string{d.Label}, Message: sourceError("update", *d.UpdateError)})
+			out = append(out, Attention{Kind: AttentionError, Devices: []string{d.Name}, Message: sourceError("update", *d.UpdateError)})
 		}
 		switch {
 		case d.Old && len(d.Limitations) > 0:
@@ -213,7 +213,7 @@ func oldAttention(ds []TeamDevice, latest string) []Attention {
 	at := Attention{Kind: AttentionOld, Message: latest}
 	var behind *time.Time
 	for _, d := range ds {
-		at.Devices = append(at.Devices, d.Label)
+		at.Devices = append(at.Devices, d.Name)
 		for _, l := range d.Limitations {
 			if !slices.Contains(at.Limitations, l) {
 				at.Limitations = append(at.Limitations, l)

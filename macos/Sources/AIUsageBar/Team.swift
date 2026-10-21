@@ -323,7 +323,6 @@ private struct StatusTable: View {
         let tokens = "M " + report.tokenLabel
         return [
             TeamColumn(id: "device", title: "Device", width: 150, minWidth: 90, trailing: false, sortsAscending: true),
-            TeamColumn(id: "user", title: "User", width: 84, trailing: false, sortsAscending: true),
             TeamColumn(id: "version", group: "Collector", title: "Version", help: "Its release; ↓ is behind the latest", width: 80,
                        trailing: false, sortsAscending: true),
             TeamColumn(id: "seen", group: "Collector", title: "Seen", help: "How long ago it last reported", width: 64),
@@ -341,7 +340,6 @@ private struct StatusTable: View {
     private var key: DeviceStatusTable.SortKey? {
         switch sort?.column {
         case "device": return .device
-        case "user": return .user
         case "version": return .version
         case "seen": return .seen
         case let id?: return Period(rawValue: id).map { .tokens($0) }
@@ -361,8 +359,6 @@ private struct StatusTable: View {
         switch id {
         case "device":
             return AnyView(DeviceCell(name: l.device, device: l.team))
-        case "user":
-            return AnyView(Plain(text: l.user, style: .secondary))
         case "version":
             let latest = report.team.latestVersion.map { "; the latest is \($0)" } ?? ""
             return AnyView(Plain(text: l.version + (l.behind ? " ↓" : ""), style: l.behind ? .secondary : .primary,

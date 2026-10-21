@@ -12,7 +12,7 @@ import (
 // heading, the group heading over it, and a cell for each row, then one for
 // TOTAL.
 type statusCol struct {
-	key   string // what it shows: user, version, seen, via, note, or a period
+	key   string // what it shows: version, seen, via, note, or a period
 	head  chunk
 	group string
 	right bool
@@ -23,8 +23,7 @@ type statusCol struct {
 }
 
 const (
-	// statusUser is the widest an OS user is, and statusVersion a release.
-	statusUser    = 12
+	// statusVersion is the widest a release is.
 	statusVersion = 12
 	// statusNote is how narrow NOTE is cut before a column goes, and
 	// statusCut the least of a silent device's last error it keeps.
@@ -33,11 +32,12 @@ const (
 )
 
 // deviceStatus is the status view of DEVICES: a row per device, in the
-// matrix's order, with its mark, its OS user, its collector's release, how
-// long ago it reported, the harnesses it reads, its burn in each period, a
-// ~ before it where it is estimated, and a note of what is wrong with it. Where the page is narrow, NOTE is cut
-// first, then USER goes, then VIA, then the periods: today, 30d, and 7d,
-// but never the chosen one or 90d.
+// matrix's order, with its mark, its name, which says its OS user, its
+// collector's release, how long ago it reported, the harnesses it reads,
+// its burn in each period, a ~ before it where it is estimated, and a note
+// of what is wrong with it. Where the page is narrow, NOTE is cut first,
+// then VIA goes, then the periods: today, 30d, and 7d, but never the chosen
+// one or 90d.
 func (p *page) deviceStatus() []chunks {
 	rows := append([]Row(nil), p.r.Team.Matrix.Rows...)
 	sortRows(rows, p.o.Period)
@@ -52,7 +52,7 @@ func (p *page) deviceStatus() []chunks {
 
 	nameW := width("DEVICE")
 	for _, r := range rows {
-		nameW = max(nameW, min(width(p.txt(r.Device)), deviceName))
+		nameW = max(nameW, min(width(p.txt(r.Device)), deviceWidth))
 	}
 	lead := 2 + nameW
 	shown, edge := p.fitStatus(cols, note, devs, lead)
@@ -131,12 +131,6 @@ func (p *page) statusColumns(rows []Row, devs []*TeamDevice, grand Usage) (cols 
 		c.marks, p.seen = p.seen, saved
 		return c
 	}
-	user := col("user", "USER", "", false, func(_ int, d *TeamDevice) chunks {
-		if d == nil || d.OSUser == "" {
-			return nil
-		}
-		return chunks{p.muted(truncEnd(p.txt(d.OSUser), statusUser, g.ell))}
-	})
 	version := col("version", "VERSION", "COLLECTOR", false, func(_ int, d *TeamDevice) chunks {
 		if d == nil {
 			return nil
@@ -169,7 +163,7 @@ func (p *page) statusColumns(rows []Row, devs []*TeamDevice, grand Usage) (cols 
 		}
 		return p.harnesses(*d)
 	})
-	cols = []*statusCol{user, version, seen, via}
+	cols = []*statusCol{version, seen, via}
 	estimated := slices.ContainsFunc(rows, func(r Row) bool { return r.BurnEstimated })
 	for _, q := range Periods {
 		c := col(q.String(), strings.ToUpper(q.String()), "TOKENS", true, func(i int, _ *TeamDevice) chunks {
@@ -223,7 +217,7 @@ func (p *page) fitStatus(cols []*statusCol, note *statusCol, devs []*TeamDevice,
 	if cols[len(cols)-1] == note {
 		noteMin = 2 + min(note.w, statusNote)
 	}
-	drops := []string{"user", "via"}
+	drops := []string{"via"}
 	for _, q := range []Period{Today, Month, Week} {
 		if q != p.o.Period {
 			drops = append(drops, q.String())

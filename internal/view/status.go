@@ -86,7 +86,7 @@ func (c *card) statusIdentity(dir string) {
 	g := c.g
 	col := c.r.Collector
 	c.kv("version", info, col.Version, nil)
-	c.kv("device", info, col.DeviceLabel+" ("+col.OSUser+")"+g.sep+col.Device, nil)
+	c.kv("device", info, col.name()+g.sep+col.Device, nil)
 	team := col.Team
 	if n := len(c.r.Team.Devices); n > 0 && c.r.Team.PulledAt != nil {
 		team += g.sep + strconv.Itoa(n) + " devices"

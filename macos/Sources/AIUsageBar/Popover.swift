@@ -695,7 +695,7 @@ enum StatusMenu {
                 let l = HealthLine(h, c, now: store.now)
                 menu.addItem(line(l.text, image: dot(nsColor(h.state)), help: l.help))
             }
-            menu.addItem(line("This Mac: \(c.deviceLabel)" + (r.solo ? "" : " · \(r.team.devices.count) devices"),
+            menu.addItem(line("This Mac: \(c.name.isEmpty ? c.deviceLabel : c.name)" + (r.solo ? "" : " · \(r.team.devices.count) devices"),
                               image: symbol("laptopcomputer"), help: "Team \(c.team)"))
             menu.addItem(.separator())
         }

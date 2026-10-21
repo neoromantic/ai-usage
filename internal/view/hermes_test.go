@@ -27,7 +27,7 @@ func TestTeamLinkFromTheWire(t *testing.T) {
 		t.Fatalf("hermes quota = %+v", h.Quota)
 	}
 	bob := findTeamAccount(t, r, "codex", "bob")
-	want := []LinkedUsage{{Provider: "hermes", Label: "openai-codex", Devices: []string{"otherbox (kim)"}, Sessions: 1, Tokens: snapshot.Tokens{Input: 40, Output: 20}}}
+	want := []LinkedUsage{{Provider: "hermes", Label: "openai-codex", Devices: []string{"kim@otherbox"}, Sessions: 1, Tokens: snapshot.Tokens{Input: 40, Output: 20}}}
 	if !reflect.DeepEqual(bob.LinkedUsage, want) {
 		t.Fatalf("linked usage = %+v", bob.LinkedUsage)
 	}
@@ -109,7 +109,7 @@ func TestTeamLinkedUsageAddsUpAcrossDevices(t *testing.T) {
 	}
 	r := withTeam(t, f, docs...)
 	got := findTeamAccount(t, r, "codex", "bob").LinkedUsage
-	want := []LinkedUsage{{Provider: "hermes", Label: "openai-codex", Devices: []string{"abox (kim)", "bbox (kim)"}, Sessions: 2, Tokens: snapshot.Tokens{Input: 30, Output: 15}}}
+	want := []LinkedUsage{{Provider: "hermes", Label: "openai-codex", Devices: []string{"kim@abox", "kim@bbox"}, Sessions: 2, Tokens: snapshot.Tokens{Input: 30, Output: 15}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("linked usage = %+v", got)
 	}

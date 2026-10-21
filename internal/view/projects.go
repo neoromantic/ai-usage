@@ -80,11 +80,11 @@ func (p *page) projects() []chunks {
 
 // projectsTitle is the title of PROJECTS in the period per, with since when
 // the ledger holds each provider of short. Where it is too wide, the
-// coverage goes first, the last provider's first, then this device's label.
+// coverage goes first, the last provider's first, then this device's name.
 func (p *page) projectsTitle(per Period, short []string) chunks {
 	g := p.g
 	unit := "by " + per.String() + g.sep + p.ownUnit()
-	label := p.txt(p.r.Collector.DeviceLabel) + g.sep
+	label := p.txt(p.r.Collector.name()) + g.sep
 	var forms []string
 	var since []string
 	for _, prov := range short {

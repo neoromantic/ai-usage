@@ -29,11 +29,13 @@ func statusHeads(t *testing.T, p Page) []string {
 	return strings.Fields(pageSection(p, "DEVICES")[2])
 }
 
-// statusLine is the status view's row of a device.
+// statusLine is the status view's row of a device, by its name or label.
 func statusLine(t *testing.T, p Page, device string) string {
 	t.Helper()
 	for _, l := range pageSection(p, "DEVICES")[3:] {
-		if _, rest, _ := strings.Cut(l, " "); strings.HasPrefix(strings.TrimLeft(rest, " ")+" ", device+" ") {
+		_, rest, _ := strings.Cut(l, " ")
+		name, _, _ := strings.Cut(strings.TrimLeft(rest, " "), " ")
+		if _, label, _ := strings.Cut(name, "@"); name == device || label == device {
 			return l
 		}
 	}
@@ -128,7 +130,7 @@ func TestStatusTitle(t *testing.T) {
 	}
 }
 
-// TestStatusColumns: a narrow page cuts NOTE, then drops USER, VIA, and the
+// TestStatusColumns: a narrow page cuts NOTE, then drops VIA, and the
 // periods but the chosen one and 90d, in that order; a wider one never shows
 // less; and no line is wider than the page before it is cut.
 func TestStatusColumns(t *testing.T) {
@@ -140,8 +142,8 @@ func TestStatusColumns(t *testing.T) {
 	}{
 		{80, Week, "DEVICE VERSION SEEN 7D 90D NOTE"},
 		{100, Week, "DEVICE VERSION SEEN TODAY 7D 30D 90D NOTE"},
-		{120, Week, "DEVICE USER VERSION SEEN VIA TODAY 7D 30D 90D NOTE"},
-		{160, Today, "DEVICE USER VERSION SEEN VIA TODAY 7D 30D 90D NOTE"},
+		{120, Week, "DEVICE VERSION SEEN VIA TODAY 7D 30D 90D NOTE"},
+		{160, Today, "DEVICE VERSION SEEN VIA TODAY 7D 30D 90D NOTE"},
 	} {
 		if got := strings.Join(statusHeads(t, Render(r, devices(Options{Width: c.width, Period: c.per}))), " "); got != c.want {
 			t.Errorf("at %d by %s: %q, want %q", c.width, c.per, got, c.want)
@@ -169,7 +171,7 @@ func TestStatusColumns(t *testing.T) {
 		}
 	}
 
-	order := []string{"DEVICE", "USER", "VERSION", "SEEN", "VIA", "TODAY", "7D", "30D", "90D", "NOTE"}
+	order := []string{"DEVICE", "VERSION", "SEEN", "VIA", "TODAY", "7D", "30D", "90D", "NOTE"}
 	for name, r := range map[string]Report{"team": loadReport(t, "team"), "troubled": troubled(t), "long": long} {
 		for _, per := range Periods {
 			for _, ascii := range []bool{false, true} {
@@ -277,7 +279,7 @@ func TestStatusNote(t *testing.T) {
 
 	// On the page, bot-e's row is silent, and its age in the silent color.
 	p := Render(troubled(t), devices(Options{Width: 160, Loc: sampleZone}))
-	if l := statusLine(t, p, "bot-e"); !strings.HasPrefix(l, "~ bot-e ") || !strings.Contains(l, " 2d 3h ") || !strings.HasSuffix(l, "silent since Mon 14:02 · last error: codex: not logged in") {
+	if l := statusLine(t, p, "bot-e"); !strings.HasPrefix(l, "~ hermes@bot-e ") || !strings.Contains(l, " 2d 3h ") || !strings.HasSuffix(l, "silent since Mon 14:02 · last error: codex: not logged in") {
 		t.Errorf("bot-e: %q", l)
 	}
 	p = Render(troubled(t), devices(Options{Width: 160, Loc: sampleZone, Color: true, Dark: true}))
@@ -331,7 +333,7 @@ func TestStatusNoteUpdate(t *testing.T) {
 		t.Fatalf("no OLD in ATTENTION:\n%s", strings.Join(got, "\n"))
 		return ""
 	}
-	if got := old(); got != " OLD         3 devices on old releases  Mac.localdomain, MacBook-Pro-Kim +1 · latest v1.4.2 · not updated for up to 1d" {
+	if got := old(); got != " OLD         3 devices on old releases  ci@ci-runner-eu-west-build-pool-… +2 · latest v1.4.2 · not updated for up to 1d" {
 		t.Errorf("OLD: %q", got)
 	}
 	// A silent device is silent: OLD does not count its days.
@@ -367,7 +369,7 @@ func TestStatusNoteUpdate(t *testing.T) {
 			errs = append(errs, a.Devices[0]+": "+a.Message)
 		}
 	}
-	if want := []string{"Mac.localdomain: codex: app-server exited without answering", "MacBook-Pro-Kim: " + rateLimited}; !slices.Equal(errs, want) {
+	if want := []string{"kim@Mac.localdomain: codex: app-server exited without answering", "sam@MacBook-Pro-Kim: " + rateLimited}; !slices.Equal(errs, want) {
 		t.Errorf("errors %q, want %q", errs, want)
 	}
 	// Behind for less than updating takes, it only says the latest.
@@ -414,8 +416,8 @@ func TestStatusNoteReplacedLimitGap(t *testing.T) {
 		i, w int
 		want string
 	}{
-		{old, -1, "silent since Sun 12:12 · reinstalled as Mac.localdomain"},
-		{old, 40, "reinstalled as Mac.localdomain"},
+		{old, -1, "silent since Sun 12:12 · reinstalled as kim@Mac.localdomain"},
+		{old, 40, "reinstalled as kim@Mac.localdomain"},
 		{old, 20, "reinstalled"},
 		{old, 10, "since Sun"},
 		{botC, -1, "gap 12h Sep 22"},
@@ -480,9 +482,9 @@ func TestStatusVersion(t *testing.T) {
 	for _, ascii := range []bool{false, true} {
 		o := devices(Options{Width: 120, Loc: sampleZone, ASCII: ascii})
 		p := Render(r, o)
-		old, fail, mark := "v1.4.0 ↓", "× Mac.localdomain", "↓ old"
+		old, fail, mark := "v1.4.0 ↓", "× kim@Mac.localdomain", "↓ old"
 		if ascii {
-			old, fail, mark = "v1.4.0 v", "x Mac.localdomain", "v old"
+			old, fail, mark = "v1.4.0 v", "x kim@Mac.localdomain", "v old"
 		}
 		if l := statusLine(t, p, "Mac.localdomain"); !strings.HasPrefix(l, fail) || !strings.Contains(l, "  "+old+"  ") {
 			t.Errorf("ascii %v: %q", ascii, l)

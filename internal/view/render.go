@@ -275,11 +275,12 @@ func (p *page) account(provider, label string) *TeamAccount {
 	return accountOf(&p.r.Team, provider, label)
 }
 
-// device is the team device with the ID or label, or nil.
-func (p *page) device(id, label string) *TeamDevice {
+// device is the team device with the ID or name, or nil. A report saved by
+// a release before names named its devices by their labels.
+func (p *page) device(id, name string) *TeamDevice {
 	for i := range p.r.Team.Devices {
 		d := &p.r.Team.Devices[i]
-		if (id != "" && d.Device == id) || (id == "" && d.Label == label) {
+		if (id != "" && d.Device == id) || (id == "" && (d.Name == name || d.Label == name)) {
 			return d
 		}
 	}

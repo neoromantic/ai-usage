@@ -67,6 +67,9 @@ public struct Collector: Decodable, Sendable {
     public let device: String
     public let deviceLabel: String
     public let osUser: String
+    /// What the team calls this Mac: its OS user at its label, as
+    /// `ann@mira-mbp`; empty from an ai-usage before v0.9.0.
+    @Absent public var name: String
     public let team: String
     public let lastRunAt: Date?
     public let lastSuccessAt: Date?
@@ -501,6 +504,10 @@ public struct TeamDevice: Decodable, Sendable {
     public let device: String
     public let label: String
     public let osUser: String
+    /// What the report calls the device, in its rows and its lists: its OS
+    /// user at its label, as `ann@mira-mbp`. Empty from an ai-usage before
+    /// v0.9.0, whose report calls a device by its label.
+    @Absent public var name: String
     public let thisDevice: Bool
     public let collectorVersion: String
     public let collectedAt: Date?
@@ -524,7 +531,7 @@ public struct TeamDevice: Decodable, Sendable {
     /// The longest time in the last 2 days the device did not report, when
     /// over an hour.
     @Absent public var gap: Gap?
-    /// The label of the device that reinstalled this one.
+    /// The name of the device that reinstalled this one.
     @Absent public var replacedBy: String?
     /// What the device's release cannot do: `no_claude_quota`,
     /// `no_update_errors`.

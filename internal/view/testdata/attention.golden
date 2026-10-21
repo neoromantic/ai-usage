@@ -7,7 +7,7 @@ ATTENTION
  NO READING  claude a-very-long-subscr…  on v0.2.0: reinstall with install.sh
  NO READING  claude unknown              on srv1: run claude and log in
  SILENT      bot-c                       no report since Mon 06:00, 1d 6h ago
- DUPLICATE   annbook                     ai-usage team forget-device 3f9a1c2e
+ DUPLICATE   ann@annbook                 ai-usage team forget-device 3f9a1c2e
  OLD         1 device on v0.2.0          no Claude quota; reinstall
  OLD         1 device on v0.3.4          bot-a · latest v0.4.0
  UNDER       claude kim@corp.test        leaves ~65% unused at this week's pace
@@ -22,7 +22,7 @@ ATTENTION
  NO READING  claude a-very-long-subscripti…  annbook runs v0.2.0: reinstall with install.sh
  NO READING  claude unknown                  not logged in on srv1: run claude and log in
  SILENT      bot-c                           no report since Mon 06:00, 1d 6h ago
- DUPLICATE   annbook                         reinstalled as annbook: ai-usage team forget-device 3f9a1c2e
+ DUPLICATE   ann@annbook                     reinstalled as ann@annbook: ai-usage team forget-device 3f9a1c2e
  OLD         1 device on v0.2.0              srv1 · cannot read Claude quota; reinstall with install.sh
  OLD         1 device on v0.3.4              bot-a · latest v0.4.0
  UNDER       claude kim@corp.test            leaves ~65% unused at this week's pace, resets Fri 12:00, in 3d

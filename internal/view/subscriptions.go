@@ -25,6 +25,10 @@ type subGroup struct {
 	rows     []subRow
 }
 
+// busiestCut is the narrowest the busiest device's name is cut to before
+// a column of SUBSCRIPTIONS goes.
+const busiestCut = 12
+
 // subLayout is the widths of the SUBSCRIPTIONS columns, and which of the
 // columns that drop as the page narrows are still shown.
 type subLayout struct {
@@ -167,10 +171,11 @@ func (p *page) subTitle(total, noReading int, counts map[string]int) chunks {
 	return title
 }
 
-// layoutSubs sizes the columns to their cells, then drops columns as the
-// page narrows: LAST, then PLAN, then the reset's clock, then the busiest
-// user, and last the bar shrinks to half. An account still too wide is cut
-// in the middle.
+// layoutSubs sizes the columns to their cells, then, as the page narrows,
+// cuts the busiest device's name to busiestCut columns and drops columns:
+// LAST, then PLAN, then the reset's clock, then the busiest device, and
+// last the bar shrinks to half. An account still too wide is cut in the
+// middle.
 func (p *page) layoutSubs(groups []subGroup) subLayout {
 	l := subLayout{bar: barCells, left: width("LEFT"), at: width("AT RESET"), count: 2, last: width("LAST"),
 		showPlan: true, showClock: true, showBusiest: true, showLast: true}
@@ -189,7 +194,7 @@ func (p *page) layoutSubs(groups []subGroup) subLayout {
 			l.at = max(l.at, width(p.atResetText(r.win)))
 			if !r.window {
 				l.count = max(l.count, width(strconv.Itoa(r.users)))
-				l.busiest = max(l.busiest, width(r.busiest))
+				l.busiest = max(l.busiest, min(width(r.busiest), deviceWidth))
 				l.last = max(l.last, width(r.last))
 			}
 		}
@@ -200,6 +205,7 @@ func (p *page) layoutSubs(groups []subGroup) subLayout {
 		l.showPlan = false
 	}
 	for _, drop := range []func(){
+		func() { l.busiest = max(l.busiest-(l.width()-p.w), min(l.busiest, busiestCut)) },
 		func() { l.showLast = false },
 		func() { l.showPlan = false },
 		func() { l.showClock = false },
@@ -295,7 +301,7 @@ func (p *page) subLine(l subLayout, r subRow) chunks {
 	}
 	if l.showBusiest && l.busiest > 0 {
 		users := p.right(p.plain(count), l.count)
-		users = append(users, p.space(2), p.muted(truncEnd(r.busiest, l.busiest, g.ell)))
+		users = append(users, p.space(2), p.muted(truncName(r.busiest, l.busiest, g.ell)))
 		out = append(out, users.padTo(l.users())...)
 	} else {
 		out = append(out, p.right(p.plain(count), l.users())...)

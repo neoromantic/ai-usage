@@ -31,11 +31,11 @@ func TestTeamReport(t *testing.T) {
 	if w := teamWindow(r, "codex", "mira@studio.dev", "7d"); w == nil || w.State != view.StateTight {
 		t.Errorf("mira's Codex week = %+v, want tight", w)
 	}
-	if !r.Team.Estimated || r.Team.EstimatedReason == nil || !strings.Contains(*r.Team.EstimatedReason, "leo-air runs v0.3.4") {
+	if !r.Team.Estimated || r.Team.EstimatedReason == nil || !strings.Contains(*r.Team.EstimatedReason, "leo@leo-air runs v0.3.4") {
 		t.Errorf("estimated %v, reason %v; want leo-air on v0.3.4", r.Team.Estimated, r.Team.EstimatedReason)
 	}
-	if got := r.Team.CyclesHeldBackBy; len(got) != 1 || got[0] != "leo-air" {
-		t.Errorf("cycles held back by %v, want leo-air", got)
+	if got := r.Team.CyclesHeldBackBy; len(got) != 1 || got[0] != "leo@leo-air" {
+		t.Errorf("cycles held back by %v, want leo@leo-air", got)
 	}
 	for _, d := range r.Team.Devices {
 		if d.BurnEstimated != (d.Label == "leo-air") {

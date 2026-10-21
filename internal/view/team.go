@@ -70,7 +70,7 @@ type devAccount struct {
 // device is one device doc while the team is merged.
 type device struct {
 	dev         *TeamDevice
-	name        string // label (OS user), as account lists show it
+	name        string // as the report calls it, DeviceName
 	collectedAt time.Time
 	shift       int
 	accts       []devAccount
@@ -182,7 +182,7 @@ func (m *merger) periods(days, hours []int64, dv *device) Usage {
 func (m *merger) raw(s string) string {
 	v, err := m.in.Key.Open(s)
 	if err != nil {
-		return "(unreadable)"
+		return unreadable
 	}
 	return v
 }
@@ -192,7 +192,7 @@ func (m *merger) open(s string) string { return snapshot.Printable(m.raw(s)) }
 // addDoc merges one device doc: the device, its aliases and its accounts.
 func (m *merger) addDoc(d snapshot.Doc) {
 	dev, noQuota := m.teamDevice(d)
-	dv := &device{dev: dev, name: dev.Label + " (" + dev.OSUser + ")", collectedAt: d.CollectedAt, shift: dayShift(d.CollectedAt, m.now), noQuota: noQuota}
+	dv := &device{dev: dev, name: dev.Name, collectedAt: d.CollectedAt, shift: dayShift(d.CollectedAt, m.now), noQuota: noQuota}
 	m.devs = append(m.devs, dv)
 	m.addAliases(d)
 	m.addAccounts(dv, d)
@@ -202,13 +202,14 @@ func (m *merger) addDoc(d snapshot.Doc) {
 // on a release before collect.ExtSince, why its Claude source read no quota,
 // as a subscription's reason for having no reading says it.
 func (m *merger) teamDevice(d snapshot.Doc) (dev *TeamDevice, noQuota string) {
-	label := m.open(d.DeviceLabel)
+	label, user := m.open(d.DeviceLabel), m.open(d.OSUser)
 	this := d.Device == m.in.Doc.Device
 	lastErr, updateErr := m.lastErrors(d, this)
 	dev = &TeamDevice{
 		Device:           d.Device,
 		Label:            label,
-		OSUser:           m.open(d.OSUser),
+		OSUser:           user,
+		Name:             DeviceName(label, user),
 		This:             this,
 		CollectorVersion: d.CollectorVersion,
 		CollectedAt:      d.CollectedAt,
@@ -224,7 +225,7 @@ func (m *merger) teamDevice(d snapshot.Doc) (dev *TeamDevice, noQuota string) {
 	for _, s := range d.Sources {
 		src := Source{Provider: s.Provider, Status: s.Status, Error: strPtr(m.open(s.Error))}
 		if s.Provider == "claude" && src.Error != nil && src.Status != "ok" {
-			note, reason, rest := legacyNoQuota(d.CollectorVersion, label, *src.Error)
+			note, reason, rest := legacyNoQuota(d.CollectorVersion, dev.Name, *src.Error)
 			switch {
 			case note == "":
 			case rest == "":
@@ -504,7 +505,7 @@ func deviceError(d TeamDevice) *string {
 	if d.LastError != nil && (d.LastSuccessAt == nil || d.CollectedAt.After(*d.LastSuccessAt)) {
 		// A release before collect.ExtSince failed its run for no Claude
 		// quota too: that is no error now.
-		if note, _, rest := legacyNoQuota(d.CollectorVersion, d.Label, *d.LastError); note != "" {
+		if note, _, rest := legacyNoQuota(d.CollectorVersion, d.Name, *d.LastError); note != "" {
 			if rest == "" {
 				return nil
 			}
@@ -613,7 +614,7 @@ func limitations(version string) []string {
 func (m *merger) replaced() {
 	for _, old := range m.devs {
 		o := old.dev
-		if !o.Silent || o.Label == "(unreadable)" {
+		if !o.Silent || o.Label == unreadable {
 			continue
 		}
 		var by *TeamDevice
@@ -627,7 +628,7 @@ func (m *merger) replaced() {
 			}
 		}
 		if by != nil {
-			o.ReplacedBy = strPtr(by.Label)
+			o.ReplacedBy = strPtr(by.Name)
 		}
 	}
 }
@@ -702,7 +703,7 @@ func (m *merger) noReading(x *teamAccount) *string {
 			}
 			return 1
 		}
-		return cmp.Compare(a.dev.Label, b.dev.Label)
+		return cmp.Compare(a.dev.Name, b.dev.Name)
 	})
 	hs = slices.CompactFunc(hs, func(a, b *device) bool { return a == b })
 	if len(hs) == 0 {
@@ -715,7 +716,7 @@ func (m *merger) noReading(x *teamAccount) *string {
 		return !slices.Contains(dv.dev.Limitations, LimitNoClaudeQuota)
 	}) {
 		d := hs[0].dev
-		return strPtr(d.Label + " runs " + d.CollectorVersion + ": reinstall with install.sh")
+		return strPtr(d.Name + " runs " + d.CollectorVersion + ": reinstall with install.sh")
 	}
 	for _, dv := range hs {
 		if x.provider == "claude" && dv.noQuota != "" {
@@ -724,7 +725,7 @@ func (m *merger) noReading(x *teamAccount) *string {
 		for _, s := range dv.dev.Sources {
 			if s.Provider == x.provider && s.Status == "ok" && s.Error != nil {
 				msg := strings.TrimPrefix(*s.Error, s.Provider+": ")
-				return strPtr(msg + " on " + dv.dev.Label)
+				return strPtr(msg + " on " + dv.dev.Name)
 			}
 		}
 	}
@@ -748,7 +749,7 @@ func unknownReason(p string, hs []*device) *string {
 				if !ok {
 					continue
 				}
-				where := dv.dev.Label
+				where := dv.dev.Name
 				if home = strings.TrimSuffix(home, ": "); home != "" {
 					where += " (" + home + ")"
 				}

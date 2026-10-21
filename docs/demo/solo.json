@@ -6,6 +6,7 @@
     "device": "d-demo-solo",
     "device_label": "mira-mbp",
     "os_user": "mira",
+    "name": "mira@mira-mbp",
     "team": "ugarfmfxwqrf74yfe7qppt32dy3uf5rs",
     "last_run_at": "2026-09-24T13:36:00Z",
     "last_success_at": "2026-09-24T13:36:00Z",
@@ -1355,6 +1356,7 @@
         "device": "d-demo-solo",
         "label": "mira-mbp",
         "os_user": "mira",
+        "name": "mira@mira-mbp",
         "this_device": true,
         "collector_version": "v0.5.0",
         "collected_at": "2026-09-24T13:36:00Z",
@@ -1420,7 +1422,7 @@
             "subscription": true,
             "current": true,
             "devices": [
-              "mira-mbp (mira)"
+              "mira@mira-mbp"
             ],
             "plan": "max",
             "state": "over",
@@ -1428,7 +1430,7 @@
               "observed_at": "2026-09-24T13:36:00Z",
               "age_seconds": 240,
               "stale": false,
-              "device": "mira-mbp (mira)",
+              "device": "mira@mira-mbp",
               "device_id": "d-demo-solo",
               "windows": [
                 {
@@ -1505,11 +1507,11 @@
               "90d": 162283885
             },
             "users": 1,
-            "busiest": "mira-mbp",
+            "busiest": "mira@mira-mbp",
             "last_active_at": "2026-09-24T13:20:00Z",
             "per_device": [
               {
-                "device": "mira-mbp (mira)",
+                "device": "mira@mira-mbp",
                 "device_id": "d-demo-solo",
                 "current": true,
                 "sessions": 295,
@@ -1743,7 +1745,7 @@
             "subscription": true,
             "current": true,
             "devices": [
-              "mira-mbp (mira)"
+              "mira@mira-mbp"
             ],
             "plan": "pro",
             "state": "ok",
@@ -1751,7 +1753,7 @@
               "observed_at": "2026-09-24T13:36:00Z",
               "age_seconds": 240,
               "stale": false,
-              "device": "mira-mbp (mira)",
+              "device": "mira@mira-mbp",
               "device_id": "d-demo-solo",
               "windows": [
                 {
@@ -1809,11 +1811,11 @@
               "90d": 174180951
             },
             "users": 1,
-            "busiest": "mira-mbp",
+            "busiest": "mira@mira-mbp",
             "last_active_at": "2026-09-24T13:20:00Z",
             "per_device": [
               {
-                "device": "mira-mbp (mira)",
+                "device": "mira@mira-mbp",
                 "device_id": "d-demo-solo",
                 "current": true,
                 "sessions": 129,
@@ -2047,7 +2049,7 @@
             "subscription": true,
             "current": true,
             "devices": [
-              "mira-mbp (mira)"
+              "mira@mira-mbp"
             ],
             "plan": "SuperGrok",
             "state": "under",
@@ -2055,7 +2057,7 @@
               "observed_at": "2026-09-24T13:36:00Z",
               "age_seconds": 240,
               "stale": false,
-              "device": "mira-mbp (mira)",
+              "device": "mira@mira-mbp",
               "device_id": "d-demo-solo",
               "windows": [
                 {
@@ -2094,11 +2096,11 @@
               "90d": 2994107
             },
             "users": 1,
-            "busiest": "mira-mbp",
+            "busiest": "mira@mira-mbp",
             "last_active_at": "2026-09-21T13:20:00Z",
             "per_device": [
               {
-                "device": "mira-mbp (mira)",
+                "device": "mira@mira-mbp",
                 "device_id": "d-demo-solo",
                 "current": true,
                 "sessions": 24,
@@ -2312,7 +2314,7 @@
       ],
       "rows": [
         {
-          "device": "mira-mbp",
+          "device": "mira@mira-mbp",
           "device_id": "d-demo-solo",
           "cells": [
             {

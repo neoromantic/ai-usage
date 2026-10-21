@@ -1,24 +1,24 @@
-ai-usage · sam-air · team fp4xk2n5                            ● collected 8m ago  ● no relay  ● v1.4.3 available
+ai-usage · sam@sam-air · team fp4xk2n5                            ● collected 8m ago  ● no relay  ● v1.4.3 available
 
 ATTENTION
  OVER   claude sam · 5h         runs out ~Wed 18:27 at this window's pace, 12m before reset
  TIGHT  claude sam@example.com  ~95% at reset Sat 12:00 at the last day's pace
- OLD    1 device on v1.4.2      sam-air · latest v1.4.3
+ OLD    1 device on v1.4.2      sam@sam-air · latest v1.4.3
  UNDER  codex sam@example.com   leaves ~73% unused at this week's pace, resets Fri 12:00, in 1d 18h
 
 SUBSCRIPTIONS  5 · 1 over · 2 no reading
 
-  CLAUDE               PLAN       THIS WEEK                 LEFT  RESETS             AT RESET  DEVICES      LAST
-● sam@example.com      pro        ━━━━━━━━━━━━━─┃─────────   45%  2d 18h Sat 12:00  95% tight   1  sam-air    8m
+  CLAUDE               PLAN       THIS WEEK                 LEFT  RESETS             AT RESET  DEVICES          LAST
+● sam@example.com      pro        ━━━━━━━━━━━━━─┃─────────   45%  2d 18h Sat 12:00  95% tight   1  sam@sam-air    8m
     5h                            ━━━━━━━━━━━━━━━━━━╋─────   20%  1h 2m  Wed 18:40  104% over
 
   CODEX
-  sam+old@example.com  pro        ━━━━━━━───┃─────────────  ~70%  3d 17h Sun 11:00    ~71% ok   1  sam-air    3d
-● sam@example.com      plus       ━━━━━────────────┃──────   80%  1d 18h Fri 12:00  27% under   1  sam-air   40m
-  work@example.org                ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                            —   ·            45d
+  sam+old@example.com  pro        ━━━━━━━───┃─────────────  ~70%  3d 17h Sun 11:00    ~71% ok   1  sam@sam-air    3d
+● sam@example.com      plus       ━━━━━────────────┃──────   80%  1d 18h Fri 12:00  27% under   1  sam@sam-air   40m
+  work@example.org                ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                            —   ·                45d
 
   GROK
-● 3f2a9c1e             SuperGrok  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                            —   1  sam-air    2d
+● 3f2a9c1e             SuperGrok  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                            —   1  sam@sam-air    2d
 
 UTILIZATION  fullest % before each reset
 
@@ -32,7 +32,7 @@ UTILIZATION  fullest % before each reset
   GROK
 ● 3f2a9c1e              2    ·  64%    70   58
 
-USAGE  sam-air · M weighted tokens
+USAGE  sam@sam-air · M weighted tokens
 
   CLAUDE               TODAY    7D   30D   90D
 ● sam@example.com         28   170   624   624
@@ -50,7 +50,7 @@ USAGE  sam-air · M weighted tokens
 
   TOTAL                   34   231   844  1523
 
-PROJECTS  sam-air · by 7d · M weighted tokens · claude since Aug 26
+PROJECTS  sam@sam-air · by 7d · M weighted tokens · claude since Aug 26
   PROJECT                7D  90D  SESS  VIA                    LAST
   ~/work/api             76  578     7  claude, codex            8m
   ~/work/web             56  450     5  codex, claude, hermes   40m

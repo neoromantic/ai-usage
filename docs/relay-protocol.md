@@ -267,7 +267,7 @@ Every integer the document allows fits exactly in an IEEE 754 double, so readers
 | `team` | string | required | the team fingerprint, `^[a-z2-7]{32}$`; MUST equal `{team}` |
 | `device` | string | required | the device id, `^[a-z0-9][a-z0-9-]{7,63}$`; MUST equal `{device}`. The reference collector uses `d-` and 24 random hex digits, fixed for its state folder |
 | `device_label` | sealed | required | the name the device goes by in the team: one set with `ai-usage name set` or `AI_USAGE_NAME`, else the host name |
-| `os_user` | sealed | required | the OS user the collector runs as |
+| `os_user` | sealed | required | the OS user the collector runs as; a report names the device by it at its `device_label`, as `ann@mira-mbp` |
 | `collector_version` | plain | required, not empty | the collector's version, such as `v1.4.2`, or `devel` for a build from source (`dev` before v0.4.0) |
 | `collected_at` | time | required | when the snapshot was built. MUST NOT be `0001-01-01T00:00:00Z`; the relay rejects a time more than 10 minutes ahead of its clock |
 | `last_success_at` | time | required | the last collection that succeeded; `0001-01-01T00:00:00Z` when none has |

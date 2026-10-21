@@ -35,6 +35,7 @@ Conventions:
 | `device` | string | this device's id, `d-` and 24 hex digits, made on the first run |
 | `device_label` | string | the name this device goes by in the team: one set with `ai-usage name set` or `AI_USAGE_NAME`, else the host name |
 | `os_user` | string | the OS user name |
+| `name` | string | what the team calls this device: its OS user at its label, as `ann@mira-mbp`; see [device names](#device-names) |
 | `team` | string | the team fingerprint |
 | `last_run_at` | time | when the last run happened |
 | `last_success_at` | time | the last run that collected without an error |
@@ -97,7 +98,7 @@ Each entry is one thing that needs attention, from the team's view of each subsc
 | `error` | a device's collector or one of its tools fails; on this device, also a run a bug stopped before it could report, its relay, or its update check; on an `old` device that is not silent, its update check. A quota that could not be read is not an error | `devices` names the device; `message` is the error, which starts with `relay` or `update` when it is theirs; `at` is when that error happened, when its collector says (v0.4.0 on) |
 | `no_reading` | a subscription with weighted tokens in the last 7 days has `no_reading` set | `provider`, `account`, `name`; `message` is the reason, with what to do. For the `unknown` account, it is where its tool answered that nobody is logged in, and how to log in |
 | `silent` | a device has not reported for a day, with or without an error in its last report, and no other device took its place | `devices` names the device; `at` is when it last reported; `message` is the error it last reported, if it had one |
-| `duplicate` | a device has `replaced_by` set: it was reinstalled, and its old record stays on the relay | `devices` names the device; `device_id` is its id, for `ai-usage team forget-device`, which takes its first 8 hex digits too; `message` is the label of the device that replaced it; `at` is when it last reported |
+| `duplicate` | a device has `replaced_by` set: it was reinstalled, and its old record stays on the relay | `devices` names the device; `device_id` is its id, for `ai-usage team forget-device`, which takes its first 8 hex digits too; `message` is the `name` of the device that replaced it; `at` is when it last reported |
 | `old` | devices run an older release than the team's newest | `devices` lists every one of them; `message` is the newest release; `at` is the earliest `behind_since` among those that have reported for 7 hours since it and are not `silent`, absent when none has. Devices whose release has `limitations` have an entry of their own, first, with those in `limitations`: they need a reinstall. A `duplicate` device is not counted |
 | `under` | past half of a subscription's main window, its forecast is under 50% | `provider`, `account`, `name`; `resets_at` is when it resets, `percent` its forecast |
 | `idle` | no team device has used a subscription with a reading for 7 days, by its `last_active_at`, and nothing says someone outside the team does: it has no `outside`, and its main window is under 1% or began before that last use. Not the `unknown` account, a Hermes account, or a free plan. It has no `under` entry then | `provider`, `account`, `name`; `at` is when a team device last used it |
@@ -107,13 +108,13 @@ A window is one with `limits`: the account's main one, or one that limits it mor
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `kind` | string | one of the kinds above |
-| `subject` | string | what the entry is about, as the console's ATTENTION line names it, uncut: an account, such as `claude ann@example.com`, with its window, as in `claude ann · Fable`; a device's label; or the devices of an `old` entry, as in `3 devices on v1.2.3` |
+| `subject` | string | what the entry is about, as the console's ATTENTION line names it, uncut: an account, such as `claude ann@example.com`, with its window, as in `claude ann · Fable`; a device's `name`; or the devices of an `old` entry, as in `3 devices on v1.2.3` |
 | `text` | string | what to know, as the console's ATTENTION line says it at its longest, without its badge and subject, such as `runs out ~Wed 12:00 at this week's pace, 2d before reset`. Clocks are in the time zone of the machine that made the report. A reader can show `subject` and `text` as they are, and use the other fields to link the entry to its subscription or device |
 | `provider` | string | the account's provider |
 | `account` | string | the account's label |
 | `name` | string | the account's short name |
 | `window` | string | the window's name, when it is not the account's main one |
-| `devices` | list of strings | the names of the devices it is about |
+| `devices` | list of strings | the devices it is about, by `name` |
 | `device_id` | string | a `duplicate` device's id |
 | `at` | time | as the table says for each kind |
 | `resets_at` | time | when the window resets |
@@ -174,7 +175,7 @@ Claude's `homes` include the Claude Code home the Claude desktop app keeps for e
 | `stale` | bool | a window's reading is stale; see the window's `stale` |
 | `source` | string | `harness` when the tool answered a command, `cache` when it came from the tool's own cache file, `log` when it came from the tool's logs, `rejection` when Claude refused requests because windows were full: those windows alone at 100%, as of the newest refusal, until they reset; only on this device's accounts |
 | `from` | string | the tool whose account took the reading, when it is the reading of the account in `link`, unchanged, observation time included; absent otherwise. With no reading for that account, `quota` is `null` |
-| `device` | string | the device whose reading is newest, as `host (user)`; only on team accounts |
+| `device` | string | the device whose reading is newest, by `name`; only on team accounts |
 | `device_id` | string | that device's id, as a team device's `device`, so a reader can tell this device's reading from another's; only on team accounts |
 | `windows` | list | the windows the tool reported; see below |
 
@@ -257,10 +258,10 @@ The report's list is sorted by `burn` in `7d`, in whole millions as the console 
 | `pulled_at` | time | when the team was read from the relay; `null` if it has not been, in which case the lists hold this device only |
 | `latest_version` | string | the newest collector release any device in the team runs, or the newest this device's update check saw, whichever is newer |
 | `estimated` | bool | the weighted tokens of some device are estimated: a release before v0.4.0 sends none, so they are worked out from its input and output, at the ratio its 90 days' tokens give. Such devices have `burn_estimated` |
-| `held_back_by` | list of strings | the devices whose release keeps this device from sending its own weighted days: until every device the team knows runs v0.4.0 or later, each device sends the snapshot an older release reads, without them |
-| `estimated_reason` | string | why totals are estimated, with what to do, in a line, such as `leo-air runs v0.3.4: it should update within 15 minutes`, `3 devices run releases before v0.4.0: reinstall old-mini with install.sh; the other 2 should update within 15 minutes`, a device that `has not reported since …: forget it with ai-usage team forget-device …`, or `the team was last read 4h ago`; `null` when `estimated` is `false` |
-| `cycles_held_back_by` | list of strings | the devices whose release keeps every device from sending its quota cycles: until every device the team knows runs v0.5.0 or later, none sends them, and each account's `utilization` holds this device's alone |
-| `cycles_reason` | string | why `utilization` holds only this device's cycles, with what to do, in a line, such as `leo-air runs v0.4.0: it should update within 15 minutes`, `2 devices run releases before v0.5.0: …`, `the relay did not accept cycles; trying again Sep 2 08:00`, or `the team was last read 4h ago`; `null` when the team's cycles are in |
+| `held_back_by` | list of strings | the devices, by `name`, whose release keeps this device from sending its own weighted days: until every device the team knows runs v0.4.0 or later, each device sends the snapshot an older release reads, without them |
+| `estimated_reason` | string | why totals are estimated, with what to do, in a line, such as `leo@leo-air runs v0.3.4: it should update within 15 minutes`, `3 devices run releases before v0.4.0: reinstall ci@old-mini with install.sh; the other 2 should update within 15 minutes`, a device that `has not reported since …: forget it with ai-usage team forget-device …`, or `the team was last read 4h ago`; `null` when `estimated` is `false` |
+| `cycles_held_back_by` | list of strings | the devices, by `name`, whose release keeps every device from sending its quota cycles: until every device the team knows runs v0.5.0 or later, none sends them, and each account's `utilization` holds this device's alone |
+| `cycles_reason` | string | why `utilization` holds only this device's cycles, with what to do, in a line, such as `leo@leo-air runs v0.4.0: it should update within 15 minutes`, `2 devices run releases before v0.5.0: …`, `the relay did not accept cycles; trying again Sep 2 08:00`, or `the team was last read 4h ago`; `null` when the team's cycles are in |
 | `today_local` | bool | `true` when every team object's `today` is the hours since local midnight, in the time zone of the machine that made the report, rather than the report's UTC day: every other device runs v0.7.0 or later, which sends its tokens by UTC hour for the last 48 hours, and the relay took them. A device that has not sent its hours yet, as in its first run on v0.7.0, counts its UTC day. `false` otherwise, and every `today` is the UTC day. `7d`, `30d`, and `90d` count UTC days either way |
 | `devices` | list | one entry per device; see below |
 | `providers` | list | `{provider, accounts}` with each account summed across devices; see below |
@@ -273,6 +274,7 @@ A device:
 | `device` | string | its id |
 | `label` | string | its name, the host name unless one was set, or `(unreadable)` if it does not decrypt with this team's key |
 | `os_user` | string | its OS user, or `(unreadable)` |
+| `name` | string | what the report calls it, in every row, list, and line that names a device: its OS user at its label, as `ann@mira-mbp`; see [device names](#device-names) |
 | `this_device` | bool | this is the device making the report |
 | `collector_version` | string | its collector version |
 | `collected_at` | time | when it made its snapshot |
@@ -291,9 +293,13 @@ A device:
 | `burn` | object | its weighted tokens in each period, as `usage` counts them |
 | `burn_estimated` | bool | `burn` is estimated from its input and output, as its release sends no weighted tokens |
 | `gap` | object | `{seconds, at}`: the longest time in the last 2 days this device's reads of the team did not find the device's snapshot growing, when over an hour, and when it began; `null` otherwise. For another device, only time this device was reading the team counts: a stretch ends at this device's last read before that device reported again |
-| `replaced_by` | string | the label of the device that reinstalled this one: the same name and OS user, reporting while this one is silent; `null` otherwise |
+| `replaced_by` | string | the `name` of the device that reinstalled this one: the same label and OS user, reporting while this one is silent; `null` otherwise |
 | `note` | string | what the status view's NOTE says of the device, uncut: its silence, the error it reports, the release it is behind and why it does not update, what its release cannot do, or its longest gap in reporting, as `ai-usage report --devices` shows it. Clocks are in the time zone of the machine that made the report. `null` when there is nothing to note |
 | `limitations` | list of strings | what its release cannot do: `no_claude_quota` before v0.2.3, and `no_update_errors` before v0.2.5 |
+
+#### Device names
+
+A device goes by its `name`: the OS user its collector runs as, at its label, as `ann@mira-mbp` or `root@build-01`. A person and their machine are one consumer, and each OS user or bot on a shared server is one of its own. The label is the name set with `ai-usage name set` or `AI_USAGE_NAME`, else the host name. A label that has an `@` in it already is the name as it is, and so is the label of a device whose OS user is not known (`unknown`), or `(unreadable)`. A Windows OS user comes as `DOMAIN\user`, and the name keeps only the user, as `ann@DESKTOP-7Q`; `os_user` keeps it whole. Every release sends its OS user, so a device on an older one is named the same way. Each row, list, and line of the report that names a device says its `name`; `device` is what tells two devices apart.
 
 A team account. Each provider's accounts are in the order the report lists them: the worst `state` first (`out`, `over`, `tight`, `ok`, `under`, then `unknown`), ties to the one with less left of its main window, then by label.
 
@@ -304,19 +310,19 @@ A team account. Each provider's accounts are in the order the report lists them:
 | `alias` | string | the name the team gave it with `ai-usage alias`: the newest one any device set, `null` when there is none or it was cleared |
 | `subscription` | bool | an account with a quota of its own: every Claude, Codex, and Grok account. Hermes is a tool, not a subscription: what it spends through a login is that login's use, and its other accounts, such as API keys, have no quota |
 | `current` | bool | the account is logged in on this device |
-| `devices` | list of strings | the devices that saw it, as `host (user)` |
+| `devices` | list of strings | the devices that saw it, by `name` |
 | `plan` | string | the plan from the newest snapshot, by `collected_at`, that has one; `null` when none has |
 | `state`, `quota` | | as for a device's account, from the newest reading of each window any device has; percentages are never added. `quota.from` is set when that reading is the linked account's. Snapshots do not say where a reading came from, so another device's refusal is an ordinary reading here |
 | `link` | object | `{provider, label}`, as for a device's account; `null` when there is none. This device's accounts use their own link. For another device's account, whose snapshot carries no link, it is the one account on that snapshot of the tool in `quota.from` with the same reading: the same observation time and windows. When none or several match, `label` is `""` |
 | `sessions`, `tokens`, `usage` | | summed across devices; the account's own, without what linked accounts spent through it |
 | `users` | number | how many devices have tokens on the account since its main window began, or in the last 7 days when it has none, what linked accounts spent through it included |
-| `busiest` | string | the name of the one of those devices with the most tokens; `null` when there is none |
+| `busiest` | string | the `name` of the one of those devices with the most tokens; `null` when there is none |
 | `last_active_at` | time | the newest activity on the account on any device, what Hermes spent through it included. A device whose Hermes spent through several logins gives each one its newest activity, since its snapshot does not say which login that went through |
-| `per_device` | list | `{device, device_id, current, sessions, tokens, usage, burn, last_active_at}` for each device that has the account, `device` as `host (user)`; most weighted tokens in `7d` first, then in `90d`, then by `device` |
+| `per_device` | list | `{device, device_id, current, sessions, tokens, usage, burn, last_active_at}` for each device that has the account, `device` by its `name`; most weighted tokens in `7d` first, then in `90d`, then by `device` |
 | `linked_usage` | list | `{provider, label, devices, sessions, tokens}` for each account of another tool that spent through this one on any device, as each device counted it session by session, summed across devices, with the devices it ran on; `[]` when none. These tokens are that account's and are not in `tokens` |
 | `burn` | object | the account's own weighted tokens, summed across devices |
 | `burn_estimated` | bool | some of `burn` is estimated, from a device whose release sends no weighted tokens |
-| `no_reading` | string | why a subscription has no reading of its main window, with what to do, such as `leo-air runs v0.3.0: reinstall with install.sh`, when that is known; `null` otherwise. For the `unknown` account, the tokens no login was known for, it is where its tool answered that nobody is logged in, as a device that holds them says, such as `not logged in on srv1 (~/.claude-work): run claude and log in` |
+| `no_reading` | string | why a subscription has no reading of its main window, with what to do, such as `leo@leo-air runs v0.3.0: reinstall with install.sh`, when that is known; `null` otherwise. For the `unknown` account, the tokens no login was known for, it is where its tool answered that nobody is logged in, as a device that holds them says, such as `not logged in on root@srv1 (~/.claude-work): run claude and log in` |
 | `outside` | object | `{points, since}`: the main window rose `points` since `since`, in the last day, while the team spent next to nothing on it, so someone outside the team uses it; `null` otherwise |
 | `utilization` | list | how full each of a subscription's windows got before each reset; see below. `[]` for an account that is not a subscription, and for one no device read a period of that ended |
 
@@ -368,7 +374,7 @@ A row:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `device` | string | the device's name, as its `label` |
+| `device` | string | the device's `name` |
 | `device_id` | string | its id |
 | `cells` | list | one per column, in the order of `columns` |
 | `usage` | object | the device's tokens over every column, in each period |
@@ -404,6 +410,7 @@ A cell:
 - `folders` on a project. A project is now a git repository, with its subfolders and linked worktrees, where each working folder was one; `path` is the project's folder, and `folders` says how many working folders count under it. A report from an earlier release has a project for each working folder and no `folders`: read a missing one as `1`, as `ai-usage report --from` fills it in. Every field keeps its type, and a project's numbers still sum its sessions, so the version stays 4.
 - `window_start` on a matrix column, and `device_id` on a team account's `quota`, so that a reader can say since when a window's tokens count, and whether this device or another took a reading, without working them out again. A report from an earlier release has neither: read them as `null`. No field changed meaning, so the version stays 4.
 - `today_local` on the team, in v0.7.0: while it is `true`, a team object's `today` is the hours since local midnight instead of the report's UTC day. A report from an earlier release has no `today_local`: read it as `false`, as its `today` counts the UTC day, and `ai-usage report --from` gives it so. Every field keeps its type, and `today` keeps its UTC day wherever `today_local` is `false`, so the version stays 4.
+- `name` on the collector and on a team device, in v0.9.0: what the report calls a device, its OS user at its label, as `ann@mira-mbp`, so that the people and bots on one server read as the consumers they are. Every string that names a device, in rows, lists, and words, `replaced_by` and a `duplicate` entry's `message` among them, now says its `name` where it said its label, or `host (user)`. A device is still told apart by its `device` id, and `label` and `os_user` keep the parts. A report from an earlier release has no `name`: `ai-usage report --from` fills it in from `label` and `os_user`, and the rest of such a report names devices as it was saved. No field changed its type, so the version stays 4.
 - `method` and `command` in `collector.update`, in v0.8.0, so that a reader says how this copy updates instead of guessing from its path: `homebrew` with the command that upgrades it, or `self` with `null`. A report from an earlier release has neither: read a missing `method` as `self` and `command` as `null`, as `ai-usage report --from` fills them in. `schedule.error` can now be set while `schedule.registered` is `true`, to say another copy of ai-usage should go. No field changed meaning, so the version stays 4.
 
 ## Example
@@ -419,6 +426,7 @@ A shortened report from a team of two:
     "device": "d-3f9c2a51b7e04d18a6c90e12",
     "device_label": "ann-mbp",
     "os_user": "ann",
+    "name": "ann@ann-mbp",
     "team": "472ghuwcctyuxbtc6zu2ht2mbmnz4pqe",
     "last_run_at": "2026-09-01T12:02:00Z",
     "last_success_at": "2026-09-01T12:02:00Z",
@@ -454,8 +462,8 @@ A shortened report from a team of two:
     {
       "kind": "old",
       "subject": "1 device on v1.2.3",
-      "text": "bo-laptop · latest v1.3.0 · not updated for 19h",
-      "devices": ["bo-laptop"],
+      "text": "bo@bo-laptop · latest v1.3.0 · not updated for 19h",
+      "devices": ["bo@bo-laptop"],
       "at": "2026-08-31T16:40:00Z",
       "message": "v1.3.0"
     }
@@ -567,6 +575,7 @@ A shortened report from a team of two:
         "device": "d-8e41d07c5a2b93f6e1d4c7a0",
         "label": "bo-laptop",
         "os_user": "bo",
+        "name": "bo@bo-laptop",
         "this_device": false,
         "collector_version": "v1.2.3",
         "collected_at": "2026-09-01T11:51:00Z",
@@ -603,14 +612,14 @@ A shortened report from a team of two:
             "alias": null,
             "subscription": true,
             "current": false,
-            "devices": ["bo-laptop (bo)"],
+            "devices": ["bo@bo-laptop"],
             "plan": "pro",
             "state": "ok",
             "quota": {
               "observed_at": "2026-09-01T11:51:00Z",
               "age_seconds": 780,
               "stale": false,
-              "device": "bo-laptop (bo)",
+              "device": "bo@bo-laptop",
               "device_id": "d-8e41d07c5a2b93f6e1d4c7a0",
               "windows": [
                 {
@@ -633,11 +642,11 @@ A shortened report from a team of two:
             "tokens": { "input": 3800000, "output": 1100000, "cache_read": 90000000, "cache_write": 4000000 },
             "usage": { "today": 900000, "7d": 4200000, "30d": 4900000, "90d": 4900000 },
             "users": 1,
-            "busiest": "bo-laptop",
+            "busiest": "bo@bo-laptop",
             "last_active_at": "2026-09-01T11:50:00Z",
             "per_device": [
               {
-                "device": "bo-laptop (bo)",
+                "device": "bo@bo-laptop",
                 "device_id": "d-8e41d07c5a2b93f6e1d4c7a0",
                 "current": true,
                 "sessions": 4,
@@ -711,7 +720,7 @@ A shortened report from a team of two:
       ],
       "rows": [
         {
-          "device": "ann-mbp",
+          "device": "ann@ann-mbp",
           "device_id": "d-3f9c2a51b7e04d18a6c90e12",
           "cells": [
             {
@@ -738,7 +747,7 @@ A shortened report from a team of two:
           "burn_estimated": false
         },
         {
-          "device": "bo-laptop",
+          "device": "bo@bo-laptop",
           "device_id": "d-8e41d07c5a2b93f6e1d4c7a0",
           "cells": [
             {

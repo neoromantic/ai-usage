@@ -81,7 +81,7 @@ func TestTeamAddsTokensAndTakesNewestReadingOfEachWindow(t *testing.T) {
 	if len(ws) != 2 || ws[0].Percent != 70 || !ws[0].ObservedAt.Equal(now.Add(-10*time.Minute)) || ws[1].Percent != 10 || !ws[1].ObservedAt.Equal(now.Add(-2*time.Hour)) || !ws[1].Main {
 		t.Fatalf("ann windows = %+v", ws)
 	}
-	if ann.Quota.Device != "otherbox (kim)" || ann.Quota.DeviceID != "d-other-device" || !ann.Quota.ObservedAt.Equal(now.Add(-10*time.Minute)) {
+	if ann.Quota.Device != "kim@otherbox" || ann.Quota.DeviceID != "d-other-device" || !ann.Quota.ObservedAt.Equal(now.Add(-10*time.Minute)) {
 		t.Fatalf("ann quota = %+v", ann.Quota)
 	}
 	var provs []string
@@ -241,7 +241,7 @@ func TestTeamPlanIsTheNewestAndPerDeviceIsByTokens(t *testing.T) {
 	for _, d := range bob.PerDevice {
 		order = append(order, d.Device)
 	}
-	if want := []string{"bbox (kim)", "cbox (kim)", "abox (kim)"}; !reflect.DeepEqual(order, want) {
+	if want := []string{"kim@bbox", "kim@cbox", "kim@abox"}; !reflect.DeepEqual(order, want) {
 		t.Fatalf("per device = %v", order)
 	}
 	if d := bob.PerDevice[0]; d.DeviceID != "d-bbox-device" || !d.Current || d.Sessions != 1 || d.Tokens.Input != 30 || d.LastActiveAt == nil || d.Usage.Today != 45 {

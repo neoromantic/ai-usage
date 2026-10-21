@@ -32,7 +32,7 @@ func TestDeviceName(t *testing.T) {
 	if got := a.config().Name; got != "Build bot" {
 		t.Fatalf("config name = %q", got)
 	}
-	if out := a.ok("name"); out != "Build bot\n" {
+	if out := a.ok("name"); out != "Build bot (the team sees tester@Build bot)\n" {
 		t.Fatalf("name = %q", out)
 	}
 	a.ok("collect", "--quiet")
@@ -49,6 +49,16 @@ func TestDeviceName(t *testing.T) {
 	}
 	if r := a.report(); r.Collector.DeviceLabel != "Build bot" || label(r, a.config().Device) != "Build bot" {
 		t.Fatalf("own label = %q, in the team %q", r.Collector.DeviceLabel, label(r, a.config().Device))
+	}
+	// The report calls it by its OS user at that name.
+	r := b.report()
+	for _, row := range r.Team.Matrix.Rows {
+		if row.DeviceID == a.config().Device && row.Device != "tester@Build bot" {
+			t.Fatalf("the matrix names it %q", row.Device)
+		}
+	}
+	if r := a.report(); r.Collector.Name != "tester@Build bot" {
+		t.Fatalf("own name = %q", r.Collector.Name)
 	}
 	if got := label(b.report(), a.config().Device); got != "Build bot" {
 		t.Fatalf("the team sees %q", got)
@@ -72,7 +82,7 @@ func TestDeviceName(t *testing.T) {
 
 	// A name set would refuse is not used from the environment either.
 	t.Setenv("AI_USAGE_NAME", "evil\nFAKE LINE\x1b[2J")
-	if out := a.ok("name"); !strings.Contains(out, "ignored") || !strings.HasSuffix(out, "\nBuild bot\n") {
+	if out := a.ok("name"); !strings.Contains(out, "ignored") || !strings.HasSuffix(out, "\nBuild bot (the team sees tester@Build bot)\n") {
 		t.Fatalf("name with a bad AI_USAGE_NAME = %q", out)
 	}
 	if r := a.report(); r.Collector.DeviceLabel != "Build bot" {
@@ -80,7 +90,7 @@ func TestDeviceName(t *testing.T) {
 	}
 	t.Setenv("AI_USAGE_NAME", "")
 
-	if out := a.ok("name", "clear"); !strings.Contains(out, "test-host") {
+	if out := a.ok("name", "clear"); !strings.Contains(out, "test-host") || !strings.Contains(out, "tester@test-host") {
 		t.Fatalf("name clear = %q", out)
 	}
 	a.ok("collect", "--quiet")

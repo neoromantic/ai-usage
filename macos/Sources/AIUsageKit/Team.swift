@@ -210,7 +210,7 @@ public struct TeamMatrix: Sendable {
     }
 }
 
-/// The Team window's status: each device's user, release, last report,
+/// The Team window's status: each device's release, last report, its
 /// tools, tokens in each period, and the report's NOTE, a line each in the
 /// matrix's order, as the console's status view has them. It takes each
 /// from the report and only sorts the lines when asked.
@@ -227,7 +227,6 @@ public struct DeviceStatusTable: Sendable {
         public let deviceId: String
         /// The device as the team has it; nil for a row it does not have.
         public let team: TeamDevice?
-        public let user: String
         public let version: String
         /// It runs an older release than the latest.
         public let behind: Bool
@@ -242,7 +241,7 @@ public struct DeviceStatusTable: Sendable {
     }
 
     public enum SortKey: Hashable, Sendable {
-        case device, user, version, seen
+        case device, version, seen
         case tokens(Period)
     }
 
@@ -254,7 +253,7 @@ public struct DeviceStatusTable: Sendable {
     public init(_ r: Report) {
         lines = r.team.matrix.rows.map { row in
             let d = r.team.devices.first { $0.device == row.deviceId }
-            return Line(device: row.device, deviceId: row.deviceId, team: d, user: d?.osUser ?? "", version: d?.collectorVersion ?? "",
+            return Line(device: row.device, deviceId: row.deviceId, team: d, version: d?.collectorVersion ?? "",
                         behind: d?.old ?? false, seen: d?.collectedAt,
                         tools: (d?.sources ?? []).filter { $0.status != "skipped" }.map {
                             Tool(provider: $0.provider, failing: $0.status == "error" || $0.status == "partial", error: $0.error)
@@ -274,7 +273,6 @@ public struct DeviceStatusTable: Sendable {
         return TeamMatrix.sorted(lines, ascending: ascending) { a, b in
             switch key {
             case .device: return a.device.localizedStandardCompare(b.device)
-            case .user: return a.user.localizedStandardCompare(b.user)
             case .version: return a.version.compare(b.version, options: .numeric)
             case .seen: return TeamMatrix.compare(b.seen ?? .distantPast, a.seen ?? .distantPast)
             case .tokens(let p): return TeamMatrix.compare(a.tokens.value[p], b.tokens.value[p])

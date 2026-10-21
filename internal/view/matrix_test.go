@@ -37,7 +37,7 @@ func TestUsersSinceTheWindowBegan(t *testing.T) {
 		otherDoc(t, f.key, "d-gone-device", "gone", start.Add(-time.Hour), gone),
 	)
 	bots := findTeamAccount(t, r, "codex", "bots")
-	if bots.Users != 2 || bots.Busiest == nil || *bots.Busiest != "build" {
+	if bots.Users != 2 || bots.Busiest == nil || *bots.Busiest != "kim@build" {
 		t.Fatalf("users = %d busiest %v", bots.Users, bots.Busiest)
 	}
 
@@ -50,7 +50,7 @@ func TestUsersSinceTheWindowBegan(t *testing.T) {
 	addAccount(old, "claude", "lee", false, nil, 0)
 	spend(old, "claude", "lee", "/w", 50, now.Add(-8*24*time.Hour))
 	r2 := withTeam(t, f2, otherDoc(t, f2.key, "d-old-device", "oldbox", now, old))
-	if s := findTeamAccount(t, r2, "claude", "lee"); s.Users != 1 || s.Busiest == nil || *s.Busiest != "thisbox" {
+	if s := findTeamAccount(t, r2, "claude", "lee"); s.Users != 1 || s.Busiest == nil || *s.Busiest != "sam@thisbox" {
 		t.Fatalf("lee users = %d busiest %v", s.Users, s.Busiest)
 	}
 }
@@ -92,7 +92,7 @@ func TestMatrix(t *testing.T) {
 		t.Fatalf("codex column = %+v", c)
 	}
 	// Rows by tokens in 7 days: build spent 3.5M, this device 5M.
-	if len(mx.Rows) != 2 || mx.Rows[0].Device != "thisbox" || mx.Rows[1].Device != "build" {
+	if len(mx.Rows) != 2 || mx.Rows[0].Device != "sam@thisbox" || mx.Rows[1].Device != "kim@build" {
 		t.Fatalf("rows = %+v", mx.Rows)
 	}
 	this, other := mx.Rows[0], mx.Rows[1]
@@ -121,7 +121,7 @@ func TestMatrix(t *testing.T) {
 	if !near(this.Share.Week, 5/8.5*100) || !near(other.Share.Week, 3.5/8.5*100) {
 		t.Fatalf("row shares = %+v %+v", this.Share, other.Share)
 	}
-	if bots := findTeamAccount(t, r, "codex", "bots@a.io"); bots.Users != 2 || *bots.Busiest != "build" {
+	if bots := findTeamAccount(t, r, "codex", "bots@a.io"); bots.Users != 2 || *bots.Busiest != "kim@build" {
 		t.Fatalf("bots users = %d %v", bots.Users, bots.Busiest)
 	}
 	if h := findTeamAccount(t, r, "hermes", "openrouter"); h.Subscription {
@@ -163,7 +163,7 @@ func TestMatrixSplitsHermesByLogin(t *testing.T) {
 		t.Fatalf("link = %+v", h.Link)
 	}
 	mx := r.Team.Matrix
-	if len(mx.Rows) != 2 || mx.Rows[0].Device != "otherbox" || mx.Rows[0].Usage.Week != 5_000_000 {
+	if len(mx.Rows) != 2 || mx.Rows[0].Device != "kim@otherbox" || mx.Rows[0].Usage.Week != 5_000_000 {
 		t.Fatalf("rows = %+v", mx.Rows)
 	}
 	for label, want := range map[string]struct {
@@ -178,7 +178,7 @@ func TestMatrixSplitsHermesByLogin(t *testing.T) {
 			t.Fatalf("%s cell = %+v", label, c)
 		}
 	}
-	if sam := findTeamAccount(t, r, "codex", "sam@mail.test"); sam.Users != 1 || sam.Busiest == nil || *sam.Busiest != "otherbox" {
+	if sam := findTeamAccount(t, r, "codex", "sam@mail.test"); sam.Users != 1 || sam.Busiest == nil || *sam.Busiest != "kim@otherbox" {
 		t.Fatalf("sam users = %d %v", sam.Users, sam.Busiest)
 	}
 	if got := shares(10, []int64{1, 1, 1}); !reflect.DeepEqual(got, []int64{3, 4, 3}) {

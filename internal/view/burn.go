@@ -39,7 +39,7 @@ func (m *merger) estimate(t *Team) {
 	g := collect.ExtendedWire(m.in.Team, m.in.Key.Fingerprint(), m.in.Config.Device, m.in.State.Relay.NoExtUntil, m.now)
 	hs := m.heldBackDevices(g)
 	for _, h := range hs {
-		t.HeldBackBy = append(t.HeldBackBy, h.Label)
+		t.HeldBackBy = append(t.HeldBackBy, h.Name)
 	}
 	var reason string
 	switch {
@@ -57,7 +57,7 @@ func (m *merger) estimate(t *Team) {
 		var labels []string
 		for _, d := range t.Devices {
 			if d.BurnEstimated {
-				labels = append(labels, d.Label)
+				labels = append(labels, d.Name)
 			}
 		}
 		reason = labels[0] + " sent no weighted days yet: its next run sends them"
@@ -75,7 +75,7 @@ func (m *merger) heldBackDevices(g collect.Gate) []TeamDevice {
 	var hs []TeamDevice
 	for _, id := range g.HeldBack {
 		k := m.in.Team.Known[id]
-		h := TeamDevice{Device: id, Label: id, CollectorVersion: k.Version, CollectedAt: k.Last, Silent: true}
+		h := TeamDevice{Device: id, Label: id, Name: id, CollectorVersion: k.Version, CollectedAt: k.Last, Silent: true}
 		for _, dv := range m.devs {
 			if dv.dev.Device == id {
 				h = *dv.dev
@@ -83,7 +83,7 @@ func (m *merger) heldBackDevices(g collect.Gate) []TeamDevice {
 		}
 		hs = append(hs, h)
 	}
-	by := byBurn(Week, func(d TeamDevice) Usage { return d.Burn }, func(d TeamDevice) string { return d.Label })
+	by := byBurn(Week, func(d TeamDevice) Usage { return d.Burn }, func(d TeamDevice) string { return d.Name })
 	slices.SortStableFunc(hs, by)
 	return hs
 }
@@ -128,12 +128,12 @@ func (m *merger) gone(h TeamDevice) bool {
 // heldBackReason is why the one held-back device h holds back weighted
 // days, or cycles, which the release since added, and what it takes.
 func (m *merger) heldBackReason(h TeamDevice, since string) string {
-	runs := h.Label + " runs " + h.CollectorVersion + ": "
+	runs := h.Name + " runs " + h.CollectorVersion + ": "
 	switch m.heldBackStep(h) {
 	case stepForget:
 		// The relay forgets a record for everyone, but only the device
 		// that forgets a record the relay let expire stops waiting for it.
-		out := h.Label + " has not reported since " + h.CollectedAt.In(m.loc()).Format("Jan 2") + ": forget it with ai-usage team forget-device " + shortDevice(h.Device)
+		out := h.Name + " has not reported since " + h.CollectedAt.In(m.loc()).Format("Jan 2") + ": forget it with ai-usage team forget-device " + shortDevice(h.Device)
 		if m.gone(h) {
 			out += " on each device"
 		}
@@ -141,12 +141,12 @@ func (m *merger) heldBackReason(h TeamDevice, since string) string {
 	case stepReinstall:
 		return runs + "reinstall with install.sh"
 	case stepRebuild:
-		return h.Label + " runs a build from source before " + since + ": build it again"
+		return h.Name + " runs a build from source before " + since + ": build it again"
 	case stepUpdate:
-		return h.Label + " runs " + h.CollectorVersion + " and has not updated; run ai-usage update on it"
+		return h.Name + " runs " + h.CollectorVersion + " and has not updated; run ai-usage update on it"
 	}
 	if h.Silent {
-		return h.Label + " has not reported since " + h.CollectedAt.In(m.loc()).Format("Jan 2") + ": it should update when it next runs"
+		return h.Name + " has not reported since " + h.CollectedAt.In(m.loc()).Format("Jan 2") + ": it should update when it next runs"
 	}
 	return runs + "it should update within 15 minutes"
 }
@@ -161,7 +161,7 @@ func (m *merger) heldBackSteps(hs []TeamDevice) string {
 	silent := false
 	for _, h := range hs {
 		st := m.heldBackStep(h)
-		by[st] = append(by[st], h.Label)
+		by[st] = append(by[st], h.Name)
 		if st == stepForget {
 			forget = append(forget, h)
 		}
@@ -205,14 +205,14 @@ func (m *merger) heldBackSteps(hs []TeamDevice) string {
 // report again: by the id the command takes, on each device when the relay
 // no longer has a record of one, as heldBackReason says for one alone.
 func (m *merger) forgetStep(hs []TeamDevice) string {
-	out := "forget " + hs[0].Label + " with ai-usage team forget-device " + shortDevice(hs[0].Device)
+	out := "forget " + hs[0].Name + " with ai-usage team forget-device " + shortDevice(hs[0].Device)
 	if len(hs) > 1 {
 		var ns []string
 		for _, h := range hs {
-			if n := shortDevice(h.Device); h.Label == h.Device {
+			if n := shortDevice(h.Device); h.Name == h.Device {
 				ns = append(ns, n)
 			} else {
-				ns = append(ns, h.Label+" ("+n+")")
+				ns = append(ns, h.Name+" ("+n+")")
 			}
 		}
 		out = "forget " + firstNames(ns, 3) + " with ai-usage team forget-device ID"

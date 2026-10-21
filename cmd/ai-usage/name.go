@@ -13,10 +13,13 @@ import (
 
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
+	"github.com/neoromantic/ai-usage/internal/view"
 )
 
-// deviceName is what the team calls this device: AI_USAGE_NAME, else the
-// name set with `ai-usage name set`, else the host name.
+// deviceName is this device's label, the name it goes by in the team:
+// AI_USAGE_NAME, else the name set with `ai-usage name set`, else the host
+// name. The report calls it by its OS user at that name, as view.DeviceName
+// says.
 func deviceName(cfg state.Config) string {
 	if v, ok := envName(); ok {
 		return v
@@ -109,7 +112,7 @@ func cmdName(args []string, stdout io.Writer) error {
 			fmt.Fprintf(stdout, "saved %s; while AI_USAGE_NAME is set, this device is %s\n", n, v)
 			return nil
 		}
-		fmt.Fprintf(stdout, "this device is now %s; the team sees the name after the next run\n", n)
+		fmt.Fprintf(stdout, "this device is now %s; the team sees %s after the next run\n", n, view.DeviceName(n, osUser()))
 		return nil
 	case "clear":
 		if len(args) != 0 {
@@ -122,7 +125,7 @@ func cmdName(args []string, stdout io.Writer) error {
 			fmt.Fprintf(stdout, "cleared; while AI_USAGE_NAME is set, this device is %s\n", v)
 			return nil
 		}
-		fmt.Fprintf(stdout, "this device goes by its host name, %s, again\n", hostname())
+		fmt.Fprintf(stdout, "this device goes by its host name, %s, again%s\n", hostname(), teamSees(hostname(), "; "))
 		return nil
 	default:
 		return usageError("unknown name command " + sub)
@@ -141,14 +144,28 @@ func showName(cfg state.Config, stdout io.Writer) {
 			saved = hostname()
 		}
 		if saved == v {
-			fmt.Fprintf(stdout, "%s (from AI_USAGE_NAME)\n", v)
+			fmt.Fprintf(stdout, "%s (from AI_USAGE_NAME%s)\n", v, teamSees(v, "; "))
 			break
 		}
 		// launchd and cron start runs without the shell's variables.
-		fmt.Fprintf(stdout, "%s (from AI_USAGE_NAME, in runs that see it; runs without it, such as the system scheduler's, use %s)\n", v, saved)
+		fmt.Fprintf(stdout, "%s (from AI_USAGE_NAME, in runs that see it%s; runs without it, such as the system scheduler's, use %s)\n", v, teamSees(v, "; "), saved)
 	case cfg.Name != "":
+		if s := teamSees(cfg.Name, ""); s != "" {
+			fmt.Fprintf(stdout, "%s (%s)\n", cfg.Name, s)
+			break
+		}
 		fmt.Fprintln(stdout, cfg.Name)
 	default:
-		fmt.Fprintf(stdout, "%s (the host name; `ai-usage name set NAME` names this device)\n", hostname())
+		fmt.Fprintf(stdout, "%s (the host name%s; `ai-usage name set NAME` names this device)\n", hostname(), teamSees(hostname(), "; "))
 	}
+}
+
+// teamSees says, after sep, what the report calls this device by the name
+// n: its OS user at n. It is "" where that is n itself, as for a name with
+// an @ in it.
+func teamSees(n, sep string) string {
+	if full := view.DeviceName(n, osUser()); full != n {
+		return sep + "the team sees " + full
+	}
+	return ""
 }
