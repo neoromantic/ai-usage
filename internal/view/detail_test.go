@@ -1,6 +1,7 @@
 package view
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -107,6 +108,56 @@ func TestDetailLines(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestDetailOnce: a detail says each error and each reason for no reading
+// once, in its head, and not again in its ATTENTION; and an account's
+// TOTAL claims no share of a period it has no tokens in.
+func TestDetailOnce(t *testing.T) {
+	seen := map[string]bool{}
+	for _, name := range []string{"team", "single"} {
+		r := loadReport(t, name)
+		for _, per := range Periods {
+			o := Options{Width: 160, Loc: sampleZone, Period: per}
+			for _, k := range Render(r, Options{Width: 120, Interactive: true}).Picks {
+				text := sgr.ReplaceAllString(detailText(t, r, o, k), "")
+				var said []string
+				if k.Device != "" {
+					d := (&page{r: &r}).device(k.Device, "")
+					said = deviceErrors(d)
+					if d.Error != nil {
+						said = append(said, *d.Error)
+					}
+				} else if a := accountOf(&r.Team, k.Provider, k.Label); a.NoReading != nil {
+					said = append(said, *a.NoReading)
+				}
+				for _, s := range said {
+					seen["said"] = true
+					if n := strings.Count(text, prefix(s, 24)); n > 1 {
+						t.Errorf("%s %v %+v says %q %d times:\n%s", name, per, k, s, n, text)
+					}
+				}
+				if k.Device != "" {
+					continue
+				}
+				i := strings.Index(text, "\nDEVICES  ")
+				if i < 0 {
+					continue
+				}
+				col := r.Team.Matrix.Columns[slices.IndexFunc(r.Team.Matrix.Columns, func(c Column) bool { return !c.NoQuota && c.Provider == k.Provider && c.Label == k.Label })]
+				total := strings.Fields(text[i+strings.Index(text[i:], "\n  TOTAL"):])
+				if share := total[slices.Index(total, "TOTAL")+len(Periods)+1]; per.Of(col.Burn) == 0 {
+					seen["no tokens"] = true
+					if share != "·" {
+						t.Errorf("%s %v %+v: TOTAL of no tokens has a share of %s:\n%s", name, per, k, share, text)
+					}
+				}
+			}
+		}
+	}
+	if !seen["said"] || !seen["no tokens"] {
+		t.Fatalf("the fixtures test too little: %v", seen)
 	}
 }
 

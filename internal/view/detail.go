@@ -98,15 +98,35 @@ func Detail(r Report, o Options, k Pick) (Page, bool) {
 	return p.finish(body), true
 }
 
-// accountDetail is the sections of an account's detail.
+// accountDetail is the sections of an account's detail. Its ATTENTION
+// leaves out why it has no reading, which its head says in full.
 func (p *page) accountDetail(provider string, a *TeamAccount) [][]chunks {
-	about := func(at Attention) bool { return at.Provider == provider && at.Account == a.Label }
+	about := func(at Attention) bool {
+		return at.Provider == provider && at.Account == a.Label && at.Kind != AttentionNoReading
+	}
 	return [][]chunks{p.accountFacts(provider, a), p.attentionOf(about), p.windows(a), p.history(a), p.spenders(provider, a), p.accountProjects(provider, a)}
 }
 
-// deviceDetail is the sections of a device's detail.
+// deviceDetail is the sections of a device's detail. Its ATTENTION leaves
+// out what its head says in full: that it is silent or reinstalled, and
+// its errors.
 func (p *page) deviceDetail(d *TeamDevice) [][]chunks {
-	about := func(at Attention) bool { return aboutDevice(at, *d) }
+	head := deviceErrors(d)
+	if d.Error != nil {
+		head = append(head, *d.Error)
+	}
+	if d.UpdateError != nil {
+		head = append(head, sourceError("update", *d.UpdateError))
+	}
+	about := func(at Attention) bool {
+		switch {
+		case !aboutDevice(at, *d), at.Kind == AttentionDuplicate:
+			return false
+		case at.Kind == AttentionSilent, at.Kind == AttentionError:
+			return at.Message != "" && !slices.Contains(head, at.Message)
+		}
+		return true
+	}
 	out := [][]chunks{p.deviceFacts(d), p.attentionOf(about), p.deviceAccounts(d)}
 	if d.This {
 		out = append(out, p.projects())
@@ -247,7 +267,7 @@ func (p *page) windows(a *TeamAccount) []chunks {
 	ws := slices.Clone(a.Quota.Windows)
 	slices.SortStableFunc(ws, func(x, y Window) int { return btoi(y.Main) - btoi(x.Main) })
 	main := mainWindow(ws)
-	// The bar shrinks to half once the columns that drop are gone.
+	// PACE goes first, then the bar shrinks to half, then RUNS OUT goes.
 	build := func(bar int) ([]chunk, []*dcol) {
 		name := &dcol{head: "WINDOW"}
 		used := &dcol{head: "USED"}
@@ -255,8 +275,8 @@ func (p *page) windows(a *TeamAccount) []chunks {
 		resets := &dcol{head: "RESETS"}
 		clock := &dcol{}
 		at := &dcol{head: "AT RESET", right: true}
-		pace := &dcol{head: "PACE", drop: 2}
-		out := &dcol{head: "RUNS OUT", drop: 1}
+		pace := &dcol{head: "PACE", drop: 1}
+		out := &dcol{head: "RUNS OUT", drop: 3}
 		var marks []chunk
 		for i := range ws {
 			w := &ws[i]
@@ -279,7 +299,7 @@ func (p *page) windows(a *TeamAccount) []chunks {
 	}
 	marks, cols := build(barCells)
 	_, narrow := build(narrowBar)
-	cols[1].narrow = narrow[1].cells
+	cols[1].narrow, cols[1].narrowAt = narrow[1].cells, 2
 	title := chunks{p.bold("WINDOWS"), p.plain("  "), p.muted(strconv.Itoa(len(ws)) + g.sep + "how full each is, and how full it ends")}
 	return append([]chunks{title}, p.table(marks, cols)...)
 }
@@ -389,8 +409,13 @@ func (p *page) spenders(provider string, a *TeamAccount) []chunks {
 		cell := r.Cells[col]
 		t.row(p.rowMark(r), chunks{p.plain(p.txt(r.Device))}, window(cell.WindowBurn), cell.Burn, per.share(cell.BurnShare), last(r.DeviceID))
 	}
-	hundred := 100.0
-	t.row(p.space(1), chunks{p.muted("TOTAL")}, window(c.WindowBurn), c.Burn, &hundred, nil)
+	// TOTAL is the whole of the account's tokens, when it has any.
+	var whole *float64
+	if per.Of(c.Burn) > 0 {
+		hundred := 100.0
+		whole = &hundred
+	}
+	t.row(p.space(1), chunks{p.muted("TOTAL")}, window(c.WindowBurn), c.Burn, whole, nil)
 	title := chunks{p.bold("DEVICES"), p.plain("  "), p.muted(strconv.Itoa(len(rows)) + p.g.sep + "by " + p.teamPeriod() + p.g.sep + "M weighted tokens")}
 	if c.WindowStart != nil {
 		title = append(title, p.muted(p.g.sep+"window since "+c.WindowStart.In(p.loc).Format("Jan 2 15:04")))
@@ -452,14 +477,8 @@ func (p *page) deviceFacts(d *TeamDevice) []chunks {
 		add("REINSTALLED", p.muted("as "+p.txt(*d.ReplacedBy)))
 	}
 	facts = append(facts, fact{"VIA", p.harnesses(*d)})
-	// Each harness that fails, else the run's own error; a silent device's
-	// is the one it last reported.
-	var errs []string
-	for _, s := range d.Sources {
-		if s.Error != nil && (s.Status == "error" || s.Status == "partial") {
-			errs = append(errs, sourceError(s.Provider, *s.Error))
-		}
-	}
+	// Each harness that fails, else the run's own error.
+	errs := deviceErrors(d)
 	if len(errs) == 0 && d.Error != nil {
 		errs = []string{*d.Error}
 	}
@@ -486,6 +505,18 @@ func (p *page) deviceFacts(d *TeamDevice) []chunks {
 		add("GAP", p.muted(age(time.Duration(d.Gap.Seconds)*time.Second)+" without a report at "+p.clock(d.Gap.At)+", the longest in 2 days"))
 	}
 	return p.factLines(title, facts)
+}
+
+// deviceErrors are the errors of each harness that fails on a device; a
+// silent device's are the ones it last reported.
+func deviceErrors(d *TeamDevice) []string {
+	var errs []string
+	for _, s := range d.Sources {
+		if s.Error != nil && (s.Status == "error" || s.Status == "partial") {
+			errs = append(errs, sourceError(s.Provider, *s.Error))
+		}
+	}
+	return errs
 }
 
 // deviceName is a device's name as DEVICES shows it.
@@ -546,11 +577,16 @@ func (p *page) deviceAccounts(d *TeamDevice) []chunks {
 		}
 		t.row(p.space(1), label, win, cell.Burn, per.share(cell.BurnShare), last)
 	}
-	t.row(p.space(1), chunks{p.muted("TOTAL")}, -1, row.Burn, per.share(row.BurnShare), nil)
+	// SHARE is the device's part of each account; its part of the team's
+	// tokens is in the title, not in TOTAL.
+	t.row(p.space(1), chunks{p.muted("TOTAL")}, -1, row.Burn, nil, nil)
 	if row.BurnEstimated {
 		t.estimated()
 	}
 	title := chunks{p.bold("ACCOUNTS"), p.plain("  "), p.muted(strconv.Itoa(len(cols)) + p.g.sep + "by " + p.teamPeriod() + p.g.sep + "M weighted tokens")}
+	if s := per.share(row.BurnShare); s != nil && len(m.Rows) > 1 {
+		title = append(title, p.muted(p.g.sep+p.percent(s)+"% of the team"))
+	}
 	return append([]chunks{title}, p.table(t.marks, t.cols())...)
 }
 
@@ -637,10 +673,11 @@ type dcol struct {
 	right bool
 	cells []chunks
 	drop  int
-	// narrow are its cells in fewer columns, which it takes once every
-	// column that drops has gone, before the first column is cut.
-	narrow []chunks
-	w      int
+	// narrow are its cells in fewer columns, which it takes at narrowAt in
+	// the order of drop.
+	narrow   []chunks
+	narrowAt int
+	w        int
 }
 
 // tableWidth is how wide a table of cols is, each as wide as its heading
@@ -659,25 +696,27 @@ func tableWidth(cols []*dcol) int {
 
 // table is a detail's table: the dim headings, then a row for each of
 // marks, the mark before its cells. Where it is wider than the page, the
-// columns go in their order of drop, then a column with narrow cells takes
-// them, then the first column is cut.
+// columns go, or take their narrow cells, in their order of drop, then the
+// first column is cut.
 func (p *page) table(marks []chunk, cols []*dcol) []chunks {
 	for tableWidth(cols) > p.w {
-		k := -1
+		k, step, narrow := -1, 0, false
 		for i, c := range cols {
-			if c.drop > 0 && (k < 0 || c.drop < cols[k].drop) {
-				k = i
+			if c.drop > 0 && (k < 0 || c.drop < step) {
+				k, step, narrow = i, c.drop, false
+			}
+			if c.narrow != nil && (k < 0 || c.narrowAt < step) {
+				k, step, narrow = i, c.narrowAt, true
 			}
 		}
 		if k < 0 {
 			break
 		}
-		cols = slices.Delete(slices.Clone(cols), k, k+1)
-	}
-	for _, c := range cols {
-		if c.narrow != nil && tableWidth(cols) > p.w {
-			c.cells = c.narrow
+		if narrow {
+			cols[k].cells, cols[k].narrow = cols[k].narrow, nil
+			continue
 		}
+		cols = slices.Delete(slices.Clone(cols), k, k+1)
 	}
 	if over := tableWidth(cols) - p.w; over > 0 {
 		cols[0].w = max(cols[0].w-over, minAccount)

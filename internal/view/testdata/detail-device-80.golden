@@ -1,4 +1,4 @@
-[1mai-usage[m · annbook · team qmvrtzpa   ● collected 7m  ● relay 7m  ● up to date
+[1mai-usage[m · annbook · team qmvrtzpa  ● collected 7m  ● relay 7m  ● up to date
 
 [1mDEVICE[m  [1mMac.localdomain[m
   USER     kim
@@ -8,11 +8,10 @@
   ERROR    codex: app-server exited without answering
 
 [1mATTENTION[m
-[7m ERROR [m Mac.localdomain            codex: app-server exited without answering
-[7m OLD   [m 3 devices on old releases  Mac.localdomain +2 · latest v1.4.2
+[7m OLD [m 3 devices on old releases  Mac.localdomain +2 · latest v1.4.2
 
-[1mACCOUNTS[m  2 · by 7d UTC · M weighted tokens
+[1mACCOUNTS[m  2 · by 7d UTC · M weighted tokens · 15% of the team
   ACCOUNT               TODAY   7D   30D   90D  SHARE
   codex unknown           128  427  1621  3839   100%
   claude kim@corp.test     37  125   474  1123   100%
-  TOTAL                   165  551  2095  4963    15%
+  TOTAL                   165  551  2095  4963      ·

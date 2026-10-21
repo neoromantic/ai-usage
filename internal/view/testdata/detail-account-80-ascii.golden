@@ -10,10 +10,10 @@
 [7m OVER [m claude ann@acme.dev  runs out ~Thu 01:17, 2d 23h before reset . 1d old
 
 [1mWINDOWS[m  3 . how full each is, and how full it ends
-  WINDOW  USED                      LEFT  RESETS               AT RESET
-  7d      =========+======--------  ~33%  3d 7h   Sun 01:00  ~174% over
-  5h      ==========--|-----------   60%  2h 12m  Wed 19:50      80% ok
-  Fable   ============+===========    0%  3d 7h   Sun 01:00         out
+  WINDOW  USED          LEFT  RESETS               AT RESET  RUNS OUT
+  7d      ====+===----  ~33%  3d 7h   Sun 01:00  ~174% over  ~Thu 01:17
+  5h      =====-|-----   60%  2h 12m  Wed 19:50      80% ok  .
+  Fable   ======+=====    0%  3d 7h   Sun 01:00         out  .
 
 [1mUTILIZATION[m  fullest % before each reset
   WINDOW  CYCLES  OUT  AVG  NEWEST FIRST
