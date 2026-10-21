@@ -1,4 +1,4 @@
-ai-usage · ann@annbook · team qmvrtzpa                                                               ● collected 7m ago  ● relay 7m ago  ● up to date
+ai-usage · ann@annbook · team qmvrtzpa                                                                   ● collected 7m ago  ● relay 7m ago  ● up to date
 
 ATTENTION
  OUT      codex ann@acme.dev   back Fri 17:09, in 1d 23h
@@ -38,7 +38,7 @@ UTILIZATION  fullest % before each reset
   sam@mail.test       4    1  94%    97   91  100  ~88
 ● lee@corp.test       9    ·  28%    22  ~35   18   40   27   31   12   44   19
 
-DEVICES  15 · 1 error · 1 silent · 4 old · by 7d UTC · M weighted tokens                                                              usage  ‹status›
+DEVICES  15 · 1 error · 1 silent · 4 old · by 7d UTC · M weighted tokens                                                                  usage  ‹status›
                         COLLECTOR ────────────────────────────  TOKENS ─────────────────────
   DEVICE                VERSION    SEEN  VIA                    TODAY     7D     30D     90D  NOTE
   root@srv1             v1.4.2       8m  claude, codex, hermes    145   1207    3621   10259
@@ -55,7 +55,7 @@ DEVICES  15 · 1 error · 1 silent · 4 old · by 7d UTC · M weighted tokens   
 ↓ ci@ci-runner-eu-wes…  v0.3.4 ↓    12m  codex                     ~3    ~18     ~54     ~90  update: latest v1.4.2
   hermes@bot-h          v1.4.2      16m  codex, hermes              1      9      32      63
   hermes@bot-i          v1.4.2      17m  codex, hermes             <1      2       6      13
-~ kim@Mac.localdomain   v1.4.0 ↓  3d 5h  claude, codex              ·      ·     180     492  silent since Sun 12:12 · reinstalled as Mac.localdomain
+~ kim@Mac.localdomain   v1.4.0 ↓  3d 5h  claude, codex              ·      ·     180     492  silent since Sun 12:12 · reinstalled as kim@Mac.localdomain
   TOTAL                                                          ~616  ~3586  ~12757  ~31896
 
 PROJECTS  ann@annbook · by 7d · M weighted tokens · claude since Sep 2

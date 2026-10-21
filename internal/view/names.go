@@ -12,8 +12,12 @@ import (
 // runs as, at its label, as in ann@mira-mbp. A person and their machine are
 // one consumer, and each OS user or bot on a shared server is one of its
 // own. A label that has an @ already is the name as it is, as is one whose
-// OS user is not known.
+// OS user is not known. A Windows user comes as DOMAIN\user, and the name
+// keeps the user.
 func DeviceName(label, osUser string) string {
+	if i := strings.LastIndexByte(osUser, '\\'); i >= 0 {
+		osUser = osUser[i+1:]
+	}
 	switch osUser {
 	case "", "unknown", unreadable:
 		return label

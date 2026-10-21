@@ -78,14 +78,14 @@
   },
   {
     "kind": "duplicate",
-    "subject": "annbook",
-    "text": "reinstalled as annbook: ai-usage team forget-device 3f9a1c2e",
+    "subject": "ann@annbook",
+    "text": "reinstalled as ann@annbook: ai-usage team forget-device 3f9a1c2e",
     "devices": [
-      "annbook"
+      "ann@annbook"
     ],
     "device_id": "d-3f9a1c2e5b7d9f1a3c5e7b9d",
     "at": "2026-08-29T12:00:00Z",
-    "message": "annbook"
+    "message": "ann@annbook"
   },
   {
     "kind": "old",

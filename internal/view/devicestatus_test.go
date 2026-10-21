@@ -416,8 +416,8 @@ func TestStatusNoteReplacedLimitGap(t *testing.T) {
 		i, w int
 		want string
 	}{
-		{old, -1, "silent since Sun 12:12 · reinstalled as Mac.localdomain"},
-		{old, 40, "reinstalled as Mac.localdomain"},
+		{old, -1, "silent since Sun 12:12 · reinstalled as kim@Mac.localdomain"},
+		{old, 40, "reinstalled as kim@Mac.localdomain"},
 		{old, 20, "reinstalled"},
 		{old, 10, "since Sun"},
 		{botC, -1, "gap 12h Sep 22"},

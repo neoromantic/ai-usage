@@ -442,6 +442,12 @@ func TestGuideNotes(t *testing.T) {
 	if !has(g, join) || has(g, app) || !has(Guide(r, "cron", true, Options{Width: 80, Loc: time.UTC}), app) {
 		t.Errorf("the guide's invitation, or its app line:\n%s", g)
 	}
+	// With a relay, the guide calls this device what the team does.
+	relayed := guideReport()
+	relayed.Collector.OSUser, relayed.Collector.Relay.URL = "ann", strPtr("https://relay.example")
+	if g := Guide(relayed, "cron", false, Options{Width: 80, Loc: time.UTC}); !has(g, "the team sees this device as ann@annbook,") {
+		t.Errorf("the guide's name of this device:\n%s", g)
+	}
 
 	// Estimated team totals: the guide repeats why, cut to the width with
 	// what to do kept.

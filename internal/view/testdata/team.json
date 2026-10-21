@@ -130,13 +130,13 @@
     {
       "kind": "duplicate",
       "subject": "kim@Mac.localdomain",
-      "text": "reinstalled as Mac.localdomain: ai-usage team forget-device e1f3a5c7",
+      "text": "reinstalled as kim@Mac.localdomain: ai-usage team forget-device e1f3a5c7",
       "devices": [
         "kim@Mac.localdomain"
       ],
       "device_id": "d-e1f3a5c7b9d1e3f5a7c9b1d3",
       "at": "2026-09-20T09:12:00Z",
-      "message": "Mac.localdomain"
+      "message": "kim@Mac.localdomain"
     },
     {
       "kind": "old",
@@ -1442,8 +1442,8 @@
         },
         "burn_estimated": false,
         "gap": null,
-        "replaced_by": "Mac.localdomain",
-        "note": "silent since Sun 12:12 · reinstalled as Mac.localdomain",
+        "replaced_by": "kim@Mac.localdomain",
+        "note": "silent since Sun 12:12 · reinstalled as kim@Mac.localdomain",
         "limitations": [],
         "update_error": null,
         "behind_since": null,

@@ -335,9 +335,9 @@ func newKindsReport() Report {
 			subAccount("kim@corp.test", false, now, weekly(20)),
 		}}},
 		Devices: []TeamDevice{
-			{Device: "d-0a1b2c3d4e5f60718293a4b5", Label: "annbook", This: true, CollectorVersion: "v0.4.0", CollectedAt: now},
-			{Device: "d-3f9a1c2e5b7d9f1a3c5e7b9d", Label: "annbook", CollectorVersion: "v0.3.4", CollectedAt: now.Add(-3 * 24 * time.Hour),
-				Silent: true, Old: true, ReplacedBy: strPtr("annbook")},
+			{Device: "d-0a1b2c3d4e5f60718293a4b5", Label: "annbook", OSUser: "ann", This: true, CollectorVersion: "v0.4.0", CollectedAt: now},
+			{Device: "d-3f9a1c2e5b7d9f1a3c5e7b9d", Label: "annbook", OSUser: "ann", CollectorVersion: "v0.3.4", CollectedAt: now.Add(-3 * 24 * time.Hour),
+				Silent: true, Old: true, ReplacedBy: strPtr("ann@annbook")},
 			{Device: "d-b01c1d2e3f4a5b6c7d8e9f10", Label: "bot-b", CollectorVersion: "v0.4.0", CollectedAt: now, Error: strPtr("codex: app-server exited without answering")},
 			{Device: "d-b02c1d2e3f4a5b6c7d8e9f20", Label: "bot-c", CollectorVersion: "v0.4.0", CollectedAt: now.Add(-30 * time.Hour), Silent: true},
 			{Device: "d-b00c1d2e3f4a5b6c7d8e9f00", Label: "bot-a", CollectorVersion: "v0.3.4", CollectedAt: now, Old: true},
@@ -365,7 +365,7 @@ func TestAttentionOrderOfEveryKind(t *testing.T) {
 	}
 	want := []string{
 		"out lee", "over bob", "tight ann", "outside sam", "error bot-b",
-		"no_reading a-very-long-subscription-name", "silent bot-c", "duplicate annbook",
+		"no_reading a-very-long-subscription-name", "silent bot-c", "duplicate ann@annbook",
 		"old srv1", "old bot-a", "under kim", "idle max",
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -375,7 +375,7 @@ func TestAttentionOrderOfEveryKind(t *testing.T) {
 	if out.ReadingAge != 30*3600 {
 		t.Errorf("a stale OUT has no age: %+v", out)
 	}
-	if dup.DeviceID != "d-3f9a1c2e5b7d9f1a3c5e7b9d" || dup.Message != "annbook" {
+	if dup.DeviceID != "d-3f9a1c2e5b7d9f1a3c5e7b9d" || dup.Message != "ann@annbook" {
 		t.Errorf("duplicate = %+v", dup)
 	}
 	if !reflect.DeepEqual(stuck.Limitations, []string{LimitNoClaudeQuota, LimitNoUpdateErrors}) || stuck.Message != "v0.4.0" || len(old.Limitations) != 0 {
@@ -402,7 +402,7 @@ func TestAttentionLinesAt80(t *testing.T) {
 		3:  "TIGHT claude ann@acme.dev ~91% at reset Fri 12:00",
 		4:  "OUTSIDE claude sam@mail.test +25 points, no team device spent",
 		6:  "NO READING claude a-very-long-subscr… on v0.2.0: reinstall with install.sh",
-		8:  "DUPLICATE annbook ai-usage team forget-device 3f9a1c2e",
+		8:  "DUPLICATE ann@annbook ai-usage team forget-device 3f9a1c2e",
 		9:  "OLD 1 device on v0.2.0 no Claude quota; reinstall",
 		10: "OLD 1 device on v0.3.4 bot-a · latest v0.4.0",
 		12: "IDLE claude max@mail.test idle 11d, paid and unused",
@@ -431,7 +431,7 @@ func TestAttentionLinesAt80(t *testing.T) {
 		3: "TIGHT claude ann@acme.dev ~91% at reset Fri 12:00 at this week's pace",
 		4: "OUTSIDE claude sam@mail.test +25 points in 20h, no team device spent",
 		6: "NO READING claude a-very-long-subscripti… annbook runs v0.2.0: reinstall with install.sh",
-		8: "DUPLICATE annbook reinstalled as annbook: ai-usage team forget-device 3f9a1c2e",
+		8: "DUPLICATE ann@annbook reinstalled as ann@annbook: ai-usage team forget-device 3f9a1c2e",
 		9: "OLD 1 device on v0.2.0 srv1 · cannot read Claude quota; reinstall with install.sh",
 	} {
 		if got := squeeze(wide[i]); got != want {

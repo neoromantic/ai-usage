@@ -287,7 +287,7 @@ func TestTeamReplacedBy(t *testing.T) {
 		doc("d-user-device", "annbook", "sam", now.Add(-72*time.Hour)),
 		doc("d-else-device", "srv1", "ann", now.Add(-72*time.Hour)),
 	)
-	want := map[string]string{"d-old1-device": "annbook", "d-old2-device": "annbook"}
+	want := map[string]string{"d-old1-device": "ann@annbook", "d-old2-device": "ann@annbook"}
 	for _, d := range r.Team.Devices {
 		if got := deref(d.ReplacedBy); got != deref(strPtrOr(want[d.Device])) {
 			t.Errorf("%s replaced by %s", d.Device, got)

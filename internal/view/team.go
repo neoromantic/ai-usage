@@ -628,7 +628,7 @@ func (m *merger) replaced() {
 			}
 		}
 		if by != nil {
-			o.ReplacedBy = strPtr(by.Label)
+			o.ReplacedBy = strPtr(by.Name)
 		}
 	}
 }

@@ -531,7 +531,7 @@ public struct TeamDevice: Decodable, Sendable {
     /// The longest time in the last 2 days the device did not report, when
     /// over an hour.
     @Absent public var gap: Gap?
-    /// The label of the device that reinstalled this one.
+    /// The name of the device that reinstalled this one.
     @Absent public var replacedBy: String?
     /// What the device's release cannot do: `no_claude_quota`,
     /// `no_update_errors`.

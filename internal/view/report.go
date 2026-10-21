@@ -488,8 +488,8 @@ type TeamDevice struct {
 	// Gap is the longest time within the last 2 days this device's reads of
 	// the team did not find the device's snapshot growing, when over an hour.
 	Gap *Gap `json:"gap"`
-	// ReplacedBy is the label of the device that reinstalled this one: the
-	// same name and OS user, reporting while this one is silent.
+	// ReplacedBy is the name of the device that reinstalled this one: the
+	// same label and OS user, reporting while this one is silent.
 	ReplacedBy *string `json:"replaced_by"`
 	// Note is what the status view's NOTE says of the device, in full, with
 	// clocks in this device's time zone; nil when it says nothing.

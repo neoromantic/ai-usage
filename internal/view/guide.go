@@ -35,7 +35,7 @@ func Guide(r Report, scheduler string, app bool, o Options) string {
 	if col.Relay.URL != nil {
 		// Sealing hides these from the relay, not from the team.
 		team = []string{
-			"the team sees this device as " + col.DeviceLabel + ", with accounts, emails, and projects",
+			"the team sees this device as " + col.name() + ", with accounts, emails, and projects",
 			"the relay sees tools, plans, and counts; the team key seals names and paths",
 		}
 	}

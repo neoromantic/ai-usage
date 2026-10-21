@@ -228,6 +228,8 @@ func TestDeviceName(t *testing.T) {
 		{"ann@mira", "ann", "ann@mira"},
 		{"srv1", "unknown", "srv1"},
 		{"srv1", "", "srv1"},
+		{"DESKTOP-7Q", `DESKTOP-7Q\ann`, "ann@DESKTOP-7Q"},
+		{"DESKTOP-7Q", `DESKTOP-7Q\`, "DESKTOP-7Q"},
 		{unreadable, unreadable, unreadable},
 	} {
 		if got := DeviceName(c.label, c.user); got != c.want {
