@@ -730,7 +730,7 @@ func (m *merger) noReading(x *teamAccount) *string {
 		}
 		for _, s := range dv.dev.Sources {
 			if s.Provider == x.provider && s.Error != nil {
-				if why := quotaReason(s, dv.dev.Name); why != "" {
+				if why := quotaReason(s, dv.dev.Name, func(home string) bool { return m.loggedIn(x, dv, home) }); why != "" {
 					return strPtr(why)
 				}
 			}
@@ -739,75 +739,153 @@ func (m *merger) noReading(x *teamAccount) *string {
 	return nil
 }
 
+// loggedIn says whether account x is the one logged in to home, as a
+// source's error on device dv names it. This device knows who is logged in
+// to each of its homes. Another device says only which accounts are, so its
+// home is taken for x only when x is the one account of its tool logged in
+// there.
+func (m *merger) loggedIn(x *teamAccount, dv *device, home string) bool {
+	if dv.dev.This {
+		for k, label := range m.in.State.Current {
+			p, h, _ := strings.Cut(k, "\x00")
+			// The error writes a home under the user's own with ~.
+			same := h == home || strings.HasPrefix(home, "~") && strings.HasSuffix(h, home[1:])
+			if p == x.provider && same && snapshot.Printable(label) == x.ta.Label {
+				return true
+			}
+		}
+		return false
+	}
+	n := 0
+	for _, y := range m.byProv[x.provider] {
+		if slices.ContainsFunc(y.ta.PerDevice, func(u DeviceUsage) bool { return u.DeviceID == dv.dev.Device && u.Current }) {
+			n++
+		}
+	}
+	return n == 1
+}
+
 // maxReason bounds a subscription's reason for having no reading.
 const maxReason = 200
 
-// quotaReasons are what keeps a harness from a quota reading, as its
-// source's error says it, and how a subscription's reason says that: what
-// is wrong, and what to do when there is something. Both are templates of
-// the match, as regexp.Expand takes them. Of those an error holds, the first
-// listed is taken. The rest of the error, such as what the harness printed,
-// is left out.
+// quotaReasons are what keeps a harness from a quota reading, as a part of
+// its source's error says it, and how a subscription's reason says that:
+// what is wrong, and what to do when there is something. Both are templates
+// of the match, as regexp.Expand takes them. Of those a part holds, the
+// first listed is taken. The rest of the part, such as what the harness
+// printed, is left out. A note keeps its source ok; the rest are problems
+// of the run, which a source that is ok has none of.
 var quotaReasons = []struct {
 	provider  string
+	note      bool
 	says      *regexp.Regexp
 	what, act string
 }{
-	// Notes, which keep a source ok.
-	{"claude", regexp.MustCompile(`update Claude Code to \S+ or newer \([^()]*\)`), "$0", ""},
-	{"claude", regexp.MustCompile(`(\S+ is Claude Code \S+(?: \([^()]*\))? but your sessions run \S+): (update Claude Code or put the newer one first on PATH)`), "$1", "$2"},
-	{"claude", regexp.MustCompile(`nonessential traffic is off in Claude Code's settings`), "$0", ""},
-	{"claude", regexp.MustCompile(`this Claude Code cannot read the usage`), "$0", "update it"},
-	{"claude", regexp.MustCompile(`showed the usage but did not cache it`), "Claude Code did not cache the usage", "update it"},
-	{"grok", regexp.MustCompile(regexp.QuoteMeta(probe.GrokNoCredits)), "no credit usage logged yet", ""},
-	// Problems of the run.
-	{"claude", regexp.MustCompile(`claude binary not found`), "claude not found", "install Claude Code or put it on PATH"},
-	{"claude", regexp.MustCompile(`could not read the usage`), "Claude Code could not read the usage", "run /usage in claude to see why"},
-	{"claude", regexp.MustCompile(`sees no claude\.ai plan`), "Claude Code sees no claude.ai plan", ""},
-	{"claude", regexp.MustCompile(`claude /usage: no answer in time`), "claude /usage timed out", ""},
-	{"claude", regexp.MustCompile(`claude /usage: `), "claude /usage failed", ""},
-	{"claude", regexp.MustCompile(`claude auth status: no answer in time`), "claude timed out", ""},
-	{"claude", regexp.MustCompile(`claude (auth status|config)\b`), "claude could not be asked", ""},
-	{"codex", regexp.MustCompile(`codex binary not found`), "codex not found", "install it or put it on PATH"},
-	// A codex too old to have app-server, or its account requests.
-	{"codex", regexp.MustCompile(`app-server exited without answering|Method not found|unknown variant`), "this codex cannot read its limits", "update codex"},
-	{"codex", regexp.MustCompile(`codex app-server: `), "codex did not start", "reinstall it"},
-	{"codex", regexp.MustCompile(`\b401\b|[Uu]nauthorized`), "codex's login was refused", "run codex login"},
-	{"codex", regexp.MustCompile(`codex \S+: no answer in time`), "codex timed out", ""},
-	{"codex", regexp.MustCompile(`codex (account/rateLimits/read|rateLimits): `), "codex could not read its limits", ""},
-	{"codex", regexp.MustCompile(`codex \S+: `), "codex could not be asked", ""},
-	{"grok", regexp.MustCompile(`grok log names no signed-in user`), "grok names no signed-in user", "run grok and sign in"},
-	{"grok", regexp.MustCompile(`grok log not found`), "no grok log", ""},
-	{"grok", regexp.MustCompile(`grok log: `), "grok's log could not be read", ""},
+	{"claude", true, regexp.MustCompile(`update Claude Code to \S+ or newer \([^()]*\)`), "$0", ""},
+	{"claude", true, regexp.MustCompile(`(\S+ is Claude Code \S+(?: \([^()]*\))? but your sessions run \S+): (update Claude Code or put the newer one first on PATH)`), "$1", "$2"},
+	{"claude", true, regexp.MustCompile(`nonessential traffic is off in Claude Code's settings`), "$0", ""},
+	{"claude", true, regexp.MustCompile(`this Claude Code cannot read the usage`), "$0", "update Claude Code"},
+	{"claude", true, regexp.MustCompile(`showed the usage but did not cache it`), "Claude Code did not cache the usage", "update Claude Code"},
+	{"claude", true, regexp.MustCompile(`^claude /usage: (another Claude Code process rewrote .*)`), "$1", ""},
+	{"grok", true, regexp.MustCompile(regexp.QuoteMeta(probe.GrokNoCredits)), "no credit usage logged yet", ""},
+	{"claude", false, regexp.MustCompile(`^claude binary not found`), "claude not found", "install Claude Code or put it on PATH"},
+	{"claude", false, regexp.MustCompile(`could not read the usage`), "Claude Code could not read the usage", "run /usage in claude to see why"},
+	{"claude", false, regexp.MustCompile(`sees no claude\.ai plan`), "Claude Code sees no claude.ai plan", ""},
+	{"claude", false, regexp.MustCompile(`^claude /usage: no answer in time`), "claude /usage timed out", ""},
+	{"claude", false, regexp.MustCompile(`^claude /usage: `), "claude /usage failed", ""},
+	{"claude", false, regexp.MustCompile(`^claude auth status: no answer in time`), "claude timed out", ""},
+	{"claude", false, regexp.MustCompile(`^claude (auth status|config)\b`), "claude could not be asked", ""},
+	{"codex", false, regexp.MustCompile(`^codex binary not found`), "codex not found", "install codex or put it on PATH"},
+	// app-server that exited is followed by the last line it wrote to
+	// stderr. One that names its config is no matter of codex's age, and
+	// neither is one that exited after it named the account.
+	{"codex", false, regexp.MustCompile(`^codex \S+: app-server exited without answering: .*(?i:config)`), "codex app-server exited", "run codex app-server to see why"},
+	{"codex", false, regexp.MustCompile(`^codex \S+: app-server exited without answering: .*unrecognized subcommand|^codex (initialize|account/read): app-server exited without answering`), "this codex cannot read its limits", "update codex"},
+	{"codex", false, regexp.MustCompile(`^codex \S+: app-server exited without answering`), "codex could not read its limits", ""},
+	// A request app-server does not know is one older than its codex.
+	{"codex", false, regexp.MustCompile(`^codex \S+: .*(Method not found|unknown variant)`), "this codex cannot read its limits", "update codex"},
+	{"codex", false, regexp.MustCompile(`^codex app-server: (fork/)?exec\b`), "codex did not start", "reinstall codex"},
+	{"codex", false, regexp.MustCompile(`\b401\b|[Uu]nauthorized`), "codex's login was refused", "run codex login"},
+	{"codex", false, regexp.MustCompile(`^codex \S+: no answer in time`), "codex timed out", ""},
+	{"codex", false, regexp.MustCompile(`^codex (account/rateLimits/read|rateLimits): `), "codex could not read its limits", ""},
+	{"codex", false, regexp.MustCompile(`^codex \S+: `), "codex could not be asked", ""},
+	{"grok", false, regexp.MustCompile(`^grok log names no signed-in user`), "grok names no signed-in user", "run grok and sign in"},
+	{"grok", false, regexp.MustCompile(`^grok log not found`), "no grok log", ""},
+	{"grok", false, regexp.MustCompile(`^grok log: `), "grok's log could not be read", ""},
 }
 
-// quotaReason is why source s of the device named label kept its accounts
-// from a quota reading, as quotaReasons word it, with the device after what
-// is wrong. A note it does not know, which keeps the source ok, is said as
-// it is. Else it is "".
-func quotaReason(s Source, label string) string {
-	msg := *s.Error
-	for _, r := range quotaReasons {
-		if r.provider != s.Provider {
-			continue
-		}
-		m := r.says.FindStringSubmatchIndex(msg)
-		if m == nil {
-			continue
-		}
-		act := ""
-		if r.act != "" {
-			act = ": " + string(r.says.ExpandString(nil, r.act, msg, m))
-		}
-		// What to do is kept whole.
+// quotaReason is why source s of the device named label kept an account
+// from a quota reading, as quotaReasons word the first part of its error
+// they know, with the device, and the home the part names, after what is
+// wrong. A part that names a home is taken only when mine says the account
+// is logged in to it. A note they do not know, on a source that is ok, is
+// said as it is. Else it is "".
+func quotaReason(s Source, label string, mine func(home string) bool) string {
+	for _, part := range sourceParts(s.Provider, *s.Error) {
 		where := " on " + label
-		what := string(r.says.ExpandString(nil, r.what, msg, m))
-		return snapshot.Truncate(what, max(maxReason-len(where+act), 16)) + where + act
-	}
-	if s.Status == "ok" {
-		return snapshot.Truncate(strings.TrimPrefix(msg, s.Provider+": ")+" on "+label, maxReason)
+		if part.home != "" {
+			if !mine(part.home) {
+				continue
+			}
+			where += " (" + snapshot.Truncate(part.home, 60) + ")"
+		}
+		for _, r := range quotaReasons {
+			if r.provider != s.Provider || !r.note && s.Status == "ok" {
+				continue
+			}
+			m := r.says.FindStringSubmatchIndex(part.text)
+			if m == nil {
+				continue
+			}
+			act := ""
+			if r.act != "" {
+				act = ": " + string(r.says.ExpandString(nil, r.act, part.text, m))
+			}
+			// What to do is kept whole.
+			what := string(r.says.ExpandString(nil, r.what, part.text, m))
+			return snapshot.Truncate(what, max(maxReason-len(where+act), 16)) + where + act
+		}
+		if s.Status == "ok" {
+			return snapshot.Truncate(strings.TrimPrefix(part.text, s.Provider+": ")+where, maxReason)
+		}
 	}
 	return ""
+}
+
+// sourcePart is a part of a source's error: what one home said, or every
+// home alike, and the home it names, if any.
+type sourcePart struct{ text, home string }
+
+var (
+	// partHome is the home a probe's error starts with, and noteHome the
+	// one a note ends with, on a device that asks several homes.
+	partHome = regexp.MustCompile(`^(~?/[^\s:;]*): `)
+	noteHome = regexp.MustCompile(` \((~?/[^\s();]*)\)$`)
+)
+
+// sourceParts splits a source's error of provider p into its parts. They
+// are joined with "; ", as a part's own words can be, as in "binary not
+// found; account unknown". Every part a probe or a note gives starts with a
+// home or with p, so what starts otherwise goes on with the part before.
+func sourceParts(p, msg string) []sourcePart {
+	var texts []string
+	for i, seg := range strings.Split(msg, "; ") {
+		if i > 0 && !partHome.MatchString(seg) && !strings.HasPrefix(seg, p+" ") && !strings.HasPrefix(seg, p+":") {
+			texts[len(texts)-1] += "; " + seg
+			continue
+		}
+		texts = append(texts, seg)
+	}
+	parts := make([]sourcePart, len(texts))
+	for i, t := range texts {
+		parts[i].text = t
+		if m := partHome.FindStringSubmatch(t); m != nil {
+			parts[i] = sourcePart{t[len(m[0]):], m[1]}
+		} else if m := noteHome.FindStringSubmatchIndex(t); m != nil {
+			parts[i] = sourcePart{t[:m[0]], t[m[2]:m[3]]}
+		}
+	}
+	return parts
 }
 
 // unknownReason is why tokens of harness p went to no login, and where,
