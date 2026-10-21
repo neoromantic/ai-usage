@@ -195,7 +195,7 @@ When standard input and output are both terminals, `ai-usage` opens the same pag
 
 ## Menu bar app
 
-On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/Applications` and opens it. With Homebrew, or after an install without it, `ai-usage app install` adds it; it then follows `ai-usage`. It starts at login and updates with `ai-usage`.
+On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/Applications` and opens it. With Homebrew, or after an install without it, `ai-usage app install` adds it; it then follows `ai-usage`. It starts at login and updates with `ai-usage`. Releases after v0.8.0 sign the app, like the `ai-usage` binary for macOS, with Developer ID and have Apple notarize it, so macOS opens it however it got to the Mac, even unzipped from `ai-usage_darwin_app.zip` downloaded in a browser.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/demo/menubar-light.png">
@@ -660,7 +660,7 @@ A binary built from source reports version `devel` (`dev` before v0.4.0). It nev
 
 ### A Mac missed a run after an update
 
-On macOS 27, launchd pins a launch agent it loads at login to its binary's code signature. `ai-usage` is signed ad hoc, so that is the binary's hash, which every release changes. Once an update has replaced the binary, launchd refuses the agent's next start, and at the start after it repairs the pin, records the new binary for the next login, and runs it. So an update can cost one scheduled run, never more. While launchd refuses it, `launchctl print` shows:
+On macOS 27, launchd pins a launch agent it loads at login to its binary's code signature. Up to v0.8.0, `ai-usage` was signed ad hoc, so that was the binary's hash, which every release changes. Later releases are signed with Developer ID, which launchd is expected to pin to the developer and the binary's identifier; these stay the same from release to release, so an update should keep the pin. If it does not, the repair below still covers it. The pin does change once, at the update from v0.8.0 or earlier to a signed release, and whenever a binary built from source, which is signed ad hoc, is replaced. Once such an update has replaced the binary, launchd refuses the agent's next start, and at the start after it repairs the pin, records the new binary for the next login, and runs it. So an update can cost one scheduled run, never more. While launchd refuses it, `launchctl print` shows:
 
 ```
 $ launchctl print gui/$(id -u)/io.github.neoromantic.ai-usage | grep -E '^.(state|last exit|job state|properties) '
@@ -763,7 +763,7 @@ go build -o ai-usage ./cmd/ai-usage
 go test ./...
 ```
 
-The menu bar app builds on macOS with Xcode or the Command Line Tools, and runs on macOS 14 and later. `macos/build.sh` builds it for both CPUs, signs it ad hoc, and zips it; a version that is not plain `vX.Y.Z` keeps self-update away from it:
+The menu bar app builds on macOS with Xcode or the Command Line Tools, and runs on macOS 14 and later. `macos/build.sh` builds it for both CPUs, signs it ad hoc, and zips it; a version that is not plain `vX.Y.Z` keeps self-update away from it. Releases sign it with Developer ID and have it notarized, as [docs/releasing.md](docs/releasing.md#signing-and-notarization) says:
 
 ```sh
 (cd macos && xcrun swift run AIUsageChecks)

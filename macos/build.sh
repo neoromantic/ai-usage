@@ -1,12 +1,18 @@
 #!/bin/sh
-# Build the menu bar app as a universal, ad-hoc signed "AI Usage.app" and
-# zip it the way a release ships it. Needs macOS with Xcode or the Command
-# Line Tools; runs from any folder.
+# Build the menu bar app as a universal, signed "AI Usage.app" and zip it
+# the way a release ships it. Needs macOS with Xcode or the Command Line
+# Tools; runs from any folder.
 #
 #   sh macos/build.sh VERSION OUT_ZIP
 #
 # VERSION is the release tag, such as v0.3.0; the bundle's version is the
 # tag without its v. The files on the way go to macos/.build.
+#
+# The app is signed ad hoc, unless AI_USAGE_SIGN_IDENTITY names a Developer
+# ID Application identity in the keychain: then it is signed with it, with
+# the hardened runtime and a secure timestamp. With AI_USAGE_NOTARY_KEY set
+# too, Apple notarizes it and the ticket is stapled to it before the zip;
+# see .github/scripts/notarize.sh for the key's variables.
 set -eu
 
 version=${1:?usage: build.sh VERSION OUT_ZIP}
@@ -28,10 +34,15 @@ case "$bundle_version" in
 esac
 [ "$(uname -s)" = Darwin ] || fail "the menu bar app builds only on macOS"
 
-# OUT_ZIP is relative to the caller's folder, not this one.
+# OUT_ZIP and the notary key are relative to the caller's folder, not this
+# one.
 case "$zip" in
 /*) ;;
 *) zip=$PWD/$zip ;;
+esac
+case "${AI_USAGE_NOTARY_KEY:-}" in
+"" | /*) ;;
+*) export AI_USAGE_NOTARY_KEY="$PWD/$AI_USAGE_NOTARY_KEY" ;;
 esac
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -100,8 +111,19 @@ cat >"$app/Contents/Info.plist" <<EOF
 EOF
 plutil -lint -s "$app/Contents/Info.plist" || fail "Info.plist is not valid"
 
-codesign --force --sign - "$app"
+identity=${AI_USAGE_SIGN_IDENTITY:-}
+if [ -n "$identity" ]; then
+	echo "signing with $identity" >&2
+	codesign --force --options runtime --timestamp --sign "$identity" "$app"
+else
+	codesign --force --sign - "$app"
+fi
 codesign --verify --deep --strict "$app" || fail "the signature does not verify"
+if [ -n "${AI_USAGE_NOTARY_KEY:-}" ]; then
+	[ -n "$identity" ] || fail "notarizing needs AI_USAGE_SIGN_IDENTITY"
+	sh "$here/../.github/scripts/notarize.sh" "$app"
+	xcrun stapler staple "$app" || fail "the ticket does not staple"
+fi
 
 mkdir -p "$(dirname "$zip")"
 rm -f "$zip"

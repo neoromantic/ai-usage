@@ -57,13 +57,59 @@ jobs:
       - name: Check the menu bar app
         working-directory: macos
         run: xcrun swift run AIUsageChecks
+      # The Developer ID certificate goes into a keychain of its own and the
+      # notary key into a file, both under RUNNER_TEMP, for Build alone; the
+      # step after Build deletes them. Every tag is signed and notarized, a
+      # prerelease too, so without the secrets the release stops here. See
+      # docs/releasing.md.
+      - name: Set up signing
+        id: sign
+        env:
+          SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          SIGN_P12_PASSWORD: ${{ secrets.MACOS_SIGN_P12_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
+        run: |
+          if [ -z "$SIGN_P12" ] || [ -z "$NOTARY_KEY" ]; then
+            echo "::error::the secrets MACOS_SIGN_P12 and NOTARY_KEY must be set to sign and notarize"
+            exit 1
+          fi
+          keychain=$RUNNER_TEMP/sign.keychain-db
+          password=$(openssl rand -hex 24)
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          (umask 077 && printf '%s' "$SIGN_P12" | base64 --decode >"$RUNNER_TEMP/sign.p12")
+          security import "$RUNNER_TEMP/sign.p12" -k "$keychain" -f pkcs12 -P "$SIGN_P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/sign.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
+          # codesign searches this keychain and the login one.
+          login=$(security default-keychain -d user | xargs)
+          security list-keychains -d user -s "$keychain" "$login"
+          # The identity's SHA-1, so that codesign picks this one.
+          identity=$(security find-identity -v -p codesigning "$keychain" | awk '/"Developer ID Application: /{print $2; exit}')
+          if [ -z "$identity" ]; then
+            echo "::error::MACOS_SIGN_P12 holds no Developer ID Application identity"
+            exit 1
+          fi
+          echo "identity=$identity" >>"$GITHUB_OUTPUT"
+          mkdir -m 700 "$RUNNER_TEMP/notary"
+          (umask 077 && printf '%s' "$NOTARY_KEY" | base64 --decode >"$RUNNER_TEMP/notary/key.p8")
       # The repository variable AI_USAGE_RELAY_URL, if set, becomes the
       # binaries' default relay. It reaches dist.sh through the environment,
       # never pasted into the script.
       - name: Build
         env:
           AI_USAGE_RELAY_URL: ${{ vars.AI_USAGE_RELAY_URL }}
+          AI_USAGE_SIGN_IDENTITY: ${{ steps.sign.outputs.identity }}
+          AI_USAGE_NOTARY_KEY: ${{ runner.temp }}/notary/key.p8
+          AI_USAGE_NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          AI_USAGE_NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER_ID }}
         run: sh .github/scripts/dist.sh "$GITHUB_REF_NAME" dist
+      - name: Remove the signing keychain
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/sign.keychain-db" 2>/dev/null || true
+          rm -rf "$RUNNER_TEMP/sign.p12" "$RUNNER_TEMP/notary"
       # The app's version is the tag without its v.
       - name: Check the build
         run: |
@@ -75,6 +121,24 @@ jobs:
           test "$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")" = "${GITHUB_REF_NAME#v}"
           for arch in arm64 x86_64; do lipo "$app/Contents/MacOS/AIUsageBar" -verify_arch "$arch"; done
           codesign --verify --strict "$app"
+          # Developer ID with the hardened runtime, and notarized, which
+          # codesign asks Apple about online; the app has its ticket stapled.
+          for f in "$app" dist/ai-usage_darwin_arm64 dist/ai-usage_darwin_amd64; do
+            codesign --verify --strict --check-notarization -R=notarized "$f"
+            codesign -dv "$f" 2>&1 | grep -F 'flags=0x10000(runtime)'
+          done
+          xcrun stapler validate "$app"
+          # With Gatekeeper off, spctl accepts anything without naming a
+          # source, so it is asked only when on; the check above holds either
+          # way.
+          if spctl --status | grep -qF 'assessments enabled'; then
+            spctl -a -vv -t exec "$app" 2>&1 | grep -F 'source=Notarized Developer ID'
+            for bin in dist/ai-usage_darwin_arm64 dist/ai-usage_darwin_amd64; do
+              spctl -a -vv -t open --context context:primary-signature "$bin" 2>&1 | grep -F 'source=Notarized Developer ID'
+            done
+          else
+            echo "Gatekeeper is off on this runner; codesign's notarization check stands for it"
+          fi
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
