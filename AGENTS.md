@@ -128,6 +128,8 @@ sh macos/build.sh v9.9.9-local /tmp/ai-usage-app.zip
 
 After a change to a shell script, CI runs `sh -n` and `shellcheck -s sh` on it.
 
+After a change to a workflow, CI's hygiene job runs actionlint and zizmor on it; run `actionlint` and `uvx zizmor@1.31.1 --offline .` first. Pin each action to a full commit with its version in a comment, as in `actions/checkout@<sha> # v7.0.1`, and give a checkout `persist-credentials: false`.
+
 `go test ./internal/view -update` rewrites the golden files. Do it only on purpose, and read the diff. `TestRun` in `internal/tui` depends on timing and fails now and then on a busy machine; run it once more before taking a failure as real.
 
 ### Docs are part of every change

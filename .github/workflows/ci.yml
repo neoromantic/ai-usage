@@ -17,9 +17,11 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       # The oldest Go that go.mod allows, so code that needs a newer one fails here.
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - name: gofmt
@@ -49,7 +51,9 @@ jobs:
   app:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Checks
         working-directory: macos
         run: xcrun swift run AIUsageChecks
@@ -65,8 +69,10 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
       - if: runner.os == 'Linux'
@@ -94,8 +100,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - run: git config --global core.autocrlf false
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
       # Builds this runner's release file, and on macOS the menu bar app,
@@ -121,8 +129,10 @@ jobs:
       HOMEBREW_NO_INSTALL_CLEANUP: 1
       HOMEBREW_NO_ANALYTICS: 1
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
       # Linux runners have Homebrew, off PATH.
@@ -185,15 +195,12 @@ jobs:
           brew audit --strict --formula ci/aiu/ai-usage
           brew untap ci/aiu
 
-  # devkit's shared checks: actionlint, gitleaks and the privacy scan of the
-  # lines a change adds. zizmor waits until these workflows pin their actions
-  # by commit; see https://github.com/neoromantic/ai-usage/issues/24.
+  # devkit's shared checks: actionlint, zizmor, gitleaks and the privacy scan
+  # of the lines a change adds.
   hygiene:
     uses: neoromantic/devkit/.github/workflows/hygiene.yml@v1
     permissions:
       contents: read
-    with:
-      zizmor: false
 
   # The one check a branch ruleset requires: every job above passed.
   ci:
