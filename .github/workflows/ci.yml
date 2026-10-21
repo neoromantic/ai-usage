@@ -149,13 +149,35 @@ jobs:
               exit 1
             fi
           done
-      # Named in full, as people install it, so Homebrew trusts the tap.
+      # Named in full, as people install it, so Homebrew trusts the tap. On
+      # Linux, Homebrew acts as on one older than its own, where it gives
+      # every formula its glibc and gcc; the formula must get none. A copy
+      # without the override must get them, or the check proves nothing.
       - name: Install with Homebrew
         run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            export HOMEBREW_FORCE_LIBC_FORMULA=1 HOMEBREW_FORCE_COMPILER_FORMULA=1
+          fi
           brew tap-new --no-git ci/aiu
           f="$(brew --repo ci/aiu)/Formula/ai-usage.rb"
           sh .github/scripts/formula.sh v9.9.9 "$RUNNER_TEMP/dist/checksums.txt" "file://$RUNNER_TEMP/dist" >"$f"
           cat "$f"
+          if [ "$RUNNER_OS" = Linux ]; then
+            control="$(brew --repo ci/aiu)/Formula/ai-usage-control.rb"
+            sed '/add_global_deps_to_spec/d; s/class AiUsage /class AiUsageControl /' "$f" >"$control"
+            deps=$(brew deps --include-implicit ci/aiu/ai-usage-control)
+            rm "$control"
+            if [ -z "$deps" ]; then
+              echo 'Homebrew no longer gives a formula its glibc and gcc when forced to; the check below proves nothing'
+              exit 1
+            fi
+            printf 'Without the override, Homebrew gives:\n%s\n' "$deps"
+          fi
+          deps=$(brew deps --include-implicit ci/aiu/ai-usage)
+          if [ -n "$deps" ]; then
+            printf 'Homebrew gives the formula dependencies:\n%s\n' "$deps"
+            exit 1
+          fi
           brew install ci/aiu/ai-usage
           brew test ci/aiu/ai-usage
           test "$(command -v ai-usage)" = "$(brew --prefix)/bin/ai-usage"

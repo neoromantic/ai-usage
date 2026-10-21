@@ -363,6 +363,8 @@ ai-usage app install        # on macOS 14 and later: the menu bar app
 
 Homebrew installs the binary and nothing else: it runs no command of ai-usage's, so the first `ai-usage` registers the schedule, as the installer's first run does, and `ai-usage app install` adds the menu bar app. If you ran `ai-usage schedule remove` before, run `ai-usage schedule install` instead of the bare `ai-usage`, since runs leave a removed schedule removed. Homebrew is per-user: run these as the person whose usage you want to collect, not with `sudo`.
 
+The binary is static and needs nothing from Homebrew. On a Linux whose glibc is older than 2.39, such as Ubuntu 22.04 or Debian 12, Homebrew gives every formula its own glibc and gcc, about 650 MB; from v0.8.1 the formula of ai-usage leaves them out. If v0.8.0 brought them, `brew autoremove` removes them after `brew upgrade neoromantic/tap/ai-usage`, unless another formula needs them.
+
 Type the full name, `neoromantic/tap/ai-usage`, in every brew command. Homebrew trusts a formula from a tap outside its own by that name, and refreshes the tap before an upgrade only when it is named. If you added the tap first with `brew tap neoromantic/tap` and Homebrew asks you to trust it, `brew trust neoromantic/tap` does.
 
 The schedule names Homebrew's stable path, such as `/opt/homebrew/opt/ai-usage/bin/ai-usage`, which brew moves to each new release, so upgrades never touch the launch agent or the crontab line. A copy Homebrew installed never replaces itself; see [Updates](#updates).
