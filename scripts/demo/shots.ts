@@ -68,6 +68,8 @@ const shots: Shot[] = [
     social: true,
   },
   { name: "team-help", from: "team.json", cols: 124, keys: ["?"], rows: 40 },
+  // Enter picks ATTENTION's first line, j j the bots' Codex, Enter opens it.
+  { name: "team-detail", from: "team.json", cols: 124, keys: ["\r", "j", "j", "\r"], rows: 34, social: true },
   { name: "solo", from: "solo.json", cols: 110, typed: "ai-usage", social: true },
   { name: "solo-forecast", from: "solo.json", cols: 110, typed: "ai-usage", lines: [0, 19], social: true },
   { name: "solo-utilization", from: "solo.json", cols: 110, typed: "ai-usage", cut: ["UTILIZATION", "USAGE"], social: true },
@@ -104,7 +106,7 @@ const shots: Shot[] = [
 ];
 
 // The tour is the interactive view, key after key, as a video.
-const tour = { from: "team.json", cols: 124, rows: 52, steps: [[], ["s"], ["%"], ["p", "p"], ["?"]] as string[][], seconds: 2.6 };
+const tour = { from: "team.json", cols: 124, rows: 52, steps: [[], ["s"], ["%"], ["\r", "j", "j", "\r"], ["p", "p"], ["?"]] as string[][], seconds: 2.6 };
 
 const env = {
   ...process.env,

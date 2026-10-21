@@ -33,6 +33,7 @@ TZ=Europe/Berlin ai-usage report --from docs/demo/solo.json --plain --width 110
 | `team-status.png`, `team-devices.png` | DEVICES as each machine's status: release, last report, tools, errors; interactive and printed |
 | `devices-status.png` | the status view alone, printed with `--devices` |
 | `team-help.png` | the interactive view's help, `?` |
+| `team-detail.png` | the interactive view after `Enter`, `j`, `j`, `Enter`: the detail of `bots@studio.dev`, the Codex login the server and the nine bots share, with each window's forecast and when it runs out, and each machine's share of it |
 | `solo.png` | one developer's page, with USAGE in place of the matrix |
 | `solo-forecast.png` | the solo page's top: the forecast lines |
 | `solo-utilization.png` | UTILIZATION alone: how full each window got before each reset over the quarter |
@@ -46,12 +47,12 @@ TZ=Europe/Berlin ai-usage report --from docs/demo/solo.json --plain --width 110
 | `app-menubar.png`, `app-menubar-light.png` | the app's item in the menu bar in each state: on track, tight, used up, stale, over, out, time until reset, no reading, and the ring alone |
 | `app-menu.png`, `app-menu-light.png` | the app's menu, opened from the popover's ⋯: the collector's status and this Mac, then its actions, Terminal's views, Settings, and Quit, each under its header |
 | `app-team.png`, `app-team-light.png` | the app's Team window on Usage: every device against every subscription over 7 days, shaded by tokens |
-| `app-team-status.png`, `app-team-status-light.png` | the app's Team window on Status: each device's user, release, last report, tools, tokens in each period, and note |
+| `app-team-status.png`, `app-team-status-light.png` | the app's Team window on Status: each device's release, last report, tools, tokens in each period, and note |
 | `app-settings.png`, `app-settings-light.png` | the app's Settings on General: what the menu bar shows and tracks, notifications, this Mac's name and opening at login, and About: the app's version and where the command-line tool is |
 | `social/app-tabs.png` | the app's three tabs side by side on a backdrop, for posts |
 | `social/architecture.png` | how a team's numbers travel, drawn from `scripts/demo/diagram.html` |
 | `social/*.png` | the pictures marked for posts, on a backdrop; the README shows these |
-| `social/tour.mp4`, `social/tour.gif` | the interactive view, key by key: the page, `s` status, `%` share, `p` 30 days, `?` help |
+| `social/tour.mp4`, `social/tour.gif` | the interactive view, key by key: the page, `s` status, `%` share, `Enter` the detail of the bots' Codex login, `p` 30 days, `?` help |
 
 The pictures are at twice the size of the page, drawn in JetBrains Mono. The menu bar app's are at twice its size in points, in the system font.
 
