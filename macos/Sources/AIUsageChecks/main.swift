@@ -314,21 +314,29 @@ equal("solo chips", Chip.chips(solo).count, 0)
 let leoAir = team.teamDevice(named: "leo@leo-air")!.device
 let notUpdating = try edited("team.json") { objects($0) { $0["device"] as? String == leoAir && $0["os_user"] != nil ? $0.merging(["not_updating": true]) { $1 } : $0 } }
 equal("not updating chip", Chip.chips(notUpdating).last.map { "\($0.text) \($0.state) \($0.devices) \($0.updating)" }, "1 not updating tight [\"leo@leo-air\"] 0")
-let broken = try edited("team.json") { json in
-    var o = objects(json) { o in
-        guard o["item"] as? String == "relay" else { return o }
-        return o.merging(["status": "failing", "state": "error"]) { $1 }
-    } as! [String: Any]
-    let this = (o["collector"] as! [String: Any])["device_label"] as! String
-    o["attention"] = (o["attention"] as! [[String: Any]]) + [["kind": "error", "devices": [this], "message": "relay: relay returned 503"]]
-    return o
+// This Mac's relay fails, and the report names it as an error too, by the
+// collector's name, or by its label in a report from before names.
+func relayFails(named: Bool) throws -> Report {
+    try edited("team.json") { json in
+        var o = objects(json) { o in
+            guard o["item"] as? String == "relay" else { return o }
+            return o.merging(["status": "failing", "state": "error"]) { $1 }
+        } as! [String: Any]
+        var c = o["collector"] as! [String: Any]
+        let this = named ? c["name"] as! String : c["device_label"] as! String
+        if !named { c["name"] = nil; o["collector"] = c }
+        o["attention"] = (o["attention"] as! [[String: Any]]) + [["kind": "error", "devices": [this], "message": "relay: relay returned 503"]]
+        return o
+    }
 }
+let broken = try relayFails(named: true)
 equal("health chip", Chip.chips(broken).first.map { "\($0.text) \($0.state)" }, "Relay failing out")
 // This Mac's failing relay is the health chip's alone, not an error too.
 equal("failing relay said once", Chip.chips(broken).map(\.text), ["Relay failing", "2 errors", "1 not reporting"])
+equal("failing relay said once, before names", Chip.chips(try relayFails(named: false)).map(\.text), ["Relay failing", "2 errors", "1 not reporting"])
 let toolFails = try edited("solo.json") { json in
     var o = json as! [String: Any]
-    let this = (o["collector"] as! [String: Any])["device_label"] as! String
+    let this = (o["collector"] as! [String: Any])["name"] as! String
     o["attention"] = (o["attention"] as! [[String: Any]]) + [["kind": "error", "devices": [this], "message": "codex: app-server exited without answering"]]
     return o
 }

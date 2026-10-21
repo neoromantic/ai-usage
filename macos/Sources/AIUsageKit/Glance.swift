@@ -203,7 +203,7 @@ public struct Chip: Equatable, Sendable {
             }
         }
         let of = { (k: Attention.Kind) in r.attention.filter { $0.kind == k } }
-        let errors = of(.error).filter { a in !(a.devices == [c.deviceLabel] && covered.contains { $0(a) }) }
+        let errors = of(.error).filter { a in !(a.devices == [c.name.isEmpty ? c.deviceLabel : c.name] && covered.contains { $0(a) }) }
         let silent = of(.silent)
         if r.solo {
             if !(errors + silent).isEmpty {
