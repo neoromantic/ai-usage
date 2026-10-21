@@ -348,6 +348,19 @@ func TestAgentLookup(t *testing.T) {
 			}
 		})
 	}
+	// With nobody logged in at the screen, as over SSH after a reboot,
+	// there is no domain to load the agent in, so it is not unloaded.
+	f := &fakeLaunchd{noSession: true}
+	s, file := agent(t, f)
+	if err := os.MkdirAll(s.AgentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte(mine), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.Lookup(ctx, exe, home); err != nil || got != Absent {
+		t.Fatalf("Lookup with no login session = %v, %v, want %v", got, err, Absent)
+	}
 }
 
 func TestAgentInstallTurnsDisabledBackOn(t *testing.T) {

@@ -133,8 +133,9 @@ func repairs(s schedule.Scheduler) bool {
 //
 // It also says when launchd does not run the agent the plist defines: when
 // it still runs an earlier definition, or a schedule the last run found
-// registered is not loaded now. Both come back to the schedule once the
-// agent is loaded again, as by `ai-usage schedule install`.
+// registered, or found launchd running an earlier definition, is not loaded
+// now. Both come back to the schedule once the agent is loaded again, as by
+// `ai-usage schedule install`.
 func repairAgent(ctx context.Context, d state.Dir, st *state.State, replaced bool) {
 	s := newScheduler()
 	if !repairs(s) {
@@ -154,7 +155,7 @@ func repairAgent(ctx context.Context, d state.Dir, st *state.State, replaced boo
 	case got == schedule.Stale:
 		sch.Registered, sch.Error = false, staleAgent
 		return
-	case got == schedule.Unloaded && sch.Registered:
+	case got == schedule.Unloaded && (sch.Registered || sch.Error == staleAgent):
 		sch.Registered, sch.Error = false, unloadedAgent
 		return
 	case got == schedule.Active && (sch.Error == staleAgent || sch.Error == unloadedAgent):

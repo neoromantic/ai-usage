@@ -685,7 +685,7 @@ launchd keeps the launch agent it loaded until the agent is loaded again or you 
 launchd still runs the launch agent it loaded before, for another binary path or state folder; `ai-usage schedule install` loads this one
 ```
 
-or, when launchd has not loaded the agent at all, `launchd has not loaded the launch agent, so nothing runs it`. `ai-usage schedule install`, or any `ai-usage` you run, loads the plist. To see what launchd runs:
+or, when launchd has not loaded the agent at all, `launchd has not loaded the launch agent, so nothing runs it`. `ai-usage schedule install`, from either copy, loads the plist. Run it before you remove the installer's copy: that copy, from v0.8.x, does not read what launchd has loaded, so its own `status` still says to remove it, and a plain `ai-usage` that runs it does not load the plist. To see what launchd runs:
 
 ```sh
 launchctl print gui/$(id -u)/io.github.neoromantic.ai-usage | sed -n '/^.arguments = {/,/^.}/p'

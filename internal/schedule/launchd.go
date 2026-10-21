@@ -265,6 +265,10 @@ func (s Scheduler) lookupAgent(ctx context.Context, exe, home string) (State, er
 	}
 	out, err := s.launchctl(ctx, "print", s.service())
 	switch {
+	case err != nil && !s.session(ctx):
+		// With nobody logged in at the screen there is no domain to load
+		// the agent in, and Install says so.
+		return Absent, nil
 	case err != nil:
 		return Unloaded, nil
 	case !loadedRuns(out, agentArgs(exe, home)):
@@ -273,6 +277,13 @@ func (s Scheduler) lookupAgent(ctx context.Context, exe, home string) (State, er
 		return Refused, nil
 	}
 	return Active, nil
+}
+
+// session reports whether launchd has the login session's domain, which a
+// person gets by logging in at the screen.
+func (s Scheduler) session(ctx context.Context) bool {
+	_, err := s.launchctl(ctx, "print", s.domain())
+	return err == nil
 }
 
 func (s Scheduler) loaded(ctx context.Context) bool {

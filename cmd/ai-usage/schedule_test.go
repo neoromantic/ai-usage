@@ -592,6 +592,16 @@ func TestStaleAgent(t *testing.T) {
 	if agent.boots != 0 {
 		t.Fatal("reading the report loaded the agent")
 	}
+	// An agent unloaded since a run found it stale runs nothing at all.
+	st.Schedule.Registered, st.Schedule.Error = false, staleAgent
+	if err := state.Dir(d.dir).SaveState(st); err != nil {
+		t.Fatal(err)
+	}
+	agent.loaded = false
+	if out := d.ok("status"); !strings.Contains(strings.Join(strings.Fields(out), " "), "not registered: launchd has not loaded") {
+		t.Fatalf("status of a stale agent unloaded since:\n%s", out)
+	}
+	agent.loaded = true
 
 	d.ok("schedule", "install")
 	if agent.boots != 1 || agent.argv[0] != exe {
