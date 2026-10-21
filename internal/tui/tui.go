@@ -45,6 +45,9 @@ type Config struct {
 	Now func() time.Time
 	// Render draws the page; nil is view.Render.
 	Render func(view.Report, view.Options) view.Page
+	// Detail draws what a row of the page opens, false when the report no
+	// longer has it; nil is view.Detail.
+	Detail func(view.Report, view.Options, view.Pick) (view.Page, bool)
 }
 
 const (
@@ -122,6 +125,14 @@ type Model struct {
 	top, helpTop int
 	help         bool
 
+	// picking says a row of the page is picked, and picked is it. open is
+	// the row whose detail shows in the page's place, nil while the page
+	// shows, and pageTop is where the page was scrolled to when it opened.
+	picking bool
+	picked  view.Pick
+	open    *view.Pick
+	pageTop int
+
 	// busy is a collection `r` started; gen tells its spinner from an
 	// earlier one's.
 	busy       bool
@@ -142,6 +153,9 @@ func New(c Config) Model {
 	}
 	if c.Render == nil {
 		c.Render = view.Render
+	}
+	if c.Detail == nil {
+		c.Detail = view.Detail
 	}
 	m := Model{
 		cfg:       c,
@@ -172,7 +186,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		bottom := m.top > 0 && m.top >= m.maxTop()
 		m.width, m.height = msg.Width, msg.Height
 		m.draw()
-		if bottom {
+		if bottom && !m.choosing() {
 			m.top = m.maxTop()
 		}
 	case tea.BackgroundColorMsg:
@@ -183,6 +197,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.key(msg.String())
 	case tea.MouseWheelMsg:
 		m.wheel(msg.Mouse())
+	case tea.MouseClickMsg:
+		m.click(msg.Mouse())
 	case pollMsg:
 		cmds := []tea.Cmd{m.poll()}
 		if !m.loading && (signature(m.cfg.Watch) != m.sig || m.cfg.Now().Sub(m.loadedAt) >= reloadEvery) {
@@ -223,15 +239,44 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	switch k {
 	case "ctrl+c", "q":
 		return m, tea.Quit
-	case "esc":
-		if !m.help {
+	case "esc", "backspace":
+		// Back: from the help, a detail, or a pick. Esc on the page quits.
+		switch {
+		case m.help:
+			m.help = false
+		case m.open != nil:
+			m.close()
+		case m.picking:
+			m.picking = false
+		case k == "esc":
 			return m, tea.Quit
 		}
-		m.help = false
 		return m, nil
 	case "?":
 		m.help, m.helpTop = !m.help, 0
 		return m, nil
+	}
+	if m.choosing() {
+		// Picking, ↑ and ↓ move the pick, which the page follows.
+		switch k {
+		case "up", "k":
+			m.move(m.pickIndex() - 1)
+			return m, nil
+		case "down", "j":
+			m.move(m.pickIndex() + 1)
+			return m, nil
+		case "g", "home":
+			m.move(0)
+			return m, nil
+		case "G", "end":
+			m.move(len(m.page.Picks) - 1)
+			return m, nil
+		case "enter":
+			m.openPick()
+			return m, nil
+		}
+	}
+	switch k {
 	case "up", "k":
 		m.scroll(-1)
 	case "down", "j":
@@ -248,7 +293,10 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	if m.help {
 		return m, nil
 	}
+	m.keepPick()
 	switch k {
+	case "enter":
+		m.startPick()
 	case "left", "h":
 		m.scrollMatrix(-1)
 	case "right", "l":
@@ -295,6 +343,155 @@ func (m *Model) wheel(e tea.Mouse) {
 	case e.Button == tea.MouseWheelDown:
 		m.scroll(wheelLines)
 	}
+	m.keepPick()
+}
+
+// click picks the row clicked on the page, and opens it when it is picked.
+func (m *Model) click(e tea.Mouse) {
+	if e.Button != tea.MouseLeft || m.help || m.open != nil || e.Y < 1 || e.Y > m.bodyHeight() {
+		return
+	}
+	i := e.Y - 1
+	if i < m.pinned(m.top) {
+		return
+	}
+	line := m.top + i
+	for _, k := range m.page.Picks {
+		if k.Line != line {
+			continue
+		}
+		if m.picking && m.picked.Line == line {
+			m.openPick()
+			return
+		}
+		m.picking, m.picked = true, k
+		return
+	}
+}
+
+// choosing says ↑ and ↓ move the pick: a row is picked on the page.
+func (m Model) choosing() bool { return m.picking && m.open == nil && !m.help }
+
+// startPick picks the first row in sight, else the nearest one.
+func (m *Model) startPick() {
+	if m.open != nil || len(m.page.Picks) == 0 {
+		return
+	}
+	from, to := m.inSight()
+	m.picking, m.picked = true, nearest(m.page.Picks, from, to)
+	m.show(m.picked.Line)
+}
+
+// pickIndex is the pick's place among the page's picks.
+func (m Model) pickIndex() int {
+	for i, k := range m.page.Picks {
+		if k.Line == m.picked.Line {
+			return i
+		}
+	}
+	return 0
+}
+
+// move picks the page's i-th pick, within the first and the last, and
+// scrolls the page to it.
+func (m *Model) move(i int) {
+	if len(m.page.Picks) == 0 {
+		return
+	}
+	m.picked = m.page.Picks[clamp(i, len(m.page.Picks)-1)]
+	m.show(m.picked.Line)
+}
+
+// keepPick picks a row in sight once the pick has scrolled out of it.
+func (m *Model) keepPick() {
+	if !m.choosing() {
+		return
+	}
+	if from, to := m.inSight(); m.picked.Line < from || m.picked.Line >= to {
+		if k := nearest(m.page.Picks, from, to); k.Line >= from && k.Line < to {
+			m.picked = k
+		}
+	}
+}
+
+// openPick shows the picked row's detail in the page's place, from its top.
+func (m *Model) openPick() {
+	k := m.picked
+	m.open, m.pageTop, m.top = &k, m.top, 0
+	m.draw()
+}
+
+// close goes back from a detail to the page, where it was, with its row
+// still picked and in sight.
+func (m *Model) close() {
+	m.open, m.top = nil, m.pageTop
+	m.draw()
+}
+
+// repick finds the picked row on a page drawn again: the same account or
+// device nearest to where it was, else the row nearest to it. A page with
+// no rows to pick has no pick.
+func (m *Model) repick() {
+	if !m.picking {
+		return
+	}
+	ks := m.page.Picks
+	if len(ks) == 0 {
+		m.picking = false
+		return
+	}
+	var same []view.Pick
+	for _, k := range ks {
+		if k.Same(m.picked) {
+			same = append(same, k)
+		}
+	}
+	if len(same) > 0 {
+		ks = same
+	}
+	m.picked = nearest(ks, m.picked.Line, m.picked.Line+1)
+}
+
+// nearest is the first of ks on the lines from from to to, else the one
+// nearest to them.
+func nearest(ks []view.Pick, from, to int) view.Pick {
+	best, dist := ks[0], 1<<30
+	for _, k := range ks {
+		d := 0
+		switch {
+		case k.Line < from:
+			d = from - k.Line
+		case k.Line >= to:
+			d = k.Line - to + 1
+		}
+		if d < dist {
+			best, dist = k, d
+		}
+	}
+	return best
+}
+
+// inSight are the page's lines on screen under the head of DEVICES, from
+// the first to one past the last.
+func (m Model) inSight() (from, to int) {
+	return m.top + m.pinned(m.top), m.top + m.bodyHeight()
+}
+
+// show scrolls the page the least that puts line in sight.
+func (m *Model) show(line int) {
+	if from, to := m.inSight(); line >= from && line < to {
+		return
+	}
+	top := m.top
+	if line >= m.top+m.bodyHeight() {
+		top = line - m.bodyHeight() + 1
+	}
+	top = min(top, line)
+	// Over the rows of DEVICES, the head pinned at the top covers a few.
+	for top > 0 && line < top+m.pinned(top) {
+		top--
+	}
+	m.top = clamp(top, m.maxTop())
 }
 
 // scroll moves the page, or the help when it is open, by n lines.
@@ -348,7 +545,7 @@ func (m Model) pinned(top int) int {
 // than its first and no further right than showing its last.
 func (m *Model) scrollMatrix(n int) {
 	s := m.opts.MatrixScroll + n
-	if m.help || m.statusView() || s < 0 || n > 0 && !m.matrixRight() {
+	if m.help || m.open != nil || m.statusView() || s < 0 || n > 0 && !m.matrixRight() {
 		return
 	}
 	m.opts.MatrixScroll = s
@@ -363,7 +560,7 @@ func (m Model) matrixRight() bool {
 // matrixCut says the matrix shows and does not fit, so ← and → do
 // something.
 func (m Model) matrixCut() bool {
-	return !m.statusView() && (m.opts.MatrixScroll > 0 || m.matrixRight())
+	return m.open == nil && !m.statusView() && (m.opts.MatrixScroll > 0 || m.matrixRight())
 }
 
 // statusView says DEVICES shows its status view, not the matrix.
@@ -372,7 +569,7 @@ func (m Model) statusView() bool { return m.opts.DeviceStatus && m.page.DeviceVi
 // shareKey says % does something: the matrix shows, and has a column to
 // share or is in share mode.
 func (m Model) shareKey() bool {
-	return !m.statusView() && (m.page.MatrixColumns > 0 || m.opts.Share)
+	return m.open == nil && !m.statusView() && (m.page.MatrixColumns > 0 || m.opts.Share)
 }
 
 func (m *Model) setPeriod(p view.Period) {
@@ -430,6 +627,16 @@ func (m *Model) draw() {
 	if m.width <= 0 {
 		return
 	}
+	if m.open != nil {
+		if p, ok := m.cfg.Detail(m.report, m.options(m.opts), *m.open); ok {
+			m.page = p
+			m.top = clamp(m.top, m.maxTop())
+			m.helpTop = clamp(m.helpTop, m.maxHelpTop())
+			return
+		}
+		// What it showed is gone from the report: back to the page.
+		m.open, m.top = nil, m.pageTop
+	}
 	m.page = m.render(m.opts)
 	// Scrolled right on a terminal that grew, or a matrix that lost columns:
 	// scroll left while the columns on the right still all show. The status
@@ -445,9 +652,18 @@ func (m *Model) draw() {
 	}
 	m.top = clamp(m.top, m.maxTop())
 	m.helpTop = clamp(m.helpTop, m.maxHelpTop())
+	if m.repick(); m.picking {
+		// Rows the period reorders take the pick along, and the page
+		// follows it.
+		m.show(m.picked.Line)
+	}
 }
 
-func (m Model) render(o view.Options) view.Page {
+func (m Model) render(o view.Options) view.Page { return m.cfg.Render(m.report, m.options(o)) }
+
+// options are o as the view draws with them: for its width, interactive,
+// with the spinner while a collection runs.
+func (m Model) options(o view.Options) view.Options {
 	o.Width = m.layoutWidth()
 	o.Interactive = true
 	o.Busy = ""
@@ -458,7 +674,7 @@ func (m Model) render(o view.Options) view.Page {
 		}
 		o.Busy = frames[m.frame%len(frames)]
 	}
-	return m.cfg.Render(m.report, o)
+	return o
 }
 
 func (m Model) layoutWidth() int {
@@ -523,6 +739,8 @@ func (m Model) screen() string {
 			// The head of DEVICES, as the page draws it, scrolled sideways
 			// with the matrix.
 			rows = append(rows, fit(lines[m.page.DevicesHead[0]+i], w))
+		case m.choosing() && top+i == m.picked.Line:
+			rows = append(rows, fit(m.highlight(lines[top+i]), w))
 		case top+i < len(lines):
 			rows = append(rows, fit(lines[top+i], w))
 		default:
@@ -538,6 +756,13 @@ func (m Model) screen() string {
 	}
 	rows = append(rows, m.style(strings.Repeat(rule, w), styleFaint), bar)
 	return strings.Join(rows, "\n")
+}
+
+// highlight is the picked row: its text, as wide as the page, in reverse
+// video, in the accent color with color.
+func (m Model) highlight(line string) string {
+	s := ansi.Strip(line)
+	return m.style(s+strings.Repeat(" ", max(0, m.page.Width-ansi.StringWidth(s))), stylePick)
 }
 
 // fit cuts a line to the terminal's width; the page is never narrower than

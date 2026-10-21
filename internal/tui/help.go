@@ -30,11 +30,15 @@ func (m Model) helpLines() []string {
 		{"1 7 3 9", "today, 7d, 30d, or 90d"},
 		{"%", "weighted tokens or share in the matrix"},
 		{"s", "DEVICES as the matrix, or as each device's status"},
+		{g("↵", "Enter"), "pick a row: an account, a device, or a bot"},
+		{g("↑ ↓  g G", "up down  g G"), "move the pick, while a row is picked"},
+		{g("↵  click", "Enter  click"), "open what is picked; a click picks a row first"},
+		{"Esc  Backspace", "back: from a detail to its row, then to scrolling"},
 	}
 	if m.cfg.Refresh != nil {
 		keys = append(keys, entry{"r", "collect now; the header shows a spinner until it is done"})
 	}
-	keys = append(keys, entry{"?", "this help; Esc closes it"}, entry{"q  Esc  Ctrl-C", "quit"})
+	keys = append(keys, entry{"?", "this help; Esc closes it"}, entry{"q  Esc  Ctrl-C", "quit; Esc quits only from the page"})
 	marks := []entry{
 		{g("━ ─", "= -"), "what a window has used, and what is left of it"},
 		{g("┃", "|"), "even use by now; past it, faster than the window allows"},

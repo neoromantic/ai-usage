@@ -18,6 +18,7 @@ const (
 	styleFaint              // separators and the rule
 	styleTitle              // a heading in the help: bold
 	styleError              // a failed refresh or reload
+	stylePick               // the picked row: reverse accent, or reverse
 )
 
 // style colors s with the theme. Without color, keys and headings are still
@@ -25,8 +26,11 @@ const (
 func (m Model) style(s string, k kind) string {
 	st := lipgloss.NewStyle()
 	if !m.opts.Color {
-		if k == styleKey || k == styleTitle {
+		switch k {
+		case styleKey, styleTitle:
 			return st.Bold(true).Render(s)
+		case stylePick:
+			return st.Reverse(true).Render(s)
 		}
 		return s
 	}
@@ -44,6 +48,8 @@ func (m Model) style(s string, k kind) string {
 		st = st.Bold(true)
 	case styleError:
 		st = st.Foreground(t.Out)
+	case stylePick:
+		st = st.Foreground(t.Accent).Reverse(true)
 	}
 	return st.Render(s)
 }
@@ -90,11 +96,12 @@ func (it item) options() []string {
 }
 
 // items are the keys that do something now, in the key bar's order, with
-// `? help` and `q quit` last.
+// `? help` and `q quit` last. A row picked, ↑↓ move the pick, and Enter
+// opens it; in a detail, Esc goes back.
 func (m Model) items() []item {
-	vertical, sideways := "↑↓", "←→"
+	vertical, sideways, enter := "↑↓", "←→", "↵"
 	if m.opts.ASCII {
-		vertical, sideways = "j k", "h l"
+		vertical, sideways, enter = "j k", "h l", "enter"
 	}
 	var its []item
 	if m.help {
@@ -103,17 +110,32 @@ func (m Model) items() []item {
 		}
 		return append(its, item{key: "esc", action: "close"}, item{key: "q", action: "quit"})
 	}
-	if m.maxTop() > 0 {
-		its = append(its, item{key: vertical, action: "scroll", drop: 6})
+	switch {
+	case m.choosing():
+		its = append(its, item{key: vertical, action: "pick", drop: 70}, item{key: enter, action: "open"}, item{key: "esc", action: "back", drop: 50})
+	case m.open != nil:
+		if m.maxTop() > 0 {
+			its = append(its, item{key: vertical, action: "scroll", drop: 70})
+		}
+		its = append(its, item{key: "esc", action: "back", drop: 50})
+	default:
+		if m.maxTop() > 0 {
+			its = append(its, item{key: vertical, action: "scroll", drop: 70})
+		}
+		if len(m.page.Picks) > 0 {
+			// It goes after share, so a team's page at 80 columns keeps
+			// refresh.
+			its = append(its, item{key: enter, action: "pick", drop: 15})
+		}
 	}
 	if m.matrixCut() {
-		its = append(its, item{key: sideways, action: "matrix", drop: 4})
+		its = append(its, item{key: sideways, action: "matrix", drop: 40})
 	}
 	if m.page.DeviceViews {
 		// Short, it names the status view alone, as `%` names share:
 		// `s status`, or `s ‹status›` when it shows.
-		views := item{key: "s", choices: []string{"usage", "status"}, pill: "usage", drop: 3}
-		short := item{key: "s", action: "status", drop: 3}
+		views := item{key: "s", choices: []string{"usage", "status"}, pill: "usage", drop: 30}
+		short := item{key: "s", action: "status", drop: 30}
 		if m.opts.DeviceStatus {
 			views.pill = "status"
 			short.action, short.pill = "", "status"
@@ -121,16 +143,16 @@ func (m Model) items() []item {
 		views.short = &short
 		its = append(its, views)
 	}
-	its = append(its, item{key: "p", action: "period", pill: m.opts.Period.String(), drop: 5})
+	its = append(its, item{key: "p", action: "period", pill: m.opts.Period.String(), drop: 60})
 	if m.shareKey() {
-		share := item{key: "%", action: "share", drop: 1}
+		share := item{key: "%", action: "share", drop: 10}
 		if m.opts.Share {
 			share.action, share.pill = "", "share"
 		}
 		its = append(its, share)
 	}
 	if m.cfg.Refresh != nil && !m.busy {
-		its = append(its, item{key: "r", action: "refresh", drop: 2})
+		its = append(its, item{key: "r", action: "refresh", drop: 20})
 	}
 	return append(its, item{key: "?", action: "help"}, item{key: "q", action: "quit"})
 }

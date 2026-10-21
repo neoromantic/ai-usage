@@ -256,15 +256,15 @@ func TestDeviceViewsBar(t *testing.T) {
 }
 
 // TestDeviceViewsAt80: on the team fixture at 80 columns, the key bar names
-// the status view alone and keeps refresh, dropping only share, and the
-// status view has room for every key it has.
+// the status view alone and keeps refresh, dropping share and pick, and the
+// status view has room for every key it has, its views named short.
 func TestDeviceViewsAt80(t *testing.T) {
 	m := model(t, 80, 30, Config{Report: teamReport(t), Render: view.Render, Refresh: refresher()})
 	if got, want := bar(m), " ↑↓ scroll · ←→ matrix · s status · p period ‹7d› · r refresh · ? help · q quit"; got != want {
 		t.Errorf("usage at 80\n got %q\nwant %q", got, want)
 	}
 	m = keys(t, m, "s")
-	if got, want := bar(m), " ↑↓ scroll · s usage ‹status› · p period ‹7d› · r refresh · ? help · q quit"; got != want {
+	if got, want := bar(m), " ↑↓ scroll · ↵ pick · s ‹status› · p period ‹7d› · r refresh · ? help · q quit"; got != want {
 		t.Errorf("status at 80\n got %q\nwant %q", got, want)
 	}
 }

@@ -29,6 +29,10 @@ func (p *page) projects() []chunks {
 
 	short := p.shortCoverage(ps)
 	cols, via := p.projectCols(ps, per, short)
+	if !slices.ContainsFunc(via.cells, func(s string) bool { return s != "" }) {
+		// One account's projects name no provider.
+		cols = slices.DeleteFunc(cols, func(c *projCol) bool { return c == via })
+	}
 	pathW := width("PROJECT")
 	paths := make([]string, len(ps))
 	for i, pr := range ps {
@@ -45,7 +49,7 @@ func (p *page) projects() []chunks {
 	if 2+pathW+rest > p.w {
 		pathW = max(p.w-2-rest, minPath)
 	}
-	if 2+pathW+rest > p.w {
+	if 2+pathW+rest > p.w && slices.Contains(cols, via) {
 		// VIA goes before the paths are cut any further.
 		cols = slices.DeleteFunc(cols, func(c *projCol) bool { return c == via })
 		rest -= 2 + via.w
