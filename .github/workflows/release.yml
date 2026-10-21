@@ -39,26 +39,49 @@ jobs:
     # macOS, because the menu bar app builds only there. Go cross-compiles
     # the other binaries.
     runs-on: macos-latest
-    # The only job that writes: it publishes the release. checks: read lets
-    # it see CI's result for the commit.
+    # The only job that writes: it publishes the release. checks: read and
+    # pull-requests: read let it see CI's result for the commit and for the
+    # pull request that made it.
     permissions:
       contents: write
       checks: read
+      pull-requests: read
     steps:
       # vet and the tests ran in CI on this very commit, on Linux, and the
       # macOS tests and the app's checks ran on a Mac before the push
       # (scripts/verify.sh --push), so they do not run again: the commit must
-      # have passed CI's check ci, the one the branch ruleset requires. A tag
-      # pushed right after a merge waits here for main's CI, up to 20 minutes.
+      # have passed CI's check ci, the one the branch ruleset requires. A
+      # squash merge of an up-to-date pull request has its head's tree, so
+      # ci passed on that head counts too. Otherwise a tag pushed right after
+      # a merge waits here for main's CI, up to 20 minutes.
       - name: CI passed on this commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          repo=repos/$GITHUB_REPOSITORY
+          # SHA: "status conclusion url" of its newest ci check run.
+          ci_of() {
+            gh api "$repo/commits/$1/check-runs?check_name=ci&per_page=100" \
+              --jq '[.check_runs[] | select(.app.slug == "github-actions")] | max_by(.id) // empty | "\(.status) \(.conclusion) \(.html_url)"'
+          }
+          head=$(gh api "$repo/commits/$GITHUB_SHA/pulls" --jq '[.[] | select(.merged_at != null)][0].head.sha // empty') || head=
+          if [ -n "$head" ]; then
+            tree=$(gh api "$repo/commits/$GITHUB_SHA" --jq .commit.tree.sha) || tree=
+            head_tree=$(gh api "$repo/commits/$head" --jq .commit.tree.sha) || head_tree=
+            run=$(ci_of "$head") || run=
+            if [ -n "$tree" ] && [ "$tree" = "$head_tree" ]; then
+              case $run in
+              "completed success "*)
+                echo "ci passed on $head, the head of the pull request merged as $GITHUB_SHA, with the same tree: ${run##* }"
+                exit 0
+                ;;
+              esac
+            fi
+            echo "the merged pull request's head $head (tree ${head_tree:-unknown} vs ${tree:-unknown}, ci: ${run:-none}) does not count; waiting for ci on $GITHUB_SHA"
+          fi
           deadline=$(($(date +%s) + 1200))
           while :; do
-            run=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?check_name=ci&per_page=100" \
-              --jq '[.check_runs[] | select(.app.slug == "github-actions")] | max_by(.id) // empty | "\(.status) \(.conclusion) \(.html_url)"') ||
-              run="unknown: GitHub's API failed"
+            run=$(ci_of "$GITHUB_SHA") || run="unknown: GitHub's API failed"
             case $run in
             "completed success "*)
               echo "ci passed on $GITHUB_SHA: ${run##* }"
