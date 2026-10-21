@@ -769,6 +769,23 @@ func TestNoQuotaNamesItsHome(t *testing.T) {
 	}
 }
 
+// A Grok user whose log has no credit usage yet is read, and the source
+// notes why it has no quota reading, which is no problem of the run.
+func TestGrokWithoutCreditsIsANote(t *testing.T) {
+	w, o := newWorld(t)
+	h := w.home(t, "grok")
+	w.login("grok", h, "gina", nil)
+	w.sessions("grok", h, sess("s1", "/p", 10, t0))
+	w.askErr[state.Key("grok", h)] = &probe.NoQuotaError{Msg: probe.GrokNoCredits}
+	st := run(t, o).State
+	if src := st.Sources["grok"]; src.Status != "ok" || src.Error != probe.GrokNoCredits || st.LastError != "" {
+		t.Fatalf("grok source = %+v, last error %q", src, st.LastError)
+	}
+	if !IsCurrent(st, "grok", "gina") || totalsFor(t, st, "grok", "gina").Tokens != tok(10) {
+		t.Fatalf("the account was not read: %+v", Totals(st, nil))
+	}
+}
+
 // A home nobody is logged in to and that has no sessions is a harness
 // installed but never used there: no problem.
 func TestUnusedHomeNotLoggedInIsNoProblem(t *testing.T) {

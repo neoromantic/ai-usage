@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -140,8 +141,9 @@ func TestGrokAccountAndBilling(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r, err := Grok(grokHome(t, tc.files))
-			if err != nil {
-				t.Fatal(err)
+			// A user with no credit usage logged has no reading, and says why.
+			if tc.percent == 0 && (!errors.Is(err, ErrNoQuota) || err.Error() != GrokNoCredits) || tc.percent != 0 && err != nil {
+				t.Fatalf("err = %v", err)
 			}
 			if r.Account != tc.account {
 				t.Errorf("account = %q, want %q", r.Account, tc.account)
@@ -224,7 +226,7 @@ func TestGrokLongLines(t *testing.T) {
 func TestGrokLastLineWithoutNewline(t *testing.T) {
 	home := t.TempDir()
 	writeFile(t, filepath.Join(home, "logs", "unified.jsonl"), authLine("2026-09-22T10:00:00Z", 1, "user-a"))
-	if r, err := Grok(home); err != nil || r.Account != "user-a" {
+	if r, err := Grok(home); !errors.Is(err, ErrNoQuota) || r.Account != "user-a" {
 		t.Errorf("reading = %+v, %v", r, err)
 	}
 }

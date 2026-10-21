@@ -10,6 +10,7 @@ import (
 
 	"github.com/neoromantic/ai-usage/internal/collect"
 	"github.com/neoromantic/ai-usage/internal/meter"
+	"github.com/neoromantic/ai-usage/internal/probe"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
@@ -690,10 +691,10 @@ func gapOf(seen, reads []time.Time, collected, now time.Time, own bool) *Gap {
 
 // noReading is why subscription x has no reading of its main window, with
 // what to do, when that is known: the devices that hold a Claude account all
-// run a release that reads no Claude quota, or one of them could not read
-// it, as its source says without failing. Of several, this device, then
-// the one first by name, is named. The unknown account has the reason
-// unknownReason gives, or none.
+// run a release that reads no Claude quota, or a device it is logged in to
+// could not read it, as its source says, in the words quotaReason gives. Of
+// several, this device, then the one first by name, is named. The unknown
+// account has the reason unknownReason gives, or none.
 func (m *merger) noReading(x *teamAccount) *string {
 	hs := slices.Clone(x.holders)
 	slices.SortStableFunc(hs, func(a, b *device) int {
@@ -719,17 +720,94 @@ func (m *merger) noReading(x *teamAccount) *string {
 		return strPtr(d.Name + " runs " + d.CollectorVersion + ": reinstall with install.sh")
 	}
 	for _, dv := range hs {
+		// A device asks only about the accounts logged in to it, so what
+		// it could not read is about those.
+		if !slices.ContainsFunc(x.ta.PerDevice, func(u DeviceUsage) bool { return u.DeviceID == dv.dev.Device && u.Current }) {
+			continue
+		}
 		if x.provider == "claude" && dv.noQuota != "" {
 			return strPtr(dv.noQuota)
 		}
 		for _, s := range dv.dev.Sources {
-			if s.Provider == x.provider && s.Status == "ok" && s.Error != nil {
-				msg := strings.TrimPrefix(*s.Error, s.Provider+": ")
-				return strPtr(msg + " on " + dv.dev.Name)
+			if s.Provider == x.provider && s.Error != nil {
+				if why := quotaReason(s, dv.dev.Name); why != "" {
+					return strPtr(why)
+				}
 			}
 		}
 	}
 	return nil
+}
+
+// maxReason bounds a subscription's reason for having no reading.
+const maxReason = 200
+
+// quotaReasons are what keeps a harness from a quota reading, as its
+// source's error says it, and how a subscription's reason says that: what
+// is wrong, and what to do when there is something. Both are templates of
+// the match, as regexp.Expand takes them. Of those an error holds, the first
+// listed is taken. The rest of the error, such as what the harness printed,
+// is left out.
+var quotaReasons = []struct {
+	provider  string
+	says      *regexp.Regexp
+	what, act string
+}{
+	// Notes, which keep a source ok.
+	{"claude", regexp.MustCompile(`update Claude Code to \S+ or newer \([^()]*\)`), "$0", ""},
+	{"claude", regexp.MustCompile(`(\S+ is Claude Code \S+(?: \([^()]*\))? but your sessions run \S+): (update Claude Code or put the newer one first on PATH)`), "$1", "$2"},
+	{"claude", regexp.MustCompile(`nonessential traffic is off in Claude Code's settings`), "$0", ""},
+	{"claude", regexp.MustCompile(`this Claude Code cannot read the usage`), "$0", "update it"},
+	{"claude", regexp.MustCompile(`showed the usage but did not cache it`), "Claude Code did not cache the usage", "update it"},
+	{"grok", regexp.MustCompile(regexp.QuoteMeta(probe.GrokNoCredits)), "no credit usage logged yet", ""},
+	// Problems of the run.
+	{"claude", regexp.MustCompile(`claude binary not found`), "claude not found", "install Claude Code or put it on PATH"},
+	{"claude", regexp.MustCompile(`could not read the usage`), "Claude Code could not read the usage", "run /usage in claude to see why"},
+	{"claude", regexp.MustCompile(`sees no claude\.ai plan`), "Claude Code sees no claude.ai plan", ""},
+	{"claude", regexp.MustCompile(`claude /usage: no answer in time`), "claude /usage timed out", ""},
+	{"claude", regexp.MustCompile(`claude /usage: `), "claude /usage failed", ""},
+	{"claude", regexp.MustCompile(`claude auth status: no answer in time`), "claude timed out", ""},
+	{"claude", regexp.MustCompile(`claude (auth status|config)\b`), "claude could not be asked", ""},
+	{"codex", regexp.MustCompile(`codex binary not found`), "codex not found", "install it or put it on PATH"},
+	// A codex too old to have app-server, or its account requests.
+	{"codex", regexp.MustCompile(`app-server exited without answering|Method not found|unknown variant`), "this codex cannot read its limits", "update codex"},
+	{"codex", regexp.MustCompile(`codex app-server: `), "codex did not start", "reinstall it"},
+	{"codex", regexp.MustCompile(`\b401\b|[Uu]nauthorized`), "codex's login was refused", "run codex login"},
+	{"codex", regexp.MustCompile(`codex \S+: no answer in time`), "codex timed out", ""},
+	{"codex", regexp.MustCompile(`codex (account/rateLimits/read|rateLimits): `), "codex could not read its limits", ""},
+	{"codex", regexp.MustCompile(`codex \S+: `), "codex could not be asked", ""},
+	{"grok", regexp.MustCompile(`grok log names no signed-in user`), "grok names no signed-in user", "run grok and sign in"},
+	{"grok", regexp.MustCompile(`grok log not found`), "no grok log", ""},
+	{"grok", regexp.MustCompile(`grok log: `), "grok's log could not be read", ""},
+}
+
+// quotaReason is why source s of the device named label kept its accounts
+// from a quota reading, as quotaReasons word it, with the device after what
+// is wrong. A note it does not know, which keeps the source ok, is said as
+// it is. Else it is "".
+func quotaReason(s Source, label string) string {
+	msg := *s.Error
+	for _, r := range quotaReasons {
+		if r.provider != s.Provider {
+			continue
+		}
+		m := r.says.FindStringSubmatchIndex(msg)
+		if m == nil {
+			continue
+		}
+		act := ""
+		if r.act != "" {
+			act = ": " + string(r.says.ExpandString(nil, r.act, msg, m))
+		}
+		// What to do is kept whole.
+		where := " on " + label
+		what := string(r.says.ExpandString(nil, r.what, msg, m))
+		return snapshot.Truncate(what, max(maxReason-len(where+act), 16)) + where + act
+	}
+	if s.Status == "ok" {
+		return snapshot.Truncate(strings.TrimPrefix(msg, s.Provider+": ")+" on "+label, maxReason)
+	}
+	return ""
 }
 
 // unknownReason is why tokens of harness p went to no login, and where,
