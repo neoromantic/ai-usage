@@ -64,7 +64,7 @@ and points `.verify/latest` at it.
 | `summary.txt` | each step, ok or FAIL, and its seconds, at which commit |
 | `go-test.txt` | the whole `go test` output |
 | `page/solo-80.txt` … `team-110.txt` | the printed page of each demo report at each width |
-| `page/tui-0-start.txt` … `tui-6-close.txt` | the interactive view at start, then after `s` (DEVICES as status), `%` (shares), `7` (the week), `G` (the bottom), `?` (help), `esc` |
+| `page/tui-0-start.txt` … `tui-10-back.txt` | the interactive view at start, then after `s` (DEVICES as status), `%` (shares), `7` (the week), `G` (the bottom), `?` (help), `esc`, `enter` (a row picked), `j` (the next row), `enter` (its detail), `esc` (back) |
 | `stack/` | each device's commands and pages, `a.json`, the report of `dev-a` that lists both devices, and `relay.log` |
 | `app/checks.txt`, `app/team/*.png`, `app/solo/*.png` | the app's checks, and its pictures |
 
@@ -96,7 +96,9 @@ real team's relay. Never run `schedule install` outside a made-up home.
   ```
   Keys: `q` quit, `?` help, `j`/`k` scroll, `G`/`g` end/top, `h`/`l` the
   matrix sideways, `p` or `1 7 3 9` the period, `%` shares, `s` DEVICES as
-  status, `r` refresh.
+  status, `r` refresh, `enter` pick a row, then `j`/`k` move the pick,
+  `enter` its detail, `esc` back. Send `Enter` and `Escape` as key names,
+  without `-l`.
 - **A team:** what `step_stack` in `scripts/verify.sh` does: `ai-usage relay serve --addr
   127.0.0.1:PORT` (memory store), then each device as
   `env -i HOME=<dir> PATH=/usr/bin:/bin AI_USAGE_NO_SCHEDULE=1 AI_USAGE_RELAY=http://127.0.0.1:PORT AI_USAGE_NAME=<name> /tmp/au ...`.

@@ -313,20 +313,31 @@ step_page() {
 	shot start
 	grep -q '^ATTENTION' "$ev/page/tui-0-start.txt" || fail "the interactive view opened without ATTENTION; see page/tui-0-start.txt"
 	# Each key, then its screen: DEVICES as status, shares, the week, the
-	# bottom of the page, the help, and the help closed.
-	for name in status share week end help close; do
+	# bottom of the page, the help, the help closed, then a row picked, the
+	# next one, its detail, and back.
+	for name in status share week end help close pick next open back; do
 		case $name in
 		status) t send-keys -t v -l s ;;
 		share) t send-keys -t v -l % ;;
 		week) t send-keys -t v -l 7 ;;
 		end) t send-keys -t v -l G ;;
 		help) t send-keys -t v -l '?' ;;
-		close) t send-keys -t v Escape ;;
+		close | back) t send-keys -t v Escape ;;
+		pick | open) t send-keys -t v Enter ;;
+		next) t send-keys -t v -l j ;;
 		esac
 		shot "$name"
 	done
 	grep -q '^STATES' "$ev/page/tui-5-help.txt" || fail "? showed no help; see page/tui-5-help.txt"
 	! cmp -s "$ev/page/tui-0-start.txt" "$ev/page/tui-1-status.txt" || fail "s did not change the view"
+	grep -q 'pick .* open' "$ev/page/tui-7-pick.txt" || fail "Enter picked no row; see page/tui-7-pick.txt"
+	# A detail's key bar goes back, and opens nothing.
+	case $(tail -n 1 "$ev/page/tui-9-open.txt") in
+	*open*) fail "Enter opened no detail; see page/tui-9-open.txt" ;;
+	*"esc back"*) ;;
+	*) fail "Enter opened no detail; see page/tui-9-open.txt" ;;
+	esac
+	cmp -s "$ev/page/tui-8-next.txt" "$ev/page/tui-10-back.txt" || fail "Esc did not go back to the page as it was; see page/tui-10-back.txt"
 	t send-keys -t v q
 	sleep 0.4
 	[ "$(cat "$ev/page/tui-exit" 2>/dev/null)" = 0 ] || fail "q did not quit the interactive view with 0"
