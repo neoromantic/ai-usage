@@ -50,11 +50,31 @@ build=$here/.build
 app=$build/app/AI\ Usage.app
 cd "$here"
 
+# Both CPUs build at once, each in a scratch path of its own and with its
+# output in a log of its own, printed once it ends.
+mkdir -p "$build"
+build_arch() {
+	xcrun swift build -c release --product AIUsageBar --arch "$1" --scratch-path ".build/$1" \
+		>"$build/swift-$1.log" 2>&1
+}
+failed=
+# ARCH PID: wait for the build, print its log, and note a failure.
+finish_arch() {
+	if wait "$2"; then status=0; else status=$?; fi
+	echo "swift build for $1 exited $status:" >&2
+	cat "$build/swift-$1.log" >&2
+	[ "$status" -eq 0 ] || failed="$failed $1"
+}
+echo "building AIUsageBar for arm64 and x86_64" >&2
+build_arch arm64 &
+pid_arm64=$!
+build_arch x86_64 &
+pid_x86_64=$!
+finish_arch arm64 "$pid_arm64"
+finish_arch x86_64 "$pid_x86_64"
+[ -z "$failed" ] || fail "swift build failed for$failed"
 set --
 for arch in arm64 x86_64; do
-	echo "building AIUsageBar for $arch" >&2
-	xcrun swift build -c release --product AIUsageBar --arch "$arch" --scratch-path ".build/$arch" ||
-		fail "swift build failed for $arch"
 	bin=$(xcrun swift build -c release --product AIUsageBar --arch "$arch" --scratch-path ".build/$arch" --show-bin-path)
 	set -- "$@" "$bin/AIUsageBar"
 done

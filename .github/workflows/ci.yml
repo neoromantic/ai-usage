@@ -268,5 +268,8 @@ jobs:
     if: always() && github.event.pull_request.draft != true
     runs-on: ${{ fromJSON('{"true":"oss-linux","false":"ubuntu-latest"}')[format('{0}', vars.CI_SELF_HOSTED == 'true' && github.ref == 'refs/heads/main')] }}
     steps:
-      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      # always(), because a step's if without a status function gets an
+      # implicit success(), which is false once a needed job failed or was
+      # cancelled: the step would be skipped and ci would pass.
+      - if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
         run: exit 1
