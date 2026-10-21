@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 permissions:
@@ -15,7 +16,8 @@ concurrency:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft != true
+    runs-on: ${{ fromJSON('{"true":"oss-linux","false":"ubuntu-latest"}')[format('{0}', vars.CI_SELF_HOSTED == 'true' && github.ref == 'refs/heads/main')] }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -24,6 +26,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: ${{ runner.environment != 'self-hosted' }}
       - name: gofmt
         run: |
           unformatted=$(gofmt -l .)
@@ -49,11 +52,24 @@ jobs:
 
   # The menu bar app: its checks, then the release build of the bundle.
   app:
+    if: github.event.pull_request.draft != true
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Swift cache version
+        id: swift
+        run: echo "version=$(xcrun swift --version | shasum -a 256 | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Cache Swift build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            macos/.build
+            !macos/.build/app
+            !macos/.build/icon
+          key: swift-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.version }}-${{ hashFiles('macos/**') }}
+          restore-keys: swift-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.version }}-
       - name: Checks
         working-directory: macos
         run: xcrun swift run AIUsageChecks
@@ -63,11 +79,12 @@ jobs:
   # Windows builds and installs (see lint and install), but its unit tests are
   # not a release gate: Windows is not a supported collector host yet.
   test:
+    if: github.event.pull_request.draft != true
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ fromJSON(format('{{"true":"oss-linux","false":"{0}"}}', matrix.os))[format('{0}', vars.CI_SELF_HOSTED == 'true' && github.ref == 'refs/heads/main' && matrix.os == 'ubuntu-latest')] }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -75,6 +92,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
+          cache: ${{ runner.environment != 'self-hosted' }}
       - if: runner.os == 'Linux'
         name: vet, staticcheck and deadcode for every release OS; go mod tidy
         run: |
@@ -88,16 +106,18 @@ jobs:
             [ -z "$d" ] || { echo "$d"; exit 1; }
           done
           go mod tidy -diff
-      - run: go test ./...
+      - if: runner.os != 'Linux'
+        run: go test ./...
       - if: runner.os == 'Linux'
         run: go test -race ./...
 
   install:
+    if: github.event.pull_request.draft != true
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ fromJSON(format('{{"true":"oss-linux","false":"{0}"}}', matrix.os))[format('{0}', vars.CI_SELF_HOSTED == 'true' && github.ref == 'refs/heads/main' && matrix.os == 'ubuntu-latest')] }}
     steps:
       - run: git config --global core.autocrlf false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -106,6 +126,22 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
+          cache: ${{ runner.environment != 'self-hosted' }}
+      - if: runner.os == 'macOS'
+        name: Swift cache version
+        id: swift
+        shell: bash
+        run: echo "version=$(xcrun swift --version | shasum -a 256 | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - if: runner.os == 'macOS'
+        name: Cache Swift build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            macos/.build
+            !macos/.build/app
+            !macos/.build/icon
+          key: swift-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.version }}-${{ hashFiles('macos/**') }}
+          restore-keys: swift-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.version }}-
       # Builds this runner's release file, and on macOS the menu bar app,
       # serves them on 127.0.0.1, and runs install.sh or install.ps1 against
       # them twice: a fresh install, then an upgrade.
@@ -119,6 +155,7 @@ jobs:
   # path, and a script copy installed later leaves it so. launchd is left
   # to the unit tests: a runner has no one logged in at the screen.
   brew:
+    if: github.event.pull_request.draft != true
     strategy:
       fail-fast: false
       matrix:
@@ -135,6 +172,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
+          cache: ${{ runner.environment != 'self-hosted' }}
       # Linux runners have Homebrew, off PATH.
       - if: runner.os == 'Linux'
         run: echo /home/linuxbrew/.linuxbrew/bin >>"$GITHUB_PATH"
@@ -227,8 +265,8 @@ jobs:
   # The one check a branch ruleset requires: every job above passed.
   ci:
     needs: [lint, app, test, install, brew, hygiene]
-    if: always()
-    runs-on: ubuntu-latest
+    if: always() && github.event.pull_request.draft != true
+    runs-on: ${{ fromJSON('{"true":"oss-linux","false":"ubuntu-latest"}')[format('{0}', vars.CI_SELF_HOSTED == 'true' && github.ref == 'refs/heads/main')] }}
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
