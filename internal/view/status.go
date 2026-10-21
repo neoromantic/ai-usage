@@ -286,9 +286,14 @@ func (c *card) sources() {
 		}
 		c.kv(key, gl, val, fg)
 		if p.Error != nil {
-			// The error goes under the homes, past the provider's name.
+			// The error goes under the homes, past the provider's name. On a
+			// source that is ok it is a note, which is no failure.
 			pad := statusKey + 2 + 8
-			c.hang(chunks{c.space(pad)}, wrapWords(*p.Error, c.w-pad), lipgloss.Red)
+			fg := lipgloss.Red
+			if p.Status == "ok" {
+				fg = lipgloss.BrightBlack
+			}
+			c.hang(chunks{c.space(pad)}, wrapWords(*p.Error, c.w-pad), fg)
 		}
 	}
 }

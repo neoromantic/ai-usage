@@ -51,10 +51,10 @@ func notLoggedIn(harness string) error { return fmt.Errorf("%s: %w", harness, Er
 
 // ErrNoQuota is the error of a harness that answered who is logged in but
 // cannot give a new quota reading for a reason of its own: the one installed
-// is too old to read or cache the usage, or its settings turn off the
-// traffic the read needs. Its tokens are read all the same, so collect keeps
-// it apart from a failure with errors.Is. It is never joined with another
-// problem.
+// is too old to read or cache the usage, its settings turn off the traffic
+// the read needs, or, for Grok, its log has no credit usage yet. Its tokens
+// are read all the same, so collect keeps it apart from a failure with
+// errors.Is. It is never joined with another problem.
 var ErrNoQuota = errors.New("no quota reading")
 
 // NoQuotaError is an ErrNoQuota with its reason in Msg, and the harness it

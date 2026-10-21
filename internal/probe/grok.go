@@ -17,7 +17,8 @@ import (
 // one-shot command that prints the account or the quota, but each start logs
 // the signed-in user id, and each billing refresh logs the credit usage for
 // the current period. Only those two kinds of line are decoded, and only the
-// user id and the credit fields are kept.
+// user id and the credit fields are kept. A user with no credit usage in the
+// log yet has no quota reading, which a NoQuotaError says.
 func Grok(home string) (Reading, error) {
 	files, _ := filepath.Glob(filepath.Join(home, "logs", "unified*.jsonl"))
 	if len(files) == 0 {
@@ -39,12 +40,17 @@ func Grok(home string) (Reading, error) {
 		}
 		return r, errors.New("grok log names no signed-in user; account unknown")
 	}
-	if b := st.billingFor(r.Account); b != nil {
-		r.Plan = b.plan
-		r.Quota = b.quota
+	b := st.billingFor(r.Account)
+	if b == nil {
+		return r, &NoQuotaError{Msg: GrokNoCredits}
 	}
+	r.Plan, r.Quota = b.plan, b.quota
 	return r, nil
 }
+
+// GrokNoCredits is why a Grok user has no quota reading: its log has no
+// credit usage for the user yet.
+const GrokNoCredits = "grok has logged no credit usage yet"
 
 type grokAuth struct {
 	at   time.Time
