@@ -17,23 +17,18 @@ Where they conflict, the project section wins.
 
 ### Commands
 
-Every repo exposes the same script names, so CI and agents need no per-repo knowledge:
+Use the project section's native commands for checks, offline tests and builds:
 
-| Script | What it does |
-|---|---|
-| `check` | lint and typecheck (or `lint` and `typecheck` separately) |
-| `test` | offline unit tests |
-| `test:e2e` | end-to-end tests, still offline |
-| `build` | produce the shipped artifact, if any |
-
-- Bun repos: `bun run <script>`. Python repos: `uv run …` (never bare `pip` or `python`).
-  Go repos: `go` tooling from `go.mod`.
+- Bun: `bun run <script>` (`check`, or `lint` and `typecheck`; `test`, `test:e2e`, `build`).
+- Python: the documented `uv run` / `uvx` commands, such as pytest, unittest and ruff.
+- Go: the documented `go` commands from `go.mod`. Do not add Bun wrappers for Python or Go.
 - Use Bun, uv or Go modules for installs. Use npm only for `npm publish` and `npm view`.
 
 ### Definition of done
 
-- The change works end to end, tests cover it, and `check` and `test` pass locally.
-- README and docs change in the same commit as the behaviour they describe.
+- The change works end to end and the project's applicable checks and tests pass locally.
+- README, docs and affected demos change with the behaviour they describe; follow the
+  [product content standard](https://github.com/neoromantic/devkit/blob/main/docs/standards/product-content.md).
 - No new warnings, no commented-out code, no stray debug output.
 
 ### Commits and releases
@@ -41,8 +36,8 @@ Every repo exposes the same script names, so CI and agents need no per-repo know
 - Conventional Commits: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`, `ci:`.
   A breaking change adds `!` (`feat!:`) and a `BREAKING CHANGE:` footer.
 - One logical change per commit. Never rewrite published history or force-push `main`.
-- Releases happen only through the repo's Release PR or release workflow. Don't bump versions,
-  edit `CHANGELOG.md` or push tags by hand.
+- Follow the project's documented release procedure, including any owner-only steps. It defines
+  versioning, tags, changelog and delivery (release, skill revision or production deployment).
 
 ### Files
 

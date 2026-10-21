@@ -8,5 +8,5 @@
 <!-- Commands you ran and what you saw. -->
 
 - [ ] Tests pass locally and use made-up data only
-- [ ] README and docs updated if behaviour changed
+- [ ] README, docs and affected demos follow the [product content standard](https://github.com/neoromantic/devkit/blob/main/docs/standards/product-content.md)
 - [ ] Title follows the repo's commit style: Conventional Commits (`feat: …`, `fix: …`) unless `AGENTS.md` says otherwise
