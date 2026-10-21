@@ -17,7 +17,7 @@ The workflow then:
 2. on macOS, runs `go vet ./...`, `go test ./...`, and the menu bar app's checks, `xcrun swift run AIUsageChecks` in `macos/`
 3. puts the Developer ID certificate in a keychain of its own and the notary key in a file, in the step "Set up signing"; see [Signing and notarization](#signing-and-notarization)
 4. builds the seven release files with `.github/scripts/dist.sh`, which signs the two macOS binaries and the app with Developer ID, has Apple notarize them, and staples the ticket to the app, and then deletes the keychain and the key
-5. checks that the macOS arm64 binary reports the tag as its version; that `checksums.txt` lists seven files that match it; that the app in `ai-usage_darwin_app.zip` reports the tag without its `v`, is built for both CPUs, and has a signature that verifies; and that the app and both macOS binaries are signed with the hardened runtime and notarized, that the app's ticket is stapled, and that Gatekeeper accepts them as `Notarized Developer ID`
+5. checks that the macOS arm64 binary reports the tag as its version; that `checksums.txt` lists seven files that match it; that the app in `ai-usage_darwin_app.zip` reports the tag without its `v`, is built for both CPUs, and has a signature that verifies; and that the app and both macOS binaries are signed with the hardened runtime and notarized, and that the app's ticket is stapled; when the runner has Gatekeeper on, it also checks that Gatekeeper accepts them as `Notarized Developer ID`
 6. creates the release as a draft, uploads the files, and then publishes it. Its notes are `docs/releases/<tag>.md`, when that file exists, followed by GitHub's generated notes, which link the changes since the last release
 7. updates the Homebrew tap, in the step "Update the Homebrew tap", with `.github/scripts/tap.sh`; see [Homebrew](#homebrew)
 
@@ -43,7 +43,7 @@ A release reaches Homebrew a few minutes after GitHub. Meanwhile `ai-usage updat
 
 ## Signing and notarization
 
-Every tag, a prerelease too, ships the app and the two macOS binaries signed with a Developer ID Application certificate, with the hardened runtime and a secure timestamp, and notarized by Apple. So Gatekeeper opens the app however it reached the Mac, from a browser too, and on macOS 27 launchd keeps a launch agent's pin across updates (see [the README](../README.md#a-mac-missed-a-run-after-an-update)). The workflow needs five repository secrets (Settings, Secrets and variables, Actions):
+Every tag, a prerelease too, ships the app and the two macOS binaries signed with a Developer ID Application certificate, with the hardened runtime and a secure timestamp, and notarized by Apple. So Gatekeeper opens the app however it reached the Mac, from a browser too, and on macOS 27 launchd is expected to keep a launch agent's pin across updates (see [the README](../README.md#a-mac-missed-a-run-after-an-update)). The workflow needs five repository secrets (Settings, Secrets and variables, Actions):
 
 | Secret | Holds |
 | --- | --- |

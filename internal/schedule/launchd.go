@@ -143,14 +143,15 @@ var ErrRefused = errors.New("launchd refuses to start the updated binary")
 
 // repairAgent has launchd start the agent now, from the binary on disk. On
 // macOS 27, launchd pins an agent it loaded at login to its binary's code
-// signature, which for an ad-hoc signed binary is its cdhash. A Developer ID
-// release is pinned to its team and identifier, which updates keep; the
-// update from an ad-hoc release, or of a build from source, still changes
-// the pin. Once such an update replaces the binary, launchd refuses the next
-// start, and at the start after it repairs the pin and records the new
-// binary for the next login. So a refused agent takes one start. A pinned one whose binary replaced says was
-// just replaced takes two, and the first, refused at once, costs no run;
-// when launchd does not refuse it in time, there is no second. An agent
+// signature, which for an ad-hoc signed binary is its cdhash. A Developer
+// ID release is expected to be pinned to its team and identifier, which
+// updates keep; the update from an ad-hoc release, or of a build from
+// source, still changes the pin. Once such an update replaces the binary,
+// launchd refuses the next start, and at the start after it repairs the
+// pin and records the new binary for the next login. So a refused agent
+// takes one start. A pinned one whose binary replaced says was just
+// replaced takes two, and the first, refused at once, costs no run; when
+// launchd does not refuse it in time, there is no second. An agent
 // pinned to nothing, as on an earlier macOS, and one that runs or is being
 // started are left alone. The started run collects as a scheduled run does.
 // A run the agent started does nothing, since launchd does not start the

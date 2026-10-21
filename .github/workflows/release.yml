@@ -128,10 +128,17 @@ jobs:
             codesign -dv "$f" 2>&1 | grep -F 'flags=0x10000(runtime)'
           done
           xcrun stapler validate "$app"
-          spctl -a -vv -t exec "$app"
-          for bin in dist/ai-usage_darwin_arm64 dist/ai-usage_darwin_amd64; do
-            spctl -a -vv -t open --context context:primary-signature "$bin"
-          done
+          # With Gatekeeper off, spctl accepts anything without naming a
+          # source, so it is asked only when on; the check above holds either
+          # way.
+          if spctl --status | grep -qF 'assessments enabled'; then
+            spctl -a -vv -t exec "$app" 2>&1 | grep -F 'source=Notarized Developer ID'
+            for bin in dist/ai-usage_darwin_arm64 dist/ai-usage_darwin_amd64; do
+              spctl -a -vv -t open --context context:primary-signature "$bin" 2>&1 | grep -F 'source=Notarized Developer ID'
+            done
+          else
+            echo "Gatekeeper is off on this runner; codesign's notarization check stands for it"
+          fi
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}

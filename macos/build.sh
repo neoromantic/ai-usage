@@ -34,10 +34,15 @@ case "$bundle_version" in
 esac
 [ "$(uname -s)" = Darwin ] || fail "the menu bar app builds only on macOS"
 
-# OUT_ZIP is relative to the caller's folder, not this one.
+# OUT_ZIP and the notary key are relative to the caller's folder, not this
+# one.
 case "$zip" in
 /*) ;;
 *) zip=$PWD/$zip ;;
+esac
+case "${AI_USAGE_NOTARY_KEY:-}" in
+"" | /*) ;;
+*) export AI_USAGE_NOTARY_KEY="$PWD/$AI_USAGE_NOTARY_KEY" ;;
 esac
 
 here=$(cd "$(dirname "$0")" && pwd)

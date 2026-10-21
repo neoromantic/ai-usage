@@ -69,7 +69,8 @@ for target in $targets; do
 		-ldflags "-s -w -X main.version=$version -X main.defaultRelay=$relay" \
 		-o "$out/$name" ./cmd/ai-usage
 	# One identifier for every release and CPU: with the team, it is what
-	# launchd on macOS 27 pins the launch agent to, so updates keep the pin.
+	# launchd on macOS 27 is expected to pin the launch agent to, so updates
+	# should keep the pin.
 	if [ "$goos" = darwin ] && [ -n "$identity" ]; then
 		codesign --force --options runtime --timestamp --identifier io.github.neoromantic.ai-usage \
 			--sign "$identity" "$out/$name"
