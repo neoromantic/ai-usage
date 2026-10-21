@@ -28,6 +28,12 @@
 #   build    the release build of the app bundle, macos/build.sh (macOS; --push)
 #   install  .github/scripts/install-smoke.sh, the installer against a local
 #            release (--push)
+#   brew     the Homebrew smoke: a formula of local files installs, passes
+#            brew test, says Homebrew updates it, and passes brew style and
+#            audit (macOS, where CI no longer runs it; --push)
+#
+# CI runs no macOS job, so on a Mac, --push is the macOS gate: go test on
+# darwin, the app's checks and release build, the installer, and Homebrew.
 #
 # Nothing touches this machine's ai-usage, its harnesses, or a real relay:
 # page reads docs/demo, stack runs in homes under the evidence folder with a
@@ -57,7 +63,7 @@ while [ $# -gt 0 ]; do
 		base_ref=$2
 		shift
 		;;
-	go | lint | shell | page | stack | app | pictures | build | install) only="$only $1" ;;
+	go | lint | shell | page | stack | app | pictures | build | install | brew) only="$only $1" ;;
 	-h | --help)
 		sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
 		exit 0
@@ -103,6 +109,14 @@ doctor() {
 	done
 	if [ "$goos" = darwin ]; then
 		if xcrun --find swift >/dev/null 2>&1; then echo "swift       ok"; else echo "swift       missing: install Xcode or the Command Line Tools"; bad=1; fi
+		if ! has brew; then
+			echo "brew        missing: the brew step needs Homebrew"
+			bad=1
+		elif [ -e "$(brew --prefix)/opt/ai-usage" ]; then
+			echo "brew        has ai-usage installed, which stops install and brew: brew uninstall ai-usage first"
+		else
+			echo "brew        ok"
+		fi
 	else
 		echo "swift       not on $goos: app and build run only on macOS"
 	fi
@@ -162,10 +176,20 @@ else
 		case $f in *.sh | install.ps1) want shell "$f" ;; esac
 		if [ -n "$push" ]; then
 			case $f in macos/*) want build "$f" ;; esac
+			# The installer puts the app in place on macOS, and the first run
+			# registers with launchd, so the app and that code count too.
 			case $f in
-			install.sh | install.ps1 | .github/scripts/* | macos/build.sh | \
-				internal/selfupdate/* | internal/schedule/* | cmd/ai-usage/update.go | cmd/ai-usage/schedule.go)
+			install.sh | install.ps1 | .github/scripts/* | macos/* | internal/fsutil/* | \
+				internal/selfupdate/* | internal/schedule/* | cmd/ai-usage/update.go | \
+				cmd/ai-usage/schedule.go | cmd/ai-usage/app.go)
 				want install "$f"
+				;;
+			esac
+			# What Homebrew installs, and how the binary knows it did.
+			case $f in
+			.github/scripts/formula.sh | .github/scripts/dist.sh | internal/fsutil/* | \
+				internal/selfupdate/* | cmd/ai-usage/brew.go | cmd/ai-usage/update.go | cmd/ai-usage/report.go)
+				want brew "$f"
 				;;
 			esac
 		fi
@@ -174,7 +198,7 @@ fi
 
 # Steps in the order that fails cheapest first.
 steps=
-for s in shell go lint page stack app pictures build install; do
+for s in shell go lint page stack app pictures build install brew; do
 	case " $want_steps " in *" $s "*) steps="$steps $s" ;; esac
 done
 
@@ -192,8 +216,8 @@ echo "verify: steps:$steps$reasons"
 if [ -z "$push" ] && [ -z "$only" ]; then
 	for f in $changed; do
 		case $f in
-		macos/* | install.sh | install.ps1 | .github/scripts/* | internal/selfupdate/* | internal/schedule/*)
-			echo "verify: build and install wait for --push"
+		macos/* | install.sh | install.ps1 | .github/scripts/* | internal/selfupdate/* | internal/schedule/* | internal/fsutil/*)
+			echo "verify: build, install, and brew wait for --push"
 			break
 			;;
 		esac
@@ -212,10 +236,15 @@ ls -1d "$root"/.verify/2* 2>/dev/null | sort -r | tail -n +11 | while read -r ol
 # A socket path must be short (104 bytes on macOS), so not under $ev.
 tmux_socket=/tmp/ai-usage-verify-$$.sock
 relay_pid=
+brew_tap=
 # Each step runs in a subshell of its own, which sets this as its trap, so
 # what a step started stops even when it fails half-way.
 cleanup() {
 	[ -z "$relay_pid" ] || kill "$relay_pid" 2>/dev/null || true
+	if [ -n "$brew_tap" ]; then
+		brew uninstall --force "$brew_tap/ai-usage" >/dev/null 2>&1 || true
+		brew untap "$brew_tap" >/dev/null 2>&1 || true
+	fi
 	tmux -S "$tmux_socket" -f /dev/null kill-server 2>/dev/null || true
 	rm -f "$tmux_socket"
 }
@@ -429,6 +458,65 @@ step_install() {
 	# 8765, the script's own port, is often taken on a desktop.
 	PORT=28765 RUNNER_TEMP="$ev/install" sh .github/scripts/install-smoke.sh >"$ev/install.txt" 2>&1 ||
 		{ tail -n 30 "$ev/install.txt"; fail "install-smoke.sh; see install.txt"; }
+}
+
+# CI's brew job, on macOS: formula.sh refuses an old release and a
+# prerelease; a formula of local files installs with no dependency, passes
+# brew test, and the binary, run in a home of its own, says Homebrew updates
+# it; and the formula the tap gets passes brew style and audit. It installs
+# into this Mac's Homebrew, from a tap of its own, and removes both at the
+# end, so it stops when Homebrew already has an ai-usage. CI still runs it on
+# Linux.
+step_brew() {
+	[ "$goos" = darwin ] || { echo "  skipped: CI runs the Homebrew smoke on Linux"; return 0; }
+	has brew || fail "no brew on PATH; the brew step needs Homebrew"
+	prefix=$(brew --prefix)
+	[ ! -e "$prefix/opt/ai-usage" ] ||
+		fail "Homebrew already has ai-usage ($prefix/opt/ai-usage), which this step would replace; brew uninstall ai-usage first, and install it again after"
+	export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1
+	b=$ev/brew
+	mkdir -p "$b"
+	# The formula names all four binaries, so all four are built.
+	AI_USAGE_RELAY_URL='' TARGETS="darwin/amd64 darwin/arm64 linux/amd64 linux/arm64" \
+		sh .github/scripts/dist.sh v9.9.9 "$b/dist" >"$b/dist.txt" 2>&1 ||
+		{ tail -n 30 "$b/dist.txt"; fail "dist.sh; see brew/dist.txt"; }
+	for tag in v0.7.0 v0.8.0-rc1; do
+		if sh .github/scripts/formula.sh "$tag" "$b/dist/checksums.txt" >/dev/null 2>&1; then
+			fail "formula.sh wrote a formula for $tag"
+		fi
+	done
+	brew_tap=verify/aiu
+	brew untap "$brew_tap" >/dev/null 2>&1 || true
+	brew tap-new --no-git "$brew_tap" >"$b/tap.txt" 2>&1 || { cat "$b/tap.txt"; fail "brew tap-new; see brew/tap.txt"; }
+	formula="$(brew --repo "$brew_tap")/Formula/ai-usage.rb"
+	sh .github/scripts/formula.sh v9.9.9 "$b/dist/checksums.txt" "file://$b/dist" >"$formula"
+	cp "$formula" "$b/local.rb"
+	deps=$(brew deps --include-implicit "$brew_tap/ai-usage")
+	[ -z "$deps" ] || fail "Homebrew gives the formula dependencies: $deps"
+	brew install "$brew_tap/ai-usage" >"$b/install.txt" 2>&1 ||
+		{ tail -n 30 "$b/install.txt"; fail "brew install; see brew/install.txt"; }
+	brew test "$brew_tap/ai-usage" >"$b/test.txt" 2>&1 ||
+		{ tail -n 30 "$b/test.txt"; fail "brew test; see brew/test.txt"; }
+	[ "$("$prefix/bin/ai-usage" version)" = v9.9.9 ] || fail "$prefix/bin/ai-usage is not the build brew installed"
+	# Never this Mac's own state: a home of its own, no harness on PATH.
+	h=$b/home
+	mkdir -p "$h"
+	run() {
+		env -i HOME="$h" PATH="$prefix/bin:/usr/bin:/bin" TERM=dumb AI_USAGE_NO_SCHEDULE=1 "$prefix/bin/ai-usage" "$@"
+	}
+	run </dev/null >"$b/first-run.txt" 2>&1 || fail "the first run; see brew/first-run.txt"
+	run report --json >"$b/report.json" 2>"$b/report.err" || fail "report --json; see brew/report.err"
+	jq -e '.collector.update.method == "homebrew" and (.collector.update.command | test("neoromantic/tap"))' "$b/report.json" >/dev/null ||
+		fail "the report does not say Homebrew updates it; see brew/report.json"
+	brew uninstall "$brew_tap/ai-usage" >/dev/null
+	# The text the tap gets, with GitHub's URLs.
+	sh .github/scripts/formula.sh v9.9.9 "$b/dist/checksums.txt" >"$formula"
+	brew style "$brew_tap" >"$b/style.txt" 2>&1 || { tail -n 30 "$b/style.txt"; fail "brew style; see brew/style.txt"; }
+	brew audit --strict --formula "$brew_tap/ai-usage" >"$b/audit.txt" 2>&1 ||
+		{ tail -n 30 "$b/audit.txt"; fail "brew audit; see brew/audit.txt"; }
+	brew untap "$brew_tap" >/dev/null 2>&1
+	brew_tap=
+	echo "  installed, tested, styled and audited from $prefix"
 }
 
 summary=

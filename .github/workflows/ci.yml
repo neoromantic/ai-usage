@@ -46,45 +46,20 @@ jobs:
           $errors = $null
           [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD/install.ps1", [ref]$null, [ref]$errors)
           if ($errors) { $errors | Format-List | Out-String | Write-Host; exit 1 }
-      # All but the menu bar app, which builds only on macOS; see app.
+      # All but the menu bar app, which builds only on macOS.
       - name: Cross-compile every release target
         run: sh .github/scripts/dist.sh v9.9.9-ci "$RUNNER_TEMP/dist"
 
-  # The menu bar app: its checks, then the release build of the bundle.
-  app:
-    if: github.event.pull_request.draft != true
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Swift cache version
-        id: swift
-        run: echo "version=$(xcrun swift --version | shasum -a 256 | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-      - name: Cache Swift build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            macos/.build
-            !macos/.build/app
-            !macos/.build/icon
-          key: swift-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.version }}-${{ hashFiles('macos/**') }}
-          restore-keys: swift-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.version }}-
-      - name: Checks
-        working-directory: macos
-        run: xcrun swift run AIUsageChecks
-      - name: Build
-        run: sh macos/build.sh v9.9.9-ci "$RUNNER_TEMP/app.zip"
-
-  # Windows builds and installs (see lint and install), but its unit tests are
-  # not a release gate: Windows is not a supported collector host yet.
+  # CI runs no macOS job: macOS is checked on a Mac before the push, with
+  # scripts/verify.sh --push, which runs go test on darwin, the menu bar
+  # app's checks and release build, and the installer and Homebrew smoke
+  # tests there (see AGENTS.md). vet, staticcheck and deadcode still cover
+  # darwin here. Windows builds and installs (see lint and install), but its
+  # unit tests are not a release gate: Windows is not a supported collector
+  # host yet.
   test:
     if: github.event.pull_request.draft != true
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ fromJSON(format('{{"true":"oss-linux","false":"{0}"}}', matrix.os))[format('{0}', vars.CI_SELF_HOSTED == 'true' && github.ref == 'refs/heads/main' && matrix.os == 'ubuntu-latest')] }}
+    runs-on: ${{ fromJSON('{"true":"oss-linux","false":"ubuntu-latest"}')[format('{0}', vars.CI_SELF_HOSTED == 'true' && github.ref == 'refs/heads/main')] }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -93,8 +68,7 @@ jobs:
         with:
           go-version: stable
           cache: ${{ runner.environment != 'self-hosted' }}
-      - if: runner.os == 'Linux'
-        name: vet, staticcheck and deadcode for every release OS; go mod tidy
+      - name: vet, staticcheck and deadcode for every release OS; go mod tidy
         run: |
           go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
           go install golang.org/x/tools/cmd/deadcode@v0.52.0
@@ -106,17 +80,14 @@ jobs:
             [ -z "$d" ] || { echo "$d"; exit 1; }
           done
           go mod tidy -diff
-      - if: runner.os != 'Linux'
-        run: go test ./...
-      - if: runner.os == 'Linux'
-        run: go test -race ./...
+      - run: go test -race ./...
 
   install:
     if: github.event.pull_request.draft != true
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ fromJSON(format('{{"true":"oss-linux","false":"{0}"}}', matrix.os))[format('{0}', vars.CI_SELF_HOSTED == 'true' && github.ref == 'refs/heads/main' && matrix.os == 'ubuntu-latest')] }}
     steps:
       - run: git config --global core.autocrlf false
@@ -127,40 +98,22 @@ jobs:
         with:
           go-version: stable
           cache: ${{ runner.environment != 'self-hosted' }}
-      - if: runner.os == 'macOS'
-        name: Swift cache version
-        id: swift
-        shell: bash
-        run: echo "version=$(xcrun swift --version | shasum -a 256 | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-      - if: runner.os == 'macOS'
-        name: Cache Swift build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            macos/.build
-            !macos/.build/app
-            !macos/.build/icon
-          key: swift-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.version }}-${{ hashFiles('macos/**') }}
-          restore-keys: swift-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.version }}-
-      # Builds this runner's release file, and on macOS the menu bar app,
-      # serves them on 127.0.0.1, and runs install.sh or install.ps1 against
-      # them twice: a fresh install, then an upgrade.
+      # Builds this runner's release file, serves it on 127.0.0.1, and runs
+      # install.sh or install.ps1 against it twice: a fresh install, then an
+      # upgrade.
       - name: Install from a local release
         shell: bash
         run: sh .github/scripts/install-smoke.sh
 
-  # The Homebrew formula, from formula.sh, with a local build: brew installs
-  # and tests it, the binary knows brew installed it, and the formula the
-  # tap gets passes brew's style and audit. On Linux, cron runs brew's opt
-  # path, and a script copy installed later leaves it so. launchd is left
-  # to the unit tests: a runner has no one logged in at the screen.
+  # The Homebrew formula, from formula.sh, with a local build, on Linux: brew
+  # installs and tests it, the binary knows brew installed it, and the
+  # formula the tap gets passes brew's style and audit. Cron runs brew's opt
+  # path, and a script copy installed later leaves it so. On macOS,
+  # scripts/verify.sh --push runs the same smoke before the push; launchd is
+  # left to the unit tests.
   brew:
     if: github.event.pull_request.draft != true
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
       HOMEBREW_NO_INSTALL_CLEANUP: 1
@@ -174,8 +127,7 @@ jobs:
           go-version: stable
           cache: ${{ runner.environment != 'self-hosted' }}
       # Linux runners have Homebrew, off PATH.
-      - if: runner.os == 'Linux'
-        run: echo /home/linuxbrew/.linuxbrew/bin >>"$GITHUB_PATH"
+      - run: echo /home/linuxbrew/.linuxbrew/bin >>"$GITHUB_PATH"
       # The formula names all four binaries, so all four are built.
       - name: Build a local release
         run: TARGETS="darwin/amd64 darwin/arm64 linux/amd64 linux/arm64" sh .github/scripts/dist.sh v9.9.9 "$RUNNER_TEMP/dist"
@@ -187,30 +139,26 @@ jobs:
               exit 1
             fi
           done
-      # Named in full, as people install it, so Homebrew trusts the tap. On
-      # Linux, Homebrew acts as on one older than its own, where it gives
-      # every formula its glibc and gcc; the formula must get none. A copy
-      # without the override must get them, or the check proves nothing.
+      # Named in full, as people install it, so Homebrew trusts the tap.
+      # Homebrew acts as on a Linux older than its own, where it gives every
+      # formula its glibc and gcc; the formula must get none. A copy without
+      # the override must get them, or the check proves nothing.
       - name: Install with Homebrew
         run: |
-          if [ "$RUNNER_OS" = Linux ]; then
-            export HOMEBREW_FORCE_LIBC_FORMULA=1 HOMEBREW_FORCE_COMPILER_FORMULA=1
-          fi
+          export HOMEBREW_FORCE_LIBC_FORMULA=1 HOMEBREW_FORCE_COMPILER_FORMULA=1
           brew tap-new --no-git ci/aiu
           f="$(brew --repo ci/aiu)/Formula/ai-usage.rb"
           sh .github/scripts/formula.sh v9.9.9 "$RUNNER_TEMP/dist/checksums.txt" "file://$RUNNER_TEMP/dist" >"$f"
           cat "$f"
-          if [ "$RUNNER_OS" = Linux ]; then
-            control="$(brew --repo ci/aiu)/Formula/ai-usage-control.rb"
-            sed '/add_global_deps_to_spec/d; s/class AiUsage /class AiUsageControl /' "$f" >"$control"
-            deps=$(brew deps --include-implicit ci/aiu/ai-usage-control)
-            rm "$control"
-            if [ -z "$deps" ]; then
-              echo 'Homebrew no longer gives a formula its glibc and gcc when forced to; the check below proves nothing'
-              exit 1
-            fi
-            printf 'Without the override, Homebrew gives:\n%s\n' "$deps"
+          control="$(brew --repo ci/aiu)/Formula/ai-usage-control.rb"
+          sed '/add_global_deps_to_spec/d; s/class AiUsage /class AiUsageControl /' "$f" >"$control"
+          deps=$(brew deps --include-implicit ci/aiu/ai-usage-control)
+          rm "$control"
+          if [ -z "$deps" ]; then
+            echo 'Homebrew no longer gives a formula its glibc and gcc when forced to; the check below proves nothing'
+            exit 1
           fi
+          printf 'Without the override, Homebrew gives:\n%s\n' "$deps"
           deps=$(brew deps --include-implicit ci/aiu/ai-usage)
           if [ -n "$deps" ]; then
             printf 'Homebrew gives the formula dependencies:\n%s\n' "$deps"
@@ -228,8 +176,7 @@ jobs:
           jq -e '.collector.update.method == "homebrew" and (.collector.update.command | test("neoromantic/tap"))' "$RUNNER_TEMP/report.json"
       # A script copy installed after the Homebrew one leaves the schedule to
       # it and says to remove itself.
-      - if: runner.os == 'Linux'
-        name: Cron runs Homebrew's opt path
+      - name: Cron runs Homebrew's opt path
         run: |
           opt="$(brew --prefix)/opt/ai-usage/bin/ai-usage"
           ai-usage schedule install
@@ -264,7 +211,7 @@ jobs:
 
   # The one check a branch ruleset requires: every job above passed.
   ci:
-    needs: [lint, app, test, install, brew, hygiene]
+    needs: [lint, test, install, brew, hygiene]
     if: always() && github.event.pull_request.draft != true
     runs-on: ${{ fromJSON('{"true":"oss-linux","false":"ubuntu-latest"}')[format('{0}', vars.CI_SELF_HOSTED == 'true' && github.ref == 'refs/heads/main')] }}
     steps:

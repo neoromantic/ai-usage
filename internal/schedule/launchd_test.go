@@ -224,7 +224,7 @@ func plistValues(t *testing.T, file string) map[string]any {
 
 func TestAgentPlist(t *testing.T) {
 	if _, err := exec.LookPath("plutil"); err != nil {
-		t.Skip("plutil reads the plist as launchd does; CI runs this on macOS")
+		t.Skip("plutil reads the plist as launchd does; scripts/verify.sh runs this on a Mac")
 	}
 	odd := "/Users/o'brien/AI & <Tools> 100%/ai-usage"
 	state := "/Users/o'brien/state \"x\""

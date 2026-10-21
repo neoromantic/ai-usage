@@ -44,5 +44,5 @@ runs the opt path, and runs `brew style` and `brew audit --strict`.
 Never run `schedule install` or an installer against this machine's own
 home: it replaces the user's ai-usage and its launchd agent. On macOS 27,
 launchd pins the agent to the binary it registered; see `internal/schedule/launchd.go`
-for how an update survives it. CI's macOS install job flakes now and then:
-rerun it before reading it as a regression.
+for how an update survives it. CI runs no macOS job; `scripts/verify.sh
+--push` runs the install smoke on a Mac.
