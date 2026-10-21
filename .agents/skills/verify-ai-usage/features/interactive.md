@@ -41,6 +41,8 @@ row picked, a device's detail, and the page as it was after `esc`.
   same device picked and in sight on the page, reordered by 30d?
 - At 12 rows, `enter` and `j` down through DEVICES: is the picked row ever
   hidden under the pinned head?
+- `enter`, then the wheel or `space` down into PROJECTS, then `r`: does the
+  page stay where it was while the spinner runs?
 
 ## Gotchas
 

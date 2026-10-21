@@ -425,7 +425,9 @@ func (m *Model) openPick() {
 // still picked and in sight.
 func (m *Model) close() {
 	m.open, m.top = nil, m.pageTop
-	m.draw()
+	if m.draw(); m.picking {
+		m.show(m.picked.Line)
+	}
 }
 
 // repick finds the picked row on a page drawn again: the same account or
@@ -627,6 +629,11 @@ func (m *Model) draw() {
 	if m.width <= 0 {
 		return
 	}
+	// The page follows the pick only when it was in sight, or comes back
+	// from a detail that is gone: a reload must not scroll back to a pick
+	// scrolled out of sight.
+	from, to := m.inSight()
+	follow := m.open != nil || from <= m.picked.Line && m.picked.Line < to
 	if m.open != nil {
 		if p, ok := m.cfg.Detail(m.report, m.options(m.opts), *m.open); ok {
 			m.page = p
@@ -652,7 +659,7 @@ func (m *Model) draw() {
 	}
 	m.top = clamp(m.top, m.maxTop())
 	m.helpTop = clamp(m.helpTop, m.maxHelpTop())
-	if m.repick(); m.picking {
+	if m.repick(); m.picking && follow {
 		// Rows the period reorders take the pick along, and the page
 		// follows it.
 		m.show(m.picked.Line)
