@@ -25,7 +25,7 @@ The draft step keeps `releases/latest` from pointing at a release whose files ar
 
 Release builds check at every scheduled run, so every collector the installer set up installs the release within about 15 minutes of its publication and runs it from the run after. Collectors Homebrew installed wait for someone to run `brew upgrade neoromantic/tap/ai-usage` or `ai-usage update`, once the tap has the release. On a Mac, the same check brings the menu bar app to the release, and the app restarts into it. A relay change the release needs must be deployed before then; see [Connect collectors to your relay](relay.md#connect-collectors-to-your-relay). A release a collector downloads and cannot install, for example one that does not start on its machine, is downloaded there again only after 6 hours, and so is a menu bar app that does not install, so fix it with a new tag, which collectors install at their next run.
 
-A tag with a suffix, such as `v1.3.0-rc.1`, becomes a prerelease. GitHub's latest release skips prereleases, so the installers and self-update skip it too, and the tap keeps the last full release. Self-update also ignores any version that is not plain `vX.Y.Z`.
+A tag with a suffix, such as `v1.3.0-rc.1`, becomes a prerelease. GitHub's latest release skips prereleases, so the installers and self-update skip it too, and the tap keeps the last full release. Self-update also ignores any version that is not plain `vX.Y.Z`. Cut one first only when the release changes the release workflow, `dist.sh`, signing, or `tap.sh`; otherwise tag the release on a `main` whose `ci` is green.
 
 ## Homebrew
 
@@ -75,7 +75,7 @@ Leave `AI_USAGE_NOTARY_KEY` unset to sign without notarizing. Without `AI_USAGE_
 
 ## After a release
 
-Check the tap's commit `ai-usage <tag>`, and install the release with `brew install neoromantic/tap/ai-usage`, or `brew upgrade neoromantic/tap/ai-usage`, on a Mac and on a Linux machine.
+The workflow has already checked the files, their signatures, and the formula, so check only what it cannot: the tap's commit `ai-usage <tag>`, and `brew upgrade neoromantic/tap/ai-usage` on a Mac. Install on Linux too when the release changed `formula.sh` or `tap.sh`.
 
 The maintainer adds the release to the website's changelog, [au.sergeybaus.com/changelog](https://au.sergeybaus.com/changelog), written the way the release notes are, shorter, for people who have not installed ai-usage yet, with made-up names only. The website also repeats the README's claims, the install commands, and pictures from `docs/demo`; when the release notes say one of these changed, the maintainer updates the site too.
 
