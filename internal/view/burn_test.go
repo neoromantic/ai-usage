@@ -416,42 +416,42 @@ func TestNoReadingSaysWhyForEachHarness(t *testing.T) {
 		provider, status, err, want string
 	}{
 		{"claude", "partial", "claude /usage: no new reading: could not read the usage (Claude Code 2.1.250, no cache)",
-			"Claude Code could not read the usage on abox: run /usage in claude to see why"},
+			"Claude Code could not read the usage on kim@abox: run /usage in claude to see why"},
 		{"claude", "ok", "claude /usage: no new reading: this Claude Code cannot read the usage; update it (Claude Code 2.1.150, no cache)",
-			"this Claude Code cannot read the usage on abox: update Claude Code"},
+			"this Claude Code cannot read the usage on kim@abox: update Claude Code"},
 		{"claude", "ok", "claude: ~/bin/claude is Claude Code 2.1.150 (Homebrew) but your sessions run 2.1.250: update Claude Code or put the newer one first on PATH",
-			"~/bin/claude is Claude Code 2.1.150 (Homebrew) but your sessions run 2.1.250 on abox: update Claude Code or put the newer one first on PATH"},
+			"~/bin/claude is Claude Code 2.1.150 (Homebrew) but your sessions run 2.1.250 on kim@abox: update Claude Code or put the newer one first on PATH"},
 		{"claude", "ok", "claude: update Claude Code to 2.1.208 or newer (~/bin/claude is 2.1.150, Homebrew)",
-			"update Claude Code to 2.1.208 or newer (~/bin/claude is 2.1.150, Homebrew) on abox"},
+			"update Claude Code to 2.1.208 or newer (~/bin/claude is 2.1.150, Homebrew) on kim@abox"},
 		// A note about one of several homes names it.
 		{"claude", "ok", "claude /usage: no new reading: this Claude Code cannot read the usage; update it (Claude Code 2.1.150, no cache) (~/.claude-work)",
-			"this Claude Code cannot read the usage on abox (~/.claude-work): update Claude Code"},
+			"this Claude Code cannot read the usage on kim@abox (~/.claude-work): update Claude Code"},
 		// A note that the reading is old is no failure, whatever else failed.
 		{"claude", "ok", "claude /usage: another Claude Code process rewrote ~/.claude.json; reading is 3h old",
-			"another Claude Code process rewrote ~/.claude.json; reading is 3h old on abox"},
+			"another Claude Code process rewrote ~/.claude.json; reading is 3h old on kim@abox"},
 		{"claude", "partial", "claude auth status: exit status 1; claude /usage: another Claude Code process rewrote ~/.claude.json; reading is 3h old",
-			"claude could not be asked on abox"},
-		{"claude", "partial", "claude /usage: no answer in time (Claude Code 2.1.250, cache 3h old)", "claude /usage timed out on abox"},
-		{"claude", "partial", "claude /usage: exit status 1 (Claude Code 2.1.250, no cache): connect ECONNREFUSED 192.0.2.7:443", "claude /usage failed on abox"},
-		{"claude", "error", "claude binary not found; account unknown", "claude not found on abox: install Claude Code or put it on PATH"},
+			"claude could not be asked on kim@abox"},
+		{"claude", "partial", "claude /usage: no answer in time (Claude Code 2.1.250, cache 3h old)", "claude /usage timed out on kim@abox"},
+		{"claude", "partial", "claude /usage: exit status 1 (Claude Code 2.1.250, no cache): connect ECONNREFUSED 192.0.2.7:443", "claude /usage failed on kim@abox"},
+		{"claude", "error", "claude binary not found; account unknown", "claude not found on kim@abox: install Claude Code or put it on PATH"},
 		{"codex", "error", "codex initialize: app-server exited without answering: error: unrecognized subcommand 'app-server'",
-			"this codex cannot read its limits on abox: update codex"},
-		{"codex", "error", "codex initialize: app-server exited without answering", "this codex cannot read its limits on abox: update codex"},
-		{"codex", "error", "codex account/read: Method not found", "this codex cannot read its limits on abox: update codex"},
-		{"codex", "error", "codex account/rateLimits/read: Invalid request: unknown variant `account/rateLimits/read`", "this codex cannot read its limits on abox: update codex"},
+			"this codex cannot read its limits on kim@abox: update codex"},
+		{"codex", "error", "codex initialize: app-server exited without answering", "this codex cannot read its limits on kim@abox: update codex"},
+		{"codex", "error", "codex account/read: Method not found", "this codex cannot read its limits on kim@abox: update codex"},
+		{"codex", "error", "codex account/rateLimits/read: Invalid request: unknown variant `account/rateLimits/read`", "this codex cannot read its limits on kim@abox: update codex"},
 		// An exit after codex named the account, or on its config, is no
 		// matter of its age, whatever it wrote to stderr.
-		{"codex", "error", "codex account/rateLimits/read: app-server exited without answering: unknown variant `x`", "codex could not read its limits on abox"},
+		{"codex", "error", "codex account/rateLimits/read: app-server exited without answering: unknown variant `x`", "codex could not read its limits on kim@abox"},
 		{"codex", "error", "codex initialize: app-server exited without answering: Error loading config.toml: unknown variant `fast`, expected one of `low`, `high`",
-			"codex app-server exited on abox: run codex app-server to see why"},
-		{"codex", "error", "codex app-server: fork/exec /opt/codex/bin/codex: permission denied", "codex did not start on abox: reinstall codex"},
-		{"codex", "partial", "~/.codex-work: codex account/rateLimits/read: no answer in time", "codex timed out on abox (~/.codex-work)"},
-		{"codex", "error", "codex account/rateLimits/read: unexpected status 401 Unauthorized", "codex's login was refused on abox: run codex login"},
-		{"codex", "error", "codex account/rateLimits/read: request to 203.0.113.9 failed", "codex could not read its limits on abox"},
-		{"codex", "error", "codex binary not found; account unknown", "codex not found on abox: install codex or put it on PATH"},
+			"codex app-server exited on kim@abox: run codex app-server to see why"},
+		{"codex", "error", "codex app-server: fork/exec /opt/codex/bin/codex: permission denied", "codex did not start on kim@abox: reinstall codex"},
+		{"codex", "partial", "~/.codex-work: codex account/rateLimits/read: no answer in time", "codex timed out on kim@abox (~/.codex-work)"},
+		{"codex", "error", "codex account/rateLimits/read: unexpected status 401 Unauthorized", "codex's login was refused on kim@abox: run codex login"},
+		{"codex", "error", "codex account/rateLimits/read: request to 203.0.113.9 failed", "codex could not read its limits on kim@abox"},
+		{"codex", "error", "codex binary not found; account unknown", "codex not found on kim@abox: install codex or put it on PATH"},
 		{"codex", "partial", "read ~/.codex: permission denied; 3 malformed lines", ""},
-		{"grok", "ok", "grok has logged no credit usage yet", "no credit usage logged yet on abox"},
-		{"grok", "partial", "grok log names no signed-in user; account unknown", "grok names no signed-in user on abox: run grok and sign in"},
+		{"grok", "ok", "grok has logged no credit usage yet", "no credit usage logged yet on kim@abox"},
+		{"grok", "partial", "grok log names no signed-in user; account unknown", "grok names no signed-in user on kim@abox: run grok and sign in"},
 	} {
 		st := emptyState()
 		addAccount(st, c.provider, "ann@acme.dev", true, nil, 100)
@@ -463,8 +463,8 @@ func TestNoReadingSaysWhyForEachHarness(t *testing.T) {
 	}
 	// A reason is bounded, and keeps what to do whole.
 	long := strings.Repeat("x", 300)
-	why := quotaReason(Source{Provider: "claude", Status: "ok", Error: strPtr("claude: " + long + " is Claude Code 2.1.150 but your sessions run 2.1.250: update Claude Code or put the newer one first on PATH")}, "abox", nil)
-	if len(why) > maxReason || !strings.HasSuffix(why, " on abox: update Claude Code or put the newer one first on PATH") {
+	why := quotaReason(Source{Provider: "claude", Status: "ok", Error: strPtr("claude: " + long + " is Claude Code 2.1.150 but your sessions run 2.1.250: update Claude Code or put the newer one first on PATH")}, "kim@abox", nil)
+	if len(why) > maxReason || !strings.HasSuffix(why, " on kim@abox: update Claude Code or put the newer one first on PATH") {
 		t.Errorf("a long reason: %q", why)
 	}
 }
@@ -485,13 +485,13 @@ func TestNoReadingInTheTeam(t *testing.T) {
 		return otherDoc(t, f.key, "d-abox-device", "abox", now.Add(-time.Minute), st)
 	}
 	r := withTeam(t, f, teammate("codex account/rateLimits/read: no answer in time"))
-	if got := deref(findTeamAccount(t, r, "codex", "sam@mail.test").NoReading); got != "codex timed out on abox" {
+	if got := deref(findTeamAccount(t, r, "codex", "sam@mail.test").NoReading); got != "codex timed out on kim@abox" {
 		t.Errorf("logged in on a teammate only: %q", got)
 	}
 	f.in.State.Current[state.Key("codex", "/home/.codex")] = "sam@mail.test"
 	f.seal(now)
 	r = withTeam(t, f, teammate("codex account/rateLimits/read: no answer in time"))
-	want := "this codex cannot read its limits on thisbox: update codex"
+	want := "this codex cannot read its limits on sam@thisbox: update codex"
 	if got := deref(findTeamAccount(t, r, "codex", "sam@mail.test").NoReading); got != want {
 		t.Errorf("logged in here too: %q", got)
 	}
@@ -525,12 +525,12 @@ func TestNoReadingOfOneHome(t *testing.T) {
 	both(here, "~/.codex-b: codex account/rateLimits/read: unexpected status 401 Unauthorized")
 	f := newFixture(t, here)
 	f.seal(now)
-	if got := reasons(withTeam(t, f)); got != [2]string{"<nil>", "codex's login was refused on thisbox (~/.codex-b): run codex login"} {
+	if got := reasons(withTeam(t, f)); got != [2]string{"<nil>", "codex's login was refused on sam@thisbox (~/.codex-b): run codex login"} {
 		t.Errorf("this device, one home failed: %q", got)
 	}
 	f.in.State.Sources["codex"] = state.Source{Status: "partial", Error: twoHomes, Homes: []string{"/home/.codex-a", "/home/.codex-b"}}
 	f.seal(now)
-	if got := reasons(withTeam(t, f)); got != [2]string{"codex timed out on thisbox (~/.codex-a)", "codex's login was refused on thisbox (~/.codex-b): run codex login"} {
+	if got := reasons(withTeam(t, f)); got != [2]string{"codex timed out on sam@thisbox (~/.codex-a)", "codex's login was refused on sam@thisbox (~/.codex-b): run codex login"} {
 		t.Errorf("this device, two homes failed: %q", got)
 	}
 
@@ -545,7 +545,7 @@ func TestNoReadingOfOneHome(t *testing.T) {
 	st.Current[state.Key("codex", "/home/.codex-a")] = "ann@acme.dev"
 	st.Sources["codex"] = state.Source{Status: "partial", Error: "~/.codex-a: codex account/rateLimits/read: no answer in time", Homes: []string{"/home/.codex-a", "/home/.codex-b"}}
 	r := withTeam(t, f, otherDoc(t, f.key, "d-abox-device", "abox", now.Add(-time.Minute), st))
-	if got := deref(findTeamAccount(t, r, "codex", "ann@acme.dev").NoReading); got != "codex timed out on abox (~/.codex-a)" {
+	if got := deref(findTeamAccount(t, r, "codex", "ann@acme.dev").NoReading); got != "codex timed out on kim@abox (~/.codex-a)" {
 		t.Errorf("a teammate with one account logged in: %q", got)
 	}
 }

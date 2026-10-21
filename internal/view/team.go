@@ -814,15 +814,15 @@ var quotaReasons = []struct {
 	{"grok", false, regexp.MustCompile(`^grok log: `), "grok's log could not be read", ""},
 }
 
-// quotaReason is why source s of the device named label kept an account
+// quotaReason is why source s of the device called name kept an account
 // from a quota reading, as quotaReasons word the first part of its error
 // they know, with the device, and the home the part names, after what is
 // wrong. A part that names a home is taken only when mine says the account
 // is logged in to it. A note they do not know, on a source that is ok, is
 // said as it is. Else it is "".
-func quotaReason(s Source, label string, mine func(home string) bool) string {
+func quotaReason(s Source, name string, mine func(home string) bool) string {
 	for _, part := range sourceParts(s.Provider, *s.Error) {
-		where := " on " + label
+		where := " on " + name
 		if part.home != "" {
 			if !mine(part.home) {
 				continue
