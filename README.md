@@ -371,7 +371,7 @@ The schedule names Homebrew's stable path, such as `/opt/homebrew/opt/ai-usage/b
 
 ### Two copies
 
-Homebrew's copy and one the installer put in `~/.local/bin` or `~/bin` would take turns registering with the scheduler, so the scheduler runs only Homebrew's. The installer's copy, from v0.8.0, registers Homebrew's copy in its place, as does `ai-usage schedule install` run from it, and leaves updates to Homebrew's. `ai-usage status` then says `Homebrew's ai-usage at /opt/homebrew/bin/ai-usage runs the schedule; remove this copy: rm /Users/ann/.local/bin/ai-usage`. Homebrew's copy says `another ai-usage at /Users/ann/.local/bin/ai-usage also runs; remove it: rm /Users/ann/.local/bin/ai-usage`. An installer copy before v0.8.0 updates itself to the latest release within 15 minutes, and hands over from then on. Both copies share the state folder, the team key, and the history.
+Homebrew's copy and one the installer put in `~/.local/bin` or `~/bin` would take turns registering with the scheduler, so the scheduler runs only Homebrew's. The installer's copy, from v0.8.0, registers Homebrew's copy in its place, as does `ai-usage schedule install` run from it, and leaves updates to Homebrew's. `ai-usage status` then says `Homebrew's ai-usage at /opt/homebrew/bin/ai-usage runs the schedule; remove this copy: rm /Users/ann/.local/bin/ai-usage`. Homebrew's copy says `another ai-usage at /Users/ann/.local/bin/ai-usage also runs; remove it: rm /Users/ann/.local/bin/ai-usage`. An installer copy before v0.8.0 updates itself to the latest release within 15 minutes, and hands over from then on. Both copies share the state folder, the team key, and the history. On macOS, when a scheduled run hands over, launchd runs the installer's copy until the agent is loaded again, and `ai-usage status` says to run `ai-usage schedule install` first; see [launchd runs an old copy](#launchd-runs-an-old-copy).
 
 An installer before v0.8.0 could put its copy in `/opt/homebrew/bin` or `/usr/local/bin`, where brew then cannot link its own, and `brew install` says so. Both copies then say to run `brew link --overwrite neoromantic/tap/ai-usage`, which puts Homebrew's link in place of the installer's copy.
 
@@ -520,7 +520,7 @@ Or, from a clone with the Vercel CLI logged in, run `sh scripts/deploy-relay.sh`
 | `ai-usage alias ACCOUNT --clear` | go back to the account's default name |
 | `ai-usage schedule install` | register with the scheduler, and let later runs keep it registered |
 | `ai-usage schedule remove` | unregister, and stop later runs from registering again |
-| `ai-usage schedule status` | whether the scheduler runs this binary with this state folder, or was disabled by hand |
+| `ai-usage schedule status` | whether the scheduler runs this binary with this state folder, or was disabled by hand; on macOS, from the job launchd has loaded, not only the plist |
 | `ai-usage schedule run` | be the scheduler where there is none, as in a container: collect now and every 15 minutes until stopped |
 | `ai-usage update` | check for a release now; where Homebrew installed ai-usage, run `brew upgrade neoromantic/tap/ai-usage` |
 | `ai-usage app install` | add the menu bar app of this release, on macOS 14 and later, whatever installed ai-usage |
@@ -676,6 +676,20 @@ From v0.5.1, `ai-usage` saves that run where it can:
 - With Homebrew, `ai-usage update` and the menu bar app's Update start the agent twice, as a self-update a run you start does. A `brew upgrade` you run yourself is like a scheduled update: the menu bar app's next read of the report, or any `ai-usage` you run, notices that the release changed since the last collection and has launchd start the agent twice, which repairs the pin.
 
 An agent launchd pinned to nothing, as on macOS 26 and earlier, is left as it is. When launchd still refuses the agent, `ai-usage status` says so, and `ai-usage schedule install` loads it again from the command line, which launchd pins to nothing until the next login. launchd still records the binary it pinned before, though, so the first run after that login can be refused once more, and launchd repairs it at the run after.
+
+### launchd runs an old copy
+
+launchd keeps the launch agent it loaded until the agent is loaded again or you log in again, whatever the plist says since. A scheduled run cannot load the agent without stopping itself, so when it rewrites the plist, as the installer's copy does to hand the schedule to [Homebrew's](#two-copies), launchd goes on running the old binary. If that binary is then removed, nothing collects. `ai-usage status`, `ai-usage schedule status`, and the menu bar app read what launchd has loaded, and say:
+
+```
+launchd still runs the launch agent it loaded before, for another binary path or state folder; `ai-usage schedule install` loads this one
+```
+
+or, when launchd has not loaded the agent at all, `launchd has not loaded the launch agent, so nothing runs it`. `ai-usage schedule install`, or any `ai-usage` you run, loads the plist. To see what launchd runs:
+
+```sh
+launchctl print gui/$(id -u)/io.github.neoromantic.ai-usage | sed -n '/^.arguments = {/,/^.}/p'
+```
 
 ## Uninstall
 

@@ -41,6 +41,14 @@ const (
 	// signature it pinned the agent to at login, as after an update replaced
 	// the binary. launchd repairs that at the next run; Repair does now.
 	Refused
+	// Stale means the macOS launch agent's plist runs this binary with this
+	// state folder, but launchd still has an earlier definition loaded,
+	// which runs another binary or state folder until the agent is loaded
+	// again, as Install does.
+	Stale
+	// Unloaded means the macOS launch agent's plist runs this binary with
+	// this state folder, but launchd has not loaded it, so nothing runs it.
+	Unloaded
 )
 
 // Runner runs a scheduler command. Tests replace it.

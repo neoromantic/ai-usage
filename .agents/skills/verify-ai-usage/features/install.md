@@ -4,7 +4,7 @@
 
 - `install.sh` (macOS, Linux) and `install.ps1` (Windows): download, checksum, install, register, the app on macOS
 - Self-update at each scheduled run from `releases/latest`, the app with it; a suffixed version never updates
-- `schedule install|remove|status|run`: launchd, cron, Task Scheduler, or the foreground in a container
+- `schedule install|remove|status|run`: launchd, cron, Task Scheduler, or the foreground in a container; on macOS, status and the report read the job launchd has loaded (`launchctl print`), which a run of the agent cannot reload, not only the plist
 - `ai-usage update`, `ai-usage version`
 - Homebrew, from v0.8.0: `.github/scripts/formula.sh` writes the formula, `tap.sh` puts it in `neoromantic/homebrew-tap` after a release; a copy in a keg never replaces itself, registers brew's opt path, and `ai-usage update` runs `brew upgrade neoromantic/tap/ai-usage` (`cmd/ai-usage/brew.go`); a script copy hands the schedule to the user's own Homebrew copy, and `install.sh` stops at one
 - `ai-usage app install`: the menu bar app of the binary's release, whatever installed it

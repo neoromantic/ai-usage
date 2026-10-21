@@ -69,13 +69,17 @@ func quarterHours() string {
 	return b.String()
 }
 
+// agentArgs is the command the launch agent runs.
+func agentArgs(exe, home string) []string {
+	return []string{exe, "collect", "--quiet", "--home", home}
+}
+
 // programArguments is the plist's command. Lookup matches it to tell this
 // binary and state folder from another.
 func programArguments(exe, home string) string {
-	argv := []string{exe, "collect", "--quiet", "--home", home}
 	var b strings.Builder
 	b.WriteString("  <key>ProgramArguments</key>\n  <array>\n")
-	for _, a := range argv {
+	for _, a := range agentArgs(exe, home) {
 		b.WriteString("    <string>" + xmlText(a) + "</string>\n")
 	}
 	b.WriteString("  </array>\n")
@@ -237,10 +241,10 @@ func (s Scheduler) bootout(ctx context.Context) error {
 	return errors.New("launchctl: the launch agent did not stop within 5 seconds")
 }
 
-// lookupAgent reads the plist and asks launchd whether it is loaded. A plist
-// launchd has not loaded counts as absent, so the next run loads it. A run
-// the agent started was not refused, whatever launchd says of the run
-// before.
+// lookupAgent reads the plist and asks launchd whether it is loaded, and
+// with which command: launchd keeps the definition it loaded, whatever the
+// plist says since, until the agent is loaded again. A run the agent started
+// was not refused, whatever launchd says of the run before.
 func (s Scheduler) lookupAgent(ctx context.Context, exe, home string) (State, error) {
 	file, err := s.plist()
 	if err != nil {
@@ -262,7 +266,9 @@ func (s Scheduler) lookupAgent(ctx context.Context, exe, home string) (State, er
 	out, err := s.launchctl(ctx, "print", s.service())
 	switch {
 	case err != nil:
-		return Absent, nil
+		return Unloaded, nil
+	case !loadedRuns(out, agentArgs(exe, home)):
+		return Stale, nil
 	case !s.InAgent && readPrint(out).refused:
 		return Refused, nil
 	}
@@ -318,6 +324,25 @@ func readPrint(print []byte) agentPrint {
 	}
 	p.refused = p.idle && p.pinned && repin && refusal
 	return p
+}
+
+// loadedRuns reports whether the agent launchctl print shows runs argv. It
+// prints each argument on a line of its own, indented twice, between
+// "arguments = {" and "}". A print without them says nothing against argv.
+func loadedRuns(print []byte, argv []string) bool {
+	var args []string
+	in, found := false, false
+	for l := range strings.SplitSeq(string(print), "\n") {
+		switch {
+		case l == "\targuments = {":
+			in, found = true, true
+		case in && l == "\t}":
+			in = false
+		case in:
+			args = append(args, strings.TrimPrefix(l, "\t\t"))
+		}
+	}
+	return !found || slices.Equal(args, argv)
 }
 
 // disabled reports whether the person ran launchctl disable on the agent.

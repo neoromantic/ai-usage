@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"os"
@@ -311,13 +312,28 @@ func TestStoppedHousekeeping(t *testing.T) {
 // the binary since: launchd refuses the next start, and repairs the pin at
 // the start after. refused says it refused the last start, and stubborn that
 // it refuses every start. inAgent makes this process a run the agent
-// started.
+// started. argv is the command launchd loaded, which it keeps whatever the
+// plist says since.
 type fakeAgent struct {
 	mu                                sync.Mutex
 	dir                               string
 	loaded, pinned, replaced, refused bool
 	stubborn, inAgent                 bool
 	runs, kicks, boots                int
+	argv                              []string
+}
+
+// plistArgv is the command in a launch agent plist, its first array.
+func plistArgv(plist []byte) ([]string, error) {
+	var p struct {
+		Arrays []struct {
+			Strings []string `xml:"string"`
+		} `xml:"dict>array"`
+	}
+	if err := xml.Unmarshal(plist, &p); err != nil || len(p.Arrays) == 0 {
+		return nil, fmt.Errorf("plist: %v\n%s", err, plist)
+	}
+	return p.Arrays[0].Strings, nil
 }
 
 func newFakeAgent(t *testing.T) *fakeAgent {
@@ -341,6 +357,9 @@ func (f *fakeAgent) scheduler() schedule.Scheduler {
 				return nil, fmt.Errorf("launchctl: Could not find service %q in domain for user gui: 501", schedule.AgentLabel)
 			}
 			out := fmt.Sprintf("%s = {\n\tstate = not running\n\truns = %d\n", svc, f.runs)
+			if f.argv != nil {
+				out += "\targuments = {\n\t\t" + strings.Join(f.argv, "\n\t\t") + "\n\t}\n"
+			}
 			switch {
 			case f.refused:
 				out += "\tlast exit reason = OS_REASON_CODESIGNING\n\tjob state = spawn failed\n" +
@@ -355,6 +374,13 @@ func (f *fakeAgent) scheduler() schedule.Scheduler {
 			f.loaded = false
 			return nil, nil
 		case "launchctl bootstrap gui/501 " + f.plist():
+			b, err := os.ReadFile(f.plist())
+			if err != nil {
+				return nil, err
+			}
+			if f.argv, err = plistArgv(b); err != nil {
+				return nil, err
+			}
 			f.loaded, f.pinned, f.refused, f.runs = true, false, false, 0
 			f.boots++
 			return nil, nil
@@ -382,7 +408,11 @@ func (f *fakeAgent) load(t *testing.T, exe, home, path string) []byte {
 	if err := os.WriteFile(f.plist(), plist, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	f.loaded, f.pinned = true, true
+	argv, err := plistArgv(plist)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.loaded, f.pinned, f.argv = true, true, argv
 	return plist
 }
 
@@ -510,6 +540,84 @@ func TestUpdateRepairsTheAgent(t *testing.T) {
 				t.Fatalf("update %+v, schedule %+v", st.Update, st.Schedule)
 			}
 		})
+	}
+}
+
+// launchd keeps the launch agent it loaded until it is loaded again, so once
+// a scheduled run of another binary rewrote the plist for this one, as the
+// installer's copy does for Homebrew's, launchd still runs the other.
+// Status says so and how to fix it, where the plist alone would look
+// registered; a run a person starts, or `ai-usage schedule install`, loads
+// the plist. A schedule launchd has not loaded says so too.
+func TestStaleAgent(t *testing.T) {
+	hermetic(t)
+	t.Setenv("AI_USAGE_NO_SCHEDULE", "")
+	releaseBuild(t, "v1.3.0")
+	agent := newFakeAgent(t)
+	newScheduler = agent.scheduler
+	exe, err := executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := newDevice(t)
+	d.claude("aaaa", "/work/app", 1)
+	old := filepath.Join(t.TempDir(), "bin", "ai-usage")
+	agent.load(t, old, d.dir, "/opt/acme/bin")
+
+	agent.inAgent = true
+	d.ok("collect", "--quiet", "--offline")
+	agent.inAgent = false
+	if b, _ := os.ReadFile(agent.plist()); !bytes.Equal(b, []byte(schedule.AgentPlist(exe, d.dir, os.Getenv("PATH")))) || agent.boots != 0 || agent.argv[0] != old {
+		t.Fatalf("a scheduled run loaded the agent: booted %d times, loaded %q, plist:\n%s", agent.boots, agent.argv, b)
+	}
+	if st := d.state(); st.Schedule.Registered || st.Schedule.Error != staleAgent {
+		t.Fatalf("schedule after a scheduled run = %+v", st.Schedule)
+	}
+	if out := d.ok("schedule", "status"); !strings.Contains(out, "registered, but launchd still runs the launch agent it loaded before") {
+		t.Fatalf("schedule status = %q", out)
+	}
+	// Status reads launchd now, whatever the last run saved.
+	st := d.state()
+	st.Schedule.Registered, st.Schedule.Error = true, ""
+	if err := state.Dir(d.dir).SaveState(st); err != nil {
+		t.Fatal(err)
+	}
+	out := strings.Join(strings.Fields(d.ok("status")), " ")
+	if !strings.Contains(out, "not registered: launchd still runs") || strings.Count(out, "schedule install") != 1 {
+		t.Fatalf("status of a stale agent:\n%s", out)
+	}
+	if r := d.report(); r.Collector.Schedule.Registered || r.Collector.Schedule.Error == nil || *r.Collector.Schedule.Error != staleAgent {
+		t.Fatalf("schedule in the report = %+v", r.Collector.Schedule)
+	}
+	if agent.boots != 0 {
+		t.Fatal("reading the report loaded the agent")
+	}
+
+	d.ok("schedule", "install")
+	if agent.boots != 1 || agent.argv[0] != exe {
+		t.Fatalf("after schedule install: booted %d times, loaded %q", agent.boots, agent.argv)
+	}
+	if out := d.ok("status"); strings.Contains(out, "launchd still runs") || !strings.Contains(out, "registered with the system scheduler") {
+		t.Fatalf("status after schedule install:\n%s", out)
+	}
+
+	// A run a person starts loads the plist itself.
+	agent.argv[0] = old
+	d.ok("collect", "--offline")
+	if st := d.state(); agent.boots != 2 || agent.argv[0] != exe || !st.Schedule.Registered || st.Schedule.Error != "" {
+		t.Fatalf("after a collection: booted %d times, loaded %q, schedule %+v", agent.boots, agent.argv, st.Schedule)
+	}
+
+	agent.loaded = false
+	if out := d.ok("schedule", "status"); !strings.Contains(out, "registered, but launchd has not loaded the launch agent") {
+		t.Fatalf("schedule status of an agent not loaded = %q", out)
+	}
+	if out := strings.Join(strings.Fields(d.ok("status")), " "); !strings.Contains(out, "not registered: launchd has not loaded") {
+		t.Fatalf("status of an agent not loaded:\n%s", out)
+	}
+	d.ok("collect", "--offline")
+	if st := d.state(); !agent.loaded || agent.boots != 3 || !st.Schedule.Registered || st.Schedule.Error != "" {
+		t.Fatalf("after a collection: loaded %v, booted %d times, schedule %+v", agent.loaded, agent.boots, st.Schedule)
 	}
 }
 
