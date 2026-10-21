@@ -99,7 +99,18 @@ cat <<EOF
 EOF
 # Quoted, so the shell leaves Ruby's #{} and the backticks alone. The test
 # runs only version: a bare ai-usage would collect and register a schedule.
+#
+# On a Linux whose glibc or libstdc++ is older than on Homebrew's own build
+# machines, Ubuntu 24.04's, Homebrew gives every formula its glibc and gcc
+# as implicit dependencies, bottle or not: some 650 MB with binutils and the
+# rest. Homebrew has no setting for a formula to say it needs neither, so
+# the formula leaves out the method that adds them; the binary is static Go.
+# It takes any arguments so that a change to the method cannot break the
+# formula, and CI's Linux install fails if the dependencies come back.
 cat <<'EOF'
+
+  # A static binary: no Homebrew glibc or gcc on an older Linux.
+  def add_global_deps_to_spec(*); end
 
   def install
     bin.install Dir["ai-usage_*"].first => "ai-usage"

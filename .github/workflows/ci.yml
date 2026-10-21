@@ -139,13 +139,23 @@ jobs:
               exit 1
             fi
           done
-      # Named in full, as people install it, so Homebrew trusts the tap.
+      # Named in full, as people install it, so Homebrew trusts the tap. On
+      # Linux, Homebrew acts as on one older than its own, where it gives
+      # every formula its glibc and gcc; the formula must get none.
       - name: Install with Homebrew
         run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            export HOMEBREW_FORCE_LIBC_FORMULA=1 HOMEBREW_FORCE_COMPILER_FORMULA=1
+          fi
           brew tap-new --no-git ci/aiu
           f="$(brew --repo ci/aiu)/Formula/ai-usage.rb"
           sh .github/scripts/formula.sh v9.9.9 "$RUNNER_TEMP/dist/checksums.txt" "file://$RUNNER_TEMP/dist" >"$f"
           cat "$f"
+          deps=$(brew deps --include-implicit ci/aiu/ai-usage)
+          if [ -n "$deps" ]; then
+            printf 'Homebrew gives the formula dependencies:\n%s\n' "$deps"
+            exit 1
+          fi
           brew install ci/aiu/ai-usage
           brew test ci/aiu/ai-usage
           test "$(command -v ai-usage)" = "$(brew --prefix)/bin/ai-usage"
