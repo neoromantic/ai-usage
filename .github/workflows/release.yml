@@ -15,9 +15,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Linux runs most collectors. CI already tested this commit on Linux, so
-  # this job only checks that the Linux binary built for the tag reports it,
-  # beside the release job rather than before it.
+  # The Linux and Windows binaries build here, on a faster runner than
+  # macOS's, and go to the release job as an artifact. CI already tested this
+  # commit on Linux, so the job only checks that the Linux binary reports the
+  # tag.
   linux:
     runs-on: ubuntu-latest
     steps:
@@ -28,16 +29,23 @@ jobs:
         with:
           go-version: stable
           cache: false
-      - name: Build and run the Linux binary
+      - name: Build the Linux and Windows binaries
         env:
           AI_USAGE_RELAY_URL: ${{ vars.AI_USAGE_RELAY_URL }}
         run: |
-          TARGETS=linux/amd64 sh .github/scripts/dist.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/dist"
+          TARGETS='linux/amd64 linux/arm64 windows/amd64 windows/arm64' sh .github/scripts/dist.sh "$GITHUB_REF_NAME" "$RUNNER_TEMP/dist"
           test "$("$RUNNER_TEMP/dist/ai-usage_linux_amd64" version)" = "$GITHUB_REF_NAME"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-windows
+          path: ${{ runner.temp }}/dist/ai-usage_*
+          if-no-files-found: error
+          retention-days: 1
 
   release:
-    # macOS, because the menu bar app builds only there. Go cross-compiles
-    # the other binaries.
+    needs: linux
+    # macOS, because the menu bar app builds only there, and signing and
+    # notarizing the macOS files need it too.
     runs-on: macos-latest
     # The only job that writes: it publishes the release. checks: read and
     # pull-requests: read let it see CI's result for the commit and for the
@@ -147,8 +155,14 @@ jobs:
       # The repository variable AI_USAGE_RELAY_URL, if set, becomes the
       # binaries' default relay. It reaches dist.sh through the environment,
       # never pasted into the script.
+      # The Linux job's binaries, which dist.sh keeps and sums with the rest.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-windows
+          path: dist
       - name: Build
         env:
+          TARGETS: darwin/amd64 darwin/arm64 darwin/app
           AI_USAGE_RELAY_URL: ${{ vars.AI_USAGE_RELAY_URL }}
           AI_USAGE_SIGN_IDENTITY: ${{ steps.sign.outputs.identity }}
           AI_USAGE_NOTARY_KEY: ${{ runner.temp }}/notary/key.p8

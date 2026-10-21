@@ -17,6 +17,10 @@
 # .github/scripts/notarize.sh and macos/build.sh. The release does both.
 # The app builds and is notarized in the background, at the same time as the
 # binaries.
+#
+# Release files already in OUTDIR for targets this run does not build stay,
+# and checksums.txt covers them too: the release's Linux job builds the Linux
+# and Windows binaries, and the macOS job builds the rest beside them.
 set -eu
 
 version=${1:?usage: dist.sh VERSION [OUTDIR]}
@@ -46,7 +50,7 @@ if [ -n "${AI_USAGE_NOTARY_KEY:-}" ] && [ -z "$identity" ]; then
 fi
 
 mkdir -p "$out"
-rm -f "$out"/ai-usage_* "$out/checksums.txt"
+rm -f "$out/checksums.txt"
 
 # The menu bar app builds, and is notarized, in the background while the
 # binaries build and are notarized, with its output in a log printed when it
@@ -73,6 +77,7 @@ case " $targets " in
 *" darwin/app "*)
 	if [ "$(uname -s)" = Darwin ]; then
 		echo "building ai-usage_darwin_app.zip in the background" >&2
+		rm -f "$out/ai-usage_darwin_app.zip"
 		# The full path, since build.sh need not work in this folder.
 		sh macos/build.sh "$version" "$(cd "$out" && pwd)/ai-usage_darwin_app.zip" >"$tmp/app.log" 2>&1 &
 		app_pid=$!
