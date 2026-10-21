@@ -61,7 +61,7 @@ DEVICES × SUBSCRIPTIONS  15 · 30d UTC · M weighted tokens                 ‹
 PROJECTS  annbook · by 30d · M weighted tokens · claude since Sep 2
   PROJECT                                            30D   90D  SESS  VIA            LAST
   ~/src/acme/app                                    3023  3465    28  codex, claude    1h
-  ~/Vault                                            585   585    37  codex            3h
+  ~/notes                                            585   585    37  codex            3h
   ~/src/site                                         255   279     4  codex            2d
   ~/src/acme/os                                      105   105     2  claude, grok    11h
   ~/src/ai-usage                                      98    98     2  claude, grok     7m
