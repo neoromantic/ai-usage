@@ -28,6 +28,15 @@ const refusedAtLastRun = "launchd refused to start the updated binary at its las
 // launch agent after a repair.
 const stillRefused = "launchd refuses to start the updated binary; `ai-usage schedule install` loads it again"
 
+// staleAgent says launchd still runs the launch agent it loaded before its
+// plist changed, as after a scheduled run of the installer's copy handed
+// the schedule to Homebrew's.
+const staleAgent = "launchd still runs the launch agent it loaded before, for another binary path or state folder; `ai-usage schedule install` loads this one"
+
+// unloadedAgent says launchd has not loaded the launch agent whose plist
+// runs this binary.
+const unloadedAgent = "launchd has not loaded the launch agent, so nothing runs it; `ai-usage schedule install` loads it"
+
 // ensureSchedule registers this binary and state folder unless the scheduler
 // already runs them. An entry the person commented out or disabled stays so.
 // Where Homebrew installed ai-usage and the installer did too, the scheduler
@@ -56,6 +65,12 @@ func ensureSchedule(ctx context.Context, d state.Dir, st *state.State, now time.
 		err = s.Repair(ctx, false)
 	case got != schedule.Active:
 		err = s.Install(ctx, exe, home, os.Getenv("PATH"))
+		if err == nil && s.InAgent {
+			// The run the agent started wrote the plist, but cannot load it
+			// without stopping itself, so launchd may run what it loaded
+			// before.
+			got, err = s.Lookup(ctx, exe, home)
+		}
 	}
 	if err != nil && ctx.Err() != nil {
 		// A lookup or install the run's stop cut short leaves the schedule
@@ -73,6 +88,11 @@ func ensureSchedule(ctx context.Context, d state.Dir, st *state.State, now time.
 		st.Schedule.Error = err.Error() + "; keep `ai-usage schedule run` running instead, such as beside a container's other services"
 	case err != nil:
 		st.Schedule.Error = err.Error()
+	case s.InAgent && got == schedule.Stale:
+		// A run a person starts loads the plist; until then, or the next
+		// login, launchd runs what it loaded before. Removing a copy of
+		// ai-usage, as yieldToBrew would say, could leave it nothing to run.
+		st.Schedule.Registered, st.Schedule.Error = false, staleAgent
 	case brewCopy() != "":
 		st.Schedule.Error = yieldToBrew(brewCopy())
 	case brewPrefix() != "":
@@ -110,6 +130,12 @@ func repairs(s schedule.Scheduler) bool {
 // launchd would refuse at the next run. A repair that fails is the
 // schedule's error. The run the agent started leaves it to launchd, which
 // starts the new binary at the run after the one it refuses.
+//
+// It also says when launchd does not run the agent the plist defines: when
+// it still runs an earlier definition, or a schedule the last run found
+// registered, or found launchd running an earlier definition, is not loaded
+// now. Both come back to the schedule once the agent is loaded again, as by
+// `ai-usage schedule install`.
 func repairAgent(ctx context.Context, d state.Dir, st *state.State, replaced bool) {
 	s := newScheduler()
 	if !repairs(s) {
@@ -120,7 +146,22 @@ func repairAgent(ctx context.Context, d state.Dir, st *state.State, replaced boo
 		return
 	}
 	got, err := s.Lookup(ctx, exe, home)
-	if err != nil || got != schedule.Refused && (!replaced || got != schedule.Active) {
+	if err != nil {
+		return
+	}
+	switch sch := &st.Schedule; {
+	case sch.Foreground:
+		// `ai-usage schedule run` is the scheduler.
+	case got == schedule.Stale:
+		sch.Registered, sch.Error = false, staleAgent
+		return
+	case got == schedule.Unloaded && (sch.Registered || sch.Error == staleAgent):
+		sch.Registered, sch.Error = false, unloadedAgent
+		return
+	case got == schedule.Active && (sch.Error == staleAgent || sch.Error == unloadedAgent):
+		sch.Registered, sch.Error = true, ""
+	}
+	if got != schedule.Refused && (!replaced || got != schedule.Active) {
 		return
 	}
 	err = s.Repair(ctx, replaced)
@@ -137,11 +178,13 @@ func repairAgent(ctx context.Context, d state.Dir, st *state.State, replaced boo
 
 // healSchedule repairs a macOS launch agent launchd refused to start at its
 // last run, so a report a person or the menu bar app reads brings collection
-// back at once, not at the next run. A copy Homebrew installed whose last
-// collection was another release was upgraded by brew since, which launchd
-// would refuse at the next run, so it has launchd start the agent as after
-// a self-update; that run collects, so this happens once an upgrade. The run
-// launchd starts takes the run lock itself.
+// back at once, not at the next run, and says when launchd runs an earlier
+// definition of the agent or none, which the last run may not have seen. A
+// copy Homebrew installed whose last collection was another release was
+// upgraded by brew since, which launchd would refuse at the next run, so it
+// has launchd start the agent as after a self-update; that run collects, so
+// this happens once an upgrade. The run launchd starts takes the run lock
+// itself.
 func healSchedule(ctx context.Context, d state.Dir, st *state.State) {
 	if !selfupdate.Dev(version) {
 		repairAgent(ctx, d, st, brewPrefix() != "" && st.RanVersion != "" && st.RanVersion != version)
@@ -241,6 +284,10 @@ func scheduleStatus(ctx context.Context, d state.Dir, s schedule.Scheduler, exe,
 		fmt.Fprintln(stdout, disabledByHand)
 	case schedule.Refused:
 		fmt.Fprintln(stdout, "registered, but "+refusedAtLastRun)
+	case schedule.Stale:
+		fmt.Fprintln(stdout, "registered, but "+staleAgent)
+	case schedule.Unloaded:
+		fmt.Fprintln(stdout, "registered, but "+unloadedAgent)
 	default:
 		fmt.Fprintln(stdout, "not registered")
 	}

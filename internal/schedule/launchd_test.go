@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,8 +47,42 @@ type fakeLaunchd struct {
 		refused bool
 	}
 	calls []string
-	// booted is the plist the last bootstrap loaded.
+	// booted is the plist launchd loaded, at the last bootstrap or as a
+	// test sets it, whose command print shows.
 	booted string
+}
+
+// loadedAs is launchctl print with the command of the launch agent plist in
+// place of its own, as launchd prints the command it loaded.
+func loadedAs(print []byte, plist string) []byte {
+	_, rest, _ := strings.Cut(plist, "<key>ProgramArguments</key>")
+	rest, _, _ = strings.Cut(rest, "</array>")
+	var argv []string
+	for l := range strings.SplitSeq(rest, "\n") {
+		if a, ok := strings.CutPrefix(strings.TrimSpace(l), "<string>"); ok {
+			argv = append(argv, html.UnescapeString(strings.TrimSuffix(a, "</string>")))
+		}
+	}
+	var out []string
+	skip := false
+	for l := range strings.SplitSeq(string(print), "\n") {
+		switch {
+		case strings.HasPrefix(l, "\tprogram = "):
+			l = "\tprogram = " + argv[0]
+		case l == "\targuments = {":
+			out = append(out, l)
+			for _, a := range argv {
+				out = append(out, "\t\t"+a)
+			}
+			skip = true
+			continue
+		case skip && l != "\t}":
+			continue
+		}
+		skip = false
+		out = append(out, l)
+	}
+	return []byte(strings.Join(out, "\n"))
 }
 
 // printOf is launchctl print of the agent on macOS 27, as testdata has it,
@@ -102,13 +137,18 @@ func (f *fakeLaunchd) run(_ context.Context, name string, args []string, _ []byt
 		case f.running:
 			state = "running"
 		}
+		name := "unpinned"
 		switch {
 		case refused:
-			return printOf("refused", f.runs, state)
+			name = "refused"
 		case f.pinned:
-			return printOf("pinned", f.runs, state)
+			name = "pinned"
 		}
-		return printOf("unpinned", f.runs, state)
+		b, err := printOf(name, f.runs, state)
+		if err != nil || f.booted == "" {
+			return b, err
+		}
+		return loadedAs(b, f.booted), nil
 	case reflect.DeepEqual(args, []string{"print-disabled", "gui/501"}):
 		out := "\tdisabled services = {\n\t\t\"com.example.other\" => disabled\n"
 		if f.disabled != "" {
@@ -270,24 +310,30 @@ func TestAgentInstall(t *testing.T) {
 
 func TestAgentLookup(t *testing.T) {
 	ctx := context.Background()
+	mine, old := AgentPlist(exe, home, ""), AgentPlist("/old/ai-usage", home, "")
 	for _, tc := range []struct {
-		name     string
-		plist    string
-		loaded   bool
+		name  string
+		plist string
+		// loaded is the plist launchd loaded; empty means none.
+		loaded   string
 		disabled string
 		want     State
 	}{
-		{"none", "", false, "", Absent},
-		{"loaded", AgentPlist(exe, home, ""), true, "", Active},
-		{"enabled by hand", AgentPlist(exe, home, ""), true, "enabled", Active},
-		{"not loaded", AgentPlist(exe, home, ""), false, "", Absent},
-		{"disabled", AgentPlist(exe, home, ""), false, "disabled", Disabled},
-		{"disabled on older macOS", AgentPlist(exe, home, ""), true, "true", Disabled},
-		{"disabled and another binary", AgentPlist("/old/ai-usage", home, ""), false, "disabled", Disabled},
-		{"another binary", AgentPlist("/old/ai-usage", home, ""), true, "", Other},
+		{"none", "", "", "", Absent},
+		{"loaded", mine, mine, "", Active},
+		{"enabled by hand", mine, mine, "enabled", Active},
+		{"not loaded", mine, "", "", Unloaded},
+		{"disabled", mine, "", "disabled", Disabled},
+		{"disabled on older macOS", mine, mine, "true", Disabled},
+		{"disabled and another binary", old, "", "disabled", Disabled},
+		{"another binary", old, old, "", Other},
+		// launchd keeps the definition it loaded once the plist changed.
+		{"another binary loaded", mine, old, "", Stale},
+		{"another state folder loaded", mine, AgentPlist(exe, "/old/state", ""), "", Stale},
+		{"loaded with another PATH", mine, AgentPlist(exe, home, "/opt/acme/bin"), "", Active},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			f := &fakeLaunchd{loaded: tc.loaded, disabled: tc.disabled}
+			f := &fakeLaunchd{loaded: tc.loaded != "", booted: tc.loaded, disabled: tc.disabled}
 			s, file := agent(t, f)
 			if tc.plist != "" {
 				if err := os.MkdirAll(s.AgentDir, 0o755); err != nil {
@@ -301,6 +347,19 @@ func TestAgentLookup(t *testing.T) {
 				t.Fatalf("Lookup = %v, %v, want %v", got, err, tc.want)
 			}
 		})
+	}
+	// With nobody logged in at the screen, as over SSH after a reboot,
+	// there is no domain to load the agent in, so it is not unloaded.
+	f := &fakeLaunchd{noSession: true}
+	s, file := agent(t, f)
+	if err := os.MkdirAll(s.AgentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte(mine), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.Lookup(ctx, exe, home); err != nil || got != Absent {
+		t.Fatalf("Lookup with no login session = %v, %v, want %v", got, err, Absent)
 	}
 }
 
@@ -399,6 +458,61 @@ func TestAgentRunDoesNotBootItselfOut(t *testing.T) {
 	}
 	if got, _ := s.Lookup(ctx, exe, home); got != Active {
 		t.Fatalf("Lookup after the plist was written back = %v", got)
+	}
+}
+
+// TestAgentStale: once a run of the agent rewrote the plist for another
+// binary, as one of the installer's copy does for Homebrew's, launchd still
+// runs the binary it loaded. Lookup says so until Install from a run a
+// person starts loads the plist again.
+func TestAgentStale(t *testing.T) {
+	ctx := context.Background()
+	f := &fakeLaunchd{}
+	s, _ := agent(t, f)
+	if err := s.Install(ctx, "/old/ai-usage", home, "/usr/bin"); err != nil {
+		t.Fatal(err)
+	}
+	in := s
+	in.InAgent = true
+	if err := in.Install(ctx, exe, home, "/usr/bin"); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []Scheduler{s, in} {
+		if got, err := s.Lookup(ctx, exe, home); err != nil || got != Stale {
+			t.Fatalf("Lookup (in a run of the agent %v) = %v, %v", s.InAgent, got, err)
+		}
+	}
+	if err := s.Install(ctx, exe, home, "/usr/bin"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Lookup(ctx, exe, home); got != Active || !strings.Contains(f.booted, "<string>"+exe+"</string>") {
+		t.Fatalf("Lookup after Install = %v, loaded:\n%s", got, f.booted)
+	}
+}
+
+func TestLoadedRuns(t *testing.T) {
+	b, err := printOf("pinned", 1, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ann := agentArgs("/Users/ann/.local/bin/ai-usage", "/Users/ann/Library/Application Support/ai-usage")
+	for _, tc := range []struct {
+		name  string
+		print []byte
+		argv  []string
+		want  bool
+	}{
+		{"its command", b, ann, true},
+		{"another binary", b, agentArgs("/opt/homebrew/opt/ai-usage/bin/ai-usage", ann[4]), false},
+		{"another state folder", b, agentArgs(ann[0], "/Users/ann/Library/Application"), false},
+		{"a longer command", b, append(slices.Clone(ann), "--offline"), false},
+		{"odd paths", loadedAs(b, AgentPlist("/Users/o'brien/AI & <Tools>/ai-usage", " state ", "")),
+			agentArgs("/Users/o'brien/AI & <Tools>/ai-usage", " state "), true},
+		{"no arguments printed", []byte("gui/501/" + AgentLabel + " = {\n\tstate = not running\n}\n"), ann, true},
+	} {
+		if got := loadedRuns(tc.print, tc.argv); got != tc.want {
+			t.Errorf("%s: loadedRuns = %v", tc.name, got)
+		}
 	}
 }
 
@@ -529,7 +643,7 @@ func TestAgentRepair(t *testing.T) {
 		{"replaced while it runs", func(f *fakeLaunchd) { f.pinned, f.replaced, f.running = true, true, true }, true, false,
 			[]string{print}, nil, 0, Active},
 		{"not loaded", func(f *fakeLaunchd) { f.loaded = false }, true, false,
-			[]string{print}, nil, 0, Absent},
+			[]string{print}, nil, 0, Unloaded},
 		{"in a run of the agent", func(f *fakeLaunchd) { f.pinned, f.refused, f.runs = true, true, 1 }, false, true,
 			nil, nil, 1, Refused},
 	} {
