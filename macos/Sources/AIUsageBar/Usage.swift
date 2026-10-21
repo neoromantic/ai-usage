@@ -267,8 +267,9 @@ private struct DeviceRow: View {
                 DetailLine("Tools", toolsText(tools))
             }
             // The error the line under the row says already is not said again.
+            // A tool that is ok has only a note, which is no failure.
             ForEach(Array(tools.filter { $0.error != nil && !said($0, d) }.enumerated()), id: \.offset) { _, s in
-                DetailLine(Format.provider(s.provider), Text(s.error!).foregroundColor(Palette.text("out")), help: s.error!)
+                DetailLine(Format.provider(s.provider), Text(s.error!).foregroundColor(s.status == "ok" ? .secondary : Palette.text("out")), help: s.error!)
             }
             if let used = accounts {
                 DetailLine("Accounts", used.text, help: used.help)

@@ -26,6 +26,20 @@ func TestStatusFoldsManyHomes(t *testing.T) {
 	}
 }
 
+// A source's error is red, and a note on a source that is ok, such as a
+// Grok log with no credit usage yet, is dim: it is no failure.
+func TestStatusNoteIsNoFailure(t *testing.T) {
+	st := emptyState()
+	st.Sources["grok"] = state.Source{Status: "ok", Error: "grok has logged no credit usage yet", Homes: []string{"/home/.grok"}}
+	st.Sources["codex"] = state.Source{Status: "error", Error: "codex binary not found; account unknown", Homes: []string{"/home/.codex"}}
+	status := StatusText(Build(newFixture(t, st).in), "", Options{Width: 100, Loc: time.UTC, Color: true, Dark: true})
+	for _, want := range []string{"\x1b[90mgrok has logged no credit usage yet", "\x1b[31mcodex binary not found; account unknown"} {
+		if !strings.Contains(status, want) {
+			t.Errorf("status lacks %q:\n%q", want, status)
+		}
+	}
+}
+
 // A home the Claude app keeps for a session ends in .claude, but the user's
 // home folder is not above it.
 func TestClaudeAppHomeIsNotTheUsersHome(t *testing.T) {
