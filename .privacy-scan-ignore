@@ -7,7 +7,7 @@ docs/demo/*.json                        home-path
 scripts/demo/**                         home-path
 
 # Golden files and their inputs, compared byte for byte by the tests.
-internal/view/testdata/**               home-path,marker
+internal/view/testdata/**               home-path
 internal/schedule/testdata/**           home-path
 
 # Tests and the app's checks, with made-up homes such as /home/ann.

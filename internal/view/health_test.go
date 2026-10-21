@@ -174,7 +174,7 @@ func TestFillGivesAnEarlierReportFolders(t *testing.T) {
 	if r.Projects[0].Folders != 4 {
 		t.Fatalf("the fixture's first project has %d folders", r.Projects[0].Folders)
 	}
-	r.Providers[0].Accounts[0].Projects = []Project{{Path: "/Users/ann/src/acme/app"}, {Path: "/Users/ann/Vault", Folders: 2}}
+	r.Providers[0].Accounts[0].Projects = []Project{{Path: "/Users/ann/src/acme/app"}, {Path: "/Users/ann/notes", Folders: 2}}
 	for i := range r.Projects[1:] {
 		r.Projects[1+i].Folders = 0
 	}
