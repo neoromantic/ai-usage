@@ -69,6 +69,7 @@ jobs:
             !macos/.build/app
             !macos/.build/icon
           key: swift-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.version }}-${{ hashFiles('macos/**') }}
+          restore-keys: swift-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.version }}-
       - name: Checks
         working-directory: macos
         run: xcrun swift run AIUsageChecks
@@ -140,6 +141,7 @@ jobs:
             !macos/.build/app
             !macos/.build/icon
           key: swift-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.version }}-${{ hashFiles('macos/**') }}
+          restore-keys: swift-${{ runner.os }}-${{ runner.arch }}-${{ steps.swift.outputs.version }}-
       # Builds this runner's release file, and on macOS the menu bar app,
       # serves them on 127.0.0.1, and runs install.sh or install.ps1 against
       # them twice: a fresh install, then an upgrade.
