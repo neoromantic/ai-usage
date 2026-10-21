@@ -1,6 +1,7 @@
 #!/bin/sh
 # Install a locally built release through the install script, the way a person
-# would, and check the result. CI runs it on macOS, Linux, and Windows.
+# would, and check the result. CI runs it on Linux and Windows, and
+# scripts/verify.sh --push on a Mac.
 #
 #   .github/scripts/install-smoke.sh
 #
@@ -179,7 +180,7 @@ else
 	# Homebrew installed there for this user would stop every case below.
 	for p in /opt/homebrew /usr/local /home/linuxbrew/.linuxbrew; do
 		if [ -L "$p/opt/ai-usage" ] && [ -n "$(find -H "$p/opt/ai-usage" -prune -user "$(id -u)" 2>/dev/null)" ]; then
-			fail "Homebrew's ai-usage in $p stops the installer in the cases that follow; run this in CI, or run brew uninstall neoromantic/tap/ai-usage first"
+			fail "Homebrew's ai-usage in $p stops the installer in the cases that follow; run brew uninstall neoromantic/tap/ai-usage first, and install it again after"
 		fi
 	done
 	# These are about the binary; the app was checked above.

@@ -45,9 +45,10 @@ jobs:
       contents: write
       checks: read
     steps:
-      # vet, the tests, and the app's checks ran in CI on this very commit,
-      # on Linux and macOS, so they do not run again: the commit must have
-      # passed CI's check ci, the one the branch ruleset requires. A tag
+      # vet and the tests ran in CI on this very commit, on Linux, and the
+      # macOS tests and the app's checks ran on a Mac before the push
+      # (scripts/verify.sh --push), so they do not run again: the commit must
+      # have passed CI's check ci, the one the branch ruleset requires. A tag
       # pushed right after a merge waits here for main's CI, up to 20 minutes.
       - name: CI passed on this commit
         env:

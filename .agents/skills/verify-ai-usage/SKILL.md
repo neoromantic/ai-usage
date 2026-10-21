@@ -40,7 +40,10 @@ edit to a golden file.
 | `app` | `macos/`, `internal/view`, `internal/snapshot`, a demo report | `AIUsageChecks`, the app's decoding and words, and a debug build of the app | 6s; 25s cold |
 | `pictures` | the app's UI or words (`AIUsageBar`, `AIUsageKit`), a demo report | every tab and state of the popover, the Team window, Settings, and the menu bar, light and dark, from `team.json`; `--push` adds `solo.json` | 45s; +20s |
 | `build` | `--push` and `macos/` changed | `macos/build.sh`: the universal, signed release bundle | 80s |
-| `install` | `--push` and an installer, `.github/scripts`, self-update, or scheduling changed | `install-smoke.sh`: install and upgrade from a local release, in homes of their own | 15s; 90s cold |
+| `install` | `--push` and an installer, `.github/scripts`, `macos/`, self-update, the app's install, or scheduling changed | `install-smoke.sh`: install and upgrade from a local release, in homes of their own; on macOS the app too | 15s; 90s cold |
+| `brew` | `--push`, on macOS, and the formula, `dist.sh`, self-update, or Homebrew detection changed | CI's Homebrew smoke: `formula.sh` refuses old tags; a formula of local files installs from a tap of its own, passes `brew test`, reports `"method": "homebrew"` from a home of its own, and passes `brew style` and `brew audit --strict`; tap and install are removed after | about 3 min cold, while `brew style` installs its gems |
+
+CI runs no macOS job, so on a Mac `--push` is the macOS gate: `go`, `app`, `build`, `install` and `brew` there replace CI's macOS jobs.
 
 A change to docs only needs no step; read its diff for real data.
 The work after a step passes is reading its evidence: a step that passes
@@ -156,7 +159,7 @@ installed AI Usage.app or their tmux. `rm -rf .verify` clears the evidence.
   `scripts/verify.sh install` uses 28765, and `stack` tries 28741 to 28745.
 - The `pictures` step shows the app's ⋯ menu on the screen for a moment;
   AppKit draws a menu only while it is open.
-- CI's macOS install job flakes now and then; rerun the failed job before
-  reading it as a regression.
+- The `install` and `brew` steps stop when Homebrew has installed ai-usage
+  on this Mac; `brew uninstall ai-usage` first, and install it again after.
 - After a release, GitHub's `releases/latest` serves the old tag for a
   couple of minutes, so `ai-usage update` says nothing is new; wait.
