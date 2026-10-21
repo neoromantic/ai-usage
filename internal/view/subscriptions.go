@@ -11,6 +11,7 @@ type subRow struct {
 	window  bool // a window's row, under its account
 	here    bool
 	name    string
+	label   string // the account's label, on its own row
 	plan    string
 	win     *Window // the account's main window, or the row's; nil with no reading
 	users   int
@@ -117,6 +118,9 @@ func (p *page) subscriptions() []chunks {
 			out = append(out, chunks{p.space(2), p.bold(strings.ToUpper(grp.provider))})
 		}
 		for _, r := range grp.rows {
+			if !r.window {
+				p.pick(len(out), Pick{Provider: grp.provider, Label: r.label})
+			}
 			out = append(out, p.subLine(l, r))
 		}
 	}
@@ -130,7 +134,7 @@ func (p *page) subRows(a *TeamAccount) []subRow {
 	if a.Quota != nil {
 		main = mainWindow(a.Quota.Windows)
 	}
-	row := subRow{here: a.Current, name: p.txt(shownLabel(a)), win: main, users: a.Users, last: p.g.none}
+	row := subRow{here: a.Current, name: p.txt(shownLabel(a)), label: a.Label, win: main, users: a.Users, last: p.g.none}
 	if a.Plan != nil {
 		row.plan = p.txt(*a.Plan)
 	}

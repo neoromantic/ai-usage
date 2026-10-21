@@ -218,6 +218,7 @@ func (p *page) grid() []chunks {
 		} else {
 			line = append(line, p.right(p.cell(est(p.millions(per.Of(r.Burn)), r.BurnEstimated)), totalW)...)
 		}
+		p.pick(len(out), Pick{Device: r.DeviceID})
 		out = append(out, line)
 	}
 
@@ -470,6 +471,8 @@ func (p *page) usage() []chunks {
 		here  bool
 		name  string
 		u     Usage
+		// pick is the account the row opens, when it is one.
+		pick *Pick
 	}
 	burn := p.localBurn()
 	var rows []usageRow
@@ -482,6 +485,7 @@ func (p *page) usage() []chunks {
 			label := shortID(c.Label)
 			if a := p.account(c.Provider, c.Label); a != nil {
 				r.here, label = a.Current, shownLabel(a)
+				r.pick = &Pick{Provider: c.Provider, Label: c.Label}
 			}
 			r.name = p.txt(label)
 		}
@@ -531,6 +535,9 @@ func (p *page) usage() []chunks {
 			p.mark("here")
 		}
 		line = append(line, p.left(p.plain(truncMid(r.name, acct, g.ell)), acct)...)
+		if r.pick != nil {
+			p.pick(len(out), *r.pick)
+		}
 		out = append(out, numbers(line, r.u))
 	}
 	return append(out, nil, numbers(p.totalLead(acct), sum))

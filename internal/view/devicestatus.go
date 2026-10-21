@@ -109,6 +109,7 @@ func (p *page) deviceStatus() []chunks {
 	head := chunks{p.space(2), p.muted("DEVICE"), p.space(nameW - width("DEVICE"))}
 	out := []chunks{title, heads, line(head, -1)}
 	for i, r := range rows {
+		p.pick(len(out), Pick{Device: r.DeviceID})
 		out = append(out, line(p.deviceLead(r, nameW), i))
 	}
 	return append(out, line(p.totalLead(nameW), n))

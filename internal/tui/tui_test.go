@@ -86,6 +86,10 @@ func press(t *testing.T, s string) tea.KeyPressMsg {
 		k = tea.KeyPressMsg{Code: tea.KeyPgDown}
 	case "esc":
 		k = tea.KeyPressMsg{Code: tea.KeyEscape}
+	case "enter":
+		k = tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "backspace":
+		k = tea.KeyPressMsg{Code: tea.KeyBackspace}
 	case "space":
 		k = tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
 	case "ctrl+c":
