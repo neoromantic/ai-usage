@@ -1,0 +1,94 @@
+name: Prices
+
+# Compares the price list, internal/cost/prices.json, with the providers'
+# public pages (scripts/prices). Every Monday, and when run by hand, it
+# keeps one issue open while the list differs from them, or a page could not
+# be read, and closes it once everything matches again. A pull request that
+# changes the list or the watcher gets the report as its summary, and fails
+# when something differs.
+
+on:
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - internal/cost/prices.json
+      - scripts/prices/**
+      - .github/workflows/prices.yml
+
+permissions: {}
+
+concurrency:
+  group: prices-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      status: ${{ steps.run.outputs.status }}
+      report: ${{ steps.run.outputs.report }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      # The program exits 0 when everything matches, 1 when something
+      # differs or a page could not be read, and 2 when it could not run.
+      - name: Compare the list with the providers' pages
+        id: run
+        run: |
+          go build -o "$RUNNER_TEMP/prices" ./scripts/prices
+          status=0
+          "$RUNNER_TEMP/prices" >"$RUNNER_TEMP/report.md" || status=$?
+          cat "$RUNNER_TEMP/report.md" >>"$GITHUB_STEP_SUMMARY"
+          eof="EOF_$(openssl rand -hex 16)"
+          {
+            echo "status=$status"
+            echo "report<<$eof"
+            cat "$RUNNER_TEMP/report.md"
+            echo "$eof"
+          } >>"$GITHUB_OUTPUT"
+          [ "$status" -le 1 ]
+      - name: The list matches the providers' pages
+        if: github.event_name == 'pull_request'
+        env:
+          STATUS: ${{ steps.run.outputs.status }}
+        run: test "$STATUS" = 0
+
+  issue:
+    needs: check
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      STATUS: ${{ needs.check.outputs.status }}
+      REPORT: ${{ needs.check.outputs.report }}
+      RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      TITLE: Price list differs from the providers
+    steps:
+      - name: Open, update, or close the issue
+        run: |
+          n=$(gh issue list --state open --author app/github-actions --limit 100 --json number,title \
+            --jq '[.[] | select(.title == env.TITLE)][0].number // empty')
+          if [ "$STATUS" = 0 ]; then
+            if [ -n "$n" ]; then
+              gh issue close "$n" --comment "The price list matches the providers' pages again: $RUN"
+            fi
+            exit 0
+          fi
+          printf '%s\n\nChecked by the Prices workflow: %s\n' "$REPORT" "$RUN" >"$RUNNER_TEMP/body.md"
+          if [ -n "$n" ]; then
+            gh issue edit "$n" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh issue create --title "$TITLE" --body-file "$RUNNER_TEMP/body.md"
+          fi

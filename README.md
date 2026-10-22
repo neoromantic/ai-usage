@@ -250,7 +250,7 @@ ai-usage cost prices                                    # the price list in use,
 
 ACCOUNT is a label, a name, or `PROVIDER:LABEL`, as for `ai-usage alias`. A price is what each charge costs, so with `--yearly` it is the year's. What a person types travels sealed in this machine's snapshot, so the whole team sees it after this machine's next run, and for each answer the newest from any machine counts. It travels only once every machine in the team runs v0.10.0 or later; until then, it counts on the machine it was typed on.
 
-**Prices.** The price list is built into ai-usage, each price with the page it was checked on, and the relay serves its own copy. Once a day each collector asks the relay for the list and keeps whichever of the two was checked later, so a price fixed in this repository reaches every machine within a day, without a release; a failed ask says nothing, and the built-in list serves. When the list price of a plan changes, the new price counts from then on, and `ai-usage cost set ACCOUNT --price N` keeps the old one.
+**Prices.** The price list is built into ai-usage, each price with the page it was checked on, and the relay serves its own copy. Once a day each collector asks the relay for the list and keeps whichever of the two was checked later, so a price fixed in this repository reaches every machine within a day, without a release, and a weekly check against the providers' pages says when one needs fixing; a failed ask says nothing, and the built-in list serves. When the list price of a plan changes, the new price counts from then on, and `ai-usage cost set ACCOUNT --price N` keeps the old one.
 
 ## Menu bar app
 
