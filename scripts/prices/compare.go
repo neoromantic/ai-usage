@@ -37,6 +37,7 @@ type difference struct {
 	Plan   listPlan
 	Annual bool      // the year's price, else the month's
 	Seen   []float64 // the plan's prices on the page that could be it
+	Fix    float64   // the price -write sets, or 0 to leave it to a person
 }
 
 type newPlan struct {
@@ -81,11 +82,11 @@ func compare(l list, pages map[string]page) report {
 			continue
 		}
 		if seen, ok := priced(offers, p.USD, annual, p.AnnualUSD); !ok {
-			r.Differs = append(r.Differs, difference{Plan: p, Seen: seen})
+			r.Differs = append(r.Differs, difference{Plan: p, Seen: seen, Fix: fix(seen, p.USD)})
 		}
 		if p.AnnualUSD > 0 {
 			if seen, ok := priced(offers, p.AnnualUSD, monthly, p.USD); !ok {
-				r.Differs = append(r.Differs, difference{Plan: p, Annual: true, Seen: seen})
+				r.Differs = append(r.Differs, difference{Plan: p, Annual: true, Seen: seen, Fix: fix(seen, p.AnnualUSD)})
 			}
 		}
 	}
@@ -134,6 +135,26 @@ func priced(offers []offer, usd float64, other period, otherUSD float64) ([]floa
 
 // same says two prices are one: the App Store's $19.99 is the web's $20.
 func same(a, b float64) bool { return math.Abs(a-b) < 0.015 }
+
+// fix is the price that replaces old when the page shows seen: the one
+// price that could be the plan's, as a whole dollar when same counts it as
+// one, so $24.99 is $25. It is 0, and the price is left to a person, when
+// the page shows no price or several that could be it, or one more than
+// double or less than half of old, which is more likely the other period's
+// price or another plan's than a new one.
+func fix(seen []float64, old float64) float64 {
+	if len(seen) != 1 {
+		return 0
+	}
+	n := seen[0]
+	if r := math.Round(n); same(n, r) {
+		n = r
+	}
+	if n <= 0 || n > 2*old || n < old/2 {
+		return 0
+	}
+	return n
+}
 
 // matches says a name on a page is the plan: its name, its id, or an id it
 // had, with or without the provider's brand before it.
@@ -205,7 +226,7 @@ func (r report) markdown() string {
 		fmt.Fprintf(&b, "Every price checked in `internal/cost/prices.json` (updated %s) matches the providers' pages.\n", r.Updated)
 	}
 	if len(r.Differs) > 0 {
-		b.WriteString("\n### Prices that differ\n\n| Plan | The list | The page | Page |\n| --- | --- | --- | --- |\n")
+		b.WriteString("\n### Prices that differ\n\n| Plan | The list | The page | Page | Fix |\n| --- | --- | --- | --- | --- |\n")
 		for _, d := range r.Differs {
 			list, per := d.Plan.USD, "a month"
 			if d.Annual {
@@ -219,8 +240,13 @@ func (r report) markdown() string {
 			if shown == "" {
 				shown = "no price " + per
 			}
-			fmt.Fprintf(&b, "| %s | %s %s | %s | %s |\n", cell(planName(d.Plan)), usd(list), per, shown, link(d.Plan.Source))
+			fixed := "by hand"
+			if d.Fix > 0 {
+				fixed = usd(d.Fix) + " " + per
+			}
+			fmt.Fprintf(&b, "| %s | %s %s | %s | %s | %s |\n", cell(planName(d.Plan)), usd(list), per, shown, link(d.Plan.Source), fixed)
 		}
+		b.WriteString("\n`go run ./scripts/prices -write` sets each price in Fix. A price marked by hand is left to a person: its page shows no price, or more than one, that could be it, or one more than double or less than half of the list's.\n")
 	}
 	if len(r.New) > 0 {
 		b.WriteString("\n### Paid plans the list lacks\n\n| Plan | Price on the page | Page |\n| --- | --- | --- |\n")

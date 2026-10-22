@@ -3,9 +3,12 @@ name: Prices
 # Compares the price list, internal/cost/prices.json, with the providers'
 # public pages (scripts/prices). Every Monday, and when run by hand, it
 # keeps one issue open while the list differs from them, or a page could not
-# be read, and closes it once everything matches again. A pull request that
-# changes the list or the watcher gets the report as its summary, and fails
-# when something differs.
+# be read, and closes it once everything matches again. When a price differs
+# and its page shows one price that could be the plan's, it also keeps one
+# pull request open, from the branch prices/update, that sets those prices
+# for the maintainer to check and merge, and closes it once no price needs
+# one. A pull request that changes the list or the watcher gets the report as
+# its summary, and fails when something differs.
 
 on:
   schedule:
@@ -31,6 +34,7 @@ jobs:
     outputs:
       status: ${{ steps.run.outputs.status }}
       report: ${{ steps.run.outputs.report }}
+      prices: ${{ steps.run.outputs.prices }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,16 +45,24 @@ jobs:
           cache: false
       # The program exits 0 when everything matches, 1 when something
       # differs or a page could not be read, and 2 when it could not run.
+      # With -write it sets the prices it can in the checkout's list, which
+      # goes to the next job, base64 in one line, only when it changed.
       - name: Compare the list with the providers' pages
         id: run
         run: |
           go build -o "$RUNNER_TEMP/prices" ./scripts/prices
           status=0
-          "$RUNNER_TEMP/prices" >"$RUNNER_TEMP/report.md" || status=$?
+          "$RUNNER_TEMP/prices" -write >"$RUNNER_TEMP/report.md" || status=$?
           cat "$RUNNER_TEMP/report.md" >>"$GITHUB_STEP_SUMMARY"
+          prices=
+          if ! git diff --quiet -- internal/cost/prices.json; then
+            git diff -- internal/cost/prices.json
+            prices=$(base64 -w0 internal/cost/prices.json)
+          fi
           eof="EOF_$(openssl rand -hex 16)"
           {
             echo "status=$status"
+            echo "prices=$prices"
             echo "report<<$eof"
             cat "$RUNNER_TEMP/report.md"
             echo "$eof"
@@ -62,9 +74,75 @@ jobs:
           STATUS: ${{ steps.run.outputs.status }}
         run: test "$STATUS" = 0
 
-  issue:
+  # The pull request is the bot's branch prices/update: one commit on the
+  # checked main that sets the list to what the check wrote, made through the
+  # API so no credentials reach a checkout. Each run force-updates it. A pull
+  # request opened with GITHUB_TOKEN starts no workflow, CI among them.
+  pull-request:
     needs: check
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      url: ${{ steps.pr.outputs.url }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PRICES: ${{ needs.check.outputs.prices }}
+      REPORT: ${{ needs.check.outputs.report }}
+      RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      BRANCH: prices/update
+      TITLE: Update the price list to the providers' prices
+    steps:
+      - name: Open, update, or close the pull request
+        id: pr
+        run: |
+          n=$(gh pr list --state open --head "$BRANCH" --author app/github-actions --limit 100 --json number \
+            --jq '.[0].number // empty')
+          if [ -z "$PRICES" ]; then
+            if [ -n "$n" ]; then
+              gh pr comment "$n" --body "No price in the list needs this change any more: $RUN"
+              gh api -X PATCH "repos/$GH_REPO/pulls/$n" -f state=closed >/dev/null
+              gh api -X DELETE "repos/$GH_REPO/git/refs/heads/$BRANCH" || true
+            fi
+            exit 0
+          fi
+          printf '%s' "$PRICES" | base64 -d >"$RUNNER_TEMP/prices.json"
+          day=$(jq -r .updated "$RUNNER_TEMP/prices.json")
+          tree=$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA" --jq .commit.tree.sha)
+          tree=$(jq -n --arg base "$tree" --rawfile content "$RUNNER_TEMP/prices.json" \
+            '{base_tree: $base, tree: [{path: "internal/cost/prices.json", mode: "100644", type: "blob", content: $content}]}' |
+            gh api "repos/$GH_REPO/git/trees" --input - --jq .sha)
+          commit=$(jq -n --arg tree "$tree" --arg parent "$GITHUB_SHA" \
+            --arg message "Set the price list to the prices the providers' pages showed on $day." \
+            '{message: $message, tree: $tree, parents: [$parent]}' |
+            gh api "repos/$GH_REPO/git/commits" --input - --jq .sha)
+          if gh api "repos/$GH_REPO/git/ref/heads/$BRANCH" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/$GH_REPO/git/refs/heads/$BRANCH" -f sha="$commit" -F force=true >/dev/null
+          else
+            gh api "repos/$GH_REPO/git/refs" -f ref="refs/heads/$BRANCH" -f sha="$commit" >/dev/null
+          fi
+          printf '%s\n\nThis pull request sets each price in the Fix column; everything else in the report stays in the issue for a person. Check each price on its page before merging: a pull request the workflow opens starts no CI, and merging deploys the relay, which serves the list to every collector. See [Prices](https://github.com/neoromantic/ai-usage/blob/main/docs/releasing.md#prices).\n\nChecked by the Prices workflow: %s\n' \
+            "$REPORT" "$RUN" >"$RUNNER_TEMP/body.md"
+          if [ -n "$n" ]; then
+            jq -n --arg title "$TITLE" --rawfile body "$RUNNER_TEMP/body.md" '{title: $title, body: $body}' |
+              gh api -X PATCH "repos/$GH_REPO/pulls/$n" --input - >/dev/null
+            url=$(gh pr view "$n" --json url --jq .url)
+          else
+            url=$(jq -n --arg title "$TITLE" --arg head "$BRANCH" --rawfile body "$RUNNER_TEMP/body.md" \
+              '{title: $title, head: $head, base: "main", body: $body}' |
+              gh api "repos/$GH_REPO/pulls" --input - --jq .html_url)
+          fi
+          echo "url=$url" >>"$GITHUB_OUTPUT"
+
+  # The issue is updated even when the pull request could not be opened.
+  issue:
+    needs: [check, pull-request]
+    if: >-
+      always() && needs.check.result == 'success' &&
+      github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -73,6 +151,8 @@ jobs:
       GH_REPO: ${{ github.repository }}
       STATUS: ${{ needs.check.outputs.status }}
       REPORT: ${{ needs.check.outputs.report }}
+      PRICES: ${{ needs.check.outputs.prices }}
+      PR: ${{ needs.pull-request.outputs.url }}
       RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       TITLE: Price list differs from the providers
     steps:
@@ -86,7 +166,14 @@ jobs:
             fi
             exit 0
           fi
-          printf '%s\n\nChecked by the Prices workflow: %s\n' "$REPORT" "$RUN" >"$RUNNER_TEMP/body.md"
+          if [ -n "$PR" ]; then
+            pr="The pull request $PR sets the prices in the Fix column; check them on their pages and merge it."
+          elif [ -n "$PRICES" ]; then
+            pr="The pull request with the prices in the Fix column could not be opened; see the run."
+          else
+            pr="No price can be set without a person, so there is no pull request."
+          fi
+          printf '%s\n\n%s\n\nChecked by the Prices workflow: %s\n' "$REPORT" "$pr" "$RUN" >"$RUNNER_TEMP/body.md"
           if [ -n "$n" ]; then
             gh issue edit "$n" --body-file "$RUNNER_TEMP/body.md"
           else
