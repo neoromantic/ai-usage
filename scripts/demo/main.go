@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/cost"
 	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
@@ -32,6 +33,11 @@ import (
 
 // now is every report's time: a Thursday afternoon in Berlin.
 var now = time.Date(2026, 9, 24, 13, 40, 0, 0, time.UTC)
+
+// began is when the reporting device's cost store began, two months
+// before: it has known the subscriptions found then since, and the ones
+// found later are news.
+var began = now.Add(-60 * 24 * time.Hour)
 
 // berlin is the time zone the reports' words give their clocks in, as the
 // pictures show them.
@@ -115,7 +121,7 @@ func firstRun() {
 func soloDevice(at time.Time) *device {
 	rng := rand.New(rand.NewPCG(1, 1))
 	d := newDevice(rng, "d-demo-solo", "mira-mbp", "mira", "/Users/mira", latest, at, "claude", "codex", "grok")
-	d.account("claude", "mira@studio.dev", "max", true, at,
+	d.account("claude", "mira@studio.dev", "max 20x", true, at,
 		window("5h", 35, 5*time.Hour, 2*time.Hour+10*time.Minute),
 		window("7d", 71, week, 2*24*time.Hour+9*time.Hour+20*time.Minute),
 		window("7d Fable", 93, week, 2*24*time.Hour+9*time.Hour+20*time.Minute))
@@ -134,7 +140,21 @@ func soloDevice(at time.Time) *device {
 	d.workTo(now.Add(-26*time.Hour), "codex", "mira@studio.dev", "/Users/mira/src/ml-playground", 2, 20)
 	d.workTo(now.Add(-3*24*time.Hour), "grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64", "/Users/mira/src/ml-playground", 0.6, 30)
 	d.workTo(now.Add(-4*24*time.Hour), "claude", "mira@studio.dev", "/Users/mira/dotfiles", 0.4, 90)
+	soloCost(d)
 	return d
+}
+
+// soloCost is what mira told her collector of her subscriptions: when
+// Claude and Codex charge. She has not said when SuperGrok does, so the
+// report asks, monthly or yearly.
+func soloCost(d *device) {
+	d.cost = newCosts()
+	claude := d.subscription("claude", "mira@studio.dev", "max 20x")
+	must(claude.Answer.SetRenews("2026-07-26", began.Add(26*time.Hour)))
+	codex := d.subscription("codex", "mira@studio.dev", "pro")
+	must(codex.Answer.SetRenews("2026-08-08", began.Add(26*time.Hour)))
+	d.subscription("grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64", "SuperGrok")
+	d.observe(nil, nil)
 }
 
 // teamReport is a small studio: two laptops, a Linux server, and nine
@@ -145,7 +165,7 @@ func teamReport() view.Report {
 	key := demoKey()
 
 	mira := newDevice(rng, "d-demo-mira", "mira-mbp", "mira", "/Users/mira", latest, now.Add(-3*time.Minute), "claude", "codex", "grok")
-	mira.account("claude", "mira@studio.dev", "max", true, now.Add(-3*time.Minute),
+	mira.account("claude", "mira@studio.dev", "max 20x", true, now.Add(-3*time.Minute),
 		window("5h", 100, 5*time.Hour, time.Hour+25*time.Minute),
 		window("7d", 58, week, 2*24*time.Hour+9*time.Hour+20*time.Minute))
 	// Her Claude week filled faster over the last day than before: at that
@@ -187,7 +207,7 @@ func teamReport() view.Report {
 	// login the bots share. Its triage job runs Claude Code in a home of its
 	// own that nobody logged in to, so its tokens go to no login.
 	srv := newDevice(rng, "d-demo-build", "build-01", "root", "/root", latest, now.Add(-6*time.Minute), "claude", "codex", "hermes")
-	srv.account("claude", "mira@studio.dev", "max", false, time.Time{})
+	srv.account("claude", "mira@studio.dev", "max 20x", false, time.Time{})
 	srv.loggedOut("claude", "/root/triage/.claude")
 	srv.work("claude", collect.UnknownAccount, "/srv/orbit/triage", 1.5, 20)
 	srv.account("codex", "bots@studio.dev", "pro", true, now.Add(-6*time.Minute),
@@ -226,7 +246,93 @@ func teamReport() view.Report {
 	for _, d := range docs {
 		known[d.Device] = collect.Known{Version: d.CollectorVersion, First: now.Add(-90 * 24 * time.Hour), Last: d.CollectedAt}
 	}
+	studioCost(mira, docs, key)
 	return mira.report(&collect.TeamCache{PulledAt: now.Add(-3 * time.Minute), Team: key.Fingerprint(), Docs: docs, Known: known})
+}
+
+// studioCost is what mira's collector recorded of the studio's
+// subscriptions since its cost store began, and what she typed. She types
+// prices with VAT, as the studio pays them: the bots' Codex Pro, and her
+// Claude Max 5x, which she moved to Max 20x two days ago, so that price no
+// longer applies and the list's does. She said when her Codex charges, and
+// that she pays SuperGrok yearly; when her Claude charges, the report asks,
+// with the day its tool says it began. Leo's Claude has no tier, as his
+// release reads none, so it has no price. Jun left the studio in August,
+// and nobody has said whether his Claude Pro is still paid; she cancelled
+// the CI's ChatGPT Plus ten days ago. The team's other devices run releases
+// from before cost, so nothing she typed reaches them.
+func studioCost(mira *device, docs []snapshot.Doc, key *team.Key) {
+	mira.cost = newCosts()
+	claude := mira.subscription("claude", "mira@studio.dev", "max 5x", cost.PlanAt{At: now.Add(-2*24*time.Hour - 5*time.Hour), Plan: "max 20x"})
+	must(claude.Answer.SetPrice(new(119.0), "max 5x", began.Add(26*time.Hour)))
+	mira.st.Accounts[state.Key("claude", "mira@studio.dev")].SubscribedAt = time.Date(2026, 5, 11, 9, 12, 0, 0, time.UTC)
+	codex := mira.subscription("codex", "mira@studio.dev", "pro")
+	must(codex.Answer.SetRenews("2026-08-27", began.Add(26*time.Hour)))
+	grok := mira.subscription("grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64", "SuperGrok")
+	must(grok.Answer.SetCadence(cost.Yearly, began.Add(26*time.Hour)))
+	must(grok.Answer.SetRenews("2026-03-02", began.Add(26*time.Hour)))
+	mira.subscription("claude", "leo@studio.dev", "max")
+	mira.subscription("codex", "leo@studio.dev", "plus")
+	bots := mira.subscription("codex", "bots@studio.dev", "pro")
+	must(bots.Answer.SetPrice(new(238.0), "pro", began.Add(4*24*time.Hour)))
+	jun := mira.subscription("claude", "jun@studio.dev", "pro")
+	jun.LastSeen = time.Date(2026, 8, 21, 16, 5, 0, 0, time.UTC)
+	jun.PlanConfirmedAt = jun.LastSeen
+	ci := mira.subscription("codex", "ci@studio.dev", "plus")
+	ci.LastSeen = time.Date(2026, 9, 13, 23, 50, 0, 0, time.UTC)
+	ci.PlanConfirmedAt = ci.LastSeen
+	ci.Answer.Cancel(time.Date(2026, 9, 14, 8, 30, 0, 0, time.UTC))
+	mira.observe(docs, key)
+}
+
+// newCosts is an empty cost store that began at began.
+func newCosts() *cost.Store {
+	return &cost.Store{V: cost.StoreVersion, Since: began, Subs: map[string]*cost.Sub{}}
+}
+
+// subscription records in the device's cost store a subscription found
+// at began on plan, which then changed to each of later, at its time.
+func (d *device) subscription(provider, label, plan string, later ...cost.PlanAt) *cost.Sub {
+	sub := d.cost.Sub(provider, label, began)
+	sub.Plans = append([]cost.PlanAt{{At: began, Plan: plan}}, later...)
+	return sub
+}
+
+// observe records in the device's cost store what its last run found, as
+// a collection does: its own accounts, and those of the team's snapshots
+// docs, opened with key.
+func (d *device) observe(docs []snapshot.Doc, key *team.Key) {
+	var seen []cost.Sighting
+	for _, a := range d.st.Accounts {
+		g := cost.Sighting{Provider: a.Provider, Label: a.Label, Plan: a.Plan, At: a.LastSeenAt, Current: collect.IsCurrent(d.st, a.Provider, a.Label)}
+		if a.Quota != nil {
+			g.QuotaAt = a.Quota.At
+		}
+		seen = append(seen, g)
+	}
+	for _, doc := range docs {
+		for _, a := range doc.Accounts {
+			label, err := key.Open(a.Label)
+			if err != nil {
+				panic(err)
+			}
+			if label == collect.UnknownAccount {
+				continue
+			}
+			g := cost.Sighting{Provider: a.Provider, Label: label, Plan: a.Plan, At: doc.CollectedAt, Current: a.Current}
+			if a.QuotaAt != nil && a.QuotaFrom == "" {
+				g.QuotaAt = *a.QuotaAt
+			}
+			seen = append(seen, g)
+		}
+	}
+	d.cost.Observe(d.id, seen, nil, cost.Builtin(), d.at)
+}
+
+func must(err error) {
+	if err != nil {
+		panic(err)
+	}
 }
 
 // miraHistory is how full mira's subscriptions got before each reset over
@@ -254,6 +360,8 @@ type device struct {
 	spread         map[string][]string
 	samples, past  []state.Sample
 	brew           bool
+	// cost is the device's cost store, nil for none.
+	cost *cost.Store
 }
 
 func newDevice(rng *rand.Rand, id, host, user, home, version string, at time.Time, providers ...string) *device {
@@ -491,6 +599,7 @@ func (d *device) report(tc *collect.TeamCache) view.Report {
 		Version: d.version, RelayURL: relay, Config: cfg, State: d.st, Key: key,
 		Doc:      collect.BuildDoc(d.st, d.cycles(), key, cfg, d.host, d.user, d.version, d.at),
 		Hostname: d.host, OSUser: d.user, Now: now, Folders: d.folders, Samples: d.samples, Loc: berlin,
+		Cost: d.cost,
 	}
 	if d.brew {
 		in.Homebrew, in.BrewCommand = true, fsutil.HomebrewUpgrade

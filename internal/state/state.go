@@ -127,6 +127,11 @@ type Account struct {
 	// is taken to use the account logged in to that harness's default home,
 	// or to the home Config.QuotaFrom names for the Hermes home.
 	Link *Link `json:"link,omitempty"`
+	// Billing is who bills the subscription, as its tool names it, and
+	// SubscribedAt when the tool says it began, each when the tool says.
+	// Neither leaves this device.
+	Billing      string    `json:"billing,omitempty"`
+	SubscribedAt time.Time `json:"subscribed_at,omitzero"`
 }
 
 // Link names an account of another provider.
@@ -203,6 +208,9 @@ type Relay struct {
 	// NoHoursUntil is when the relay last refused a snapshot with hours,
 	// plus a day: until then the hours are not sent.
 	NoHoursUntil time.Time `json:"no_hours_until,omitzero"`
+	// NoCostUntil is when the relay last refused a snapshot with costs,
+	// plus a day: until then the costs are not sent.
+	NoCostUntil time.Time `json:"no_cost_until,omitzero"`
 }
 
 // Update is the self-update bookkeeping.
@@ -372,6 +380,7 @@ func mergeOlder(s, last *State) {
 	s.Relay.NoExtUntil = last.Relay.NoExtUntil
 	s.Relay.NoCyclesUntil = last.Relay.NoCyclesUntil
 	s.Relay.NoHoursUntil = last.Relay.NoHoursUntil
+	s.Relay.NoCostUntil = last.Relay.NoCostUntil
 	from := hourOf(last.LastRunAt) - 1
 	for k, sess := range s.Sessions {
 		if sess == nil {

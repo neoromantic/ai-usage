@@ -27,6 +27,11 @@ const CyclesSince = "v0.5.0"
 // sends them only while the whole team reads them.
 const HoursSince = "v0.7.0"
 
+// CostSince is the first release that reads the costs a snapshot carries.
+// An older one drops a document that has them as undecodable, so a device
+// sends them only while the whole team reads them.
+const CostSince = "v0.10.0"
+
 // legacyDev is the version a build from source of a release before ExtSince
 // reports. One from ExtSince on reports "devel", which does not parse as a
 // release either.
@@ -51,6 +56,10 @@ func BeforeCycles(version string) bool { return before(version, CyclesSince) }
 // a newer one does, so it counts as new.
 func BeforeHours(version string) bool { return before(version, HoursSince) }
 
+// BeforeCost says a collector of version runs a release before CostSince,
+// or is a build from source of one, as BeforeHours tells.
+func BeforeCost(version string) bool { return before(version, CostSince) }
+
 // before says a collector of version runs a release before since, or is a
 // build from source of one.
 func before(version, since string) bool {
@@ -71,8 +80,8 @@ const (
 const gateReadAge = 3 * time.Hour
 
 // Gate says whether this device may send the snapshot fields a release
-// added: those ExtSince added, the cycles CyclesSince added, or the hours
-// HoursSince added.
+// added: those ExtSince added, the cycles CyclesSince added, the hours
+// HoursSince added, or the costs CostSince added.
 type Gate struct {
 	Open bool
 	// HeldBack is the other devices of the team on a release before the
@@ -111,6 +120,20 @@ func CyclesWire(c TeamCache, fingerprint, self string, noCyclesUntil, now time.T
 // noHoursUntil was set.
 func HoursWire(c TeamCache, fingerprint, self string, noHoursUntil, now time.Time) Gate {
 	return wireGate(c, fingerprint, self, noHoursUntil, now, BeforeHours)
+}
+
+// CostWire is the gate for the costs, as ExtendedWire is for the fields
+// ExtSince added: every other device must run CostSince or later, as
+// BeforeCost tells, and the relay must not have refused them since
+// noCostUntil was set.
+func CostWire(c TeamCache, fingerprint, self string, noCostUntil, now time.Time) Gate {
+	return wireGate(c, fingerprint, self, noCostUntil, now, BeforeCost)
+}
+
+// NoCostUntil is when the relay's refusal of the costs, or of what an older
+// release added, which a relay that refuses refuses the costs with, ends.
+func NoCostUntil(r state.Relay) time.Time {
+	return latest(r.NoCostUntil, NoHoursUntil(r))
 }
 
 // NoHoursUntil is when the relay's refusal of the hours, or of what an

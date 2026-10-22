@@ -50,7 +50,7 @@ func bodyLine(t *testing.T, p Page, from string, match func(text string) bool) s
 
 func TestPageAttentionIsCut(t *testing.T) {
 	// The team fixture with a silent device and an unused window as well,
-	// 11 lines of ATTENTION.
+	// 15 lines of ATTENTION.
 	r := loadReport(t, "team")
 	since := time.Date(2026, 9, 21, 11, 2, 0, 0, time.UTC)
 	resets := time.Date(2026, 9, 29, 13, 30, 0, 0, time.UTC)
@@ -60,12 +60,12 @@ func TestPageAttentionIsCut(t *testing.T) {
 		Attention{Kind: AttentionUnder, Provider: "codex", Account: "lee@corp.test", Name: "lee", ResetsAt: &resets, Percent: &pct})
 	static := pageSection(Render(r, Options{Width: 160, Loc: sampleZone}), "ATTENTION")
 	// What is cut is counted by kind, so a NO READING is still named.
-	if len(static) != 1+attentionLines+1 || strings.TrimSpace(static[len(static)-1]) != "+5 more: 1 no reading, 1 duplicate, 1 old, 1 silent, 1 under" {
+	if len(static) != 1+attentionLines+1 || strings.TrimSpace(static[len(static)-1]) != "+9 more: 1 no reading, 1 duplicate, 1 old, 1 check, 3 cost, 1 silent, 1 under" {
 		t.Errorf("static ATTENTION is not cut at %d lines:\n%s", attentionLines, strings.Join(static, "\n"))
 	}
 	p := Render(r, Options{Width: 160, Loc: sampleZone, Interactive: true})
 	all := pageSection(p, "ATTENTION")
-	if len(all) != 1+11 {
+	if len(all) != 1+15 {
 		t.Fatalf("the interactive view does not show every line:\n%s", strings.Join(all, "\n"))
 	}
 	for _, want := range []string{
@@ -217,8 +217,12 @@ func TestPageOldLine(t *testing.T) {
 			}
 		}
 		for _, w := range []int{80, 100, 120} {
-			lines := pageSection(Render(r, Options{Width: w, Loc: sampleZone, Interactive: true}), "ATTENTION")
-			line := lines[len(lines)-1]
+			line := ""
+			for _, l := range pageSection(Render(r, Options{Width: w, Loc: sampleZone, Interactive: true}), "ATTENTION") {
+				if strings.HasPrefix(l, " OLD ") {
+					line = l
+				}
+			}
 			m := names.FindStringSubmatch(line)
 			if m == nil || (m[1] == "old releases") != mixed {
 				t.Errorf("mixed %v at %d: %q", mixed, w, line)

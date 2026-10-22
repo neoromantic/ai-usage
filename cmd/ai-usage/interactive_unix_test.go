@@ -80,3 +80,50 @@ func TestViewColor(t *testing.T) {
 		}
 	}
 }
+
+// TestViewAsksCost opens the interactive view on a pseudo-terminal: it
+// asks the report's first question over the key bar, and S, typed as a
+// terminal sends it, asks no more on this device.
+func TestViewAsksCost(t *testing.T) {
+	hermetic(t)
+	d := newDevice(t)
+	d.claude("11111111-aaaa", "/work/app", 1)
+	d.ok("collect", "--quiet", "--offline")
+	res, err := loadResult(state.Dir(d.dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TERM", "xterm-256color")
+	master, slave := openPTY(t)
+	sent := answering(master, "")
+	cfg := viewConfig(state.Dir(d.dir), res, &display{color: "never"}, true, slave)
+	done := make(chan error, 1)
+	go func() { done <- tui.Run(context.Background(), cfg, slave, slave) }()
+	wait := func(s string) {
+		t.Helper()
+		for deadline := time.Now().Add(5 * time.Second); !strings.Contains(sent(), s); time.Sleep(10 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatalf("the view never showed %q:\n%q", s, sent())
+			}
+		}
+	}
+	wait("next charge")
+	if _, err := master.WriteString("S"); err != nil {
+		t.Fatal(err)
+	}
+	wait("asks nothing about the cost")
+	if _, err := master.WriteString("q"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the view did not quit")
+	}
+	if qs := d.costOf().Questions; len(qs) != 0 {
+		t.Fatalf("S left questions: %+v", qs)
+	}
+}

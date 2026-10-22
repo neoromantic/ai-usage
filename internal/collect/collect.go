@@ -157,16 +157,28 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	// sees them now rather than one run late.
 	noteProblems(st, s.problems(saving, ""), now)
 	res := &Result{Config: cfg, State: st, Key: key}
+	costs := loadCosts(o.Dir)
 	res.Doc = BuildDoc(st, cycles, key, cfg, o.Hostname, o.OSUser, o.Version, now)
+	withCosts(&res.Doc, costs, key)
 	res.Team, _ = LoadTeamCache(o.Dir)
 	relayErr := s.publish(ctx, key, cfg.Device, res)
 	offline := s.goOffline(relayErr)
-	if offline || relayErr != "" {
+	if !offline {
+		fetchPrices(ctx, o, now)
+	}
+	// The costs are noted after the team read, which brings the other
+	// devices' subscriptions and answers.
+	costErr := noteCosts(o, st, key, res.Team, cfg.Device, now)
+	if costErr != nil {
+		saving = append(saving, costErr.Error())
+	}
+	if offline || relayErr != "" || costErr != nil {
 		noteProblems(st, s.problems(saving, relayErr), now)
 	}
 	if offline {
 		// The snapshot no one could be sent is this device's own row.
 		res.Doc = BuildDoc(st, cycles, key, cfg, o.Hostname, o.OSUser, o.Version, now)
+		withCosts(&res.Doc, costs, key)
 	}
 	// A stopped run leaves its housekeeping to the next one.
 	if o.After != nil && ctx.Err() == nil {

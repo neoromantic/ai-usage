@@ -145,7 +145,12 @@ func codexConversation(ctx context.Context, rpc *codexRPC, env Env) (r Reading, 
 	if err != nil {
 		return r, false, err
 	}
-	r.Quota, r.Plan = q, cmp.Or(r.Plan, plan)
+	// The rate limits' plan is OpenAI's answer of now; account/read's may
+	// be the one the login was issued with.
+	if plan != "" && plan != "unknown" {
+		r.Plan = plan
+	}
+	r.Quota = q
 	return r, false, nil
 }
 

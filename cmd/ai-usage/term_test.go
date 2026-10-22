@@ -36,7 +36,7 @@ func TestDisplayFlags(t *testing.T) {
 	d.ok("collect", "--quiet", "--offline")
 
 	// A pipe gets no escapes unless asked, and NO_COLOR does not beat asking.
-	if out := d.ok("report"); strings.Contains(out, "\x1b") || widest(out) > 79 || strings.Contains(out, "  PLAN  ") {
+	if out := d.ok("report"); strings.Contains(out, "\x1b") || widest(out) > 79 || regexp.MustCompile(`PLAN +THIS WEEK`).MatchString(out) {
 		t.Fatalf("default report:\n%s", out)
 	}
 	if out := d.ok("report", "--color=always"); !strings.HasPrefix(out, "\x1b[1mai-usage\x1b[m") || !regexp.MustCompile(`\x1b\[91m\d+ over\x1b\[m`).MatchString(out) {

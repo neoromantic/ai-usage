@@ -110,8 +110,9 @@ func TestCodexAnswers(t *testing.T) {
 		wantCalls []string
 		loggedOut bool
 	}{
+		// The rate limits' plan, asked of OpenAI, wins over account/read's.
 		{
-			mode: "codex-no-email", account: "chatgpt", plan: "plus",
+			mode: "codex-no-email", account: "chatgpt", plan: "pro",
 			wantCalls: []string{"initialize", "initialized", "account/read", "account/rateLimits/read"},
 		},
 		// wantErr is part of the error, which says why.

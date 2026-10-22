@@ -126,6 +126,11 @@ private struct LimitRow: View {
 
     private var solo: Bool { report.solo }
     private var quota: Quota? { account.quota }
+    /// The plan as the cost names it, "Pro 200", so the row and its cost
+    /// line say the same; else as its tool reports it.
+    private var plan: String? {
+        report.costSubscription(provider: provider, label: account.label)?.planTitle ?? account.plan.map(Format.plan)
+    }
     /// The window the bar and percent show.
     private var shown: Quota.Window { line.window }
 
@@ -169,8 +174,8 @@ private struct LimitRow: View {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 6) {
                     name
-                    if let plan = a.plan {
-                        Text(Format.plan(plan))
+                    if let plan {
+                        Text(plan)
                             .font(.subheadline)
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
@@ -321,7 +326,7 @@ private struct LimitRow: View {
     /// each window, where the one that runs out is headed and at what pace,
     /// what fills it from outside the team, how old the reading is and who
     /// read it when that says something, who spent the window so far, when
-    /// it was last used, and why it is idle or not read. A caveat has its
+    /// it was last used, what it costs, and why it is idle or not read. A caveat has its
     /// line whatever the line under the row says.
     private var details: some View {
         let a = account
@@ -338,6 +343,9 @@ private struct LimitRow: View {
                 DetailLine("This window", forms: spent.forms, help: spent.help)
             }
             DetailLine("Last used", more.lastUsed)
+            if let c = report.costSubscription(provider: provider, label: a.label) {
+                DetailLine("Cost", c.line(now: now), help: c.help(now: now))
+            }
             DetailLine("Idle", idle)
             DetailLine("Not read", a.noReading)
             ForEach(Array(a.linkedUsage.enumerated()), id: \.offset) { _, l in
@@ -444,7 +452,7 @@ private struct LimitRow: View {
     private var spoken: String {
         let a = account, w = shown
         var head = [Format.provider(provider) + " " + a.name]
-        if let plan = a.plan { head.append(Format.plan(plan)) }
+        if let plan { head.append(plan) }
         if a.current && !solo { head.append("logged in here") }
         var parts = [short(w) + " window " + Format.left(w) + " left"]
         if w.stale { parts.append("from an old reading") }

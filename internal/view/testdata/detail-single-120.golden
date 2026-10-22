@@ -1,7 +1,13 @@
-[1mai-usage[m · sam@sam-air · team fp4xk2n5           ● collected 8m ago  ● no relay  ● v1.4.3 available
+[1mai-usage[m · sam@sam-air · team fp4xk2n5       ● collected 8m ago  ● no relay  ● v1.4.3 available  $65/mo
 
 [1mCLAUDE[m  [1msam@example.com[m  ● logged in here
   PLAN      pro
+  PRICE     $20/mo · the list price of Pro
+  USED      $17 (85%) over the last 4 weeks · unused $3
+  NEXT      not confirmed · its tool says day 14; ai-usage cost set claude:sam@example.com --renews DAY
+  BILLED    through the App Store; the price may differ
+  PER M     $0.03 a month per M weighted tokens of the last 4 weeks
+  PLANS     Pro since 14 Jul
   READING   8m ago · Wed 17:30 · on sam@sam-air
   LAST USE  8m ago · Wed 17:30
 
@@ -24,3 +30,7 @@
   DEVICE       TODAY   7D  30D   90D  SHARE
 ● sam@sam-air     28  170  624  1680   100%
   TOTAL           28  170  624  1680   100%
+
+[1mCOST[m  1 · by device · last 4 weeks
+  DEVICE       USED  SHARE
+● sam@sam-air   $17   100%

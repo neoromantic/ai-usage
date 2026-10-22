@@ -1,0 +1,15 @@
+{"v":1,"updated":"2026-10-22","currency":"USD","plans":[
+ {"provider":"claude","plan":"pro","name":"Pro","usd":20,"annual_usd":200,"source":"https://claude.com/pricing"},
+ {"provider":"claude","plan":"max 5x","name":"Max 5x","usd":100,"source":"https://support.claude.com/en/articles/11049741-what-is-the-max-plan"},
+ {"provider":"claude","plan":"max 20x","name":"Max 20x","usd":200,"source":"https://support.claude.com/en/articles/11049741-what-is-the-max-plan"},
+ {"provider":"codex","plan":"go","name":"Go","usd":8,"source":"https://apps.apple.com/us/app/chatgpt/id6448311069"},
+ {"provider":"codex","plan":"plus","name":"Plus","usd":20,"source":"https://apps.apple.com/us/app/chatgpt/id6448311069"},
+ {"provider":"codex","plan":"prolite","name":"Pro 100","usd":100,"source":"https://apps.apple.com/us/app/chatgpt/id6448311069"},
+ {"provider":"codex","plan":"pro","name":"Pro 200","usd":200,"source":"https://apps.apple.com/us/app/chatgpt/id6448311069"},
+ {"provider":"codex","plan":"promax","name":"Pro 500","usd":500,"source":"https://apps.apple.com/us/app/chatgpt/id6448311069"},
+ {"provider":"grok","plan":"SuperGrok Lite","name":"SuperGrok Lite","usd":10,"source":"https://apps.apple.com/us/app/grok/id6670324846"},
+ {"provider":"grok","plan":"SuperGrok","name":"SuperGrok","usd":30,"annual_usd":300,"source":"https://apps.apple.com/us/app/grok/id6670324846"},
+ {"provider":"grok","plan":"SuperGrok Plus","name":"SuperGrok Plus","usd":100,"source":"https://apps.apple.com/us/app/grok/id6670324846"},
+ {"provider":"grok","plan":"SuperGrok Heavy","name":"SuperGrok Heavy","usd":300,"source":"https://apps.apple.com/us/app/grok/id6670324846"},
+ {"provider":"grok","plan":"X Premium+","name":"X Premium+","usd":40,"was":["XPremiumPlus"],"source":"https://tech.co/news/x-premium-price-increase-grok-3"}
+]}

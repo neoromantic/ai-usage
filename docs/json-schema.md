@@ -26,6 +26,7 @@ Conventions:
 | `providers` | list | one entry each for `claude`, `codex`, `grok`, and `hermes`, in that order; see [providers](#providers) |
 | `projects` | list | this device's projects over every account, most weighted tokens in the last 7 days first; see [projects](#projects) |
 | `team` | object | every device in the team, this one included; see [team](#team) |
+| `cost` | object | what the team's subscriptions cost a month, and who used it; see [cost](#cost). `null` in a report saved by a release before v0.10.0 |
 
 ### collector
 
@@ -101,7 +102,9 @@ Each entry is one thing that needs attention, from the team's view of each subsc
 | `duplicate` | a device has `replaced_by` set: it was reinstalled, and its old record stays on the relay | `devices` names the device; `device_id` is its id, for `ai-usage team forget-device`, which takes its first 8 hex digits too; `message` is the `name` of the device that replaced it; `at` is when it last reported |
 | `old` | devices run an older release than the team's newest | `devices` lists every one of them; `message` is the newest release; `at` is the earliest `behind_since` among those that have reported for 7 hours since it and are not `silent`, absent when none has. Devices whose release has `limitations` have an entry of their own, first, with those in `limitations`: they need a reinstall. A `duplicate` device is not counted |
 | `under` | past half of a subscription's main window, its forecast is under 50% | `provider`, `account`, `name`; `resets_at` is when it resets, `percent` its forecast |
-| `idle` | no team device has used a subscription with a reading for 7 days, by its `last_active_at`, and nothing says someone outside the team does: it has no `outside`, and its main window is under 1% or began before that last use. Not the `unknown` account, a Hermes account, or a free plan. It has no `under` entry then | `provider`, `account`, `name`; `at` is when a team device last used it |
+| `check` | nobody can say a subscription is still paid: its cost's `state` is `unconfirmed` | `provider`, `account`, `name`; `at` is when its paid plan was last confirmed, its cost's `plan_confirmed_at`, else its `first_seen`. `text` says since when no device has it, when that is 14 days or more, and the commands that answer |
+| `idle` | no team device has used a subscription with a reading for 7 days, by its `last_active_at`, and nothing says someone outside the team does: it has no `outside`, and its main window is under 1% or began before that last use. Not the `unknown` account, a Hermes account, or a free plan. It has no `under` entry then. `text` says its price a month, when its cost has one | `provider`, `account`, `name`; `at` is when a team device last used it |
+| `cost` | for 3 days after it happened, a cost event of kind `new`, `plan_changed`, or `price_changed`: a new subscription, a change of plan, or of the list price of its plan | `provider`, `account`, `name`; `at` is when it happened; `event` is the event's `id` in the cost's `events` |
 
 A window is one with `limits`: the account's main one, or one that limits it more. An `over`, `tight`, or `under` entry has `reading_age_seconds` when its window's reading is stale, an `over` entry also when its window's forecast is `stopped`, and an `out` entry when its reading is over 6 hours old, as the provider can reset a full window early.
 
@@ -122,6 +125,7 @@ A window is one with `limits`: the account's main one, or one that limits it mor
 | `reading_age_seconds` | number | how old the reading is, as the paragraph above the table says when |
 | `message` | string | an error's text, the error a silent device last reported, why a subscription has no reading, the device that replaced a duplicate, or the newest release |
 | `limitations` | list of strings | what the releases of the devices of an `old` entry cannot do, as a team device's `limitations` says |
+| `event` | string | a `cost` entry's event, by its `id` |
 
 ### providers
 
@@ -391,6 +395,84 @@ A cell:
 | `share` | object | the device's part of the column's tokens, in percent, in each period: `today`, `7d`, `30d`, and `90d`, as in `usage`. It is the cell's `usage` over the column's, so a column's shares add up to 100. A period's is `null` when the team spent nothing on the column in it. A device that spent none has `0`. It says how the tokens split, not how much of the quota the device used |
 | `burn`, `window_burn`, `burn_share` | | the same as weighted tokens |
 
+### cost
+
+What the team pays for its subscriptions a month, how much of it the team used over the last 4 weeks, and who used it: a budget, not accounting. Every number is in `currency`, a month, as the price list or a person says; the console's COST section, header, and the matrix's `$` mode draw this object, and `ai-usage cost --json` prints it alone.
+
+A subscription is one account of Claude, Codex, or Grok that the team found on a paid plan, logged in on a device or with a reading of its quota in the last 35 days, or that this device's cost store keeps. An account a device logged out of long ago is no news of a paid plan, and one that ended and dropped out of the store comes back only with a reading of its quota after it dropped. The store keeps a subscription after every device has logged out of it, so that a forgotten one stays in the cost, until a person cancels it or a reading finds it on a free plan, and 30 days after that. Hermes accounts borrow the quota of another login and cost nothing of their own; what they spend counts under the login they spend through. Team, business, enterprise, and education plans have no list price.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `currency` | string | `USD` |
+| `total_usd` | number | the price a month of every subscription whose `state` is not `ended` and that has a price |
+| `without_price` | number | how many subscriptions that have not ended have no price, and so are left out of `total_usd` |
+| `used_usd` | number | what the team used of the subscriptions whose Used is known, over the last 4 weeks; `null` when none is |
+| `used_pct` | number | `used_usd` over the prices of those subscriptions, in percent; `null` when none is known |
+| `unused_usd` | number | the rest of their prices; `null` when none is known |
+| `used_estimated` | bool | an estimate is among them: a subscription with `used_estimated` |
+| `next_charge` | object | the soonest charge a person confirmed: `{provider, account, at, usd}`, `usd` its price, a year's for a yearly subscription, `null` when unknown; `null` when no charge is confirmed |
+| `prices` | object | the price list in use: `updated`, the day it was last checked, `YYYY-MM-DD`, and `source`, `built in` or `relay`, which serves a list fixed after the release, used when it was updated later than the built-in one |
+| `subscriptions` | list | by provider, in the order of the team's providers, each provider's in the order of their team accounts, those no device has any more after them, and those that ended last; see below |
+| `devices` | list | what each device used of the subscriptions that have not ended, `{device, device_id, usd}`, the most first; `usd` is `null` when no price of them is known |
+| `questions` | list | what this device asks a person; see below |
+| `events` | list | what happened to the subscriptions in the last 30 days, oldest first; see below |
+
+A subscription:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `provider` | string | `claude`, `codex`, or `grok` |
+| `account` | string | its label |
+| `name`, `alias` | | as on its team account; one no device has any more goes by its short name |
+| `current` | bool | it is logged in on this device |
+| `plan` | string | its plan as its tool reports it, the newest any device read: Claude's with its tier, as `max 20x`. One that ended on a free plan has the last plan it was paid for |
+| `plan_name` | string | its plan as the price list calls it, as `Max 20x`, else as its tool reports it |
+| `price_usd` | number | its price a month: a person's typed for its plan, a year's over 12 when it is billed yearly, else the list price of its plan, at the cadence a person gave when the list prices it yearly too; `0` on a free plan; `null` when unknown |
+| `price_source` | string | `typed`; `list`; `stale`, the list price, as a person typed one for another plan, `typed_for`; or `unknown` |
+| `typed_for` | string | the plan a stale typed price was typed for; `null` otherwise |
+| `cadence` | string | `monthly`, or `yearly` when a person said so |
+| `renews_at` | time | its next charge, midnight of its day in the time zone of the machine that made the report: the day a person gave, rolled forward each month, the last day of a shorter month, or each year; `null` when nobody gave one |
+| `renews_confirmed` | bool | a person gave its charge day; a report says no charge that nobody confirmed |
+| `suggested_renewal_day` | number | the day of the month its tool says it began, offered when asking for its charge day; Claude Code's subscription date, on a device logged in to it. `null` otherwise, and once a charge day is confirmed |
+| `used_pct` | number | how full its main window got over the last 4 weeks: the mean of 4 weeks, each the fullest period of its main window that reset in it, at most 100, or 0 for a week in which no period reset and the team spent no tokens on it while it watched the subscription. A week with tokens and no period, as a reading missed, is left out, and so is one that began before this device first found the subscription and the team's oldest period of its main window. The main window is the weekly one, else the longest of a day or more; a window shorter than a day, as Claude's 5-hour one, never counts. `null` when no week is known |
+| `used_usd` | number | the part of its price the team used: each known week's price, from the plan it had then, times how full it got, averaged. With no week known, an estimate, `used_estimated`: its whole price, split by tokens, or `0` with no tokens either. `null` when its price is unknown |
+| `used_estimated` | bool | `used_usd` is an estimate, as no week of its Used is known: its whole price when the team spent tokens on it, else `0`. The console and the app show such a subscription's Used, and what nobody used of it, as unknown, `?`, and only its split by device as an estimate, `~` |
+| `unused_usd` | number | its price less `used_usd`; `null` when either is unknown |
+| `state` | string | `active`; `idle`, as `idle` in `attention`; `unconfirmed`, when its paid plan was last confirmed over 35 days ago, or no device has had it logged in for 14 days, and nobody said it is still paid in the last 35 days; or `ended`, when a person said it was cancelled, or a reading found it on a free plan. An ended subscription is in no total and shows for 30 days |
+| `idle_since`, `unconfirmed_since`, `ended_at` | time | since when it is in its `state`; `null` in another |
+| `plan_confirmed_at` | time | the team's newest reading of its quota, which proves its paid plan was live then |
+| `first_seen` | time | when this device first found it |
+| `last_seen` | time | the newest report of a device that had it logged in |
+| `billed_through` | string | `App Store` or `Google Play`, when Claude Code says the subscription is billed there, where its price may differ from the list's; `null` otherwise |
+| `consumers` | list | the devices that used it, `{device, device_id, usd, share}`, the most first: `share` is the device's part of its weighted tokens over the last 4 weeks, in percent, what Hermes spent through it on the device included, and `usd` that part of `used_usd`, `null` when its price is unknown |
+| `usd_per_m_weighted` | number | its price a month for a million of the team's weighted tokens on it over the last 4 weeks; `null` without a price or tokens |
+| `plans` | list | the plans it had, `{at, plan}`, oldest first, each with when a device first read it, up to 12 |
+
+A question is asked of a person only: in the interactive view, on the first run after the guide on a terminal, and by the menu bar app; never in a scheduled run or in `--json`. A charge day and a price are asked only on a device logged in to the subscription; whether it is still paid, on every device. A person answers with `ai-usage cost`, which the app runs too. `ai-usage cost skip ACCOUNT KIND` asks that question of the subscription no more on this device, until its plan changes for a charge day or a price, and `ai-usage cost never-ask` asks none.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | string | the question's id, the same for as long as it stands, and new after a plan change |
+| `kind` | string | `renewal`, its next charge, asked when nobody gave one; `price`, its price, asked when the list has none and nobody typed one; or `still_paid`, asked when its `state` is `unconfirmed` |
+| `provider`, `account` | string | the subscription |
+| `text` | string | the question in words, as `When does codex ann@acme.dev (Pro 200 at $200/mo) charge next?` |
+| `suggestion` | string | the answer offered: for a `renewal`, the next date, `YYYY-MM-DD`, on the day its tool says it began, the next one of the month, or of the year when a person said it is billed yearly; `null` when there is none |
+| `suggestion_yearly` | string | for a `renewal` with `choices`, the next anniversary of the day its tool says it began, `YYYY-MM-DD`, to offer when a person chooses `yearly`; `null` otherwise. Ask the cadence first, then the date with the suggestion of that cadence; `ai-usage cost set --renews` takes a day of the month only for a monthly subscription |
+| `choices` | list of strings | `monthly` and `yearly`, for a `renewal` of a plan the list prices yearly too, as the answer's cadence; for a `price` of a plan read without its tier, as Claude's `max` from a release that does not read it, the list's tiers of it, each its name and price a month, as `Max 5x $100`, whose dollars are the answer's price; `[]` otherwise |
+
+An event:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | string | the event's id, the same in every report, so that a reader tells it once: it is made of the subscription, the kind, and `at`, so a plan's tier read later does not change it |
+| `kind` | string | `new`, a subscription this device found after it began keeping costs; `plan_changed`, a read plan that is not the same plan as the one before, a provider's rename and a tier first read not counted; `price_changed`, the list price of its unchanged plan changed between two lists this device used; `ended`; `charges_soon`, from 3 days before a confirmed charge; or `unconfirmed`, when nobody could say any more that it is still paid |
+| `at` | time | when it happened: for `charges_soon`, 3 days before the charge |
+| `provider`, `account` | string | the subscription |
+| `from`, `to` | string | the plans of a change; `to` is the plan of a `new` subscription, a charge, and a subscription not confirmed, and `from` of one that ended; `null` otherwise |
+| `from_usd`, `to_usd` | number | their prices a month; of a `price_changed`, the old and the new list price. `null` when not known |
+| `delta_usd` | number | how much a month it changed the cost by: the price of a `new` subscription, or `to_usd` less `from_usd`; `null` when not known |
+| `text` | string | the event in words. A `price_changed` says that the new price applies from now on, and the `ai-usage cost set` that keeps the old one; a `charges_soon` says the price, the day, how much of the subscription was used over the last 4 weeks, and for how many days it has been unused, when idle |
+
 ## Changes from version 3
 
 - A matrix cell's `share` is an object with a value for each period, the device's part of the column's tokens in it. It was a number, an estimate of how much of the column's main window the device used: its `window_tokens` over the column's, times the column's `percent`, which a reader can still work out from those fields.
@@ -413,6 +495,8 @@ A cell:
 - `name` on the collector and on a team device, in v0.9.0: what the report calls a device, its OS user at its label, as `ann@mira-mbp`, so that the people and bots on one server read as the consumers they are. Every string that names a device, in rows, lists, and words, `replaced_by` and a `duplicate` entry's `message` among them, now says its `name` where it said its label, or `host (user)`. A device is still told apart by its `device` id, and `label` and `os_user` keep the parts. A report from an earlier release has no `name`: `ai-usage report --from` fills it in from `label` and `os_user`, and the rest of such a report names devices as it was saved. No field changed its type, so the version stays 4.
 - `method` and `command` in `collector.update`, in v0.8.0, so that a reader says how this copy updates instead of guessing from its path: `homebrew` with the command that upgrades it, or `self` with `null`. A report from an earlier release has neither: read a missing `method` as `self` and `command` as `null`, as `ai-usage report --from` fills them in. `schedule.error` can now be set while `schedule.registered` is `true`, to say another copy of ai-usage should go. No field changed meaning, so the version stays 4.
 - `no_reading` on a team account, in v0.9.0, says why for Codex and Grok too, and for a source that failed: a Codex that could not start app-server, answer, or read its limits, a login it refused, a Grok log with no credit usage or no signed-in user, and Claude Code's `/usage` that timed out or could not read the usage, each from a device the account is logged in to. The Grok provider's `error` can now say that its log has no credit usage yet, with `status` `ok`. No field changed meaning, so the version stays 4.
+
+- Cost, in v0.10.0: `cost`, with what each subscription costs a month, what the team used of it over the last 4 weeks and who used it, its next charge, its state, and the questions this device asks and the events of the last 30 days; the `check` and `cost` kinds in `attention`, with `event` on a `cost` entry; and an `idle` entry's `text` says its price a month. A report from an earlier release has no `cost`: read it as `null`, as `ai-usage report --from` leaves it. No field changed meaning, so the version stays 4.
 
 ## Example
 

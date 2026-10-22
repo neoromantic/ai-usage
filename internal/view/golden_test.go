@@ -122,6 +122,39 @@ func TestGolden(t *testing.T) {
 		{"detail-single-120", func() string {
 			return detailText(t, single, page(120), Pick{Provider: "claude", Label: single.Team.Providers[0].Accounts[0].Label})
 		}},
+		// The matrix in dollars, and its REST at 80 columns.
+		{"team-cost-120", func() string {
+			o := page(120)
+			o.Cost = true
+			return plainText(team, o)
+		}},
+		{"team-cost-80-ascii", func() string {
+			o := page(80)
+			o.Cost, o.ASCII = true, true
+			return plainText(team, o)
+		}},
+		{"team-cost-120-color", func() string {
+			o := page(120)
+			o.Color, o.Dark, o.Cost = true, true, true
+			return Text(team, o)
+		}},
+		// What ai-usage cost prints.
+		{"cost-120", func() string { return sgr.ReplaceAllString(CostText(team, page(120)), "") }},
+		{"cost-80-ascii", func() string {
+			o := page(80)
+			o.ASCII = true
+			return sgr.ReplaceAllString(CostText(team, o), "")
+		}},
+		{"cost-single-100", func() string { return sgr.ReplaceAllString(CostText(single, page(100)), "") }},
+		// A subscription no device has any more, nobody can say is still
+		// paid; one idle with no price; and a device's dollars.
+		{"detail-cost-gone-120", func() string { return detailText(t, team, page(120), Pick{Provider: "claude", Label: "old@acme.dev"}) }},
+		{"detail-cost-idle-100", func() string {
+			return detailText(t, single, page(100), Pick{Provider: "codex", Label: "work@example.org"})
+		}},
+		{"detail-cost-device-120", func() string {
+			return detailText(t, team, page(120), Pick{Device: "d-2f8a6c4e0b9d7f1a3c5e7b9d"})
+		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			got := c.out()
@@ -170,7 +203,7 @@ func TestWidths(t *testing.T) {
 			for _, per := range Periods {
 				for _, share := range []bool{false, true} {
 					for _, ascii := range []bool{false, true} {
-						o := Options{Width: w, Period: per, Share: share, ASCII: ascii, AllProjects: share, Loc: sampleZone}
+						o := Options{Width: w, Period: per, Share: share, Cost: share && ascii, ASCII: ascii, AllProjects: share, Loc: sampleZone}
 						checkLines(t, name, o, Text(r, o))
 						checkLines(t, name, devices(o), Text(r, devices(o)))
 						o.Interactive, o.MatrixScroll, o.Busy = true, 3, "|"
@@ -230,7 +263,7 @@ func TestPageFits(t *testing.T) {
 			for _, status := range []bool{false, true} {
 				for _, share := range []bool{false, true} {
 					for _, per := range Periods {
-						o := Options{Width: w, Loc: sampleZone, DeviceStatus: status, Share: share, Period: per}
+						o := Options{Width: w, Loc: sampleZone, DeviceStatus: status, Share: share, Cost: share && per == Week, Period: per}
 						p := Render(r, o)
 						body := 0
 						for _, l := range p.Body {

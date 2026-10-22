@@ -84,6 +84,7 @@ func (d Doc) Validate() error {
 	return cmp.Or(
 		checkList("accounts", d.Accounts, MaxAccounts, Account.validate),
 		checkList("aliases", d.Aliases, MaxAliases, Alias.validate),
+		checkList("costs", d.Costs, MaxCosts, Cost.validate),
 		checkList("sources", d.Sources, MaxSources, Source.validate),
 	)
 }
@@ -209,6 +210,22 @@ func (a Alias) validate() error {
 		return err
 	}
 	if a.At.IsZero() {
+		return errors.New("at is missing")
+	}
+	return nil
+}
+
+func (c Cost) validate() error {
+	if !KnownProvider(c.Provider) {
+		return errors.New("unknown provider")
+	}
+	if err := sealedText.check("label", c.Label, true); err != nil {
+		return err
+	}
+	if err := sealedText.check("data", c.Data, true); err != nil {
+		return err
+	}
+	if c.At.IsZero() {
 		return errors.New("at is missing")
 	}
 	return nil

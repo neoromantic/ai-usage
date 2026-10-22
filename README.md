@@ -13,6 +13,7 @@
 <a href="https://au.sergeybaus.com"><b>Website</b></a> ·
 <a href="#quick-start"><b>Quick start</b></a> ·
 <a href="#what-it-shows"><b>What it shows</b></a> ·
+<a href="#cost"><b>Cost</b></a> ·
 <a href="#install"><b>Install</b></a> ·
 <a href="#teams"><b>Teams</b></a> ·
 <a href="#privacy"><b>Privacy</b></a> ·
@@ -33,6 +34,7 @@ ai-usage is one small binary for macOS, Linux, and Windows. The system scheduler
 - **Every subscription on one page.** Claude Code and the Claude app's agent-mode sessions, Codex from its CLI, the ChatGPT app, or an IDE extension, Grok, and Hermes. Each account shows its 5-hour, weekly, and per-model windows, and its tokens today and over 7, 30, and 90 days, weighed by what the API charges for each kind.
 - **A forecast, not just a percentage.** Each window says how full it will be at its reset at your pace, the average since it began or the last day's when that is faster: `over`, `tight`, `ok`, or `under`. An `over` window says when it runs out.
 - **How full each window got before it reset,** over the last 90 days, for every account in the team: a subscription that runs out week after week, or one mostly left unused.
+- **What the subscriptions cost,** a month, from a price list or the price you typed: how much of it the team used over the last 4 weeks, which machine used it, in dollars, when each one charges next, and which ones nobody uses or can say are still paid. See [Cost](#cost).
 - **ATTENTION, only when something is wrong.** A full window, one that will run out before its reset, a machine whose tool fails or that stopped reporting, an old release, a subscription nobody uses.
 - **The whole team.** Laptops, servers, and bots in containers, every machine against every subscription, with each one's share. A colleague joins with one command. See [Teams](#teams).
 - **Private by design.** The relay sees tools, plans, and numbers. Names, emails, and project paths are encrypted with the team key, and every snapshot is signed. See [Privacy](#privacy).
@@ -75,7 +77,7 @@ Questions, ideas, a tool you want supported: write me on Telegram, [@usualguy](h
 
 ## Contents
 
-- [What it shows](#what-it-shows)
+- [What it shows](#what-it-shows), and what the subscriptions [cost](#cost)
 - [Install](#install) and the [first run](#first-run)
 - [Teams](#teams) and the [relay](#relay)
 - [Commands](#commands)
@@ -94,7 +96,7 @@ The team in the picture is made up. [docs/demo](docs/demo) has its report and mo
 <summary>The same page as text, for another made-up team</summary>
 
 ```
-ai-usage · ann@annbook · team qmvrtzpa                                 ● collected 7m ago  ● relay 7m ago  ● up to date
+ai-usage · ann@annbook · team qmvrtzpa                      ● collected 7m ago  ● relay 7m ago  ● up to date  $1,000/mo
 
 ATTENTION
  OUT      codex ann@acme.dev   back Fri 17:09, in 1d 23h
@@ -103,7 +105,7 @@ ATTENTION
  OVER     codex sam@mail.test  runs out ~Sat 03:01 at the last day's pace, 2d 17h before reset
  OUTSIDE  codex lee@corp.test  +25 points in 20h, no team device spent
  ERROR    kim@Mac.localdomain  codex: app-server exited without answering
- +3 more: 1 no reading, 1 duplicate, 1 old
+ +7 more: 1 no reading, 1 duplicate, 1 old, 1 check, 3 cost
 
 SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
 
@@ -121,6 +123,22 @@ SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
   GROK
 ● a4c2e917       SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  ann@annbook          11h
 
+COST  $1,000/mo +1 without a price · used ~$787 (79%) over the last 4 weeks · next: Fri 25 Sep, $200
+
+  CLAUDE            PLAN             $/MO   USED       NEXT
+● ann@acme.dev      Max 20x          $200   $182  91%  Fri 25 Sep
+  kim@corp.test     max                 ?      ?  64%  ·
+  old@acme.dev      Pro               $20     $0   0%  ·           still paid?
+
+  CODEX
+● ann@acme.dev      Pro 200          $180*  $155  86%  Mon 12 Oct
+  sam@mail.test     Pro 100          $100    $94  94%  ·           typed for plus
+● lee@corp.test     Pro 200          $200    $56  28%  ·
+  ann+old@acme.dev  Plus              $20     $3  15%  ·           ended
+
+  GROK
+● a4c2e917          SuperGrok Heavy  $300      ?       ·
+
 UTILIZATION  fullest % before each reset
   only this device's cycles: ci@ci-runner-eu-west-build-pool-node-0042ab runs v0.3…: it should update within 15 minutes
 
@@ -134,7 +152,7 @@ UTILIZATION  fullest % before each reset
   sam@mail.test       4    1  94%    97   91  100  ~88
 ● lee@corp.test       9    ·  28%    22  ~35   18   40   27   31   12   44   19
 
-DEVICES × SUBSCRIPTIONS  15 · 7d UTC · M weighted tokens                  ‹usage›  status   ‹tokens›  share
+DEVICES × SUBSCRIPTIONS  15 · 7d UTC · M weighted tokens              ‹usage›  status   ‹tokens›  share   $
                         CODEX ─────────────────────────────  CLAUDE ──────────  GROK ───  NO QUOTA
                              lee      ann  unknown      sam       ann      kim  a4c2e917    hermes     TOTAL
   root@srv1                 1080       53        ·        ·        25        ·         ·        49      1207
@@ -168,7 +186,7 @@ PROJECTS  ann@annbook · by 7d · M weighted tokens · claude since Sep 2
   ~/src/acme/landing                                  4    32     1  codex            6d
   + 4 more
 
-━ used  ─ left  ┃╋ even use  ┈ no reading  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
+━ used  ─ left  ┃╋ even use  ┈ no reading  * typed  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
 ~ stale/estimated: ci@ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it should update within 15 minutes
 ```
 
@@ -190,11 +208,49 @@ DEVICES × SUBSCRIPTIONS is every machine against every subscription, in million
 
 The matrix shows accounts by short names: the part of an email before the `@`, or the first 8 characters of an id. `ai-usage alias` gives an account a name for the whole team; see [Teams](#teams).
 
-When standard input and output are both terminals, `ai-usage` opens the same page as an interactive view. It scrolls, with the head of DEVICES kept at the top while its rows go by, and the matrix scrolls sideways; `s` switches DEVICES between the matrix and the status view, `p` picks the period (today, 7, 30, or 90 days), `%` shows each machine's percent of each subscription's tokens in the period, and in TOTAL of all the team's, `r` collects now, `?` lists every key, and `q` quits. `Enter` picks a row, an account or a machine, a bot's container included, and `↑` `↓` move the pick; `Enter` again, or a click on the picked row, opens its detail in the page's place, and `Esc` or `Backspace` goes back. An account's detail has its ATTENTION lines, the reading and where it came from, each window with its bar, reset, forecast, pace, and when it runs out at that pace, how full each window got before its last resets, every machine that spent it, in its current window and over each period, with its share of the account, and this machine's projects on it. A machine's detail, under its name such as `hermes@scout`, has its ATTENTION lines, its release, last report, the tools it reads and each error in full, every account it spent with its share of each, its share of the team's tokens, and, for this machine, its projects. Piped output, `--json`, `--plain`, and `TERM=dumb` print the page instead, and so does the installer's first run. The page is at its best at 120 to 160 columns; narrower, it drops columns in a fixed order, down to 80.
+When standard input and output are both terminals, `ai-usage` opens the same page as an interactive view. It scrolls, with the head of DEVICES kept at the top while its rows go by, and the matrix scrolls sideways; `s` switches DEVICES between the matrix and the status view, `p` picks the period (today, 7, 30, or 90 days), `%` shows each machine's percent of each subscription's tokens in the period, and in TOTAL of all the team's, `$` what each machine used of each subscription in dollars, as [Cost](#cost) says, `r` collects now, `?` lists every key, and `q` quits. `Enter` picks a row, an account or a machine, a bot's container included, and `↑` `↓` move the pick; `Enter` again, or a click on the picked row, opens its detail in the page's place, and `Esc` or `Backspace` goes back. An account's detail has its ATTENTION lines, the reading and where it came from, each window with its bar, reset, forecast, pace, and when it runs out at that pace, how full each window got before its last resets, every machine that spent it, in its current window and over each period, with its share of the account, and this machine's projects on it. A machine's detail, under its name such as `hermes@scout`, has its ATTENTION lines, its release, last report, the tools it reads and each error in full, every account it spent with its share of each, its share of the team's tokens, and, for this machine, its projects. Piped output, `--json`, `--plain`, and `TERM=dumb` print the page instead, and so does the installer's first run. The page is at its best at 120 to 160 columns; narrower, it drops columns in a fixed order, down to 80.
 
 ![An account's detail in the interactive view: the Codex login a server and nine bots share, each window with its reset, forecast, pace, and when it runs out, and every machine that spent it with its share](docs/demo/social/team-detail.png)
 
 ![The interactive view, key by key: the page, s for status, % for each machine's share, Enter for an account's detail, p for 30 days, and ? for help](docs/demo/social/tour.gif)
+
+## Cost
+
+![COST for a made-up team: each subscription's price a month, what the team used of it over the last 4 weeks, its next charge, a price typed with VAT, one typed for an older plan, one with no price, one nobody can say is still paid, one that ended, and one paid and idle](docs/demo/social/team-cost.png)
+
+COST, after SUBSCRIPTIONS, is what the team's Claude, Codex, and Grok subscriptions cost a month: a budget, not accounting. Its first line is the team's total a month, which also ends the header, how much of it the team used over the last 4 weeks, and the next charge. Then a row per subscription, grouped by tool:
+
+- **PLAN** as the price list names it.
+- **$/MO**, the price a month: the list price of the plan, or the price a person typed, marked `*`; a plan billed yearly counts a twelfth of the year's price. `?` marks a plan the list has no price for, such as a team, business, enterprise, or education plan, or a Claude Max whose tier an older release did not read, and the first line counts them. A price typed for another plan no longer counts: the row says `typed for max 5x`, and the list's price counts until someone types the new one. Prices are the providers' US list prices in USD; a Claude subscription billed through the App Store or Google Play may cost more there, and its detail says so.
+- **USED**, in dollars and percent: how much of the price the team used over the last 4 weeks. Each week counts as full as the subscription's weekly window got before it reset, or the longest window of a day or more its tool has, never Claude's 5-hour one; a week with no reading and no tokens counts 0%, and a week with tokens but no reading is left out, and so is a week before the team first found the subscription. After a change of plan, each week counts at the price of its plan. When no week is known, as when the subscription is new or the machines that used it run a release that sends no quota cycles, USED is `?`, and the matrix in dollars splits the whole price by tokens, marked `~`.
+- **NEXT**, the next charge, once a person said when it charges: the same day each month, the last day of a shorter month, or the same date each year.
+- What is wrong, when something is: `idle 9d`, a paid subscription no team machine used for a week; `still paid?`, when nobody can say, because its plan was last confirmed by a reading of its quota over 35 days ago, or no machine has had it logged in for 14 days, and nobody confirmed it in the last 35 days; and `ended`, when a reading found a free plan or a person cancelled it. An ended subscription counts in no total and goes after 30 days. A subscription stays in COST after the last machine that had it is gone, until it ends, so one nobody uses cannot drop out of the cost.
+
+ATTENTION gives IDLE its price, "idle 9d, $25/mo paid and unused"; asks CHECK of a subscription nobody can say is still paid, "still paid? last confirmed 21 Aug · no device since 21 Aug: ai-usage cost confirm claude:jun@studio.dev or cancel"; and for 3 days says COST when a subscription is new, its plan changed, as "plan Max 5x → Max 20x, +$81/mo", or the list price of its plan changed. Hermes borrows a Claude, Codex, or Grok login, so what it spends counts as that login's use, and it costs nothing of its own.
+
+In the interactive view, `$` shows DEVICES × SUBSCRIPTIONS in dollars over the last 4 weeks: a cell is what the machine used of the subscription, its part of the subscription's weighted tokens times the dollars used; `unused` is what nobody used, and the TOTAL row is each subscription's price, so every column adds up to it, and the TOTAL column to the row; a line under it says what COST counts that no machine has, and the subscriptions without a price. `%` goes from dollars to shares. A subscription's detail adds its price and where it comes from, used and unused, the next charge, its state, who bills it, its price for a million weighted tokens, its plans, and what each machine used of it; a machine's detail adds what it used of each subscription, and in all.
+
+![DEVICES × SUBSCRIPTIONS in dollars: what each machine of a made-up team used of each subscription over 4 weeks, what nobody used, and each subscription's price in the TOTAL row](docs/demo/social/team-dollars.png)
+
+**Questions.** ai-usage asks a person what no tool says: when a subscription logged in on this machine charges next, and whether monthly or yearly when the list prices its plan yearly too, with the day Claude Code says the subscription began as a suggestion; its price, when the list has none, offering the list's tiers when a plan was read without its tier, as Claude's Max from an older release; and, on every machine, whether a subscription nobody can confirm is still paid. The interactive view asks one at a time, on the line over the key bar: type the answer, `Enter` takes the suggestion, `y` or `n` says whether it is still paid, `s` skips the question, `S` asks no more on this machine, and `Esc` asks later. The first run on a terminal asks them after the guide, and the [menu bar app](#menu-bar-app) asks in a notification and in Settings. A skipped question is not asked again of that subscription, except a charge day or a price after its plan changes. A scheduled run, a run without a terminal, and `--json` ask nothing. `e` on a picked or open subscription asks for its cadence, price, and next charge.
+
+```sh
+ai-usage cost                                           # COST, and what each machine used
+ai-usage cost --json                                    # the report's cost object
+ai-usage cost set claude:ann@acme.dev --renews 12       # charges on the 12th of each month
+ai-usage cost set codex:bots@acme.dev --price 238       # what each charge costs, here with VAT
+ai-usage cost set grok:ann@acme.dev --yearly --price 300 --renews 2027-03-02
+ai-usage cost confirm claude:jun@acme.dev               # still paid
+ai-usage cost cancel codex:ci@acme.dev                  # cancelled: ended from now
+ai-usage cost reset codex:bots@acme.dev                 # back to the list price
+ai-usage cost skip claude:ann@acme.dev renewal          # never ask this again
+ai-usage cost never-ask                                 # ask nothing on this machine; --undo asks again
+ai-usage cost prices                                    # the price list in use, its date, and where it came from
+```
+
+ACCOUNT is a label, a name, or `PROVIDER:LABEL`, as for `ai-usage alias`. A price is what each charge costs, so with `--yearly` it is the year's. What a person types travels sealed in this machine's snapshot, so the whole team sees it after this machine's next run, and for each answer the newest from any machine counts. It travels only once every machine in the team runs v0.10.0 or later; until then, it counts on the machine it was typed on.
+
+**Prices.** The price list is built into ai-usage, each price with the page it was checked on, and the relay serves its own copy. Once a day each collector asks the relay for the list and keeps whichever of the two was checked later, so a price fixed in this repository reaches every machine within a day, without a release; a failed ask says nothing, and the built-in list serves. When the list price of a plan changes, the new price counts from then on, and `ai-usage cost set ACCOUNT --price N` keeps the old one.
 
 ## Menu bar app
 
@@ -212,7 +268,7 @@ On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/A
   <img alt="The menu bar item in each state: on track, tight, used up, stale, over, out, time until reset, no reading, and the ring alone" src="docs/demo/app-menubar.png">
 </picture>
 
-**The popover** opens with one line that answers the first question: what is out and when it is back, what runs out and when, or that all is on track and where the most room is. When the report has more to say, the line ends with a link, "11 alerts ›", to every entry of its ATTENTION, in its order and its words, in place of the tab: one line each with the mark of its kind, a click opening the subscription in Limits or the devices in Usage, and last the subscription with the most room. Chips under it name what to fix on the devices, such as errors or a device that stopped reporting; a click shows those devices. At the line's end, a dot is the collector's health with the report's age, ↻ collects now, and ⋯ opens the menu. Then three tabs, and for a team, the Team button, which opens the Team window:
+**The popover** opens with one line that answers the first question: what is out and when it is back, what runs out and when, or that all is on track and where the most room is. When the report has more to say, the line ends with a link, "11 alerts ›", to every entry of its ATTENTION, in its order and its words, in place of the tab: one line each with the mark of its kind, a click opening the subscription in Limits or the devices in Usage, and last the subscription with the most room. Chips under it name what to fix on the devices, such as errors or a device that stopped reporting; a click shows those devices. At the line's end, a dot is the collector's health with the report's age, ↻ collects now, and ⋯ opens the menu; under them, the team's subscriptions cost a month, `$703/mo`, and a click on it opens the Team window on Cost, or Settings on Cost for one Mac alone. Then three tabs, and for a team, the Team button, which opens the Team window:
 
 <table>
 <tr>
@@ -226,7 +282,7 @@ On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/A
 - **Usage:** the tokens of each device or each subscription, today or over 7, 30, or 90 days, in whole millions.
 - **Projects:** this Mac's repositories, their worktrees counted in, grouped by the folder they share.
 
-A click on a row opens its details: each window with its forecast, and the forecast of the one that runs out with the pace it takes, or where it was headed when nobody spent on it since; who spent the window since it began, "root@build-01 84M, hermes@scout 35M, +8 more · since 21 Sep 02:40", the busiest first and the rest as a count; when the subscription was last used; how old its reading is and which device took it, when the reading is old or another device's; and why the report calls it idle or could not read it, which a click on the line of the subscriptions not read also gives whole; a device's release, tools, and errors, in the words of the report's NOTE; a project's sessions. Color means a problem only: red is out, orange runs out before the reset, yellow is tight. `⌘1` to `⌘3` switch the tabs and `⌘R` collects now.
+A click on a row opens its details: each window with its forecast, and the forecast of the one that runs out with the pace it takes, or where it was headed when nobody spent on it since; who spent the window since it began, "root@build-01 84M, hermes@scout 35M, +8 more · since 21 Sep 02:40", the busiest first and the rest as a count; when the subscription was last used; how old its reading is and which device took it, when the reading is old or another device's; and why the report calls it idle or could not read it, which a click on the line of the subscriptions not read also gives whole; its cost, "$238/mo typed · used ?" when no week of its Used is known, or "$200/mo · used 46% · next charge Sun 27 Sep", with `idle 9d`, `still paid?`, or `ended` when it is so; a device's release, tools, and errors, in the words of the report's NOTE; a project's sessions. Color means a problem only: red is out, orange runs out before the reset, yellow is tight. `⌘1` to `⌘3` switch the tabs and `⌘R` collects now.
 
 <table>
 <tr>
@@ -242,7 +298,7 @@ A click on a row opens its details: each window with its forecast, and the forec
   <img alt="The menu: Status with the collection, the relay, the update, and this Mac; Actions with Collect Now and Team Window; Open in Terminal with Report, Device Status, and All Projects; and AI Usage with Settings and Quit" src="docs/demo/app-menu.png" width="300">
 </picture>
 
-**The Team window** has the whole team on one screen, as the terminal's DEVICES does. The Team button beside the popover's tabs opens it, and so do `⌘D` and Team Window… in the menu; with only this Mac there is no team, so none of them shows. Usage puts each device against each subscription, grouped by tool, then the tokens no subscription covers and TOTAL. A cell is shaded by its tokens, a step for every half of a tenfold below the largest, as in the terminal, and its tooltip says "root@build-01 · Codex bots: 131M in 7 Days · 46% of column · 84M this window"; a subscription's name is in the color of its state. Status has each device's release (↓ when it is behind the latest), last report, the tools it reads (× for a failing one), its tokens in each period, and the report's NOTE. A click on a heading sorts the rows; until then they are in the report's order. As in the terminal, `1`, `7`, `3`, and `9` pick the period, `%` switches Usage between tokens and each device's share of its column, and `s` switches between Usage and Status. The window opens where it was last, at its size.
+**The Team window** has the whole team on one screen, as the terminal's DEVICES does. The Team button beside the popover's tabs opens it, and so do `⌘D` and Team Window… in the menu; with only this Mac there is no team, so none of them shows. Usage puts each device against each subscription, grouped by tool, then the tokens no subscription covers and TOTAL. A cell is shaded by its tokens, a step for every half of a tenfold below the largest, as in the terminal, and its tooltip says "root@build-01 · Codex bots: 131M in 7 Days · 46% of column · 84M this window"; a subscription's name is in the color of its state. Status has each device's release (↓ when it is behind the latest), last report, the tools it reads (× for a failing one), its tokens in each period, and the report's NOTE. A click on a heading sorts the rows; until then they are in the report's order. Cost puts each device against each subscription that has not ended in dollars over the last 4 weeks, with Unused and Total rows under them, so every column adds up to the subscription's price, and the team's total a month in its header. As in the terminal, `1`, `7`, `3`, and `9` pick the period, `%` switches Usage between tokens and each device's share of its column, `s` switches between Usage and Status, and `$` to Cost and back. The window opens where it was last, at its size.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/demo/app-team-light.png">
@@ -254,16 +310,28 @@ A click on a row opens its details: each window with its forecast, and the forec
   <img alt="The Team window on Status: each device's collector version, when it last reported, its tools, its tokens today and over 7, 30, and 90 days, and the report's note" src="docs/demo/app-team-status.png">
 </picture>
 
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/demo/app-team-cost-light.png">
+  <img alt="The Team window on Cost: what each device used of each subscription in dollars over 4 weeks, what nobody used, each subscription's price, and the team's $703 a month" src="docs/demo/app-team-cost.png">
+</picture>
+
 **Notifications** say when a window is out, "Claude mira · 5h is out", with when it is back, and when one will run out before its reset, "Claude mira · 7d runs out ~Sat 11:12", with how long before its reset. A window whose run-out time passed with nobody on the team spending on it since gets none. They are the windows the report's ATTENTION marks out and over, and Settings picks which: When a Window Is Out (on by default); When a Window Will Run Out, Within a Day (the default), Any Time, or Never, since a forecast early in a long window can say it runs out days ahead and change by the next reading; and Subscriptions, This Mac's (the default), those logged in here, or The Team's, every subscription with a reading, bots' included, where a notification also names the device that uses it most, "used on root@build-01 +9". Each window gets one notification per period and state, not one at every run: a forecast that dips under 100% and rises again says nothing new, and after its reset a window starts over. The app remembers what it said in its settings, so a restart says nothing twice. A click on a notification opens the popover on that subscription in Limits, when the menu bar has room to show the app's item. macOS asks for permission when there is first something to say, or when you turn a notification on; when you decline, the app asks no more, and Settings says where to turn notifications on.
 
-**Settings** does what the terminal commands do: this Mac's name in the team (`ai-usage name`), the names of accounts (`ai-usage alias`), the relay (`ai-usage relay`), the team key, open at login, what the menu bar shows and whose subscriptions it tracks, notifications, and updates. About names the app and its version once, beside Check for Updates, which runs `ai-usage update` and so updates the app too, and says where the command-line tool is, "Command-Line Tool (Homebrew)" when the report says Homebrew installed it. It names the tool's release only when it is another one, "Command-line tool v0.5.1: updates with Check for Updates", or "Command-line tool v0.5.1 (Homebrew): updates with Check for Updates or brew upgrade", or says the tool is not found. Under Homebrew, Check for Updates runs `ai-usage update`, which runs `brew upgrade neoromantic/tap/ai-usage` and brings the app to the release brew installed; it waits up to 15 minutes for it. When it fails, the app shows ai-usage's own error, not what brew printed before it.
+The cost has three notifications of its own, each on by default and for the same subscriptions: a change, such as a new subscription, a change of plan or of a list price, or one that ended; a charge in 3 days, with how much of the subscription was used; and the [questions](#cost) the report asks on this Mac. Whether a subscription is still paid has the actions Still Paying, Cancelled, and Skip; a charge day or a price has a field to type it in and Skip, and a charge day also Use the Suggested Day when the report has one. An answer runs `ai-usage cost`, and when it refuses the answer, a notification says why. Each is said once, a change or a charge only within 3 days of it, so the first run of a new release does not tell a month of news. A click opens Settings on Cost.
+
+**Settings** does what the terminal commands do: this Mac's name in the team (`ai-usage name`), the names of accounts (`ai-usage alias`), the relay (`ai-usage relay`), the team key, open at login, what the menu bar shows and whose subscriptions it tracks, notifications, updates, and the cost (`ai-usage cost`). Cost has this Mac's questions on top, then each subscription with its plan, who bills it, Used, next charge, and state; a click on one opens its price, Billed (Monthly or Yearly), Next Charge, Still Paying, Cancelled, and Reset; and under them the cost's notifications. About names the app and its version once, beside Check for Updates, which runs `ai-usage update` and so updates the app too, and says where the command-line tool is, "Command-Line Tool (Homebrew)" when the report says Homebrew installed it. It names the tool's release only when it is another one, "Command-line tool v0.5.1: updates with Check for Updates", or "Command-line tool v0.5.1 (Homebrew): updates with Check for Updates or brew upgrade", or says the tool is not found. Under Homebrew, Check for Updates runs `ai-usage update`, which runs `brew upgrade neoromantic/tap/ai-usage` and brings the app to the release brew installed; it waits up to 15 minutes for it. When it fails, the app shows ai-usage's own error, not what brew printed before it.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/demo/app-settings-light.png">
   <img alt="Settings, General: what the menu bar shows and whose subscriptions it tracks, notifications when a window is out or will run out and for whose subscriptions, this Mac's name, open at login, and About with the app's version and where the command-line tool is" src="docs/demo/app-settings.png" width="460">
 </picture>
 
-The app computes nothing itself. It runs `ai-usage report --json` every minute and when the popover opens, and shows what the report says: forecasts, states, what needs attention, and the collector's health. Its notifications come from the same report. The tooltip of a release that is out takes its words from the report too: "ai-usage v0.5.0 installs v0.5.1 on its next check" for a script install, and "v0.5.1 is out; Update runs brew upgrade neoromantic/tap/ai-usage" for a Homebrew one. It finds the binary through the launch agent, or shows the install command when there is none, with the Homebrew one under it. To go without it, install with `AI_USAGE_NO_APP=1`, or remove it as [Uninstall](#uninstall) shows; neither self-update nor `brew upgrade` brings it back, and `ai-usage app install` does.
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/demo/app-settings-cost-light.png">
+  <img alt="Settings, Cost: whether a former teammate's Claude Pro is still paid, with Still Paying, Cancelled, and Skip, and when this Mac's Claude charges next, with the suggested day; then each Claude and Codex subscription with its plan, Used, and price a month" src="docs/demo/app-settings-cost.png" width="460">
+</picture>
+
+The app computes nothing itself. It runs `ai-usage report --json` every minute and when the popover opens, and shows what the report says: forecasts, states, what needs attention, the cost, and the collector's health. It keeps no answer of its own either: each one runs `ai-usage cost`. Its notifications come from the same report. The tooltip of a release that is out takes its words from the report too: "ai-usage v0.5.0 installs v0.5.1 on its next check" for a script install, and "v0.5.1 is out; Update runs brew upgrade neoromantic/tap/ai-usage" for a Homebrew one. It finds the binary through the launch agent, or shows the install command when there is none, with the Homebrew one under it. To go without it, install with `AI_USAGE_NO_APP=1`, or remove it as [Uninstall](#uninstall) shows; neither self-update nor `brew upgrade` brings it back, and `ai-usage app install` does.
 
 ## Install
 
@@ -397,6 +465,7 @@ The first run:
 - registers with the scheduler: a line in your crontab on Linux, a launch agent on macOS, a task named `ai-usage` in Task Scheduler on Windows
 - collects and prints the report
 - prints a short guide under the report: which scheduler now collects every 15 minutes, or what to do when none could be registered; what the team and the relay see; what a weighted token weighs; when it applies, that the team's tables count UTC days, and today from your local midnight, that the ledger holds less than 90 days of Claude, or why the team's totals are estimated; and the commands worth knowing, with how to invite a colleague, `ai-usage app install` on a Mac with macOS 14 or later that does not have the menu bar app, how to pause the system scheduler's runs, and how to uninstall
+- on a terminal, asks the [cost](#cost) questions after the guide, one per line: when each subscription logged in here charges, its price when the list has none, and whether one nobody can confirm is still paid. An empty line takes the suggestion, or leaves the question for later; `s` skips it for good, and `S` asks nothing more
 
 The guide is printed once. When the scheduler collected first, or the first run you started used `--json`, the guide comes with the next `ai-usage` that prints text; `ai-usage report` never prints it.
 
@@ -435,6 +504,8 @@ The state folder is `~/Library/Application Support/ai-usage` on macOS, `$XDG_CON
 | `state.json.bad` | a `state.json` that did not parse, kept when a run started again from `state.json.last`, or from an empty state when that did not parse either |
 | `state.json.pre-v0.4` | the `state.json` a release before v0.4.0 saved, kept once for going back to it |
 | `projects.json` | the project each folder belonged to, so a worktree that is gone still counts with its repository |
+| `cost.json` | the team's subscriptions as this device found them, with each one's plans, the prices, cadences, and charge days people typed, and the questions skipped and news already told; one a later release saved is left as it is |
+| `prices.json` | the relay's price list, as last fetched, and when |
 | `cache/` | what the last run parsed of each Claude Code transcript, so the next one reads only what was added |
 | `team-cache.json` | the team's snapshots from the last read |
 | `samples/` | one file per day of samples, kept for 90 days; UTILIZATION finds each window's periods in them |
@@ -459,6 +530,8 @@ In the team view, token counts add up across machines. Quota percentages do not:
 While any machine in the team runs a release before v0.4.0, every machine sends the snapshot such a release reads, without weighted tokens, so that none drops out of its view. The team's weighted tokens are then estimated from input and output, marked `~`, and the legend names the machines holding them back and what to do: releases from v0.2.5 on should update within 15 minutes, and one that has not, as when its update fails or Homebrew installed it, takes `ai-usage update` on it; older ones need `install.sh` again. A retired machine on an old release, or one silent for over a week, holds them back until `ai-usage team forget-device` forgets it.
 
 Likewise, while any machine runs a release before v0.5.0, no machine sends the periods UTILIZATION shows, since such a release cannot read them: each machine shows its own, and a line under the section's title names the machines holding them back and what to do. A relay that does not accept them yet, because it runs an older release, has each machine send its snapshot without them and try again a day later.
+
+The same holds for what people type with [`ai-usage cost`](#cost), from v0.10.0: while any machine runs an older release, each answer counts only on the machine it was typed on. A relay before v0.10.0 neither keeps the answers nor serves a price list, so every machine uses the list built into its release.
 
 ![DEVICES × SUBSCRIPTIONS for a made-up team: twelve machines, most of them bots, against six subscriptions and the tokens no login was known for, in millions of weighted tokens over 7 days](docs/demo/social/team-matrix.png)
 
@@ -523,6 +596,13 @@ Or, from a clone with the Vercel CLI logged in, run `sh scripts/deploy-relay.sh`
 | `ai-usage alias` | list the names the team gave accounts |
 | `ai-usage alias ACCOUNT NAME` | name an account for the whole team, in at most 12 columns; `ACCOUNT` is a label, a name, or `PROVIDER:LABEL` |
 | `ai-usage alias ACCOUNT --clear` | go back to the account's default name |
+| `ai-usage cost [--json] [DISPLAY]` | what the team's subscriptions cost a month, how much of it the team used over the last 4 weeks, and which machine used it; see [Cost](#cost) |
+| `ai-usage cost set ACCOUNT [--price N] [--monthly\|--yearly] [--renews DAY]` | type what a subscription costs each charge, a year's with `--yearly`, and its next charge, DAY as `YYYY-MM-DD`, or a day of the month when it is billed monthly; a change of cadence alone turns a typed price into the new cadence's; the whole team sees it |
+| `ai-usage cost confirm ACCOUNT`, `ai-usage cost cancel ACCOUNT` | say a subscription is still paid, or that it was cancelled |
+| `ai-usage cost reset ACCOUNT` | clear the typed price, cadence, and charge day, so the list price counts again |
+| `ai-usage cost skip ACCOUNT renewal\|price\|still_paid` | never ask this machine that question of the subscription again |
+| `ai-usage cost never-ask [--undo]` | ask no cost questions on this machine |
+| `ai-usage cost prices` | the price list in use, when it was checked, and where it came from |
 | `ai-usage schedule install` | register with the scheduler, and let later runs keep it registered |
 | `ai-usage schedule remove` | unregister, and stop later runs from registering again |
 | `ai-usage schedule status` | whether the scheduler runs this binary with this state folder, or was disabled by hand; on macOS, from the job launchd has loaded, not only the plist |
@@ -587,7 +667,7 @@ The collector runs in a container as on any Linux machine: install it inside, as
 schema_version, generated_at
 collector   version, device, team, last run, last success, last error,
             relay, schedule, and update state, and health[] as the header shows it
-attention[] out, over, tight, outside, error, no_reading, silent, duplicate, old, under, idle: the account or
+attention[] out, over, tight, outside, error, no_reading, silent, duplicate, old, under, idle, check, cost: the account or
             devices, when, and why, and subject and text, the line as the console words it
 providers[] claude, codex, grok, hermes: status (ok, partial, error, skipped), error, homes,
             covered_since, accounts[]: label, name, home, plan, state (out, over, tight, ok,
@@ -601,6 +681,10 @@ team        pulled_at, latest_version, estimated, held_back_by, estimated_reason
             with accounts summed across devices (name, alias, state, quota, usage, burn, users,
             busiest, no_reading, outside, per_device[], linked_usage[]), and matrix (columns[],
             rows[] with share and burn_share, of cells with share and burn_share)
+cost        currency, total_usd, used_usd, used_pct, unused_usd, without_price, next_charge, prices,
+            subscriptions[] (plan, price_usd, price_source, cadence, renews_at, used_usd, used_pct,
+            unused_usd, state, consumers[], plans[]), devices[], questions[], and events[] of the
+            last 30 days, each with an id that stays the same
 ```
 
 `ai-usage status --json` prints `schema_version`, `collector`, and `sources[]`. Every field is described in [docs/json-schema.md](docs/json-schema.md).
@@ -616,16 +700,20 @@ Sealed with the team key, so only the team can read them:
 - project folder paths
 - error messages
 - the names `ai-usage alias` gave accounts
+- what people typed with `ai-usage cost`: prices, cadences, charge days, and that a subscription is still paid or was cancelled, each with the label of its account
 
 In plain text, so the relay can check the shape:
 
 - the team fingerprint, the device id (random), and the collector version
-- provider names, plan names, and whether an account is logged in
+- provider names, plan names, and whether an account is logged in; from v0.10.0 a Claude Max plan names its tier, as `max 20x`
+- the provider and time of each cost answer
 - quota window names, percentages, and reset times
 - session and token counts, tokens and weighted tokens per day and since each quota window began, and timestamps
 - each tool's status: ok, partial, error, or skipped
 
-So the relay's operator can see how many machines a team has, which tools and plans they use, how much, and when, but not who, on which machine, or in which project. The operator also sees the IP addresses that connect, which the relay keeps in rate-limit counters for up to a day.
+So the relay's operator can see how many machines a team has, which tools and plans they use, and so roughly what they pay at list prices, how much, and when, but not who, on which machine, or in which project, nor the prices the team typed. The operator also sees the IP addresses that connect, which the relay keeps in rate-limit counters for up to a day.
+
+Once a day each collector also asks the relay for its price list, `GET /v1/prices`, which needs no key and carries nothing of the team. Who bills a Claude subscription, such as the App Store, and when it began, as Claude Code says, stay on the machine.
 
 ![What the relay keeps for one machine, trimmed: the machine, user, account, and project paths sealed, the provider, plan, quota windows, and session count in plain text](docs/demo/social/relay-view.png)
 

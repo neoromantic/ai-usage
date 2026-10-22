@@ -1,0 +1,13 @@
+[1mai-usage[m · ann@annbook · team qmvrtzpa               ● collected 7m ago  ● relay 7m ago  ● up to date  $1,000/mo
+
+[1mCLAUDE[m  [1mold@acme.dev[m
+  PLAN   pro
+  PRICE  $20/mo · the list price of Pro
+  USED   $0 (0%) over the last 4 weeks · unused $20
+  NEXT   not confirmed · ai-usage cost set claude:old@acme.dev --renews DAY
+  STATE  still paid? last confirmed 12 Aug · ai-usage cost confirm claude:old@acme.dev or cancel
+  PLANS  Pro since 4 May
+
+[1mATTENTION[m
+[7m CHECK [m claude old@acme.dev  still paid? last confirmed 12 Aug · no device since 2 Sep
+[7m COST  [m claude old@acme.dev  list price $17 → $20/mo; ai-usage cost set claude:old@acme.dev --price 17 keeps $17

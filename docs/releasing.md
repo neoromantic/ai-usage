@@ -100,6 +100,12 @@ Self-update, both installers, and the formula find their file by these names, so
 
 Set the repository variable `AI_USAGE_RELAY_URL` (Settings, Secrets and variables, Actions, Variables) to build that relay into the binaries with `-X main.defaultRelay=…`. A collector uses it until someone runs `ai-usage relay set`, and `ai-usage relay clear` goes back to it. It must be an `https://` URL. Leave the variable unset to ship binaries without a relay.
 
+## Prices
+
+The price list is `internal/cost/prices.json`, built into every binary and into the relay. The relay serves its copy at `/v1/prices`, and collectors take it once a day when its `updated` day is later than their own list's. The production relay deploys from `main`, so a price merged to `main` reaches every collector within a day, without a release: review a change to the list as you would a release. Each plan gives the page its price was checked on as `source`; check every changed price there, in a browser, since chatgpt.com and x.ai turn scripts away, and set `updated` to the day you checked. Team, business, enterprise, and education plans stay out of the list.
+
+A collector takes the relay's list only when its `updated` is later than the list built into its release, so every change moves `updated` forward, or no collector sees it until a release builds it in. The relay serves the list from its own build, so the change reaches collectors once the relay's deploy of that commit is live, not when a release is tagged; check `curl -s https://<relay>/v1/prices` after the deploy. Keep every plan within the rules of [relay-protocol.md §6.8](relay-protocol.md#68-get-v1prices): a collector ignores a list with one plan that breaks them, so a list that needs a looser rule waits until no collector of an older release is left. A change of a list price shows on each team as a COST entry in ATTENTION and an event the menu bar app notifies once, saying the new price applies and how to keep the old one; say why in the commit.
+
 ## Build locally
 
 `dist.sh` is what the workflow runs, from the repository's root:

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/cost"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/tui"
 	"github.com/neoromantic/ai-usage/internal/view"
@@ -49,6 +50,10 @@ const samplesSpan = 48 * time.Hour
 // Samples that do not read are left out: they only sharpen a forecast.
 func reportInput(d state.Dir, res *collect.Result, now time.Time) view.Input {
 	samples, _ := d.LoadSamples(now.Add(-samplesSpan))
+	// A cost store that does not read is an empty one here; the run that
+	// cannot write it says why.
+	store, _ := cost.LoadStore(d)
+	prices, from := cost.Current(d)
 	return view.Input{
 		Version:     version,
 		RelayURL:    relayURL(res.Config),
@@ -65,6 +70,9 @@ func reportInput(d state.Dir, res *collect.Result, now time.Time) view.Input {
 		Loc:         time.Local,
 		Homebrew:    brewPrefix() != "",
 		BrewCommand: brewCommand(),
+		Cost:        store,
+		Prices:      prices,
+		PricesFrom:  from,
 	}
 }
 

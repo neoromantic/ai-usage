@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/cost"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/team"
 )
@@ -308,6 +310,37 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+// The price list is served to anyone, with no store command, and a cache
+// may keep it for an hour.
+func TestPrices(t *testing.T) {
+	e := newRelay(t)
+	e.srv.Store = &testStore{Store: e.mem, fail: map[string]bool{"count": true, "get": true, "list": true}}
+	resp, body := send(t, func() *http.Request { r, _ := http.NewRequest(http.MethodGet, e.ts.URL+"/v1/prices", nil); return r }())
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Cache-Control") != "public, max-age=3600" || resp.Header.Get("Content-Type") != "application/json" {
+		t.Fatalf("status %d, headers %v", resp.StatusCode, resp.Header)
+	}
+	if body != string(cost.PricesJSON) {
+		t.Fatalf("prices = %s", body)
+	}
+	got, err := (&Client{BaseURL: e.ts.URL + "/", HTTP: e.ts.Client()}).Prices(context.Background())
+	if err != nil || !bytes.Equal(got, cost.PricesJSON) {
+		t.Fatalf("Client.Prices = %d bytes, %v", len(got), err)
+	}
+	if _, err := cost.ParsePrices(got); err != nil {
+		t.Fatal(err)
+	}
+	resp, _ = send(t, func() *http.Request { r, _ := http.NewRequest(http.MethodPut, e.ts.URL+"/v1/prices", nil); return r }())
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("PUT status %d", resp.StatusCode)
+	}
+	// A relay that serves no list says 404.
+	old := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(old.Close)
+	if _, err := (&Client{BaseURL: old.URL}).Prices(context.Background()); statusOf(err) != http.StatusNotFound {
+		t.Fatalf("an older relay: %v", err)
+	}
+}
+
 func TestStoreFailuresAre503(t *testing.T) {
 	k := newKey(t)
 	ctx := context.Background()
@@ -394,9 +427,10 @@ func TestSlowBodyTimesOut(t *testing.T) {
 }
 
 // The relay takes the snapshot a collector before v0.4.0 sends, one with the
-// fields v0.4.0 added, one with the cycles v0.5.0 added, and one with the
-// hours v0.7.0 added, each only as the exact bytes it signs. The bodies are the snapshot package's hand-written goldens, filed under a test
-// key's team.
+// fields v0.4.0 added, one with the cycles v0.5.0 added, one with the hours
+// v0.7.0 added, and one with the costs v0.10.0 added, each only as the exact
+// bytes it signs. The bodies are the snapshot package's hand-written goldens,
+// filed under a test key's team.
 func TestPutAcceptsOlderAndExtendedSnapshots(t *testing.T) {
 	e := newRelay(t)
 	k := newKey(t)
@@ -425,6 +459,7 @@ func TestPutAcceptsOlderAndExtendedSnapshots(t *testing.T) {
 		{"v1-extended.json", "mac-0123abcd", golden("v1-extended.json")},
 		{"v1-cycles.json", "mac-0123abcd", golden("v1-cycles.json")},
 		{"v1-hours.json", "mac-0123abcd", golden("v1-hours.json")},
+		{"v1-cost.json", "mac-0123abcd", golden("v1-cost.json")},
 		{"an extended collector document", "work-laptop", marshal(t, extended)},
 		{"last_error_at within the skew", "work-laptop", marshal(t, inSkew)},
 	} {

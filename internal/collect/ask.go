@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/cost"
 	"github.com/neoromantic/ai-usage/internal/fsutil"
 	"github.com/neoromantic/ai-usage/internal/logs"
 	"github.com/neoromantic/ai-usage/internal/probe"
@@ -274,8 +275,15 @@ func applyReading(st *state.State, p, home string, r probe.Reading, loggedOut bo
 	acct := touchAccount(st, p, label)
 	if answered {
 		acct.LastSeenAt = now
-		if r.Plan != "" {
-			acct.Plan = snapshot.PlainLabel(r.Plan)
+		// A read without the tier keeps the plan read with it.
+		if plan := snapshot.PlainLabel(r.Plan); plan != "" && !cost.Refines(plan, acct.Plan) {
+			acct.Plan = plan
+		}
+		if r.Billing != "" {
+			acct.Billing = r.Billing
+		}
+		if !r.SubscribedAt.IsZero() {
+			acct.SubscribedAt = r.SubscribedAt
 		}
 	}
 	q := r.Quota

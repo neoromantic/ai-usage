@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/cost"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/team"
 )
@@ -41,6 +42,8 @@ func NewServer(store Store) *Server {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "snapshot_version": snapshot.Version})
 		return nil
 	})
+	// The price list needs no store, so it is not counted.
+	s.mux.HandleFunc("GET /v1/prices", ServePrices)
 	s.route("PUT /v1/teams/{team}/devices/{device}", s.put)
 	s.route("DELETE /v1/teams/{team}/devices/{device}", s.del)
 	s.route("GET /v1/teams/{team}", s.list)
@@ -333,6 +336,17 @@ func (s *Server) del(w http.ResponseWriter, r *http.Request) *ErrStatus {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
 	return nil
+}
+
+// ServePrices answers the price list built into the relay, to anyone: it
+// holds nothing of a team. Production runs main's copy, so a fixed price
+// reaches every collector without a release. A cache may keep it for an
+// hour.
+func ServePrices(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(cost.PricesJSON)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

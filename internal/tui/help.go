@@ -29,11 +29,18 @@ func (m Model) helpLines() []string {
 		{"p", "the next period: today, 7d, 30d, 90d"},
 		{"1 7 3 9", "today, 7d, 30d, or 90d"},
 		{"%", "weighted tokens or share in the matrix"},
+		{"$", "dollars in the matrix: what each device used over 4 weeks"},
 		{"s", "DEVICES as the matrix, or as each device's status"},
 		{g("↵", "Enter"), "pick a row: an account, a device, or a bot"},
 		{g("↑ ↓  j k  g G", "up down  j k  g G"), "move the pick, while a row is picked"},
 		{g("↵  click", "Enter  click"), "open what is picked; a click picks a row first"},
 		{"Esc  Backspace", "back: from a detail to its row, then to scrolling"},
+	}
+	if m.cfg.Cost != nil {
+		keys = append(keys,
+			entry{"e", "edit the price, cadence, and next charge of the subscription picked or open"},
+			entry{g("↵", "Enter"), "answer the question over the key bar; an empty line takes its suggestion"},
+			entry{"s  S", "skip that question, or never ask any on this device"})
 	}
 	if m.cfg.Refresh != nil {
 		keys = append(keys, entry{"r", "collect now; the header shows a spinner until it is done"})
@@ -49,6 +56,7 @@ func (m Model) helpLines() []string {
 		{g("●", "*"), "this device, or an account logged in on it"},
 		{g("×", "x"), "a device that fails, or a harness that fails in VIA"},
 		{"~", "a silent device, a reading 6h+ old, or an estimated total"},
+		{"*", "a price a person typed, in COST"},
 		{"~78", "a cycle read last well before its reset: maybe fuller"},
 		{g("↓", "v"), "a device on an older release, or that release in VERSION"},
 		{g("·", "."), "nothing"},

@@ -14,8 +14,9 @@ type healthItem struct {
 }
 
 // header is `ai-usage`, this device, and the team on the left, and the
-// collector's health on the right, ending where the page does. A failure
-// turns its dot red; the error itself is in ATTENTION.
+// collector's health on the right, then what the team's subscriptions cost
+// a month, ending where the page does. A failure turns its dot red; the
+// error itself is in ATTENTION.
 func (p *page) header(pageWidth int) chunks {
 	c := p.r.Collector
 	g := p.g
@@ -27,7 +28,7 @@ func (p *page) header(pageWidth int) chunks {
 		}
 		return out
 	}
-	right := func(short bool) chunks {
+	right := func(short, money bool) chunks {
 		var out chunks
 		for i, h := range p.health() {
 			if i > 0 {
@@ -43,17 +44,23 @@ func (p *page) header(pageWidth int) chunks {
 			}
 			out = append(out, p.paint(g.here, h.dot, false, false), p.plain(" "), p.muted(text))
 		}
+		if money {
+			out = append(out, p.moneyTotal()...)
+		}
 		return out
 	}
-	// The health words shorten first, then the team goes, then the device
-	// is cut.
-	l, r := left(device, true), right(false)
+	// The health words shorten first, then the team goes, then the total
+	// a month, which COST says too, then the device is cut.
+	l, r := left(device, true), right(false, true)
 	fits := func() bool { return l.width()+2+r.width() <= p.w }
 	if !fits() {
-		r = right(true)
+		r = right(true, true)
 	}
 	if !fits() {
 		l = left(device, false)
+	}
+	if !fits() {
+		r = right(true, false)
 	}
 	if over := l.width() + 2 + r.width() - p.w; over > 0 {
 		l = left(truncName(device, max(width(device)-over, 6), g.ell), false)

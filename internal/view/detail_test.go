@@ -63,6 +63,10 @@ func TestPicks(t *testing.T) {
 			default:
 				accts++
 				a := accountOf(&c.r.Team, k.Provider, k.Label)
+				if s := c.r.Cost.Subscription(k.Provider, k.Label); a == nil && s != nil {
+					// A subscription only COST has, as no device has it.
+					a = costStub(s)
+				}
 				if a == nil {
 					t.Fatalf("%s: pick of no account %+v", c.name, k)
 				}
@@ -129,7 +133,7 @@ func TestDetailOnce(t *testing.T) {
 					if d.Error != nil {
 						said = append(said, *d.Error)
 					}
-				} else if a := accountOf(&r.Team, k.Provider, k.Label); a.NoReading != nil {
+				} else if a := accountOf(&r.Team, k.Provider, k.Label); a != nil && a.NoReading != nil {
 					said = append(said, *a.NoReading)
 				}
 				for _, s := range said {

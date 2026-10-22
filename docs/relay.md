@@ -38,7 +38,7 @@ The repository deploys as it is. `vercel.json` selects the *Other* framework pre
    {"ok":true,"snapshot_version":1}
    ```
 
-   A `503` with `{"error":"relay store not configured"}` means the function did not find those two variables. It refuses to run without a store, because Vercel starts and stops function instances as it likes, and a store in memory would lose snapshots at random. `vercel dev` runs one long-lived process, so there the function falls back to memory.
+   A `503` with `{"error":"relay store not configured"}` means the function did not find those two variables; only the price list, `/v1/prices`, is served without them. It refuses to run without a store, because Vercel starts and stops function instances as it likes, and a store in memory would lose snapshots at random. `vercel dev` runs one long-lived process, so there the function falls back to memory.
 5. [Connect the collectors](#connect-collectors-to-your-relay) to `https://your-project.vercel.app`.
 
 Use the production domain or a custom domain. Vercel's Deployment Protection can put preview and per-deployment URLs behind a Vercel login, which collectors cannot pass.
@@ -59,7 +59,7 @@ A device runs 96 times a day. Each run writes its snapshot; a run you start also
 
 Every read returns the whole team, so traffic grows with the square of the team size. At about 15 KB a snapshot with its daily counts, a team of N devices reads about N² × 30 MB a month, once out of the store and once more out of the function. Upstash's free plan allows 500,000 commands a month, enough for about 15 devices, and 10 GB of bandwidth, enough for a team of about 18. Vercel's Hobby plan includes 10 GB a month of Fast Origin Transfer, which function responses count against. A larger team needs a paid plan, or a relay of your own with `ai-usage relay serve`. Bots that one collector reads are part of its device's snapshot, so a server running many bots costs as much as one device; a bot with a collector of its own in its container is a device of its own.
 
-A request to a path the relay does not serve costs no KV command. Once a function instance has seen a client go over a limit, it answers that client's further requests with `429` without a KV command until the window ends. Every request still costs a function invocation, and a signed team read returns up to about 4.4 MB. On a public deployment, also add a rate-limit rule for `/v1/` in the project's Vercel Firewall, so a flood is dropped before it reaches the function.
+A request to a path the relay does not serve costs no KV command, and neither does the price list: each collector asks for it once a day. Once a function instance has seen a client go over a limit, it answers that client's further requests with `429` without a KV command until the window ends. Every request still costs a function invocation, and a signed team read returns up to about 4.4 MB. On a public deployment, also add a rate-limit rule for `/v1/` in the project's Vercel Firewall, so a flood is dropped before it reaches the function.
 
 ## With `ai-usage relay serve`
 
@@ -170,13 +170,16 @@ The lifetime rule means a key made only to fill the store leaves its snapshots f
 
 ## API
 
-All paths are under `/v1`. Every response has `Cache-Control: no-store`. Errors are JSON, `{"error": "…"}`. This is a summary; [relay-protocol.md](relay-protocol.md) specifies every field and rule, with test vectors.
+All paths are under `/v1`. Every response has `Cache-Control: no-store`, but the price list's, which a cache may keep for an hour. Errors are JSON, `{"error": "…"}`. This is a summary; [relay-protocol.md](relay-protocol.md) specifies every field and rule, with test vectors.
 
 | Request | Signed over | Success |
 | --- | --- | --- |
 | `GET /v1/health` | nothing | `{"ok":true,"snapshot_version":1}` |
+| `GET /v1/prices` | nothing | the price list built into the relay: `{"v":1,"updated":"2026-10-22","currency":"USD","plans":[…]}` |
 | `PUT /v1/teams/{team}/devices/{device}` | `ai-usage snapshot v1\n` followed by the body | `{"stored":true}` |
 | `GET /v1/teams/{team}` | `ai-usage request v1\nGET\n{team}\n\n{time}` | `{"devices":[{"device","body","sig"}]}` |
 | `DELETE /v1/teams/{team}/devices/{device}` | `ai-usage request v1\nDELETE\n{team}\n{device}\n{time}` | `{"deleted":true}` |
 
 A `PUT` body must be a valid snapshot in exactly the form `encoding/json` writes it, naming the same team and device as the path. The team read returns each stored body and signature as they were written, so every reader verifies them again.
+
+The price list is `internal/cost/prices.json`, built into the relay as into the collector. Collectors ask the relay for it at most once a day and use it when its `updated` day is later than their own list's, so a relay that runs a newer commit brings them prices fixed since their release, and one that runs an older release changes nothing. A relay before v0.10.0 answers `404`, and its collectors use their own list. The snapshots' `costs`, which hold the prices and charge days people typed, are sealed like the names.

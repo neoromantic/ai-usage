@@ -21,6 +21,9 @@ public struct NoticeSettings: Equatable, Sendable {
     public static let outKey = "notifyOut"
     public static let runsOutKey = "notifyRunsOut"
     public static let scopeKey = "notifySubscriptions"
+    public static let costChangesKey = "notifyCostChanges"
+    public static let chargesSoonKey = "notifyChargesSoon"
+    public static let costQuestionsKey = "notifyCostQuestions"
     /// How soon a window runs out for `RunsOut.day`.
     public static let soon: TimeInterval = 86400
 
@@ -28,9 +31,19 @@ public struct NoticeSettings: Equatable, Sendable {
     public var out = true
     public var runsOut = RunsOut.day
     public var scope = Scope.mac
+    /// A new subscription, a change of plan, one that ended, and a list
+    /// price that changed.
+    public var costChanges = true
+    /// A charge a person confirmed, 3 days before it.
+    public var chargesSoon = true
+    /// What ai-usage asks of a subscription's cost: its next charge, its
+    /// price, and whether it is still paid.
+    public var costQuestions = true
 
-    public init(out: Bool = true, runsOut: RunsOut = .day, scope: Scope = .mac) {
+    public init(out: Bool = true, runsOut: RunsOut = .day, scope: Scope = .mac, costChanges: Bool = true, chargesSoon: Bool = true,
+                costQuestions: Bool = true) {
         (self.out, self.runsOut, self.scope) = (out, runsOut, scope)
+        (self.costChanges, self.chargesSoon, self.costQuestions) = (costChanges, chargesSoon, costQuestions)
     }
 
     /// The settings saved in defaults, each at its default when not set.
@@ -38,10 +51,16 @@ public struct NoticeSettings: Equatable, Sendable {
         out = d.object(forKey: Self.outKey) as? Bool ?? true
         runsOut = d.string(forKey: Self.runsOutKey).flatMap(RunsOut.init) ?? .day
         scope = d.string(forKey: Self.scopeKey).flatMap(Scope.init) ?? .mac
+        costChanges = d.object(forKey: Self.costChangesKey) as? Bool ?? true
+        chargesSoon = d.object(forKey: Self.chargesSoonKey) as? Bool ?? true
+        costQuestions = d.object(forKey: Self.costQuestionsKey) as? Bool ?? true
     }
 
-    /// No notification at all.
+    /// No notification about a window.
     public var off: Bool { !out && runsOut == .never }
+
+    /// No notification about the cost.
+    public var costOff: Bool { !costChanges && !chargesSoon && !costQuestions }
 
     /// Whether a notice is one of those asked for.
     public func wants(_ n: WindowNotice, now: Date) -> Bool {
@@ -164,8 +183,35 @@ public struct NoticeLedger: Codable, Equatable, Sendable {
 
     /// By window key.
     public private(set) var said: [String: Said] = [:]
+    /// The cost's events and questions the report had, by `CostNotice.key`,
+    /// and when they were first seen.
+    public private(set) var costs: [String: Date] = [:]
 
     public init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case said, costs
+    }
+
+    /// A ledger an app before the cost saved has no costs.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        said = try c.decodeIfPresent([String: Said].self, forKey: .said) ?? [:]
+        costs = try c.decodeIfPresent([String: Date].self, forKey: .costs) ?? [:]
+    }
+
+    /// Records the cost's events and questions a report has, by their
+    /// keys, and returns those of wanted not seen before. Each is seen
+    /// once, wanted or not, so one turned on later says nothing old; one
+    /// the report no longer has is forgotten.
+    public mutating func record(_ wanted: [CostNotice], among keys: Set<String>, now: Date) -> [CostNotice] {
+        costs = costs.filter { keys.contains($0.key) }
+        let due = wanted.filter { costs[$0.key] == nil }
+        for k in keys where costs[k] == nil {
+            costs[k] = now
+        }
+        return due
+    }
 
     /// Records the notices a report calls for, and returns those not said
     /// yet. A window is forgotten once it resets, or, with no reset time,
@@ -195,5 +241,109 @@ public struct NoticeLedger: Codable, Equatable, Sendable {
     static func samePeriod(_ said: Date?, _ n: WindowNotice) -> Bool {
         guard let said, let r = n.resetsAt else { return true }
         return r.timeIntervalSince(said) < max((n.length ?? 0) / 2, 60)
+    }
+}
+
+/// A notification about a subscription's cost: an event the report says
+/// happened, or a question ai-usage asks of this Mac. The report decides
+/// both, and their words; a notice only says them, with the actions that
+/// answer a question.
+public struct CostNotice: Equatable, Sendable {
+    public enum Kind: String, Sendable {
+        /// A new subscription, a plan or list price that changed, or one
+        /// that ended.
+        case change
+        case chargesSoon
+        /// The questions, which a notification answers with its actions:
+        /// still paid, cancelled, or skip; a typed day or price, or skip.
+        case stillPaid, renewal, price
+    }
+
+    /// The event's or the question's id in the report.
+    public let id: String
+    public let kind: Kind
+    public let provider: String
+    public let label: String
+    /// "Claude ann · changed plan".
+    public let title: String
+    /// The report's words.
+    public let body: String
+    /// The day a renewal question suggests, YYYY-MM-DD.
+    public let suggestion: String?
+
+    /// The ledger's key: "question:<id>" or "event:<id>".
+    public var key: String { (question ? "question:" : "event:") + id }
+    public var question: Bool { kind == .stillPaid || kind == .renewal || kind == .price }
+    /// The question's kind, as `ai-usage cost skip` takes it.
+    public var questionKind: String? {
+        switch kind {
+        case .stillPaid: return "still_paid"
+        case .renewal: return "renewal"
+        case .price: return "price"
+        default: return nil
+        }
+    }
+    /// The account as the CLI takes it.
+    public var target: String { provider + ":" + label }
+
+    /// How long after it an event is still news: a notification about an
+    /// older one, as when the app first reads a cost, would be noise.
+    public static let news: TimeInterval = 3 * 86400
+
+    /// The keys of every event and question the report has, for the ledger.
+    public static func keys(_ r: Report) -> Set<String> {
+        guard let c = r.cost else { return [] }
+        return Set(c.events.map { "event:" + $0.id } + c.questions.map { "question:" + $0.id })
+    }
+
+    /// The notices the report's cost calls for, of those the settings ask
+    /// for: each event of the last 3 days that tells a change or a charge
+    /// soon, and each question, of the subscriptions logged in on this Mac
+    /// or of the whole team. A subscription nobody can confirm is still
+    /// paid has its question, not its event, and the question is asked
+    /// whatever the scope: such a subscription is mostly one no device has
+    /// any more, and ai-usage asks it of every device. edited is when this
+    /// Mac last ran a cost command on a subscription, by its target: the
+    /// events of a report made after it are the person's own doing, as an
+    /// ended one after Cancelled, and are not told.
+    public static func notices(_ r: Report, _ settings: NoticeSettings = NoticeSettings(), now: Date,
+                               edited: [String: Date] = [:]) -> [CostNotice] {
+        guard let c = r.cost else { return [] }
+        let wanted = { (p: String, l: String) in settings.scope == .team || c.subscription(provider: p, label: l)?.current == true }
+        let subject = { (p: String, l: String) in c.subscription(provider: p, label: l)?.title ?? Format.provider(p) + " " + l }
+        var out: [CostNotice] = []
+        for e in c.events where wanted(e.provider, e.account) && now.timeIntervalSince(e.at) < news {
+            if let at = edited[e.provider + ":" + e.account], r.generatedAt >= at { continue }
+            let kind: Kind, phrase: String
+            switch e.kind {
+            case "new": (kind, phrase) = (.change, "new subscription")
+            case "plan_changed": (kind, phrase) = (.change, "changed plan")
+            case "price_changed": (kind, phrase) = (.change, "list price changed")
+            case "ended": (kind, phrase) = (.change, "ended")
+            case "charges_soon": (kind, phrase) = (.chargesSoon, "charges soon")
+            default: continue
+            }
+            guard kind == .change ? settings.costChanges : settings.chargesSoon else { continue }
+            out.append(CostNotice(id: e.id, kind: kind, provider: e.provider, label: e.account, title: subject(e.provider, e.account) + " · " + phrase,
+                                  body: sentence(e.text), suggestion: nil))
+        }
+        guard settings.costQuestions else { return out }
+        for q in c.questions where q.kind == "still_paid" || wanted(q.provider, q.account) {
+            let kind: Kind, phrase: String
+            switch q.kind {
+            case "still_paid": (kind, phrase) = (.stillPaid, "still paid?")
+            case "renewal": (kind, phrase) = (.renewal, "when does it charge next?")
+            case "price": (kind, phrase) = (.price, "what does it cost?")
+            default: continue
+            }
+            out.append(CostNotice(id: q.id, kind: kind, provider: q.provider, label: q.account, title: subject(q.provider, q.account) + " · " + phrase,
+                                  body: sentence(q.text), suggestion: q.suggestion))
+        }
+        return out
+    }
+
+    /// The report's words as a sentence, with a capital first.
+    private static func sentence(_ s: String) -> String {
+        s.prefix(1).uppercased() + s.dropFirst()
     }
 }

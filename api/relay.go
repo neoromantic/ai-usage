@@ -38,12 +38,16 @@ func instance() http.Handler {
 
 // build picks the store from the environment. The memory store forgets every
 // snapshot when Vercel recycles the instance, so a deployment without KV
-// refuses requests rather than pretend to store them. `vercel dev` is one
-// long-lived process and may use memory.
+// refuses requests rather than pretend to store them, all but the price
+// list's. `vercel dev` is one long-lived process and may use memory.
 func build() http.Handler {
 	store, kind := relay.StoreFromEnv()
 	if kind == "memory" && os.Getenv("VERCEL") != "" && os.Getenv("VERCEL_ENV") != "development" {
-		return http.HandlerFunc(unconfigured)
+		// The price list needs no store.
+		mux := http.NewServeMux()
+		mux.HandleFunc("GET /v1/prices", relay.ServePrices)
+		mux.HandleFunc("/", unconfigured)
+		return mux
 	}
 	srv := relay.NewServer(store)
 	// Vercel's edge sets X-Real-Ip to the client's address, replacing any the

@@ -292,30 +292,40 @@ private struct TabBottom: View {
 
 /// The verdict, and the status, refresh, and menu buttons at the end of its
 /// title: the line under the title runs under them, so that what it says
-/// keeps its room.
+/// keeps its room, and ends with the team's total a month.
 private struct Header: View {
     @EnvironmentObject private var store: Store
     @ViewState private var trailing: CGFloat = 0
+    @ViewState private var money: CGFloat = 0
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             if let r = store.report {
-                VerdictButton(report: r, trailing: trailing + 8)
+                VerdictButton(report: r, trailing: trailing + 8, sublineTrailing: money > 0 ? money + 8 : 0)
             } else {
                 let (symbol, title) = emptyTitle
                 VerdictLabel(symbol: symbol.map { ($0, Color.secondary) }, title: title, subline: nil, trailing: trailing + 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            HStack(alignment: .top, spacing: 8) {
-                if store.report != nil {
-                    StatusButton()
+            // The total sits on the line under the title, which runs under
+            // the buttons.
+            VStack(alignment: .trailing, spacing: -2) {
+                HStack(alignment: .top, spacing: 8) {
+                    if store.report != nil {
+                        StatusButton()
+                    }
+                    RefreshButton()
+                    MenuButton()
                 }
-                RefreshButton()
-                MenuButton()
+                .background(GeometryReader { g in Color.clear.preference(key: TrailingWidth.self, value: g.size.width) })
+                if let total = store.report.flatMap({ CostTotal($0) }) {
+                    CostButton(total: total)
+                        .background(GeometryReader { g in Color.clear.preference(key: MoneyWidth.self, value: g.size.width) })
+                }
             }
-            .background(GeometryReader { g in Color.clear.preference(key: TrailingWidth.self, value: g.size.width) })
         }
         .onPreferenceChange(TrailingWidth.self) { trailing = $0 }
+        .onPreferenceChange(MoneyWidth.self) { money = $0 }
         .padding(.top, 12)
         .padding(.bottom, 10)
         .padding(.horizontal, Metrics.inset)
@@ -351,14 +361,24 @@ private struct TrailingWidth: PreferenceKey {
     }
 }
 
+/// The width of the team's total a month under the buttons.
+private struct MoneyWidth: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 /// A symbol, a title, and a line under it, which ends in room for the
-/// alerts link. The title keeps clear of the buttons at its end.
+/// alerts link. The title keeps clear of the buttons at its end, and the
+/// line of the total under them.
 private struct VerdictLabel: View {
     let symbol: (name: String, color: Color)?
     let title: String
     let subline: String?
     var alerts = 0
     let trailing: CGFloat
+    var sublineTrailing: CGFloat = 0
     /// Whether the title and line take their whole width.
     var fixed = false
 
@@ -397,6 +417,7 @@ private struct VerdictLabel: View {
                         }
                     }
                     .font(.callout)
+                    .padding(.trailing, sublineTrailing)
                 }
             }
         }
@@ -443,6 +464,7 @@ private struct VerdictButton: View {
     @EnvironmentObject private var store: Store
     let report: Report
     let trailing: CGFloat
+    let sublineTrailing: CGFloat
 
     var body: some View {
         let v = Verdict(report, now: store.now)
@@ -460,11 +482,14 @@ private struct VerdictButton: View {
             // leads it in place of the title's end; the reading's age
             // stays.
             ViewThatFits(in: .horizontal) {
-                VerdictLabel(symbol: symbol(v.kind), title: v.title, subline: v.subline, alerts: alerts, trailing: trailing, fixed: true)
-                VerdictLabel(symbol: symbol(v.kind), title: v.title, subline: v.shortSubline, alerts: alerts, trailing: trailing, fixed: true)
+                VerdictLabel(symbol: symbol(v.kind), title: v.title, subline: v.subline, alerts: alerts, trailing: trailing,
+                             sublineTrailing: sublineTrailing, fixed: true)
+                VerdictLabel(symbol: symbol(v.kind), title: v.title, subline: v.shortSubline, alerts: alerts, trailing: trailing,
+                             sublineTrailing: sublineTrailing, fixed: true)
                 VerdictLabel(symbol: symbol(v.kind), title: v.compactTitle, subline: v.compactSubline, alerts: alerts, trailing: trailing,
-                             fixed: true)
-                VerdictLabel(symbol: symbol(v.kind), title: v.compactTitle, subline: v.compactSubline, alerts: alerts, trailing: trailing)
+                             sublineTrailing: sublineTrailing, fixed: true)
+                VerdictLabel(symbol: symbol(v.kind), title: v.compactTitle, subline: v.compactSubline, alerts: alerts, trailing: trailing,
+                             sublineTrailing: sublineTrailing)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
@@ -503,6 +528,36 @@ private struct VerdictButton: View {
             let t = AttentionText(a, report: report)
             return "\(t.subject): \(word)" + (t.detail.isEmpty ? "" : " · \(t.detail)")
         }.joined(separator: "\n")
+    }
+}
+
+/// The team's total a month, as the console's header ends with it, under
+/// the status: a click opens the Team window on its Cost, or with this Mac
+/// alone, the cost in Settings.
+private struct CostButton: View {
+    @EnvironmentObject private var store: Store
+    let total: CostTotal
+
+    var body: some View {
+        let solo = store.report?.solo ?? true
+        Button {
+            if solo {
+                SettingsWindow.show(pane: .cost)
+            } else {
+                TeamWindow.show(.cost)
+            }
+        } label: {
+            Text(total.text)
+                .font(.callout)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(total.help)
+        .accessibilityLabel(total.help)
+        .accessibilityHint(solo ? "Opens the cost in Settings" : "Opens the Team window on its cost")
     }
 }
 

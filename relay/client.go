@@ -147,6 +147,20 @@ func (c *Client) Pull(ctx context.Context) (PullResult, error) {
 	return out, nil
 }
 
+// Prices reads the relay's price list, which needs no key. A relay that
+// serves none fails with an *ErrStatus of 404.
+func (c *Client) Prices(ctx context.Context) ([]byte, error) {
+	u, err := c.url("/v1/prices")
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	return c.do(req)
+}
+
 // Remove deletes one device's document.
 func (c *Client) Remove(ctx context.Context, device string) error {
 	req, err := c.signed(ctx, http.MethodDelete, device)

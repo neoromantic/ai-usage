@@ -148,6 +148,45 @@
         "ci@ci-runner-eu-west-build-pool-node-0042ab"
       ],
       "message": "v1.4.2"
+    },
+    {
+      "kind": "check",
+      "subject": "claude old@acme.dev",
+      "text": "still paid? last confirmed 12 Aug · no device since 2 Sep: ai-usage cost confirm claude:old@acme.dev or cancel",
+      "provider": "claude",
+      "account": "old@acme.dev",
+      "name": "old",
+      "at": "2026-08-12T09:00:00Z"
+    },
+    {
+      "kind": "cost",
+      "subject": "claude ann@acme.dev",
+      "text": "plan Max 5x → Max 20x, +$100/mo",
+      "provider": "claude",
+      "account": "ann@acme.dev",
+      "name": "ann",
+      "at": "2026-09-21T08:00:00Z",
+      "event": "plan_changed-3c4d5e6f7a8b"
+    },
+    {
+      "kind": "cost",
+      "subject": "grok a4c2e917",
+      "text": "new subscription: SuperGrok Heavy at $300/mo",
+      "provider": "grok",
+      "account": "a4c2e917-6b3d-4f81-9c2a-5e7d1b8f0a36",
+      "name": "a4c2e917",
+      "at": "2026-09-22T06:00:00Z",
+      "event": "new-5e6f7a8b9c0d"
+    },
+    {
+      "kind": "cost",
+      "subject": "claude old@acme.dev",
+      "text": "list price $17 → $20/mo; ai-usage cost set claude:old@acme.dev --price 17 keeps $17",
+      "provider": "claude",
+      "account": "old@acme.dev",
+      "name": "old",
+      "at": "2026-09-22T09:00:00Z",
+      "event": "price_changed-6f7a8b9c0d1e"
     }
   ],
   "providers": [
@@ -7115,5 +7154,544 @@
         }
       ]
     }
+  },
+  "cost": {
+    "currency": "USD",
+    "total_usd": 1000,
+    "without_price": 1,
+    "used_usd": 787,
+    "used_pct": 78.7,
+    "unused_usd": 213,
+    "used_estimated": true,
+    "next_charge": {
+      "provider": "claude",
+      "account": "ann@acme.dev",
+      "at": "2026-09-24T21:00:00Z",
+      "usd": 200
+    },
+    "prices": {
+      "updated": "2026-09-20",
+      "source": "relay"
+    },
+    "subscriptions": [
+      {
+        "provider": "claude",
+        "account": "ann@acme.dev",
+        "name": "ann",
+        "alias": null,
+        "current": true,
+        "plan": "max 20x",
+        "plan_name": "Max 20x",
+        "price_usd": 200,
+        "price_source": "list",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": "2026-09-24T21:00:00Z",
+        "renews_confirmed": true,
+        "suggested_renewal_day": null,
+        "used_usd": 182,
+        "used_pct": 91,
+        "used_estimated": false,
+        "unused_usd": 18,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-23T14:20:00Z",
+        "first_seen": "2026-06-02T09:15:00Z",
+        "last_seen": "2026-09-23T14:31:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "ann@annbook",
+            "device_id": "d-7c3e1a9b5f2d4e8a6c0b1d3f",
+            "usd": 163.8,
+            "share": 90
+          },
+          {
+            "device": "root@srv1",
+            "device_id": "d-2f8a6c4e0b9d7f1a3c5e7b9d",
+            "usd": 18.2,
+            "share": 10
+          }
+        ],
+        "usd_per_m_weighted": 0.21,
+        "plans": [
+          {
+            "at": "2026-06-02T09:15:00Z",
+            "plan": "max 5x"
+          },
+          {
+            "at": "2026-09-21T08:00:00Z",
+            "plan": "max 20x"
+          }
+        ]
+      },
+      {
+        "provider": "claude",
+        "account": "kim@corp.test",
+        "name": "kim",
+        "alias": null,
+        "current": false,
+        "plan": "max",
+        "plan_name": "max",
+        "price_usd": null,
+        "price_source": "unknown",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": null,
+        "renews_confirmed": false,
+        "suggested_renewal_day": null,
+        "used_usd": null,
+        "used_pct": 64,
+        "used_estimated": false,
+        "unused_usd": null,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-21T10:00:00Z",
+        "first_seen": "2026-07-01T10:00:00Z",
+        "last_seen": "2026-09-23T13:38:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "kim@Mac.localdomain",
+            "device_id": "d-9b1d3f5a7c9e1b3d5f7a9c1e",
+            "usd": null,
+            "share": 100
+          }
+        ],
+        "usd_per_m_weighted": null,
+        "plans": [
+          {
+            "at": "2026-07-01T10:00:00Z",
+            "plan": "max"
+          }
+        ]
+      },
+      {
+        "provider": "claude",
+        "account": "old@acme.dev",
+        "name": "old",
+        "alias": null,
+        "current": false,
+        "plan": "pro",
+        "plan_name": "Pro",
+        "price_usd": 20,
+        "price_source": "list",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": null,
+        "renews_confirmed": false,
+        "suggested_renewal_day": null,
+        "used_usd": 0,
+        "used_pct": 0,
+        "used_estimated": false,
+        "unused_usd": 20,
+        "state": "unconfirmed",
+        "idle_since": null,
+        "unconfirmed_since": "2026-09-16T09:00:00Z",
+        "ended_at": null,
+        "plan_confirmed_at": "2026-08-12T09:00:00Z",
+        "first_seen": "2026-05-04T09:00:00Z",
+        "last_seen": "2026-09-02T09:00:00Z",
+        "billed_through": null,
+        "consumers": [],
+        "usd_per_m_weighted": null,
+        "plans": [
+          {
+            "at": "2026-05-04T09:00:00Z",
+            "plan": "pro"
+          }
+        ]
+      },
+      {
+        "provider": "codex",
+        "account": "ann@acme.dev",
+        "name": "ann",
+        "alias": null,
+        "current": true,
+        "plan": "pro",
+        "plan_name": "Pro 200",
+        "price_usd": 180,
+        "price_source": "typed",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": "2026-10-11T21:00:00Z",
+        "renews_confirmed": true,
+        "suggested_renewal_day": null,
+        "used_usd": 155,
+        "used_pct": 86,
+        "used_estimated": false,
+        "unused_usd": 25,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-23T13:38:00Z",
+        "first_seen": "2026-06-02T09:15:00Z",
+        "last_seen": "2026-09-23T14:31:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "ann@annbook",
+            "device_id": "d-7c3e1a9b5f2d4e8a6c0b1d3f",
+            "usd": 145.7,
+            "share": 94
+          },
+          {
+            "device": "root@srv1",
+            "device_id": "d-2f8a6c4e0b9d7f1a3c5e7b9d",
+            "usd": 9.3,
+            "share": 6
+          }
+        ],
+        "usd_per_m_weighted": 0.05,
+        "plans": [
+          {
+            "at": "2026-06-02T09:15:00Z",
+            "plan": "pro"
+          }
+        ]
+      },
+      {
+        "provider": "codex",
+        "account": "sam@mail.test",
+        "name": "sam",
+        "alias": null,
+        "current": false,
+        "plan": "prolite",
+        "plan_name": "Pro 100",
+        "price_usd": 100,
+        "price_source": "stale",
+        "typed_for": "plus",
+        "cadence": "monthly",
+        "renews_at": null,
+        "renews_confirmed": false,
+        "suggested_renewal_day": null,
+        "used_usd": 94,
+        "used_pct": 94,
+        "used_estimated": false,
+        "unused_usd": 6,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-23T11:38:00Z",
+        "first_seen": "2026-06-20T09:00:00Z",
+        "last_seen": "2026-09-23T11:38:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "sam@MacBook-Pro-Kim",
+            "device_id": "d-4e6a8c0e2a4c6e8a0c2e4a6c",
+            "usd": 94,
+            "share": 100
+          }
+        ],
+        "usd_per_m_weighted": 0.09,
+        "plans": [
+          {
+            "at": "2026-06-20T09:00:00Z",
+            "plan": "plus"
+          },
+          {
+            "at": "2026-08-30T09:00:00Z",
+            "plan": "prolite"
+          }
+        ]
+      },
+      {
+        "provider": "codex",
+        "account": "lee@corp.test",
+        "name": "lee",
+        "alias": null,
+        "current": true,
+        "plan": "pro",
+        "plan_name": "Pro 200",
+        "price_usd": 200,
+        "price_source": "list",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": null,
+        "renews_confirmed": false,
+        "suggested_renewal_day": null,
+        "used_usd": 56,
+        "used_pct": 28,
+        "used_estimated": false,
+        "unused_usd": 144,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-23T14:04:00Z",
+        "first_seen": "2026-06-02T09:15:00Z",
+        "last_seen": "2026-09-23T14:31:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "root@srv1",
+            "device_id": "d-2f8a6c4e0b9d7f1a3c5e7b9d",
+            "usd": 38.6,
+            "share": 69
+          },
+          {
+            "device": "hermes@bot-a",
+            "device_id": "d-b00c1d2e3f4a5b6c7d8e9f00",
+            "usd": 5,
+            "share": 9
+          },
+          {
+            "device": "hermes@bot-b",
+            "device_id": "d-b01c1d2e3f4a5b6c7d8e9f10",
+            "usd": 4,
+            "share": 7
+          },
+          {
+            "device": "hermes@bot-c",
+            "device_id": "d-b02c1d2e3f4a5b6c7d8e9f20",
+            "usd": 2.6,
+            "share": 5
+          },
+          {
+            "device": "ci@ci-runner-eu-west-build-pool-node-0042ab",
+            "device_id": "d-5a1b2c3d4e5f60718293a4b5",
+            "usd": 0.6,
+            "share": 1
+          }
+        ],
+        "usd_per_m_weighted": 0.03,
+        "plans": [
+          {
+            "at": "2026-06-02T09:15:00Z",
+            "plan": "pro"
+          }
+        ]
+      },
+      {
+        "provider": "codex",
+        "account": "ann+old@acme.dev",
+        "name": "ann+old",
+        "alias": null,
+        "current": false,
+        "plan": "plus",
+        "plan_name": "Plus",
+        "price_usd": 20,
+        "price_source": "list",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": null,
+        "renews_confirmed": false,
+        "suggested_renewal_day": null,
+        "used_usd": 3,
+        "used_pct": 15,
+        "used_estimated": false,
+        "unused_usd": 17,
+        "state": "ended",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": "2026-09-15T10:00:00Z",
+        "plan_confirmed_at": "2026-09-10T10:00:00Z",
+        "first_seen": "2026-06-02T09:15:00Z",
+        "last_seen": "2026-09-14T09:00:00Z",
+        "billed_through": null,
+        "consumers": [],
+        "usd_per_m_weighted": null,
+        "plans": [
+          {
+            "at": "2026-06-02T09:15:00Z",
+            "plan": "plus"
+          }
+        ]
+      },
+      {
+        "provider": "grok",
+        "account": "a4c2e917-6b3d-4f81-9c2a-5e7d1b8f0a36",
+        "name": "a4c2e917",
+        "alias": null,
+        "current": true,
+        "plan": "SuperGrok Heavy",
+        "plan_name": "SuperGrok Heavy",
+        "price_usd": 300,
+        "price_source": "list",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": null,
+        "renews_confirmed": false,
+        "suggested_renewal_day": null,
+        "used_usd": 300,
+        "used_pct": null,
+        "used_estimated": true,
+        "unused_usd": 0,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-23T03:38:00Z",
+        "first_seen": "2026-09-22T06:00:00Z",
+        "last_seen": "2026-09-23T14:31:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "ann@annbook",
+            "device_id": "d-7c3e1a9b5f2d4e8a6c0b1d3f",
+            "usd": 300,
+            "share": 100
+          }
+        ],
+        "usd_per_m_weighted": 17.6,
+        "plans": [
+          {
+            "at": "2026-09-22T06:00:00Z",
+            "plan": "SuperGrok Heavy"
+          }
+        ]
+      }
+    ],
+    "devices": [
+      {
+        "device": "ann@annbook",
+        "device_id": "d-7c3e1a9b5f2d4e8a6c0b1d3f",
+        "usd": 609.5
+      },
+      {
+        "device": "sam@MacBook-Pro-Kim",
+        "device_id": "d-4e6a8c0e2a4c6e8a0c2e4a6c",
+        "usd": 94
+      },
+      {
+        "device": "root@srv1",
+        "device_id": "d-2f8a6c4e0b9d7f1a3c5e7b9d",
+        "usd": 66.1
+      },
+      {
+        "device": "hermes@bot-a",
+        "device_id": "d-b00c1d2e3f4a5b6c7d8e9f00",
+        "usd": 5
+      },
+      {
+        "device": "hermes@bot-b",
+        "device_id": "d-b01c1d2e3f4a5b6c7d8e9f10",
+        "usd": 4
+      },
+      {
+        "device": "hermes@bot-c",
+        "device_id": "d-b02c1d2e3f4a5b6c7d8e9f20",
+        "usd": 2.6
+      },
+      {
+        "device": "ci@ci-runner-eu-west-build-pool-node-0042ab",
+        "device_id": "d-5a1b2c3d4e5f60718293a4b5",
+        "usd": 0.6
+      },
+      {
+        "device": "kim@Mac.localdomain",
+        "device_id": "d-9b1d3f5a7c9e1b3d5f7a9c1e",
+        "usd": null
+      }
+    ],
+    "questions": [
+      {
+        "id": "renewal-1a2b3c4d5e6f",
+        "kind": "renewal",
+        "provider": "grok",
+        "account": "a4c2e917-6b3d-4f81-9c2a-5e7d1b8f0a36",
+        "text": "When does grok a4c2e917 (SuperGrok Heavy at $300/mo) charge next? Its tool suggests Sun 4 Oct.",
+        "suggestion": "2026-10-04",
+        "suggestion_yearly": null,
+        "choices": []
+      },
+      {
+        "id": "still_paid-0f1e2d3c4b5a",
+        "kind": "still_paid",
+        "provider": "claude",
+        "account": "old@acme.dev",
+        "text": "Is claude old@acme.dev (Pro at $20/mo) still paid? Last confirmed 12 Aug.",
+        "suggestion": null,
+        "suggestion_yearly": null,
+        "choices": []
+      }
+    ],
+    "events": [
+      {
+        "id": "ended-6a7b8c9d0e1f",
+        "kind": "ended",
+        "at": "2026-09-15T10:00:00Z",
+        "provider": "codex",
+        "account": "ann+old@acme.dev",
+        "from": "plus",
+        "to": null,
+        "from_usd": 20,
+        "to_usd": null,
+        "delta_usd": null,
+        "text": "codex ann+old@acme.dev ended; its $20/mo no longer counts"
+      },
+      {
+        "id": "unconfirmed-2b3c4d5e6f7a",
+        "kind": "unconfirmed",
+        "at": "2026-09-16T09:00:00Z",
+        "provider": "claude",
+        "account": "old@acme.dev",
+        "from": null,
+        "to": "pro",
+        "from_usd": null,
+        "to_usd": 20,
+        "delta_usd": null,
+        "text": "nobody can say claude old@acme.dev is still paid; last confirmed 12 Aug"
+      },
+      {
+        "id": "plan_changed-3c4d5e6f7a8b",
+        "kind": "plan_changed",
+        "at": "2026-09-21T08:00:00Z",
+        "provider": "claude",
+        "account": "ann@acme.dev",
+        "from": "max 5x",
+        "to": "max 20x",
+        "from_usd": 100,
+        "to_usd": 200,
+        "delta_usd": 100,
+        "text": "claude ann@acme.dev changed plan: Max 5x to Max 20x, +$100/mo"
+      },
+      {
+        "id": "charges_soon-4d5e6f7a8b9c",
+        "kind": "charges_soon",
+        "at": "2026-09-21T21:00:00Z",
+        "provider": "claude",
+        "account": "ann@acme.dev",
+        "from": null,
+        "to": "max 20x",
+        "from_usd": null,
+        "to_usd": 200,
+        "delta_usd": null,
+        "text": "claude ann@acme.dev charges $200 on Fri 25 Sep; used 91% over the last 4 weeks"
+      },
+      {
+        "id": "new-5e6f7a8b9c0d",
+        "kind": "new",
+        "at": "2026-09-22T06:00:00Z",
+        "provider": "grok",
+        "account": "a4c2e917-6b3d-4f81-9c2a-5e7d1b8f0a36",
+        "from": null,
+        "to": "SuperGrok Heavy",
+        "from_usd": null,
+        "to_usd": 300,
+        "delta_usd": 300,
+        "text": "new subscription grok a4c2e917: SuperGrok Heavy at $300/mo"
+      },
+      {
+        "id": "price_changed-6f7a8b9c0d1e",
+        "kind": "price_changed",
+        "at": "2026-09-22T09:00:00Z",
+        "provider": "claude",
+        "account": "old@acme.dev",
+        "from": "pro",
+        "to": "pro",
+        "from_usd": 17,
+        "to_usd": 20,
+        "delta_usd": 3,
+        "text": "the list price of claude old@acme.dev's pro changed from $17 to $20/mo; the new price applies from now on, and `ai-usage cost set claude:old@acme.dev --price 17` keeps the old one"
+      }
+    ]
   }
 }

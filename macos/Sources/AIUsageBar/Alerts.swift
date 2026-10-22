@@ -75,8 +75,8 @@ private struct AlertRow: View {
         let a = line.attention
         let mark = Self.mark(a)
         // An idle subscription is a quiet line, dim throughout, as the
-        // report's is.
-        let quiet = a.kind == .idle
+        // report's is; so is what its cost says.
+        let quiet = a.kind == .idle || a.kind == .check || a.kind == .cost
         let row = HStack(alignment: .firstTextBaseline, spacing: 0) {
             Image(systemName: mark.symbol)
                 .symbolRenderingMode(.monochrome)
@@ -127,6 +127,7 @@ private struct AlertRow: View {
         switch line.target {
         case .limits, .notRead: return "Shows the subscription in Limits"
         case .devices: return solo ? "Shows this Mac's status" : "Shows the devices in Usage"
+        case .cost: return "Shows the subscription's cost in Settings"
         case .none: return nil
         }
     }
@@ -151,6 +152,8 @@ private struct AlertRow: View {
             }
             store.tab = .usage
             store.deviceFilter = DeviceFilter(title: line.text.subject, devices: Set(devices), chip: nil)
+        case .cost:
+            SettingsWindow.show(pane: .cost)
         case .none:
             break
         }
@@ -173,6 +176,8 @@ private struct AlertRow: View {
             if !a.limitations.isEmpty { return ("arrow.down.circle.fill", Palette.text("tight")) }
             return ("arrow.up.circle.fill", a.at != nil ? Palette.text("tight") : .secondary)
         case .idle: return ("moon.zzz", Color(nsColor: .tertiaryLabelColor))
+        case .check: return ("questionmark.circle", Color(nsColor: .tertiaryLabelColor))
+        case .cost: return ("dollarsign.circle", Color(nsColor: .tertiaryLabelColor))
         case .other: return ("circle", Color(nsColor: .tertiaryLabelColor))
         }
     }
@@ -191,6 +196,8 @@ private struct AlertRow: View {
         case .old: return "Older release"
         case .under: return "Underused"
         case .idle: return "Idle"
+        case .check: return "Still paid?"
+        case .cost: return "Cost"
         case .other(let name): return name
         }
     }

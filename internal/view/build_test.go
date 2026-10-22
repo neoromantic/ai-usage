@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/cost"
 	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
@@ -119,6 +120,10 @@ func TestJSONFieldNamesAreStable(t *testing.T) {
 		{Window: "7d", ResetsAt: start, Percent: 100, LastReadAt: start.Add(-time.Hour)},
 	}}
 	f.seal(now)
+	// A subscription new a day ago, which ATTENTION names.
+	store := &cost.Store{V: cost.StoreVersion, Since: now.Add(-60 * 24 * time.Hour), Subs: map[string]*cost.Sub{}}
+	store.Sub("codex", "bob", now.Add(-24*time.Hour)).Plans = []cost.PlanAt{{At: now.Add(-24 * time.Hour), Plan: "plus"}}
+	f.in.Cost = store
 	r := Build(f.in)
 	if r.SchemaVersion != 4 {
 		t.Fatalf("schema version %d", r.SchemaVersion)
@@ -171,7 +176,7 @@ func TestJSONFieldNamesAreStable(t *testing.T) {
 
 // jsonFields are every field of the report, as dotted paths.
 const jsonFields = `
-attention attention.account attention.at attention.devices attention.kind attention.message attention.name
+attention attention.account attention.at attention.devices attention.event attention.kind attention.message attention.name
 attention.percent attention.provider attention.reading_age_seconds attention.resets_at attention.subject attention.text attention.window
 collector collector.device collector.device_label
 collector.health collector.health.at collector.health.item collector.health.release collector.health.state collector.health.status
@@ -181,6 +186,19 @@ collector.relay.last_error collector.relay.last_pull_at collector.relay.last_pus
 collector.relay.url collector.schedule collector.schedule.error collector.schedule.foreground collector.schedule.registered
 collector.team collector.update collector.update.checked_at collector.update.command collector.update.error
 collector.update.latest collector.update.method collector.update.staged collector.version
+cost cost.currency cost.devices cost.devices.device cost.devices.device_id cost.devices.usd cost.events cost.events.account cost.events.at
+cost.events.delta_usd cost.events.from cost.events.from_usd cost.events.id cost.events.kind cost.events.provider cost.events.text cost.events.to cost.events.to_usd cost.next_charge
+cost.prices cost.prices.source cost.prices.updated cost.questions cost.questions.account cost.questions.choices cost.questions.id cost.questions.kind
+cost.questions.provider cost.questions.suggestion cost.questions.suggestion_yearly cost.questions.text cost.subscriptions cost.subscriptions.account cost.subscriptions.alias
+cost.subscriptions.billed_through cost.subscriptions.cadence cost.subscriptions.consumers cost.subscriptions.consumers.device
+cost.subscriptions.consumers.device_id cost.subscriptions.consumers.share cost.subscriptions.consumers.usd cost.subscriptions.current
+cost.subscriptions.ended_at cost.subscriptions.first_seen cost.subscriptions.idle_since cost.subscriptions.last_seen cost.subscriptions.name
+cost.subscriptions.plan cost.subscriptions.plan_confirmed_at cost.subscriptions.plan_name cost.subscriptions.plans cost.subscriptions.plans.at
+cost.subscriptions.plans.plan cost.subscriptions.price_source cost.subscriptions.price_usd cost.subscriptions.provider cost.subscriptions.renews_at
+cost.subscriptions.renews_confirmed cost.subscriptions.state cost.subscriptions.suggested_renewal_day cost.subscriptions.typed_for
+cost.subscriptions.unconfirmed_since cost.subscriptions.unused_usd cost.subscriptions.usd_per_m_weighted cost.subscriptions.used_estimated
+cost.subscriptions.used_pct cost.subscriptions.used_usd cost.total_usd cost.unused_usd cost.used_estimated cost.used_pct cost.used_usd
+cost.without_price
 generated_at
 projects projects.active_sessions projects.active_sessions.30d projects.active_sessions.7d projects.active_sessions.90d projects.active_sessions.today
 projects.burn projects.burn.30d projects.burn.7d projects.burn.90d projects.burn.today

@@ -19,7 +19,8 @@ import (
 // every account's quota_at, so the minimal document beside it, which leaves
 // them out, pins their omitempty. v1-extended.json adds the members v0.4.0
 // added, which v1.json pins as left out when empty, and v1-cycles.json the
-// cycles v0.5.0 added, which v1-extended.json pins so.
+// cycles v0.5.0 added, which v1-extended.json pins so. v1-cost.json adds
+// the costs v0.10.0 added to v1-hours.json.
 func TestWireFormat(t *testing.T) {
 	golden, err := os.ReadFile(filepath.Join("testdata", "v1.json"))
 	if err != nil {
@@ -33,6 +34,10 @@ func TestWireFormat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	costs, err := os.ReadFile(filepath.Join("testdata", "v1-cost.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	minimal := `{"v":1,"team":"a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2","device":"mac-0123abcd","device_label":"Ab-_","os_user":"Ab-_",` +
 		`"collector_version":"v1.2.3","collected_at":"2026-09-23T12:00:00Z","last_success_at":"2026-09-23T11:45:00Z",` +
 		`"accounts":[{"provider":"codex","label":"Ab-_","current":true,"plan":"pro","quota_at":"2026-09-23T11:59:00Z",` +
@@ -40,7 +45,7 @@ func TestWireFormat(t *testing.T) {
 		`"tokens":{"input":1,"output":2,"cache_read":3,"cache_write":4},"projects":[]},` +
 		`{"provider":"claude","label":"Ab-_","current":false,"windows":[],"sessions":1,` +
 		`"tokens":{"input":1,"output":2,"cache_read":3,"cache_write":4},"projects":[]}],"sources":[]}`
-	for _, body := range [][]byte{bytes.TrimSpace(golden), []byte(minimal), bytes.TrimSpace(extended), bytes.TrimSpace(cycles)} {
+	for _, body := range [][]byte{bytes.TrimSpace(golden), []byte(minimal), bytes.TrimSpace(extended), bytes.TrimSpace(cycles), bytes.TrimSpace(costs)} {
 		d, err := Decode(body)
 		if err != nil {
 			t.Fatalf("Decode: %v", err)
@@ -111,6 +116,7 @@ func TestDecodeRejectsUnknownFields(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 	al := Alias{Provider: "claude", Label: sealed(40), Name: sealed(12), At: t0}
+	co := Cost{Provider: "codex", Label: sealed(40), Data: sealed(MaxSealed), At: t0}
 	rc := Recent{Window: "5h", Start: t0.Add(-time.Hour), Tokens: 900}
 	cy := Cycle{Window: "7d", ResetsAt: t0.Add(-time.Hour), Percent: 100, LastReadAt: t0.Add(-2 * time.Hour)}
 	cycle := func(edit func(*Cycle)) func(*Doc) {
@@ -188,6 +194,16 @@ func TestValidate(t *testing.T) {
 		// A plain name of only letters, digits, - and _ would pass the sealed charset.
 		{"alias plain name", func(d *Doc) { d.Aliases = []Alias{al}; d.Aliases[0].Name = "Ann B" }, false},
 		{"alias at missing", func(d *Doc) { d.Aliases = []Alias{al}; d.Aliases[0].At = time.Time{} }, false},
+		{"costs", func(d *Doc) { d.Costs = []Cost{co} }, true},
+		{"most costs", func(d *Doc) { d.Costs = repeat(co, MaxCosts) }, true},
+		{"too many costs", func(d *Doc) { d.Costs = repeat(co, MaxCosts+1) }, false},
+		{"cost unknown provider", func(d *Doc) { d.Costs = []Cost{co}; d.Costs[0].Provider = "gemini" }, false},
+		{"cost plain label", func(d *Doc) { d.Costs = []Cost{co}; d.Costs[0].Label = "ann@acme.dev" }, false},
+		{"cost label missing", func(d *Doc) { d.Costs = []Cost{co}; d.Costs[0].Label = "" }, false},
+		{"cost plain data", func(d *Doc) { d.Costs = []Cost{co}; d.Costs[0].Data = `{"p":20}` }, false},
+		{"cost data missing", func(d *Doc) { d.Costs = []Cost{co}; d.Costs[0].Data = "" }, false},
+		{"cost data too long", func(d *Doc) { d.Costs = []Cost{co}; d.Costs[0].Data = sealed(MaxSealed + 1) }, false},
+		{"cost at missing", func(d *Doc) { d.Costs = []Cost{co}; d.Costs[0].At = time.Time{} }, false},
 
 		{"account unknown provider", func(d *Doc) { d.Accounts[0].Provider = "Claude" }, false},
 		{"account label missing", func(d *Doc) { d.Accounts[0].Label = "" }, false},

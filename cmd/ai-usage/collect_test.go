@@ -351,7 +351,7 @@ func TestScheduledRunReadsTheTeamEvery20Minutes(t *testing.T) {
 	reads := 0
 	rs := relay.NewServer(relay.NewMemory())
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
+		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/teams/") {
 			mu.Lock()
 			reads++
 			mu.Unlock()

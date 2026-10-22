@@ -97,6 +97,15 @@
       "name": "sam",
       "resets_at": "2026-09-25T09:00:00Z",
       "percent": 27
+    },
+    {
+      "kind": "idle",
+      "subject": "codex work@example.org",
+      "text": "idle 45d, paid and unused",
+      "provider": "codex",
+      "account": "work@example.org",
+      "name": "work",
+      "at": "2026-08-09T14:38:00Z"
     }
   ],
   "providers": [
@@ -2215,5 +2224,267 @@
         }
       ]
     }
+  },
+  "cost": {
+    "currency": "USD",
+    "total_usd": 65,
+    "without_price": 1,
+    "used_usd": 39,
+    "used_pct": 60,
+    "unused_usd": 26,
+    "used_estimated": false,
+    "next_charge": {
+      "provider": "codex",
+      "account": "sam@example.com",
+      "at": "2026-10-02T21:00:00Z",
+      "usd": 20
+    },
+    "prices": {
+      "updated": "2026-09-20",
+      "source": "built in"
+    },
+    "subscriptions": [
+      {
+        "provider": "claude",
+        "account": "sam@example.com",
+        "name": "sam",
+        "alias": null,
+        "current": true,
+        "plan": "pro",
+        "plan_name": "Pro",
+        "price_usd": 20,
+        "price_source": "list",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": null,
+        "renews_confirmed": false,
+        "suggested_renewal_day": 14,
+        "used_usd": 17,
+        "used_pct": 85,
+        "used_estimated": false,
+        "unused_usd": 3,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-23T14:20:00Z",
+        "first_seen": "2026-07-14T09:00:00Z",
+        "last_seen": "2026-09-23T14:31:00Z",
+        "billed_through": "App Store",
+        "consumers": [
+          {
+            "device": "sam@sam-air",
+            "device_id": "d-5c1f9a0e7b3d2c4a8e6f1b09",
+            "usd": 17,
+            "share": 100
+          }
+        ],
+        "usd_per_m_weighted": 0.03,
+        "plans": [
+          {
+            "at": "2026-07-14T09:00:00Z",
+            "plan": "pro"
+          }
+        ]
+      },
+      {
+        "provider": "codex",
+        "account": "sam@example.com",
+        "name": "sam",
+        "alias": null,
+        "current": true,
+        "plan": "plus",
+        "plan_name": "Plus",
+        "price_usd": 20,
+        "price_source": "list",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": "2026-10-02T21:00:00Z",
+        "renews_confirmed": true,
+        "suggested_renewal_day": null,
+        "used_usd": 6,
+        "used_pct": 29,
+        "used_estimated": false,
+        "unused_usd": 14,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-23T13:58:00Z",
+        "first_seen": "2026-06-02T09:00:00Z",
+        "last_seen": "2026-09-23T14:31:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "sam@sam-air",
+            "device_id": "d-5c1f9a0e7b3d2c4a8e6f1b09",
+            "usd": 6,
+            "share": 100
+          }
+        ],
+        "usd_per_m_weighted": 0.12,
+        "plans": [
+          {
+            "at": "2026-06-02T09:00:00Z",
+            "plan": "plus"
+          }
+        ]
+      },
+      {
+        "provider": "codex",
+        "account": "work@example.org",
+        "name": "work",
+        "alias": null,
+        "current": false,
+        "plan": "team",
+        "plan_name": "team",
+        "price_usd": null,
+        "price_source": "unknown",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": null,
+        "renews_confirmed": false,
+        "suggested_renewal_day": null,
+        "used_usd": null,
+        "used_pct": 0,
+        "used_estimated": false,
+        "unused_usd": null,
+        "state": "idle",
+        "idle_since": "2026-08-09T14:38:00Z",
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-20T10:00:00Z",
+        "first_seen": "2026-06-02T09:00:00Z",
+        "last_seen": "2026-09-23T14:31:00Z",
+        "billed_through": null,
+        "consumers": [],
+        "usd_per_m_weighted": null,
+        "plans": [
+          {
+            "at": "2026-06-02T09:00:00Z",
+            "plan": "team"
+          }
+        ]
+      },
+      {
+        "provider": "codex",
+        "account": "sam+old@example.com",
+        "name": "sam+old",
+        "alias": null,
+        "current": false,
+        "plan": "free",
+        "plan_name": "free",
+        "price_usd": 0,
+        "price_source": "list",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": null,
+        "renews_confirmed": false,
+        "suggested_renewal_day": null,
+        "used_usd": 0,
+        "used_pct": 0,
+        "used_estimated": false,
+        "unused_usd": 0,
+        "state": "ended",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": "2026-09-18T08:00:00Z",
+        "plan_confirmed_at": "2026-09-20T14:38:00Z",
+        "first_seen": "2026-06-02T09:00:00Z",
+        "last_seen": "2026-09-20T14:38:00Z",
+        "billed_through": null,
+        "consumers": [],
+        "usd_per_m_weighted": null,
+        "plans": [
+          {
+            "at": "2026-06-02T09:00:00Z",
+            "plan": "pro"
+          },
+          {
+            "at": "2026-09-18T08:00:00Z",
+            "plan": "free"
+          }
+        ]
+      },
+      {
+        "provider": "grok",
+        "account": "3f2a9c1e-5b7d-4e2f-8a1c-9d0e6f4b2a7c",
+        "name": "3f2a9c1e",
+        "alias": null,
+        "current": true,
+        "plan": "SuperGrok",
+        "plan_name": "SuperGrok",
+        "price_usd": 25,
+        "price_source": "typed",
+        "typed_for": null,
+        "cadence": "yearly",
+        "renews_at": "2027-03-01T21:00:00Z",
+        "renews_confirmed": true,
+        "suggested_renewal_day": null,
+        "used_usd": 16,
+        "used_pct": 64,
+        "used_estimated": false,
+        "unused_usd": 9,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-21T14:38:00Z",
+        "first_seen": "2026-03-02T09:00:00Z",
+        "last_seen": "2026-09-23T14:31:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "sam@sam-air",
+            "device_id": "d-5c1f9a0e7b3d2c4a8e6f1b09",
+            "usd": 16,
+            "share": 100
+          }
+        ],
+        "usd_per_m_weighted": 2.27,
+        "plans": [
+          {
+            "at": "2026-03-02T09:00:00Z",
+            "plan": "SuperGrok"
+          }
+        ]
+      }
+    ],
+    "devices": [
+      {
+        "device": "sam@sam-air",
+        "device_id": "d-5c1f9a0e7b3d2c4a8e6f1b09",
+        "usd": 39
+      }
+    ],
+    "questions": [
+      {
+        "id": "renewal-7a8b9c0d1e2f",
+        "kind": "renewal",
+        "provider": "claude",
+        "account": "sam@example.com",
+        "text": "When does claude sam@example.com (Pro at $20/mo) charge next? Its tool suggests Wed 14 Oct.",
+        "suggestion": "2026-10-14",
+        "choices": [
+          "monthly",
+          "yearly"
+        ]
+      }
+    ],
+    "events": [
+      {
+        "id": "ended-8b9c0d1e2f3a",
+        "kind": "ended",
+        "at": "2026-09-18T08:00:00Z",
+        "provider": "codex",
+        "account": "sam+old@example.com",
+        "from": "free",
+        "to": null,
+        "from_usd": 0,
+        "to_usd": null,
+        "delta_usd": null,
+        "text": "codex sam+old@example.com ended"
+      }
+    ]
   }
 }

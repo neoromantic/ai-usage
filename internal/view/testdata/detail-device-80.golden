@@ -1,4 +1,4 @@
-[1mai-usage[m · ann@annbook         ● collected 7m  ● relay 7m  ● up to date
+[1mai-usage[m · ann@annbook  ● collected 7m  ● relay 7m  ● up to date  $1,000/mo
 
 [1mDEVICE[m  [1mkim@Mac.localdomain[m
   VERSION  v1.4.0 ↓ · latest v1.4.2
@@ -14,3 +14,8 @@
   codex unknown           128  427  1621  3839   100%
   claude kim@corp.test     37  125   474  1123   100%
   TOTAL                   165  551  2095  4963      ·
+
+[1mCOST[m  1 · used over the last 4 weeks · share of each subscription
+  ACCOUNT               USED  SHARE
+  claude kim@corp.test     ?   100%
+  TOTAL                    ?      ·

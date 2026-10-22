@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/cost"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/team"
 	"github.com/neoromantic/ai-usage/relay"
@@ -125,6 +126,26 @@ func TestStoreChoice(t *testing.T) {
 				t.Fatalf("health body %v", body)
 			}
 		})
+	}
+}
+
+// A deployment without KV still serves the price list, and nothing else.
+func TestPricesWithoutKV(t *testing.T) {
+	fresh(t)
+	t.Setenv("VERCEL", "1")
+	t.Setenv("VERCEL_ENV", "production")
+	rec := httptest.NewRecorder()
+	vercel().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/prices", nil))
+	if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "public, max-age=3600" || rec.Body.String() != string(cost.PricesJSON) {
+		t.Fatalf("status %d, headers %v, body %q", rec.Code, rec.Header(), rec.Body.String())
+	}
+	if code, _ := get(t, vercel(), "/v1/health"); code != http.StatusServiceUnavailable {
+		t.Fatalf("health without KV: status %d", code)
+	}
+	rec = httptest.NewRecorder()
+	vercel().ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/v1/prices", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("PUT prices without KV: status %d", rec.Code)
 	}
 }
 
