@@ -59,6 +59,26 @@ func TestExtendedWire(t *testing.T) {
 		t.Errorf("a read with documents left out: %+v", g)
 	}
 
+	// A device that keeps reporting on an older release for StuckAfter is
+	// left out; one behind for less, or behind on another release, is not.
+	stuck := cache(doc(self, "v0.4.0", 0), doc("d-srv1-a4c2e917", "v0.3.4", 0), doc("d-sambook-0002", "v0.3.0", 0))
+	stuck.Behind = map[string]Behind{
+		"d-srv1-a4c2e917": {Version: "v0.3.4", Since: now.Add(-StuckAfter - time.Hour)},
+		"d-sambook-0002":  {Version: "v0.3.0", Since: now.Add(-StuckAfter + time.Hour)},
+	}
+	stuck.Known = map[string]Known{"d-srv1-a4c2e917": {Version: "v0.3.4"}}
+	if g := ExtendedWire(stuck, fp, self, time.Time{}, now); g.Open || !slices.Equal(g.HeldBack, []string{"d-sambook-0002"}) || !slices.Equal(g.LeftOut, []string{"d-srv1-a4c2e917"}) {
+		t.Errorf("a device stuck for less than StuckAfter: %+v", g)
+	}
+	stuck.Behind["d-sambook-0002"] = Behind{Version: "v0.3.0", Since: now.Add(-StuckAfter)}
+	if g := ExtendedWire(stuck, fp, self, time.Time{}, now); !g.Open || len(g.HeldBack) > 0 || !slices.Equal(g.LeftOut, []string{"d-sambook-0002", "d-srv1-a4c2e917"}) {
+		t.Errorf("devices stuck for StuckAfter: %+v", g)
+	}
+	stuck.Behind["d-sambook-0002"] = Behind{Version: "v0.2.0", Since: now.Add(-30 * 24 * time.Hour)}
+	if g := ExtendedWire(stuck, fp, self, time.Time{}, now); g.Open || !slices.Equal(g.HeldBack, []string{"d-sambook-0002"}) {
+		t.Errorf("a device that moved to another old release: %+v", g)
+	}
+
 	// A device in Known and in the documents is held back once.
 	both := cache(doc("d-srv1-a4c2e917", "v0.3.4", 0))
 	both.Known = map[string]Known{"d-srv1-a4c2e917": {Version: "v0.3.4"}, "d-leoair-0003": {Version: "v0.3.0"}, self: {Version: "v0.2.0"}}
