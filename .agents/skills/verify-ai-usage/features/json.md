@@ -4,6 +4,7 @@
 
 - `schema_version`, `generated_at`, `collector`, `attention`, `providers`, `projects`, `team`
 - `team.devices[]` (each with `label`, `device`, `this_device`, `silent`, `old`), `team.matrix`, `team.providers`
+- `cost`: totals, subscriptions, devices, questions, and events ([cost.md](cost.md))
 - Every field and its meaning in `docs/json-schema.md`
 
 ## How to get to it (user POV)

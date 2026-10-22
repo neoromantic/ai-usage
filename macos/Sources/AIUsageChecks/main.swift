@@ -27,10 +27,10 @@ let team = try Report.decode(Data(contentsOf: demo.appendingPathComponent("team.
 let solo = try Report.decode(Data(contentsOf: demo.appendingPathComponent("solo.json")))
 equal("team schema", team.schemaVersion, 4)
 equal("team generated_at", team.generatedAt, time("2026-09-24T13:40:00Z"))
-equal("team attention", team.attention.map(\.kind.rawValue), ["out", "out", "over", "over", "tight", "error", "error", "no_reading", "silent", "old", "idle"])
+equal("team attention", team.attention.map(\.kind.rawValue), ["out", "out", "over", "over", "tight", "error", "error", "no_reading", "silent", "old", "check", "idle", "cost"])
 // IDLE, a paid subscription no team device has used for a week, gets no
 // chip, and the verdict does not count it.
-equal("idle kind", team.attention.last?.kind, .idle)
+equal("idle kind", team.attention[11].kind, .idle)
 // Each entry has the subject and text its console line says in full; an
 // entry from an older ai-usage has neither.
 equal("attention words", [team.attention[2].subject, team.attention[2].text],
@@ -229,13 +229,15 @@ check("team verdict opens its account", teamVerdict.kind == .out && teamVerdict.
 let alerts = AlertLine.lines(team)
 equal("alerts order", alerts.map(\.attention.kind.rawValue), team.attention.map(\.kind.rawValue))
 equal("alert subjects", alerts.map(\.text.subject), ["Claude mira · 5h", "Codex leo", "Codex bots", "Claude mira", "Codex mira", "leo@leo-air",
-                                                     "root@build-01", "Claude unknown", "hermes@courier", "1 device on v0.3.4", "Grok 7f3b9c21"])
+                                                     "root@build-01", "Claude unknown", "hermes@courier", "1 device on v0.3.4", "Claude jun",
+                                                     "Grok 7f3b9c21", "Claude mira"])
 equal("alert texts", alerts.map(\.text.detail), team.attention.map(\.text))
 check("alert targets", alerts.map(\.target) == [
     .limits(provider: "claude", label: "mira@studio.dev"), .limits(provider: "codex", label: "leo@studio.dev"),
     .limits(provider: "codex", label: "bots@studio.dev"), .limits(provider: "claude", label: "mira@studio.dev"),
     .limits(provider: "codex", label: "mira@studio.dev"), .devices(["leo@leo-air"]), .devices(["root@build-01"]), .notRead(provider: "claude"),
-    .devices(["hermes@courier"]), .devices(["leo@leo-air"]), .limits(provider: "grok", label: "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64"),
+    .devices(["hermes@courier"]), .devices(["leo@leo-air"]), .cost(provider: "claude", label: "jun@studio.dev"),
+    .limits(provider: "grok", label: "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64"), .cost(provider: "claude", label: "mira@studio.dev"),
 ])
 // The list's last line is the subscription the calm verdict names.
 equal("most room", Room.most(team).map { "\($0.text) \($0.account.label)" }, "Most room: Grok 7f3b9c21 · 100% 7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64")
@@ -467,7 +469,7 @@ equal("v0.3.4 this window's tooltip", bots034?.thisWindow?.help.components(separ
 equal("v0.3.4 forecast line", details(v034, "claude", "mira@studio.dev")?.forecast, "113% at reset · this week's pace")
 equal("v0.3.4 reading", details(v034, "claude", "mira@studio.dev")?.reading?.text, "3m old, from mira@mira-mbp")
 check("v0.3.4 solo reading", details(v034Solo, "claude", "mira@studio.dev").map { $0.reading == nil && $0.thisWindow?.forms == ["10M"] } == true)
-equal("v0.3.4 attention", v034.attention.map(\.kind.rawValue), ["out", "out", "over", "over", "tight", "error", "error", "no_reading", "silent", "old", "idle"])
+equal("v0.3.4 attention", v034.attention.map(\.kind.rawValue), ["out", "out", "over", "over", "tight", "error", "error", "no_reading", "silent", "old", "check", "idle", "cost"])
 
 /// Usage, or a share, of every period times f.
 func scaled(_ v: Any?, _ f: Double) -> Any {
@@ -765,9 +767,14 @@ let costFixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent().a
 let costTeam = try Report.decode(Data(contentsOf: costFixtures.appendingPathComponent("team.json")))
 let costSolo = try Report.decode(Data(contentsOf: costFixtures.appendingPathComponent("single.json")))
 let tz3 = TimeZone(secondsFromGMT: 3 * 3600)!
-check("a report before the cost has none", team.cost == nil && CostTotal(team) == nil && CostMatrix(team) == nil)
-equal("no cost notices", CostNotice.notices(team, now: team.generatedAt).count, 0)
-equal("no cost keys", CostNotice.keys(team).count, 0)
+let beforeCost = try edited("team.json") { objects($0) { o in o.filter { $0.key != "cost" } } }
+check("a report before the cost has none", beforeCost.cost == nil && CostTotal(beforeCost) == nil && CostMatrix(beforeCost) == nil)
+equal("no cost notices", CostNotice.notices(beforeCost, now: beforeCost.generatedAt).count, 0)
+equal("no cost keys", CostNotice.keys(beforeCost).count, 0)
+// The demo's cost: the total the popover shows, and the Team window's Cost
+// with a column for each subscription that has not ended.
+equal("demo cost total", CostTotal(team)?.text, "$703/mo")
+equal("demo cost columns", CostMatrix(team)?.columns.count, 7)
 let cost = costTeam.cost!
 equal("cost totals", [cost.totalUsd, cost.usedUsd, cost.usedPct, cost.unusedUsd], [1000, 787, 78.7, 213])
 equal("cost subscriptions", cost.subscriptions.map { "\($0.provider) \($0.name) \($0.state) \($0.priceSource)" },

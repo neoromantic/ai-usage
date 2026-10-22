@@ -154,13 +154,32 @@
       "message": "v0.5.0"
     },
     {
+      "kind": "check",
+      "subject": "claude jun@studio.dev",
+      "text": "still paid? last confirmed 21 Aug · on no device since 21 Aug: ai-usage cost confirm or cancel",
+      "provider": "claude",
+      "account": "jun@studio.dev",
+      "name": "jun",
+      "at": "2026-08-21T16:05:00Z"
+    },
+    {
       "kind": "idle",
       "subject": "grok 7f3b9c21",
-      "text": "idle 9d, paid and unused",
+      "text": "idle 9d, $25/mo paid and unused",
       "provider": "grok",
       "account": "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64",
       "name": "7f3b9c21",
       "at": "2026-09-15T13:20:00Z"
+    },
+    {
+      "kind": "cost",
+      "subject": "claude mira@studio.dev",
+      "text": "plan Max 5x → Max 20x, +$81/mo",
+      "provider": "claude",
+      "account": "mira@studio.dev",
+      "name": "mira",
+      "at": "2026-09-22T08:40:00Z",
+      "event": "plan_changed-7a0b62bfe894"
     }
   ],
   "providers": [
@@ -178,7 +197,7 @@
           "name": "mira",
           "current": true,
           "home": "/Users/mira/.claude",
-          "plan": "max",
+          "plan": "max 20x",
           "state": "out",
           "quota": {
             "observed_at": "2026-09-24T13:37:00Z",
@@ -2085,7 +2104,7 @@
               "mira@mira-mbp",
               "root@build-01"
             ],
-            "plan": "max",
+            "plan": "max 20x",
             "state": "out",
             "quota": {
               "observed_at": "2026-09-24T13:37:00Z",
@@ -6817,5 +6836,556 @@
         }
       ]
     }
+  },
+  "cost": {
+    "currency": "USD",
+    "total_usd": 703,
+    "without_price": 1,
+    "used_usd": 481.7125,
+    "used_pct": 68.52240398293029,
+    "unused_usd": 221.2875,
+    "used_estimated": true,
+    "next_charge": {
+      "provider": "codex",
+      "account": "mira@studio.dev",
+      "at": "2026-09-26T22:00:00Z",
+      "usd": 200
+    },
+    "prices": {
+      "updated": "2026-10-22",
+      "source": "built in"
+    },
+    "subscriptions": [
+      {
+        "provider": "claude",
+        "account": "mira@studio.dev",
+        "name": "mira",
+        "alias": null,
+        "current": true,
+        "plan": "max 20x",
+        "plan_name": "Max 20x",
+        "price_usd": 200,
+        "price_source": "stale",
+        "typed_for": "max 5x",
+        "cadence": "monthly",
+        "renews_at": null,
+        "renews_confirmed": false,
+        "suggested_renewal_day": 11,
+        "used_usd": 128.8375,
+        "used_pct": 91.25,
+        "used_estimated": false,
+        "unused_usd": 71.1625,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-24T13:37:00Z",
+        "first_seen": "2026-07-26T13:40:00Z",
+        "last_seen": "2026-09-24T13:37:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "mira@mira-mbp",
+            "device_id": "d-demo-mira",
+            "usd": 107.10372733052861,
+            "share": 83.13086432950702
+          },
+          {
+            "device": "root@build-01",
+            "device_id": "d-demo-build",
+            "usd": 21.73377266947139,
+            "share": 16.869135670492977
+          }
+        ],
+        "usd_per_m_weighted": 0.34662999044063814,
+        "plans": [
+          {
+            "at": "2026-07-26T13:40:00Z",
+            "plan": "max 5x"
+          },
+          {
+            "at": "2026-09-22T08:40:00Z",
+            "plan": "max 20x"
+          }
+        ]
+      },
+      {
+        "provider": "claude",
+        "account": "leo@studio.dev",
+        "name": "leo",
+        "alias": null,
+        "current": false,
+        "plan": "max",
+        "plan_name": "max",
+        "price_usd": null,
+        "price_source": "unknown",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": null,
+        "renews_confirmed": false,
+        "suggested_renewal_day": null,
+        "used_usd": null,
+        "used_pct": null,
+        "used_estimated": false,
+        "unused_usd": null,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-24T13:29:00Z",
+        "first_seen": "2026-07-26T13:40:00Z",
+        "last_seen": "2026-09-24T13:29:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "leo@leo-air",
+            "device_id": "d-demo-leo",
+            "usd": null,
+            "share": 100
+          }
+        ],
+        "usd_per_m_weighted": null,
+        "plans": [
+          {
+            "at": "2026-07-26T13:40:00Z",
+            "plan": "max"
+          }
+        ]
+      },
+      {
+        "provider": "claude",
+        "account": "jun@studio.dev",
+        "name": "jun",
+        "alias": null,
+        "current": false,
+        "plan": "pro",
+        "plan_name": "Pro",
+        "price_usd": 20,
+        "price_source": "list",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": null,
+        "renews_confirmed": false,
+        "suggested_renewal_day": null,
+        "used_usd": 0,
+        "used_pct": 0,
+        "used_estimated": false,
+        "unused_usd": 20,
+        "state": "unconfirmed",
+        "idle_since": null,
+        "unconfirmed_since": "2026-09-04T16:05:00Z",
+        "ended_at": null,
+        "plan_confirmed_at": "2026-08-21T16:05:00Z",
+        "first_seen": "2026-07-26T13:40:00Z",
+        "last_seen": "2026-08-21T16:05:00Z",
+        "billed_through": null,
+        "consumers": [],
+        "usd_per_m_weighted": null,
+        "plans": [
+          {
+            "at": "2026-07-26T13:40:00Z",
+            "plan": "pro"
+          }
+        ]
+      },
+      {
+        "provider": "codex",
+        "account": "leo@studio.dev",
+        "name": "leo",
+        "alias": null,
+        "current": false,
+        "plan": "plus",
+        "plan_name": "Plus",
+        "price_usd": 20,
+        "price_source": "list",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": null,
+        "renews_confirmed": false,
+        "suggested_renewal_day": null,
+        "used_usd": 20,
+        "used_pct": null,
+        "used_estimated": true,
+        "unused_usd": 0,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-24T08:40:00Z",
+        "first_seen": "2026-07-26T13:40:00Z",
+        "last_seen": "2026-09-24T13:29:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "leo@leo-air",
+            "device_id": "d-demo-leo",
+            "usd": 20,
+            "share": 100
+          }
+        ],
+        "usd_per_m_weighted": 0.15963871205243144,
+        "plans": [
+          {
+            "at": "2026-07-26T13:40:00Z",
+            "plan": "plus"
+          }
+        ]
+      },
+      {
+        "provider": "codex",
+        "account": "bots@studio.dev",
+        "name": "bots",
+        "alias": null,
+        "current": false,
+        "plan": "pro",
+        "plan_name": "Pro 200",
+        "price_usd": 238,
+        "price_source": "typed",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": null,
+        "renews_confirmed": false,
+        "suggested_renewal_day": null,
+        "used_usd": 238,
+        "used_pct": null,
+        "used_estimated": true,
+        "unused_usd": 0,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-24T13:36:00Z",
+        "first_seen": "2026-07-26T13:40:00Z",
+        "last_seen": "2026-09-24T13:36:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "root@build-01",
+            "device_id": "d-demo-build",
+            "usd": 113.2901529761693,
+            "share": 47.60090461183584
+          },
+          {
+            "device": "hermes@scout",
+            "device_id": "d-demo-bot-scout",
+            "usd": 34.74438703320138,
+            "share": 14.598481946723268
+          },
+          {
+            "device": "hermes@herald",
+            "device_id": "d-demo-bot-herald",
+            "usd": 20.88578777114031,
+            "share": 8.775541080311056
+          },
+          {
+            "device": "hermes@editor",
+            "device_id": "d-demo-bot-editor",
+            "usd": 18.169253271751504,
+            "share": 7.63414003014769
+          },
+          {
+            "device": "hermes@sentry",
+            "device_id": "d-demo-bot-sentry",
+            "usd": 17.94982067544747,
+            "share": 7.541941460272046
+          },
+          {
+            "device": "hermes@archivist",
+            "device_id": "d-demo-bot-archivist",
+            "usd": 11.540801319369464,
+            "share": 4.849076184609018
+          },
+          {
+            "device": "hermes@courier",
+            "device_id": "d-demo-bot-courier",
+            "usd": 9.376879353945732,
+            "share": 3.939865274767114
+          },
+          {
+            "device": "hermes@tutor",
+            "device_id": "d-demo-bot-tutor",
+            "usd": 7.57119123998487,
+            "share": 3.1811727899096094
+          },
+          {
+            "device": "hermes@critic",
+            "device_id": "d-demo-bot-critic",
+            "usd": 2.88104351358813,
+            "share": 1.2105224847008949
+          },
+          {
+            "device": "hermes@concierge",
+            "device_id": "d-demo-bot-concierge",
+            "usd": 1.5906828454018607,
+            "share": 0.6683541367234709
+          }
+        ],
+        "usd_per_m_weighted": 0.19401935864998304,
+        "plans": [
+          {
+            "at": "2026-07-26T13:40:00Z",
+            "plan": "pro"
+          }
+        ]
+      },
+      {
+        "provider": "codex",
+        "account": "mira@studio.dev",
+        "name": "mira",
+        "alias": null,
+        "current": true,
+        "plan": "pro",
+        "plan_name": "Pro 200",
+        "price_usd": 200,
+        "price_source": "list",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": "2026-09-26T22:00:00Z",
+        "renews_confirmed": true,
+        "suggested_renewal_day": null,
+        "used_usd": 92.5,
+        "used_pct": 46.25,
+        "used_estimated": false,
+        "unused_usd": 107.5,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-24T13:37:00Z",
+        "first_seen": "2026-07-26T13:40:00Z",
+        "last_seen": "2026-09-24T13:37:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "mira@mira-mbp",
+            "device_id": "d-demo-mira",
+            "usd": 92.5,
+            "share": 100
+          }
+        ],
+        "usd_per_m_weighted": 0.7324576323799245,
+        "plans": [
+          {
+            "at": "2026-07-26T13:40:00Z",
+            "plan": "pro"
+          }
+        ]
+      },
+      {
+        "provider": "codex",
+        "account": "ci@studio.dev",
+        "name": "ci",
+        "alias": null,
+        "current": false,
+        "plan": "plus",
+        "plan_name": "Plus",
+        "price_usd": 20,
+        "price_source": "list",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": null,
+        "renews_confirmed": false,
+        "suggested_renewal_day": null,
+        "used_usd": 0,
+        "used_pct": 0,
+        "used_estimated": false,
+        "unused_usd": 20,
+        "state": "ended",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": "2026-09-14T08:30:00Z",
+        "plan_confirmed_at": "2026-09-13T23:50:00Z",
+        "first_seen": "2026-07-26T13:40:00Z",
+        "last_seen": "2026-09-13T23:50:00Z",
+        "billed_through": null,
+        "consumers": [],
+        "usd_per_m_weighted": null,
+        "plans": [
+          {
+            "at": "2026-07-26T13:40:00Z",
+            "plan": "plus"
+          }
+        ]
+      },
+      {
+        "provider": "grok",
+        "account": "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64",
+        "name": "7f3b9c21",
+        "alias": null,
+        "current": true,
+        "plan": "SuperGrok",
+        "plan_name": "SuperGrok",
+        "price_usd": 25,
+        "price_source": "list",
+        "typed_for": null,
+        "cadence": "yearly",
+        "renews_at": "2027-03-01T23:00:00Z",
+        "renews_confirmed": true,
+        "suggested_renewal_day": null,
+        "used_usd": 2.375,
+        "used_pct": 9.5,
+        "used_estimated": false,
+        "unused_usd": 22.625,
+        "state": "idle",
+        "idle_since": "2026-09-15T13:20:00Z",
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-24T13:37:00Z",
+        "first_seen": "2026-07-26T13:40:00Z",
+        "last_seen": "2026-09-24T13:37:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "mira@mira-mbp",
+            "device_id": "d-demo-mira",
+            "usd": 2.375,
+            "share": 100
+          }
+        ],
+        "usd_per_m_weighted": 3.1937743373588945,
+        "plans": [
+          {
+            "at": "2026-07-26T13:40:00Z",
+            "plan": "SuperGrok"
+          }
+        ]
+      }
+    ],
+    "devices": [
+      {
+        "device": "mira@mira-mbp",
+        "device_id": "d-demo-mira",
+        "usd": 201.9787273305286
+      },
+      {
+        "device": "root@build-01",
+        "device_id": "d-demo-build",
+        "usd": 135.02392564564067
+      },
+      {
+        "device": "hermes@scout",
+        "device_id": "d-demo-bot-scout",
+        "usd": 34.74438703320138
+      },
+      {
+        "device": "hermes@herald",
+        "device_id": "d-demo-bot-herald",
+        "usd": 20.88578777114031
+      },
+      {
+        "device": "leo@leo-air",
+        "device_id": "d-demo-leo",
+        "usd": 20
+      },
+      {
+        "device": "hermes@editor",
+        "device_id": "d-demo-bot-editor",
+        "usd": 18.169253271751504
+      },
+      {
+        "device": "hermes@sentry",
+        "device_id": "d-demo-bot-sentry",
+        "usd": 17.94982067544747
+      },
+      {
+        "device": "hermes@archivist",
+        "device_id": "d-demo-bot-archivist",
+        "usd": 11.540801319369464
+      },
+      {
+        "device": "hermes@courier",
+        "device_id": "d-demo-bot-courier",
+        "usd": 9.376879353945732
+      },
+      {
+        "device": "hermes@tutor",
+        "device_id": "d-demo-bot-tutor",
+        "usd": 7.57119123998487
+      },
+      {
+        "device": "hermes@critic",
+        "device_id": "d-demo-bot-critic",
+        "usd": 2.88104351358813
+      },
+      {
+        "device": "hermes@concierge",
+        "device_id": "d-demo-bot-concierge",
+        "usd": 1.5906828454018607
+      }
+    ],
+    "questions": [
+      {
+        "id": "still_paid-9893321bc489",
+        "kind": "still_paid",
+        "provider": "claude",
+        "account": "jun@studio.dev",
+        "text": "Is claude jun@studio.dev (Pro at $20/mo) still paid? Last confirmed 21 Aug.",
+        "suggestion": null,
+        "choices": []
+      },
+      {
+        "id": "renewal-24216b715072",
+        "kind": "renewal",
+        "provider": "claude",
+        "account": "mira@studio.dev",
+        "text": "When does claude mira@studio.dev (Max 20x at $200/mo) charge next? Its tool suggests Sun 11 Oct.",
+        "suggestion": "2026-10-11",
+        "choices": []
+      }
+    ],
+    "events": [
+      {
+        "id": "unconfirmed-622b215b2253",
+        "kind": "unconfirmed",
+        "at": "2026-09-04T16:05:00Z",
+        "provider": "claude",
+        "account": "jun@studio.dev",
+        "from": null,
+        "to": "pro",
+        "from_usd": null,
+        "to_usd": 20,
+        "delta_usd": null,
+        "text": "nobody can say claude jun@studio.dev is still paid; last confirmed 21 Aug"
+      },
+      {
+        "id": "ended-673527f3fd8c",
+        "kind": "ended",
+        "at": "2026-09-14T08:30:00Z",
+        "provider": "codex",
+        "account": "ci@studio.dev",
+        "from": "plus",
+        "to": null,
+        "from_usd": 20,
+        "to_usd": null,
+        "delta_usd": null,
+        "text": "codex ci@studio.dev ended; its $20/mo no longer counts"
+      },
+      {
+        "id": "plan_changed-7a0b62bfe894",
+        "kind": "plan_changed",
+        "at": "2026-09-22T08:40:00Z",
+        "provider": "claude",
+        "account": "mira@studio.dev",
+        "from": "max 5x",
+        "to": "max 20x",
+        "from_usd": 119,
+        "to_usd": 200,
+        "delta_usd": 81,
+        "text": "claude mira@studio.dev changed plan: Max 5x to Max 20x, +$81/mo"
+      },
+      {
+        "id": "charges_soon-08be5d2b4f98",
+        "kind": "charges_soon",
+        "at": "2026-09-23T22:00:00Z",
+        "provider": "codex",
+        "account": "mira@studio.dev",
+        "from": null,
+        "to": "pro",
+        "from_usd": null,
+        "to_usd": 200,
+        "delta_usd": null,
+        "text": "codex mira@studio.dev charges $200 on Sun 27 Sep; used 46% over the last 4 weeks"
+      }
+    ]
   }
 }

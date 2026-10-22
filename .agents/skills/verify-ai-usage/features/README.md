@@ -12,5 +12,6 @@ field changes, change its file here in the same commit.
 | [JSON for agents](json.md) | `ai-usage --json`, `report --json` | `internal/view` JSON goldens, `docs/json-schema.md` | `stack` (`a.json`), `app` |
 | [Teams and the relay](team.md) | `team key`, `team join`, `name`, `alias`, `relay` | `relay/`, `cmd/ai-usage/team_test.go`, `internal/collect/team_test.go` | `stack` |
 | [Collection](collection.md) | the scheduler every 15 minutes, `ai-usage collect` | `internal/collect`, `internal/logs`, `internal/probe` | none; Go tests only |
+| [Cost](cost.md) | COST on the page, `$` in the interactive view, `ai-usage cost`, the app's Cost | `internal/cost`, `internal/view` cost goldens, `internal/tui/cost_test.go`, `cmd/ai-usage/cost_test.go`, `scripts/demo` `TestTeamCost` | `page`, `stack` (`/v1/prices`), `app`, `pictures` |
 | [Menu bar app](menubar.md) | the ring in the menu bar, the popover, Team window, Settings | `AIUsageChecks` | `app`, `pictures` |
 | [Install, update, schedule](install.md) | `install.sh`, `install.ps1`, `ai-usage update`, `schedule` | `internal/selfupdate`, `internal/schedule`, `install-smoke.sh` | `install` (`--push`) |

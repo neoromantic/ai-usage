@@ -6,7 +6,8 @@
 - Scrolling: `j`/`k`, `space`/`pgdown`, `pgup`, `g`/`G`, the mouse wheel
 - The matrix sideways: `h`/`l`, shift+wheel
 - The period: `p` cycles, `1` today, `7` week, `3` month, `9` quarter
-- `%` shares instead of tokens; `s` DEVICES as each device's status
+- `%` shares instead of tokens; `$` the matrix in dollars; `s` DEVICES as each device's status
+- Cost questions on the line over the key bar, and `e` to edit a subscription's cost, with a state folder only, not `--from` ([cost.md](cost.md))
 - `?` help, `esc` closes it (or quits), `q` quits, `r` refreshes
 - Drill-down: `enter` picks a row (an ATTENTION line about one account or
   device, an account in SUBSCRIPTIONS, UTILIZATION, or USAGE, a device in

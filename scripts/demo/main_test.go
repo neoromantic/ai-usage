@@ -47,6 +47,46 @@ func TestTeamReport(t *testing.T) {
 	}
 }
 
+// The team's cost shows every state and every source of a price, a Used
+// estimated from tokens, what happened over the month, and both questions
+// a device asks.
+func TestTeamCost(t *testing.T) {
+	c := teamReport().Cost
+	if c == nil {
+		t.Fatal("no cost")
+	}
+	have := map[string]bool{}
+	for _, s := range c.Subscriptions {
+		have["state "+s.State], have["price "+s.PriceSource] = true, true
+		if s.UsedEstimated {
+			have["estimated"] = true
+		}
+		if s.RenewsAt != nil && s.Cadence == "yearly" {
+			have["yearly"] = true
+		}
+	}
+	for _, e := range c.Events {
+		have["event "+e.Kind] = true
+	}
+	for _, q := range c.Questions {
+		have["question "+q.Kind] = true
+	}
+	for _, want := range []string{
+		"state " + view.CostActive, "state " + view.CostIdle, "state " + view.CostUnconfirmed, "state " + view.CostEnded,
+		"price " + view.PriceList, "price " + view.PriceTyped, "price " + view.PriceStale, "price " + view.PriceUnknown,
+		"estimated", "yearly",
+		"event " + view.EventPlanChanged, "event " + view.EventChargesSoon, "event " + view.EventEnded, "event " + view.EventUnconfirmed,
+		"question " + view.AskRenewal, "question " + view.AskStillPaid,
+	} {
+		if !have[want] {
+			t.Errorf("the team's cost has no %s", want)
+		}
+	}
+	if c.WithoutPrice != 1 || c.NextCharge == nil {
+		t.Errorf("without price %d, next charge %v; want 1 and one", c.WithoutPrice, c.NextCharge)
+	}
+}
+
 // The solo page shows how full each subscription got before its resets,
 // one of them read only partly, and the weeks Claude ran out.
 func TestSoloUtilization(t *testing.T) {

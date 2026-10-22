@@ -7,7 +7,8 @@
 - Each report pulls the team: `GET /v1/teams/{team}`; `team forget-device ID` deletes one
 - `name set` and `AI_USAGE_NAME`, the device's name, which the report shows after its OS user, as `ann@mira-mbp`; `alias`, an account's short name
 - `relay show|set|clear`, `AI_USAGE_RELAY`; `relay serve`, a relay of one's own
-- The relay as a Vercel function in `api/`, with Upstash, limits, and caps
+- The relay as a Vercel function in `api/`, with Upstash, limits, and caps; `GET /v1/prices`, the price list, even without a store
+- The snapshot's `costs`, what people typed with `ai-usage cost`, sealed, sent once every device runs v0.10.0
 
 ## How to get to it (user POV)
 

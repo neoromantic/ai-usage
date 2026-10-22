@@ -5,10 +5,11 @@
 - The ring in the menu bar and its states (`menubar-states-*.png`)
 - The popover: the verdict line, Limits, Usage (by device and by subscription), Projects; a row's details; the alerts
 - The ⋯ menu: status, Collect Now, Team Window…, Open in Terminal, Settings
-- The Team window: Usage in tokens and shares, Status
-- Settings: General, Accounts, Team
+- The popover's cost a month under its title, and the Limits details' cost line
+- The Team window: Usage in tokens and shares, Status, Cost
+- Settings: General, Accounts, Team, Cost
 - States with no report: loading, not installed, not collected, mismatch, failed
-- Notifications when a window is out or will run out
+- Notifications when a window is out or will run out, and of the cost: changes, a charge soon, questions with actions
 
 ## How to get to it (user POV)
 

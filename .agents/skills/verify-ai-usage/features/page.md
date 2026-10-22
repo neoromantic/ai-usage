@@ -2,8 +2,9 @@
 
 ## Sub-features
 
-- The header: device, team, collected and relay ages, release state
-- ATTENTION: out, over, tight, error, no reading, silent, old, idle; only when something is wrong
+- The header: device, team, collected and relay ages, release state, the team's cost a month
+- ATTENTION: out, over, tight, error, no reading, silent, old, idle, check, cost; only when something is wrong
+- COST: each subscription's price, used, next charge, and state ([cost.md](cost.md))
 - SUBSCRIPTIONS: each account's windows, bar, left, reset, forecast at reset, devices
 - DEVICES × SUBSCRIPTIONS, the matrix, and DEVICES as status (`--devices`)
 - UTILIZATION, how full each window got before its reset over 90 days

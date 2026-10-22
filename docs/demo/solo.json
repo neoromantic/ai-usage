@@ -106,7 +106,7 @@
           "name": "mira",
           "current": true,
           "home": "/Users/mira/.claude",
-          "plan": "max",
+          "plan": "max 20x",
           "state": "over",
           "quota": {
             "observed_at": "2026-09-24T13:36:00Z",
@@ -1424,7 +1424,7 @@
             "devices": [
               "mira@mira-mbp"
             ],
-            "plan": "max",
+            "plan": "max 20x",
             "state": "over",
             "quota": {
               "observed_at": "2026-09-24T13:36:00Z",
@@ -2430,5 +2430,191 @@
         }
       ]
     }
+  },
+  "cost": {
+    "currency": "USD",
+    "total_usd": 430,
+    "without_price": 0,
+    "used_usd": 277.85,
+    "used_pct": 64.61627906976744,
+    "unused_usd": 152.15,
+    "used_estimated": false,
+    "next_charge": {
+      "provider": "claude",
+      "account": "mira@studio.dev",
+      "at": "2026-09-25T22:00:00Z",
+      "usd": 200
+    },
+    "prices": {
+      "updated": "2026-10-22",
+      "source": "built in"
+    },
+    "subscriptions": [
+      {
+        "provider": "claude",
+        "account": "mira@studio.dev",
+        "name": "mira",
+        "alias": null,
+        "current": true,
+        "plan": "max 20x",
+        "plan_name": "Max 20x",
+        "price_usd": 200,
+        "price_source": "list",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": "2026-09-25T22:00:00Z",
+        "renews_confirmed": true,
+        "suggested_renewal_day": null,
+        "used_usd": 182.5,
+        "used_pct": 91.25,
+        "used_estimated": false,
+        "unused_usd": 17.5,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-24T13:36:00Z",
+        "first_seen": "2026-07-26T13:40:00Z",
+        "last_seen": "2026-09-24T13:36:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "mira@mira-mbp",
+            "device_id": "d-demo-solo",
+            "usd": 182.5,
+            "share": 100
+          }
+        ],
+        "usd_per_m_weighted": 0.3488150589376847,
+        "plans": [
+          {
+            "at": "2026-07-26T13:40:00Z",
+            "plan": "max 20x"
+          }
+        ]
+      },
+      {
+        "provider": "codex",
+        "account": "mira@studio.dev",
+        "name": "mira",
+        "alias": null,
+        "current": true,
+        "plan": "pro",
+        "plan_name": "Pro 200",
+        "price_usd": 200,
+        "price_source": "list",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": "2026-10-07T22:00:00Z",
+        "renews_confirmed": true,
+        "suggested_renewal_day": null,
+        "used_usd": 92.5,
+        "used_pct": 46.25,
+        "used_estimated": false,
+        "unused_usd": 107.5,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-24T13:36:00Z",
+        "first_seen": "2026-07-26T13:40:00Z",
+        "last_seen": "2026-09-24T13:36:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "mira@mira-mbp",
+            "device_id": "d-demo-solo",
+            "usd": 92.5,
+            "share": 100
+          }
+        ],
+        "usd_per_m_weighted": 0.57580987918622,
+        "plans": [
+          {
+            "at": "2026-07-26T13:40:00Z",
+            "plan": "pro"
+          }
+        ]
+      },
+      {
+        "provider": "grok",
+        "account": "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64",
+        "name": "7f3b9c21",
+        "alias": null,
+        "current": true,
+        "plan": "SuperGrok",
+        "plan_name": "SuperGrok",
+        "price_usd": 30,
+        "price_source": "list",
+        "typed_for": null,
+        "cadence": "monthly",
+        "renews_at": null,
+        "renews_confirmed": false,
+        "suggested_renewal_day": null,
+        "used_usd": 2.85,
+        "used_pct": 9.5,
+        "used_estimated": false,
+        "unused_usd": 27.15,
+        "state": "active",
+        "idle_since": null,
+        "unconfirmed_since": null,
+        "ended_at": null,
+        "plan_confirmed_at": "2026-09-24T13:36:00Z",
+        "first_seen": "2026-07-26T13:40:00Z",
+        "last_seen": "2026-09-24T13:36:00Z",
+        "billed_through": null,
+        "consumers": [
+          {
+            "device": "mira@mira-mbp",
+            "device_id": "d-demo-solo",
+            "usd": 2.85,
+            "share": 100
+          }
+        ],
+        "usd_per_m_weighted": 3.0115320597162714,
+        "plans": [
+          {
+            "at": "2026-07-26T13:40:00Z",
+            "plan": "SuperGrok"
+          }
+        ]
+      }
+    ],
+    "devices": [
+      {
+        "device": "mira@mira-mbp",
+        "device_id": "d-demo-solo",
+        "usd": 277.85
+      }
+    ],
+    "questions": [
+      {
+        "id": "renewal-90464196a016",
+        "kind": "renewal",
+        "provider": "grok",
+        "account": "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64",
+        "text": "When does grok 7f3b9c21 (SuperGrok at $30/mo) charge next?",
+        "suggestion": null,
+        "choices": [
+          "monthly",
+          "yearly"
+        ]
+      }
+    ],
+    "events": [
+      {
+        "id": "charges_soon-ca8a451dff58",
+        "kind": "charges_soon",
+        "at": "2026-09-22T22:00:00Z",
+        "provider": "claude",
+        "account": "mira@studio.dev",
+        "from": null,
+        "to": "max 20x",
+        "from_usd": null,
+        "to_usd": 200,
+        "delta_usd": null,
+        "text": "claude mira@studio.dev charges $200 on Sat 26 Sep; used 91% over the last 4 weeks"
+      }
+    ]
   }
 }
