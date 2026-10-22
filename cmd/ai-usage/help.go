@@ -46,7 +46,7 @@ var help = []helpSection{
 		{"ai-usage cost [--json] [DISPLAY]",
 			"what the team's subscriptions cost a month, how much of it the team used over the last 4 weeks, and which device used it"},
 		{"ai-usage cost set ACCOUNT [--price N] [--monthly|--yearly] [--renews DAY]",
-			"type what a subscription costs each charge, a year's with `--yearly`, and its next charge, DAY as YYYY-MM-DD or a day of the month; the whole team sees it"},
+			"type what a subscription costs each charge, a year's with `--yearly`, and its next charge, DAY as YYYY-MM-DD, or a day of the month when it is billed monthly; the whole team sees it"},
 		{"ai-usage cost confirm|cancel ACCOUNT", "say a subscription is still paid, or that it was cancelled"},
 		{"ai-usage cost reset ACCOUNT", "clear the typed price, cadence, and charge day, so the list price counts again"},
 		{"ai-usage cost skip ACCOUNT renewal|price|still_paid", "never ask this device that question of the subscription again"},

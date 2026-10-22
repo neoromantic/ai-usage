@@ -2,21 +2,21 @@ ai-usage . ann@annbook     * collected 7m  * relay 7m  * up to date  $1,000/mo
 
 COST  $1,000/mo +1 without a price . used ~$787 (79%) . next: Fri 25 Sep, $200
 
-  CLAUDE            PLAN        $/MO    USED       NEXT
-* ann@acme.dev      Max 20x     $200    $182  91%  Fri 25 Sep
-  kim@corp.test     max            ?       ?  64%  .
-  old@acme.dev      Pro          $20      $0   0%  .           still paid?
+  CLAUDE            PLAN        $/MO   USED       NEXT
+* ann@acme.dev      Max 20x     $200   $182  91%  Fri 25 Sep
+  kim@corp.test     max            ?      ?  64%  .
+  old@acme.dev      Pro          $20     $0   0%  .           still paid?
 
   CODEX
-* ann@acme.dev      Pro 200     $180*   $155  86%  Mon 12 Oct
-  sam@mail.test     Pro 100     $100     $94  94%  .           typed for plus
-* lee@corp.test     Pro 200     $200     $56  28%  .
-  ann+old@acme.dev  Plus         $20      $3  15%  .           ended
+* ann@acme.dev      Pro 200     $180*  $155  86%  Mon 12 Oct
+  sam@mail.test     Pro 100     $100    $94  94%  .           typed for plus
+* lee@corp.test     Pro 200     $200    $56  28%  .
+  ann+old@acme.dev  Plus         $20     $3  15%  .           ended
 
   GROK
-* a4c2e917          SuperGr...  $300   ~$300       .
+* a4c2e917          SuperGr...  $300      ?       .
 
-BY DEVICE  8 . used over the last 4 weeks . TOTAL a month
+BY DEVICE  USED: dollars used over the last 4 weeks . TOTAL: price a month
   DEVICE                                         USED
 * ann@annbook                                   ~$610
 v sam@MacBook-Pro-Kim                             $94

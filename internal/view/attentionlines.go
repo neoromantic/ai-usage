@@ -417,9 +417,9 @@ func (p *page) checkForms(a Attention) []chunks {
 	}
 	gone := ""
 	if c := p.r.Cost.Subscription(a.Provider, a.Account); c != nil && c.LastSeen != nil && p.now.Sub(*c.LastSeen) >= cost.GoneAfter {
-		gone = p.g.sep + "on no device since " + c.LastSeen.In(p.loc).Format("2 Jan")
+		gone = p.g.sep + "no device since " + c.LastSeen.In(p.loc).Format("2 Jan")
 	}
-	act := ": ai-usage cost confirm or cancel"
+	act := ": ai-usage cost confirm " + a.Provider + ":" + p.txt(shortID(a.Account)) + " or cancel"
 	return p.forms(s+gone+act, s+gone, s)
 }
 

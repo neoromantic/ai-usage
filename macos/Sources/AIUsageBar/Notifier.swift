@@ -20,6 +20,16 @@ final class Notifier: NSObject, ObservableObject, UNUserNotificationCenterDelega
     /// What the system lets the app do, for Settings; nil until asked.
     @Published private(set) var status: UNAuthorizationStatus?
 
+    /// When this Mac last ran a cost command on a subscription, by its
+    /// target, until a report made after it is read: that report's events
+    /// of the subscription are the person's own doing.
+    private var edited: [String: Date] = [:]
+
+    /// Notes a cost command run on the subscription target.
+    func noteEdit(_ target: String) {
+        edited[target] = Date()
+    }
+
     /// The system keeps notifications by the bundle's id, so a build run
     /// outside a bundle, such as the renderer, has none.
     static var available: Bool {
@@ -71,8 +81,9 @@ final class Notifier: NSObject, ObservableObject, UNUserNotificationCenterDelega
         let due = settings.off ? [] : ledger.record(WindowNotice.notices(r, settings, now: now), now: now)
         // A report from an ai-usage without the cost leaves what was said
         // of it.
-        let costs = r.cost == nil ? [] : ledger.record(settings.costOff ? [] : CostNotice.notices(r, settings, now: now),
+        let costs = r.cost == nil ? [] : ledger.record(settings.costOff ? [] : CostNotice.notices(r, settings, now: now, edited: edited),
                                                        among: CostNotice.keys(r), now: now)
+        edited = edited.filter { r.generatedAt < $0.value }
         if let data = try? JSONEncoder().encode(ledger) {
             d.set(data, forKey: Self.ledgerKey)
         }

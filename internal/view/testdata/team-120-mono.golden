@@ -7,7 +7,7 @@
 [7m OVER    [m codex sam@mail.test  runs out ~Sat 03:01 at the last day's pace, 2d 17h before reset
 [7m OUTSIDE [m codex lee@corp.test  +25 points in 20h, no team device spent
 [7m ERROR   [m kim@Mac.localdomain  codex: app-server exited without answering
- +3 more: 1 no reading, 1 duplicate, 1 old
+ +7 more: 1 no reading, 1 duplicate, 1 old, 1 check, 3 cost
 
 [1mSUBSCRIPTIONS[m  7 · 2 out · 1 over · 3 no reading
 
@@ -27,19 +27,19 @@
 
 [1mCOST[m  $1,000/mo +1 without a price · used ~$787 (79%) over the last 4 weeks · next: Fri 25 Sep, $200
 
-  [1mCLAUDE[m            PLAN        $/MO    USED       NEXT
-● ann@acme.dev      Max 20x     $200    $182  91%  Fri 25 Sep
-  kim@corp.test     max            ?       ?  64%  ·
-  old@acme.dev      Pro          $20      $0   0%  ·           still paid?
+  [1mCLAUDE[m            PLAN             $/MO   USED       NEXT
+● ann@acme.dev      Max 20x          $200   $182  91%  Fri 25 Sep
+  kim@corp.test     max                 ?      ?  64%  ·
+  old@acme.dev      Pro               $20     $0   0%  ·           still paid?
 
   [1mCODEX[m
-● ann@acme.dev      Pro 200     $180*   $155  86%  Mon 12 Oct
-  sam@mail.test     Pro 100     $100     $94  94%  ·           typed for plus
-● lee@corp.test     Pro 200     $200     $56  28%  ·
-  ann+old@acme.dev  Plus         $20      $3  15%  ·           ended
+● ann@acme.dev      Pro 200          $180*  $155  86%  Mon 12 Oct
+  sam@mail.test     Pro 100          $100    $94  94%  ·           typed for plus
+● lee@corp.test     Pro 200          $200    $56  28%  ·
+  ann+old@acme.dev  Plus              $20     $3  15%  ·           ended
 
   [1mGROK[m
-● a4c2e917          SuperGrok…  $300   ~$300       ·
+● a4c2e917          SuperGrok Heavy  $300      ?       ·
 
 [1mUTILIZATION[m  fullest % before each reset
   only this device's cycles: ci@ci-runner-eu-west-build-pool-node-0042ab runs v0.3…: it should update within 15 minutes

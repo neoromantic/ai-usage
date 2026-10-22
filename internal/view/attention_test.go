@@ -603,7 +603,7 @@ func TestAttentionWordsAreTheLines(t *testing.T) {
 		"claude a-very-long-subscription-name@acme.devxy": "annbook runs v0.2.0: reinstall with install.sh",
 		"1 device on v0.2.0":                              "srv1 · cannot read Claude quota; reinstall with install.sh",
 		"claude max@mail.test":                            "idle 11d, $100/mo paid and unused",
-		"claude gone@mail.test":                           "still paid? last confirmed 13 Jul · on no device since 12 Aug: ai-usage cost confirm or cancel",
+		"claude gone@mail.test":                           "still paid? last confirmed 13 Jul · no device since 12 Aug: ai-usage cost confirm claude:gone@mail.test or cancel",
 		"claude bob@mail.test":                            "new subscription: Pro at $20/mo",
 	} {
 		if got[subject] != text {

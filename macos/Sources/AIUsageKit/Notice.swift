@@ -300,13 +300,20 @@ public struct CostNotice: Equatable, Sendable {
     /// for: each event of the last 3 days that tells a change or a charge
     /// soon, and each question, of the subscriptions logged in on this Mac
     /// or of the whole team. A subscription nobody can confirm is still
-    /// paid has its question, not its event.
-    public static func notices(_ r: Report, _ settings: NoticeSettings = NoticeSettings(), now: Date) -> [CostNotice] {
+    /// paid has its question, not its event, and the question is asked
+    /// whatever the scope: such a subscription is mostly one no device has
+    /// any more, and ai-usage asks it of every device. edited is when this
+    /// Mac last ran a cost command on a subscription, by its target: the
+    /// events of a report made after it are the person's own doing, as an
+    /// ended one after Cancelled, and are not told.
+    public static func notices(_ r: Report, _ settings: NoticeSettings = NoticeSettings(), now: Date,
+                               edited: [String: Date] = [:]) -> [CostNotice] {
         guard let c = r.cost else { return [] }
         let wanted = { (p: String, l: String) in settings.scope == .team || c.subscription(provider: p, label: l)?.current == true }
         let subject = { (p: String, l: String) in c.subscription(provider: p, label: l)?.title ?? Format.provider(p) + " " + l }
         var out: [CostNotice] = []
         for e in c.events where wanted(e.provider, e.account) && now.timeIntervalSince(e.at) < news {
+            if let at = edited[e.provider + ":" + e.account], r.generatedAt >= at { continue }
             let kind: Kind, phrase: String
             switch e.kind {
             case "new": (kind, phrase) = (.change, "new subscription")
@@ -321,7 +328,7 @@ public struct CostNotice: Equatable, Sendable {
                                   body: sentence(e.text), suggestion: nil))
         }
         guard settings.costQuestions else { return out }
-        for q in c.questions where wanted(q.provider, q.account) {
+        for q in c.questions where q.kind == "still_paid" || wanted(q.provider, q.account) {
             let kind: Kind, phrase: String
             switch q.kind {
             case "still_paid": (kind, phrase) = (.stillPaid, "still paid?")

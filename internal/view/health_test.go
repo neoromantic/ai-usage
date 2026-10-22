@@ -256,3 +256,17 @@ func quotas(r *Report) []*Quota {
 	}
 	return qs
 }
+
+// The total a month goes from the header before the device's name is cut.
+func TestHeaderDropsTheTotalBeforeTheDevice(t *testing.T) {
+	r := Report{GeneratedAt: now, Cost: &Cost{TotalUSD: 150}}
+	r.Collector = Collector{DeviceLabel: "annes-macbook-pro", OSUser: "ann", Version: "v1.2.3", LastRunAt: tp(now), LastSuccessAt: tp(now)}
+	r.Collector.Health = health(r.Collector, now)
+	if h := sgr.ReplaceAllString(Render(r, Options{Width: 120, Loc: time.UTC}).Header, ""); !strings.Contains(h, "ann@annes-macbook-pro") || !strings.HasSuffix(h, "$150/mo") {
+		t.Errorf("at 120: %q", h)
+	}
+	h := sgr.ReplaceAllString(Render(r, Options{Width: 80, Loc: time.UTC}).Header, "")
+	if !strings.Contains(h, "ann@annes-macbook-pro") || strings.Contains(h, "/mo") {
+		t.Errorf("at 80: %q", h)
+	}
+}

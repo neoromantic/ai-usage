@@ -113,8 +113,9 @@ type Cycle struct {
 type Slot struct {
 	// Known says how full it got is known: from the fullest of the
 	// periods that reset in the week, or 0 when none did and the team
-	// spent nothing on it. A week with tokens and no period is a missed
-	// reading.
+	// spent nothing on it while it was watched. A week with tokens and no
+	// period is a missed reading, and one from before anybody watched the
+	// subscription was not seen.
 	Known   bool    `json:"known"`
 	Percent float64 `json:"percent"`
 	// Tokens are the team's weighted tokens on it in the week.
@@ -127,12 +128,14 @@ type Slot struct {
 
 // UsedSlots is how full the subscription got in each week as of now, from
 // the periods of its main window that ended, each capped at 100%, and the
-// team's weighted tokens on it by week.
-func UsedSlots(cycles []Cycle, tokens [Slots]int64, now time.Time) [Slots]Slot {
+// team's weighted tokens on it by week. watched is since when the team
+// would have seen a period end: a week that began before it, with no
+// period and no tokens, is not known to be unused.
+func UsedSlots(cycles []Cycle, tokens [Slots]int64, watched, now time.Time) [Slots]Slot {
 	var out [Slots]Slot
 	for i := range out {
 		out[i].Tokens = tokens[i]
-		out[i].Known = tokens[i] <= 0
+		out[i].Known = tokens[i] <= 0 && !SlotEnd(i-1, now).Before(watched)
 	}
 	for _, c := range cycles {
 		s := SlotOf(c.ResetsAt, now)
@@ -227,7 +230,7 @@ type Input struct {
 	// Answer is what the team said of it, merged.
 	Answer Answer
 	// Cycles are the ended periods of its main window: the weekly one, else
-	// the longest it has.
+	// the longest it has of a day or more.
 	Cycles    []Cycle
 	Consumers []Consumer
 	// IdleSince is when it was last used, when no device of the team used
@@ -237,6 +240,9 @@ type Input struct {
 	// tool says it was subscribed to, as this device read them.
 	Billing      string
 	SubscribedAt time.Time
+	// QuotaAt is the team's newest reading of its quota, for a
+	// subscription the store does not have yet.
+	QuotaAt time.Time
 }
 
 // Result is the numbers of one subscription.
@@ -255,9 +261,10 @@ type Result struct {
 	NextCharge   *time.Time
 	SuggestedDay int
 	// Slots are the weeks of Used. UsedPct is the mean of the known ones;
-	// UsedUSD the mean of their price times how full they got. With no
-	// week known, UsedUSD is the whole price, an estimate, when the team
-	// spent tokens on it. UnusedUSD is the price less UsedUSD.
+	// UsedUSD the mean of their price times how full they got, nil when
+	// the price is unknown. With no week known, UsedUSD is an estimate:
+	// the whole price when the team spent tokens on it, else nothing.
+	// UnusedUSD is the price less UsedUSD.
 	Slots         [Slots]Slot
 	UsedPct       *float64
 	UsedUSD       *float64
@@ -290,6 +297,11 @@ func Compute(in Input) Result {
 	now, loc := in.Now, cmp.Or(in.Loc, time.Local)
 	sub := in.sub()
 	plan := cmp.Or(sub.Plan(), in.Plan)
+	// One that ended on a free plan is shown, and its end told, with the
+	// plan it was paid for.
+	if Free(plan) {
+		plan = cmp.Or(sub.lastPaid(), plan)
+	}
 	r := Result{
 		Provider: in.Provider, Label: in.Label, Plan: plan, PlanName: in.List.Name(in.Provider, plan),
 		Price: Price(in.List, in.Provider, plan, in.Answer), Cadence: cmp.Or(in.Answer.Cadence, Monthly),
@@ -302,7 +314,13 @@ func Compute(in Input) Result {
 			team[i] += n
 		}
 	}
-	r.Slots = UsedSlots(in.Cycles, team, now)
+	watched := sub.FirstSeen
+	for _, c := range in.Cycles {
+		if c.ResetsAt.Before(watched) {
+			watched = c.ResetsAt
+		}
+	}
+	r.Slots = UsedSlots(in.Cycles, team, watched, now)
 	var pct, usd float64
 	var known, priced int
 	for i := range r.Slots {
@@ -324,13 +342,13 @@ func Compute(in Input) Result {
 	switch {
 	case known > 0:
 		r.UsedPct = ptr(pct / float64(known))
-		if priced > 0 {
+		if priced > 0 && price != nil {
 			r.UsedUSD = ptr(usd / float64(priced))
 		}
 	case price != nil && r.Tokens > 0:
 		r.UsedUSD, r.UsedEstimated = ptr(*price), true
 	case price != nil:
-		r.UsedUSD = ptr(0.0)
+		r.UsedUSD, r.UsedEstimated = ptr(0.0), true
 	}
 	if price != nil && r.UsedUSD != nil {
 		r.UnusedUSD = ptr(max(*price-*r.UsedUSD, 0))
@@ -382,7 +400,7 @@ func (in Input) sub() *Sub {
 	if in.Sub != nil {
 		return in.Sub
 	}
-	s := &Sub{Provider: in.Provider, Label: in.Label, FirstSeen: in.Now}
+	s := &Sub{Provider: in.Provider, Label: in.Label, FirstSeen: in.Now, PlanConfirmedAt: in.QuotaAt}
 	if in.Plan != "" {
 		s.Plans = []PlanAt{{At: in.Now, Plan: in.Plan}}
 	}
@@ -390,6 +408,17 @@ func (in Input) sub() *Sub {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// lastPaid is the newest plan of the subscription that is not free, or ""
+// when none is.
+func (sub *Sub) lastPaid() string {
+	for i := len(sub.Plans) - 1; i >= 0; i-- {
+		if !Free(sub.Plans[i].Plan) {
+			return sub.Plans[i].Plan
+		}
+	}
+	return ""
+}
 
 // endedAt is when the subscription ended, as the merged answer a says: when
 // a person cancelled it, or when a reading first found the free plan it is
@@ -407,16 +436,16 @@ func (sub *Sub) endedAt(a Answer) (time.Time, bool) {
 
 // unconfirmedSince is since when nobody can say the subscription is still
 // paid, as of now: its plan was last confirmed by a reading of its quota,
-// or it was first found, ConfirmAge ago, or no device has had it logged in
-// for GoneAfter; and no person said it was still paid in the last
-// ConfirmAge.
+// or, with none, it was first found, ConfirmAge ago, or no device has had
+// it logged in for GoneAfter; and no person said it was still paid in the
+// last ConfirmAge.
 func (sub *Sub) unconfirmedSince(a Answer, now time.Time) (time.Time, bool) {
-	confirmed := sub.PlanConfirmedAt
-	if sub.FirstSeen.After(confirmed) {
+	// Found with no reading of either, it is as old as when it was found.
+	confirmed, seen := sub.PlanConfirmedAt, sub.LastSeen
+	if confirmed.IsZero() {
 		confirmed = sub.FirstSeen
 	}
-	seen := sub.LastSeen
-	if sub.FirstSeen.After(seen) {
+	if seen.IsZero() {
 		seen = sub.FirstSeen
 	}
 	since := confirmed.Add(ConfirmAge)
@@ -489,6 +518,28 @@ func RenewsOn(day int, now time.Time, loc *time.Location) string {
 	return at.Format(time.DateOnly)
 }
 
+// Anniversary is the next date, YYYY-MM-DD, as of now in loc, on which a
+// subscription that began at began and is billed yearly charges: today's
+// when it is today.
+func Anniversary(began, now time.Time, loc *time.Location) string {
+	next, _ := NextCharge(began.In(loc).Format(time.DateOnly), Yearly, now, loc)
+	return next.Format(time.DateOnly)
+}
+
+// DayAnchor is a charge day, YYYY-MM-DD, that charges monthly on day of the
+// month, as of now in loc: in this month, or the last one before it that
+// has the day, so that a shorter month's last day does not stand for it
+// in the months after.
+func DayAnchor(day int, now time.Time, loc *time.Location) string {
+	y, m, _ := now.In(loc).Date()
+	for {
+		if at := monthDay(y, m, day, loc); at.Day() == day {
+			return at.Format(time.DateOnly)
+		}
+		m--
+	}
+}
+
 // Event is something that happened to a subscription that a person may want
 // to hear of once: ID stays the same for as long as it is reported.
 type Event struct {
@@ -559,10 +610,11 @@ func Events(in Input, r Result, since time.Time) []Event {
 	return out
 }
 
-// eventID keys an event by what it is of and when, so that the same event
-// has the same ID in every report.
+// eventID keys an event by its subscription, kind, and time, so that the
+// same event has the same ID in every report: not by its plans, which a
+// later reading of the tier spells anew.
 func eventID(e Event) string {
-	h := sha256.Sum256([]byte(Key(e.Provider, e.Label) + "\x00" + e.Kind + "\x00" + e.From + "\x00" + e.To + "\x00" + strconv.FormatInt(e.At.Unix(), 10)))
+	h := sha256.Sum256([]byte(Key(e.Provider, e.Label) + "\x00" + e.Kind + "\x00" + strconv.FormatInt(e.At.Unix(), 10)))
 	return e.Kind + "-" + hex.EncodeToString(h[:6])
 }
 

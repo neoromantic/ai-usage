@@ -155,3 +155,57 @@ func TestEdit(t *testing.T) {
 		t.Fatal("e edits a device")
 	}
 }
+
+// TestRenewalPrompt: a plan billed yearly too is asked its cadence first,
+// and yearly is offered its own date and takes no day of the month; with
+// no suggestion, Enter waits for an answer, and a day that is no day keeps
+// the prompt open with what is wrong.
+func TestRenewalPrompt(t *testing.T) {
+	rec := &costRec{}
+	m := costModel(t, rec)
+	month, year := "2026-11-15", "2027-03-15"
+	m.prompt = questionPrompt(view.Question{ID: "renewal-1", Kind: view.AskRenewal, Provider: "claude", Account: "ann@acme.dev", Text: "When?",
+		Suggestion: &month, SuggestionYearly: &year, Choices: []string{"monthly", "yearly"}})
+	if l := m.promptLine(); !strings.Contains(l, "billed m monthly or y yearly") {
+		t.Fatalf("first %q", l)
+	}
+	m = pressRun(t, m, "y", "enter")
+	if l := m.promptLine(); !strings.Contains(l, "next charge, YYYY-MM-DD, Enter takes "+year) {
+		t.Fatalf("yearly %q", l)
+	}
+	m = pressRun(t, m, "1", "5", "enter")
+	if l := m.promptLine(); m.prompt == nil || !strings.Contains(l, "charges on a date") || len(rec.runs) != 0 {
+		t.Fatalf("a day of the month, yearly: %q, runs %v", l, rec.runs)
+	}
+	m = pressRun(t, m, "backspace", "backspace", "enter")
+	if want := [][]string{{"set", "claude:ann@acme.dev", "--yearly", "--renews", year}}; !reflect.DeepEqual(rec.runs, want) {
+		t.Fatalf("yearly ran %v", rec.runs)
+	}
+
+	rec.runs = nil
+	m.prompt = questionPrompt(view.Question{ID: "renewal-2", Kind: view.AskRenewal, Provider: "claude", Account: "cat@acme.dev", Text: "When?"})
+	m = pressRun(t, m, "enter", "enter")
+	if m.prompt == nil || m.prompt.at != 0 || len(rec.runs) != 0 {
+		t.Fatalf("Enter with nothing to take: %+v, runs %v", m.prompt, rec.runs)
+	}
+	m = pressRun(t, m, "9", "9", "enter")
+	if l := m.promptLine(); m.prompt == nil || !strings.Contains(l, "from 1 to 31") || len(rec.runs) != 0 {
+		t.Fatalf("day 99: %q, runs %v", l, rec.runs)
+	}
+}
+
+// TestTierPrompt: the price of a plan read without its tier offers its
+// tiers' prices.
+func TestTierPrompt(t *testing.T) {
+	rec := &costRec{}
+	m := costModel(t, rec)
+	m.prompt = questionPrompt(view.Question{ID: "price-1", Kind: view.AskPrice, Provider: "claude", Account: "ann@acme.dev", Text: "What?",
+		Choices: []string{"Max 5x $100", "Max 20x $200"}})
+	if l := m.promptLine(); !strings.Contains(l, "price a month, in USD, as Max 5x $100 or Max 20x $200") {
+		t.Fatalf("prompt %q", l)
+	}
+	m = pressRun(t, m, "2", "0", "0", "enter")
+	if want := [][]string{{"set", "claude:ann@acme.dev", "--price", "200"}}; !reflect.DeepEqual(rec.runs, want) {
+		t.Fatalf("ran %v", rec.runs)
+	}
+}

@@ -33,7 +33,7 @@ TZ=Europe/Berlin ai-usage report --from docs/demo/solo.json --plain --width 110
 | `team-matrix.png` | DEVICES × SUBSCRIPTIONS only: every machine and bot against every subscription |
 | `team-bots.png` | the interactive view after `%` and `G`: each machine's share of each subscription, such as how the server and the nine bots split `bots` |
 | `team-cost.png` | COST only: each subscription's price a month and where it comes from, what the team used of it over the last 4 weeks, the next charge, and its state |
-| `team-dollars.png` | the interactive view after `$` and `G`: what each machine used of each subscription in dollars over 4 weeks, what nobody used, and each price |
+| `team-dollars.png` | DEVICES × SUBSCRIPTIONS in the interactive view after `$`: what each machine used of each subscription in dollars over 4 weeks, what nobody used, and each price |
 | `team-status.png`, `team-devices.png` | DEVICES as each machine's status: release, last report, tools, errors; interactive and printed |
 | `devices-status.png` | the status view alone, printed with `--devices` |
 | `team-help.png` | the interactive view's help, `?` |

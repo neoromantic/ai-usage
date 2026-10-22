@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -44,6 +45,10 @@ func TestCostCommands(t *testing.T) {
 	kinds := map[string]bool{}
 	for _, q := range c.Questions {
 		kinds[q.Kind] = true
+		// Max without its tier is asked as one of its tiers.
+		if q.Kind == view.AskPrice && (!slices.Equal(q.Choices, []string{"Max 5x $100", "Max 20x $200"}) || !strings.HasSuffix(q.Text, "Its tool did not say its tier: Max 5x $100 or Max 20x $200.")) {
+			t.Fatalf("price question %+v", q)
+		}
 	}
 	if !kinds[view.AskRenewal] || !kinds[view.AskPrice] {
 		t.Fatalf("questions = %+v", c.Questions)
@@ -71,6 +76,19 @@ func TestCostCommands(t *testing.T) {
 	if s = oneSub(t, d.costOf()); s.Cadence != "yearly" || *s.PriceUSD != 100 {
 		t.Fatalf("yearly = %+v", s)
 	}
+	// A day of the month is no yearly charge day.
+	if r := d.run("", "cost", "set", "dev@example.com", "--renews", "15"); r.code != 2 || !strings.Contains(r.stderr, "takes YYYY-MM-DD") {
+		t.Fatalf("a day of the month, yearly: exit %d, %q", r.code, r.stderr)
+	}
+	// Billed monthly from now: the typed price is turned into a month's,
+	// so the cost a month stays.
+	if out := d.ok("cost", "set", "dev@example.com", "--monthly"); !strings.Contains(out, "billed monthly at $100 a month") {
+		t.Fatalf("monthly said %q", out)
+	}
+	if s = oneSub(t, d.costOf()); s.Cadence != "monthly" || *s.PriceUSD != 100 {
+		t.Fatalf("monthly = %+v", s)
+	}
+	d.ok("cost", "set", "claude:dev@example.com", "--price", "1200", "--yearly")
 
 	if out := d.ok("cost", "cancel", "dev@example.com"); !strings.Contains(out, "is cancelled") {
 		t.Fatalf("cancel said %q", out)
@@ -124,6 +142,7 @@ func TestCostCommandErrors(t *testing.T) {
 		{[]string{"cost", "set", "dev@example.com", "--price", "lots"}, 2, "--price takes dollars"},
 		{[]string{"cost", "set", "dev@example.com", "--monthly", "--yearly"}, 2, "not both"},
 		{[]string{"cost", "set", "dev@example.com", "--renews", "32"}, 2, "from 1 to 31"},
+		{[]string{"cost", "set", "dev@example.com", "--yearly", "--renews", "15"}, 2, "--renews takes YYYY-MM-DD"},
 		{[]string{"cost", "set", "--price", "20"}, 2, "takes an account first"},
 		{[]string{"cost", "skip", "dev@example.com", "later"}, 2, "renewal, price, or still_paid"},
 		{[]string{"cost", "confirm", "nobody@example.com"}, 2, "no account this device knows"},
@@ -147,7 +166,7 @@ func TestAskCost(t *testing.T) {
 	sugg := "2099-02-01"
 	qs := []view.Question{
 		{Kind: view.AskRenewal, Provider: "claude", Account: "dev@example.com", Text: "When does it charge?", Suggestion: &sugg},
-		{Kind: view.AskPrice, Provider: "claude", Account: "dev@example.com", Text: "What does it cost?"},
+		{Kind: view.AskPrice, Provider: "claude", Account: "dev@example.com", Text: "What does it cost?", Choices: []string{"Max 5x $100", "Max 20x $200"}},
 		{Kind: view.AskStillPaid, Provider: "claude", Account: "dev@example.com", Text: "Still paid?"},
 	}
 	var out strings.Builder
@@ -156,7 +175,29 @@ func TestAskCost(t *testing.T) {
 	if s.RenewsAt == nil || s.RenewsAt.Local().Format("2006-01-02") != sugg {
 		t.Fatalf("Enter did not take the suggestion: %+v\n%s", s, out.String())
 	}
-	if !strings.Contains(out.String(), "price question is not asked again") || !strings.Contains(out.String(), "asks nothing about the cost") {
+	if !strings.Contains(out.String(), "price a month, in USD, as Max 5x $100 or Max 20x $200: ") || !strings.Contains(out.String(), "price question is not asked again") || !strings.Contains(out.String(), "asks nothing about the cost") {
+		t.Fatalf("asked:\n%s", out.String())
+	}
+}
+
+// TestAskCostYearly: the cadence is asked first, and yearly is offered the
+// subscription's own date of the year.
+func TestAskCostYearly(t *testing.T) {
+	hermetic(t)
+	d := newDevice(t)
+	d.claude("11111111-aaaa", "/work/app", 1)
+	d.ok("collect", "--quiet", "--offline")
+	d.env()
+	month, year := "2099-02-01", "2099-06-01"
+	qs := []view.Question{{Kind: view.AskRenewal, Provider: "claude", Account: "dev@example.com", Text: "When does it charge?",
+		Suggestion: &month, SuggestionYearly: &year, Choices: []string{"monthly", "yearly"}}}
+	var out strings.Builder
+	askCost(qs, strings.NewReader("y\n\n"), &out)
+	s := oneSub(t, d.costOf())
+	if s.Cadence != "yearly" || s.RenewsAt == nil || s.RenewsAt.Local().Format("2006-01-02") != year {
+		t.Fatalf("yearly: %+v\n%s", s, out.String())
+	}
+	if !strings.Contains(out.String(), "next charge, YYYY-MM-DD; Enter takes "+year) {
 		t.Fatalf("asked:\n%s", out.String())
 	}
 }

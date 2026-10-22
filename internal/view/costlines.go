@@ -71,7 +71,7 @@ func (p *page) costSection() []chunks {
 		l.acct = max(l.acct, width(g.provider))
 		for _, r := range g.rows {
 			l.acct = max(l.acct, width(r.name))
-			l.plan = max(l.plan, min(width(r.plan), planWidth))
+			l.plan = max(l.plan, width(r.plan))
 			l.price = max(l.price, r.price.width())
 			l.used, l.pct = max(l.used, width(r.used)), max(l.pct, width(r.pct))
 			l.next, l.notes = max(l.next, width(r.next)), max(l.notes, width(r.notes))
@@ -80,6 +80,7 @@ func (p *page) costSection() []chunks {
 	// The notes say a state: they are cut, not dropped.
 	l.notes = min(l.notes, 24)
 	for _, drop := range []func(){
+		func() { l.plan = max(min(l.plan, planWidth), width("PLAN")) },
 		func() { l.showPlan = false },
 		func() { l.showPct = false },
 	} {
@@ -182,9 +183,10 @@ func (p *page) costRow(s *CostSubscription) costRow {
 		p.mark("typed")
 	}
 	switch {
-	case s.UsedEstimated && s.UsedUSD != nil:
-		r.used = g.silent + usd(*s.UsedUSD)
-		p.mark("costEstimated")
+	case s.UsedEstimated:
+		// No week of it is known: only its split by device is estimated.
+		r.used = "?"
+		p.mark("unknown")
 	case s.UsedUSD != nil:
 		r.used = usd(*s.UsedUSD)
 	case s.PriceUSD == nil:
@@ -305,9 +307,12 @@ func (p *page) costFacts(s *CostSubscription) []fact {
 		add("PRICE", v+g.sep+why)
 	}
 	switch {
-	case s.UsedUSD != nil && s.UsedEstimated:
-		p.mark("costEstimated")
-		add("USED", g.silent+usd(*s.UsedUSD)+g.sep+"all of it, split by tokens: no week of the last 4 is known")
+	case s.UsedEstimated && s.UsedUSD != nil && *s.UsedUSD > 0:
+		p.mark("unknown")
+		add("USED", "?"+g.sep+"no week of the last 4 is known; its devices' share is its price split by their tokens, an estimate")
+	case s.UsedEstimated:
+		p.mark("unknown")
+		add("USED", "?"+g.sep+"no week of the last 4 is known, and nobody spent tokens on it")
 	case s.UsedUSD != nil:
 		v := usd(*s.UsedUSD)
 		if s.UsedPct != nil {
@@ -341,7 +346,7 @@ func (p *page) costFacts(s *CostSubscription) []fact {
 		if at := confirmedAt(*s); at != nil {
 			w += " last confirmed " + at.In(p.loc).Format("2 Jan")
 		}
-		add("STATE", w+g.sep+"ai-usage cost confirm or cancel")
+		add("STATE", w+g.sep+"ai-usage cost confirm "+s.Provider+":"+p.txt(shortID(s.Account))+" or cancel")
 	case CostEnded:
 		w := "ended"
 		if s.EndedAt != nil {
@@ -562,13 +567,52 @@ func (mx moneyMatrix) unused(p *page, c gridCol) string {
 		return "?"
 	case s.UnusedUSD == nil:
 		return p.g.none
+	case s.UsedEstimated:
+		// Its Used is not known, so neither is what nobody used of it.
+		p.mark("unknown")
+		return "?"
 	}
-	return p.dollars(s.UnusedUSD, s.UsedEstimated)
+	return p.dollars(s.UnusedUSD, false)
 }
 
-// unusedTotal prints what nobody used of every subscription.
-func (mx moneyMatrix) unusedTotal(p *page) string {
-	return p.dollars(p.r.Cost.UnusedUSD, p.r.Cost.UsedEstimated)
+// sum adds up f of each subscription column of cols, so that a TOTAL is
+// the sum of its row.
+func (mx moneyMatrix) sum(cols []gridCol, f func(gridCol) float64) float64 {
+	var v float64
+	for _, c := range cols {
+		v += f(c)
+	}
+	return v
+}
+
+// unusedTotal prints what nobody used of the subscription columns of cols,
+// ~ when an estimate is among it.
+func (mx moneyMatrix) unusedTotal(p *page, cols []gridCol) string {
+	est := false
+	for _, c := range cols {
+		if s := mx.of(c); s != nil && s.UnusedUSD != nil && s.UsedEstimated {
+			est = true
+		}
+	}
+	return p.dollars(new(mx.sum(cols, mx.unusedOf)), est)
+}
+
+// beyond is the line under the $ matrix that says what its TOTAL leaves
+// out and COST counts: the subscriptions no device has, and those without
+// a price; nil when there are none.
+func (mx moneyMatrix) beyond(p *page, cols []gridCol) chunks {
+	c := p.r.Cost
+	var parts []string
+	if rest := c.TotalUSD - mx.sum(cols, mx.priceOf); rest >= 0.5 {
+		parts = append(parts, "+"+usd(rest)+"/mo on no device")
+	}
+	if c.WithoutPrice > 0 {
+		parts = append(parts, "+"+strconv.Itoa(c.WithoutPrice)+" without a price")
+	}
+	if len(parts) == 0 {
+		return nil
+	}
+	return chunks{p.space(2), p.muted(strings.Join(parts, p.g.sep) + "; COST has every subscription")}
 }
 
 // priceOf is column c's price a month, and price prints it: ? when it is
@@ -639,6 +683,16 @@ func (p *page) costDevices() []chunks {
 	marks = append(marks, p.space(1), p.space(1))
 	name.cells = append(name.cells, chunks{p.muted("unused")}, chunks{p.muted("TOTAL")})
 	used.cells = append(used.cells, chunks{p.cell(p.dollars(c.UnusedUSD, c.UsedEstimated))}, chunks{p.cell(usd(c.TotalUSD))})
-	title := chunks{p.bold("BY DEVICE"), p.plain("  "), p.muted(strconv.Itoa(len(c.Devices)) + p.g.sep + "used over the last 4 weeks" + p.g.sep + "TOTAL a month")}
+	// What the column and the total are, as fits.
+	title := chunks{p.bold("BY DEVICE")}
+	for _, w := range []string{
+		"USED is the dollars each device used of the subscriptions over the last 4 weeks" + p.g.sep + "TOTAL is their price a month",
+		"USED: dollars used over the last 4 weeks" + p.g.sep + "TOTAL: price a month",
+		"USED: last 4 weeks" + p.g.sep + "TOTAL: a month",
+	} {
+		if title = (chunks{p.bold("BY DEVICE"), p.plain("  "), p.muted(w)}); title.width() <= p.w {
+			break
+		}
+	}
 	return append([]chunks{title}, p.table(marks, []*dcol{name, used})...)
 }

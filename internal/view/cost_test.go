@@ -193,7 +193,7 @@ func TestCostStates(t *testing.T) {
 		att = append(att, x.Kind+" "+x.Account+": "+x.Text)
 	}
 	for _, want := range []string{
-		"check old@acme.dev: still paid? last confirmed 3 Jul · on no device since 2 Aug: ai-usage cost confirm or cancel",
+		"check old@acme.dev: still paid? last confirmed 3 Jul · no device since 2 Aug: ai-usage cost confirm claude:old@acme.dev or cancel",
 		"cost ann@acme.dev: plan Max 5x → Max 20x, +$80/mo",
 		"idle g-1: idle 10d, $30/mo paid and unused",
 	} {
@@ -225,5 +225,49 @@ func TestCostWithoutStore(t *testing.T) {
 	Fill(&r)
 	if text := plainText(r, Options{Width: 120, Loc: time.UTC}); strings.Contains(text, "COST") || strings.Contains(text, "/mo") {
 		t.Fatalf("a report without cost:\n%s", text)
+	}
+}
+
+// TestCostWindow: Used is counted in the weekly window, and never in the
+// 5-hour one, even while the weekly one has not reset yet.
+func TestCostWindow(t *testing.T) {
+	day := 24 * time.Hour
+	st := emptyState()
+	q := &state.Quota{At: now, Source: "harness", Windows: []snapshot.Window{
+		{Name: "5h", Percent: 10, Minutes: 300, ResetsAt: new(now.Add(time.Hour))},
+		week7(20, now.Add(4*day)),
+	}}
+	addAccount(st, "claude", "ann@acme.dev", true, q, 0)
+	st.Accounts[state.Key("claude", "ann@acme.dev")].Plan = "max 20x"
+	f := newFixture(t, st)
+	f.cycles = collect.Cycles{collect.HistoryKey("claude", "ann@acme.dev"): {
+		{Window: "5h", ResetsAt: now.Add(-3 * time.Hour), Percent: 100, LastReadAt: now.Add(-4 * time.Hour)},
+		{Window: "5h", ResetsAt: now.Add(-8 * time.Hour), Percent: 100, LastReadAt: now.Add(-9 * time.Hour)},
+	}}
+	f.seal(now)
+	s := &cost.Store{V: cost.StoreVersion, Since: now.Add(-60 * day), Subs: map[string]*cost.Sub{}}
+	ann := s.Sub("claude", "ann@acme.dev", now.Add(-60*day))
+	ann.Plans = []cost.PlanAt{{At: now.Add(-60 * day), Plan: "max 20x"}}
+	ann.PlanConfirmedAt, ann.LastSeen = now, now
+	f.in.Cost = s
+	r := Build(f.in)
+	if u := findTeamAccount(t, r, "claude", "ann@acme.dev").Utilization; len(u) != 1 || u[0].Window != "5h" {
+		t.Fatalf("utilization %+v", u)
+	}
+	if a := costSub(t, r.Cost, "claude", "ann@acme.dev"); a.UsedPct == nil || *a.UsedPct != 0 || *a.UsedUSD != 0 {
+		t.Fatalf("Used from the 5-hour window: %v%%, $%v", a.UsedPct, a.UsedUSD)
+	}
+	for _, c := range []struct {
+		a    TeamAccount
+		want string
+	}{
+		{TeamAccount{Quota: &Quota{Windows: []Window{{Name: "5h", Minutes: 300}, {Name: "7d", Minutes: 10080}}}}, "7d"},
+		{TeamAccount{Utilization: []Utilization{{Window: "5h"}}}, ""},
+		{TeamAccount{Quota: &Quota{Windows: []Window{{Name: "month credits", Minutes: 43200}}}}, "month credits"},
+		{TeamAccount{Utilization: []Utilization{{Window: "5h"}, {Window: "7d Opus"}}}, "7d Opus"},
+	} {
+		if got := costWindow(c.a); got != c.want {
+			t.Errorf("costWindow(%+v) = %q, want %q", c.a, got, c.want)
+		}
 	}
 }

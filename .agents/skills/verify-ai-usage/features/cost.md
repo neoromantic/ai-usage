@@ -4,10 +4,10 @@
 
 - The price list: `internal/cost/prices.json`, built in, served by the relay at `GET /v1/prices`, fetched by a collection once a day; `ai-usage cost prices`
 - The cost store, `cost.json` in the state folder: each subscription's plans, first and last seen, the answers people typed, skipped questions, news told
-- COST after SUBSCRIPTIONS, and the team's total a month at the end of the header: PLAN, $/MO (`*` typed, `?` unknown, `typed for PLAN` stale), USED in $ and % over 4 weeks (`~` estimated), NEXT, and idle / still paid? / ended
+- COST after SUBSCRIPTIONS, and the team's total a month at the end of the header: PLAN, $/MO (`*` typed, `?` unknown, `typed for PLAN` stale), USED in $ and % over 4 weeks (`?` when no week is known), NEXT, and idle / still paid? / ended
 - ATTENTION: IDLE with its price, CHECK (still paid?), COST (new, plan changed, list price changed) for 3 days
-- DEVICES × SUBSCRIPTIONS in dollars (`$` in the interactive view), with `unused` and TOTAL rows; a subscription's and a device's detail in dollars
-- Questions: the prompt line in the interactive view (Enter, `s`, `S`, `y`/`n`, `Esc`), `e` to edit, the first run's questions after the guide
+- DEVICES × SUBSCRIPTIONS in dollars (`$` in the interactive view), with `unused` and TOTAL rows, `~` on a split of a subscription whose Used is not known, and a line for what no device has; a subscription's and a device's detail in dollars
+- Questions: the prompt line in the interactive view (Enter, `s`, `S`, `y`/`n`, `Esc`), the cadence before the charge day, a plan without its tier offered its tiers' prices, `e` to edit, the first run's questions after the guide
 - `ai-usage cost [--json]`, `cost set|confirm|cancel|reset|skip|never-ask`
 - `cost` in `report --json`: subscriptions, devices, questions, events
 - Team sharing: typed answers sealed in the snapshot's `costs`, behind the v0.10.0 gate
@@ -42,7 +42,9 @@ stack` serves `/v1/prices` too: `curl -i` it for the `Cache-Control`.
 and `AIUsageChecks`. Read the COST section and the `$` matrix in
 `.verify/latest/page/`, and `team-cost-*.png` and `settings-cost-*.png` in
 `.verify/latest/app/team/`: each column of the `$` matrix adds up to its
-price, and the header's total is COST's.
+price, and its TOTAL to the columns', with a line under it for what no
+device has and the subscriptions without a price; the header's total is
+COST's.
 
 ## Try
 
@@ -50,6 +52,9 @@ price, and the header's total is COST's.
 - `cost cancel` on a subscription: does it leave every total and show `ended`, muted?
 - `cost skip ACCOUNT renewal`, then a new plan: is the charge day asked again?
 - A relay before v0.10.0 (404 on `/v1/prices`): does the run stay quiet and use the built-in list?
+- A Claude Max read without its tier, as from an older release: does the price question offer Max 5x and Max 20x?
+- A plan billed yearly: is the cadence asked before the day, with the next anniversary offered, and a day of the month refused?
+- Cancelled from the app: does the app keep quiet about the ended event it caused?
 
 ## Gotchas
 

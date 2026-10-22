@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -190,20 +191,25 @@ func costEdit(args []string, stdout io.Writer) error {
 	var saved *cost.Sub
 	if _, err := cost.EditStore(d, func(s *cost.Store) error {
 		saved = s.Sub(t.provider, t.label, now)
-		return e.apply(saved, cmp.Or(saved.Plan(), plan), now)
+		return e.apply(saved, saved.Merged(cfg.Device), cmp.Or(saved.Plan(), plan), now)
 	}); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(stdout, e.done(t, saved, now))
+	_, err = fmt.Fprintln(stdout, e.done(t, saved.Merged(cfg.Device), now))
 	return err
 }
 
-// costChange is what a cost command, cmd, says of a subscription.
+// costChange is what a cost command, cmd, says of a subscription. A next
+// charge is a day, renews, or a day of the month, day.
 type costChange struct {
 	cmd             string
 	price           *float64
 	cadence, renews string
+	day             int
 	skip            string
+	// converted is the typed price a change of cadence alone turned into
+	// the new cadence's.
+	converted bool
 }
 
 // parseSet reads `cost set`'s flags after the account: at least one of a
@@ -238,33 +244,41 @@ func parseSet(args []string, now time.Time) (costChange, error) {
 		e.cadence = cost.Yearly
 	}
 	if *renews != "" {
-		day, err := renewDay(*renews, now)
-		if err != nil {
+		var err error
+		if e.renews, e.day, err = renewDay(*renews); err != nil {
 			return e, err
 		}
-		e.renews = day
+		if e.day > 0 && e.cadence == cost.Yearly {
+			return e, usageError(yearlyDay)
+		}
 	}
 	return e, nil
 }
 
-// renewDay is a next charge as a person gives it, a YYYY-MM-DD day or a
-// day of the month, as a day: a day of the month is its next one in this
-// device's time zone, today's included.
-func renewDay(s string, now time.Time) (string, error) {
+// yearlyDay refuses a day of the month for a subscription billed yearly.
+const yearlyDay = "a yearly subscription charges on one date a year: --renews takes YYYY-MM-DD"
+
+// renewDay is a next charge as a person gives it: a YYYY-MM-DD day, or a
+// day of the month.
+func renewDay(s string) (string, int, error) {
 	if n, err := strconv.Atoi(s); err == nil {
 		if n < 1 || n > 31 {
-			return "", usageError("--renews takes a day of the month from 1 to 31, or YYYY-MM-DD")
+			return "", 0, usageError("--renews takes a day of the month from 1 to 31, or YYYY-MM-DD")
 		}
-		return cost.RenewsOn(n, now, time.Local), nil
+		return "", n, nil
 	}
 	if _, err := time.Parse(time.DateOnly, s); err != nil {
-		return "", usageError("--renews takes YYYY-MM-DD, or a day of the month")
+		return "", 0, usageError("--renews takes YYYY-MM-DD, or a day of the month")
 	}
-	return s, nil
+	return s, 0, nil
 }
 
-// apply records the change in sub, whose plan is plan, at now.
-func (e costChange) apply(sub *cost.Sub, plan string, now time.Time) error {
+// apply records the change in sub, whose plan is plan and whose answers,
+// the team's merged, were was, at now. A day of the month charges on that
+// day in this device's time zone, and only monthly. A change of cadence
+// alone turns the typed price into the new cadence's, so that what the
+// subscription costs a month stays.
+func (e *costChange) apply(sub *cost.Sub, was cost.Answer, plan string, now time.Time) error {
 	a := &sub.Answer
 	switch e.cmd {
 	case "skip":
@@ -279,6 +293,25 @@ func (e costChange) apply(sub *cost.Sub, plan string, now time.Time) error {
 	case "reset":
 		a.Reset(now)
 		return nil
+	}
+	cadence := cmp.Or(e.cadence, was.Cadence, cost.Monthly)
+	if e.day > 0 {
+		if cadence == cost.Yearly {
+			return usageError(yearlyDay)
+		}
+		e.renews = cost.DayAnchor(e.day, now, time.Local)
+	}
+	if e.price == nil && e.cadence != "" && was.Price != nil && e.cadence != cmp.Or(was.Cadence, cost.Monthly) {
+		p := *was.Price * 12
+		if e.cadence == cost.Monthly {
+			p = *was.Price / 12
+		}
+		p = math.Round(p*100) / 100
+		// It stays typed for the plan it was typed for, or for any.
+		if err := a.SetPrice(&p, was.PriceFor, now); err != nil {
+			return err
+		}
+		e.converted = true
 	}
 	if e.price != nil {
 		if err := a.SetPrice(e.price, plan, now); err != nil {
@@ -298,8 +331,9 @@ func (e costChange) apply(sub *cost.Sub, plan string, now time.Time) error {
 	return nil
 }
 
-// done says what the change did to the subscription t, saved as s.
-func (e costChange) done(t account, s *cost.Sub, now time.Time) string {
+// done says what the change did to the subscription t, whose answers, the
+// team's merged, are now a.
+func (e costChange) done(t account, a cost.Answer, now time.Time) string {
 	who := t.provider + " " + snapshot.Printable(t.label)
 	const team = "; the team sees it after the next run"
 	switch e.cmd {
@@ -312,7 +346,6 @@ func (e costChange) done(t account, s *cost.Sub, now time.Time) string {
 	case "skip":
 		return who + ": the " + strings.ReplaceAll(e.skip, "_", " ") + " question is not asked again on this device"
 	}
-	a := s.Answer
 	var parts []string
 	if a.Price != nil {
 		each := "a month"
@@ -322,6 +355,9 @@ func (e costChange) done(t account, s *cost.Sub, now time.Time) string {
 		p := "$" + strconv.FormatFloat(*a.Price, 'f', -1, 64) + " " + each
 		if a.PriceFor != "" {
 			p += " for " + a.PriceFor
+		}
+		if e.converted {
+			p = "billed " + a.Cadence + " at " + p + ", the typed price turned into it"
 		}
 		parts = append(parts, p)
 	}
@@ -400,30 +436,42 @@ func askCost(qs []view.Question, in io.Reader, out io.Writer) {
 		var ok bool
 		switch q.Kind {
 		case cost.AskRenewal:
-			hint := "next charge, YYYY-MM-DD or a day of the month"
-			if q.Suggestion != nil {
-				hint += "; Enter takes " + *q.Suggestion
+			// The cadence first: a yearly subscription charges on a date
+			// of its own, and is offered its own.
+			hint, suggestion, yearly := "next charge, YYYY-MM-DD or a day of the month", q.Suggestion, false
+			if len(q.Choices) > 1 {
+				if answer, ok = ask("billed m monthly or y yearly; Enter takes monthly"); !ok {
+					return
+				}
+				if answer == "s" || answer == "S" {
+					break
+				}
+				if yearly = strings.HasPrefix(strings.ToLower(answer), "y"); yearly {
+					hint, suggestion = "next charge, YYYY-MM-DD", q.SuggestionYearly
+				}
+			}
+			if suggestion != nil {
+				hint += "; Enter takes " + *suggestion
 			}
 			if answer, ok = ask(hint); !ok {
 				return
 			}
-			if answer == "" && q.Suggestion != nil {
-				answer = *q.Suggestion
+			if answer == "" && suggestion != nil {
+				answer = *suggestion
 			}
 			if answer != "" && answer != "s" && answer != "S" {
 				args = []string{"set", account, "--renews", answer}
-				if len(q.Choices) > 1 {
-					c, ok := ask("billed m monthly or y yearly; Enter takes monthly")
-					if !ok {
-						return
-					}
-					if strings.HasPrefix(strings.ToLower(c), "y") {
-						args = append(args, "--yearly")
-					}
+				if yearly {
+					args = append(args, "--yearly")
 				}
 			}
 		case cost.AskPrice:
-			if answer, ok = ask("price a month, in USD"); !ok {
+			hint := "price a month, in USD"
+			if len(q.Choices) > 0 {
+				// A plan read without its tier: its tiers' prices.
+				hint += ", as " + strings.Join(q.Choices, " or ")
+			}
+			if answer, ok = ask(hint); !ok {
 				return
 			}
 			if answer != "" && answer != "s" && answer != "S" {

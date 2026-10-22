@@ -21,11 +21,15 @@ func TestBuild(t *testing.T) {
 	gone.Plans = []PlanAt{{t0.Add(-60 * day), "plus"}}
 	gone.LastSeen, gone.PlanConfirmedAt = t0.Add(-40*day), t0.Add(-40*day)
 	began := time.Date(2025, 3, 9, 10, 0, 0, 0, time.UTC)
+	s.Dropped = map[string]time.Time{Key("claude", "was@acme.dev"): t0.Add(-40 * day)}
 	seen := []Seen{
 		{Provider: "claude", Label: "Mira@studio.dev", Plan: "max 20x", Here: true, Cycles: weekly(80, 80, 80, 80),
 			Consumers: []Consumer{{Name: "mira@mira-mbp", Slots: [Slots]int64{1, 1, 1, 1}}}},
 		{Provider: "codex", Label: "ann@acme.dev", Plan: "team", Here: true, SubscribedAt: began},
-		{Provider: "grok", Label: "kim@acme.dev", Plan: "SuperGrok"},
+		{Provider: "grok", Label: "kim@acme.dev", Plan: "SuperGrok", LoggedIn: true},
+		// Logged out long ago, and dropped after it ended.
+		{Provider: "codex", Label: "old@acme.dev", Plan: "plus", QuotaAt: t0.Add(-60 * day)},
+		{Provider: "claude", Label: "was@acme.dev", Plan: "pro", Here: true, QuotaAt: t0.Add(-20 * day)},
 		{Provider: "codex", Label: "free@acme.dev", Plan: "free"},
 		{Provider: "codex", Label: "api key"},
 		{Provider: "hermes", Label: "bot", Plan: "pro"},
@@ -72,5 +76,22 @@ func TestBuild(t *testing.T) {
 	}
 	if b := Build(nil, list, SourceBuiltin, "d-self", nil, t0, nil); len(b.Subs) != 0 || b.Totals.USD != 0 {
 		t.Fatal("Build of nothing")
+	}
+	// A plan billed yearly too is offered the next anniversary for yearly.
+	pro := []Seen{{Provider: "claude", Label: "cat@acme.dev", Plan: "pro", Here: true, QuotaAt: t0, SubscribedAt: time.Date(2026, 3, 15, 9, 0, 0, 0, time.UTC)}}
+	q := Build(nil, list, SourceBuiltin, "d-self", pro, t0, time.UTC).Questions[0]
+	if q.Kind != AskRenewal || q.Suggestion != "2026-11-15" || q.SuggestionYearly != "2027-03-15" || !slices.Equal(q.Choices, []string{Monthly, Yearly}) {
+		t.Fatalf("yearly renewal %+v", q)
+	}
+	// Max read without its tier is priced as one of its tiers.
+	maxPlan := []Seen{{Provider: "claude", Label: "cat@acme.dev", Plan: "max", Here: true, QuotaAt: t0}}
+	var tiers []string
+	for _, q := range Build(nil, list, SourceBuiltin, "d-self", maxPlan, t0, time.UTC).Questions {
+		for _, pl := range q.Tiers {
+			tiers = append(tiers, q.Kind+" "+pl.Plan)
+		}
+	}
+	if !slices.Equal(tiers, []string{"price max 5x", "price max 20x"}) {
+		t.Fatalf("tiers of max: %v", tiers)
 	}
 }

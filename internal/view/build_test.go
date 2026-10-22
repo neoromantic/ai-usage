@@ -189,7 +189,7 @@ collector.update.latest collector.update.method collector.update.staged collecto
 cost cost.currency cost.devices cost.devices.device cost.devices.device_id cost.devices.usd cost.events cost.events.account cost.events.at
 cost.events.delta_usd cost.events.from cost.events.from_usd cost.events.id cost.events.kind cost.events.provider cost.events.text cost.events.to cost.events.to_usd cost.next_charge
 cost.prices cost.prices.source cost.prices.updated cost.questions cost.questions.account cost.questions.choices cost.questions.id cost.questions.kind
-cost.questions.provider cost.questions.suggestion cost.questions.text cost.subscriptions cost.subscriptions.account cost.subscriptions.alias
+cost.questions.provider cost.questions.suggestion cost.questions.suggestion_yearly cost.questions.text cost.subscriptions cost.subscriptions.account cost.subscriptions.alias
 cost.subscriptions.billed_through cost.subscriptions.cadence cost.subscriptions.consumers cost.subscriptions.consumers.device
 cost.subscriptions.consumers.device_id cost.subscriptions.consumers.share cost.subscriptions.consumers.usd cost.subscriptions.current
 cost.subscriptions.ended_at cost.subscriptions.first_seen cost.subscriptions.idle_since cost.subscriptions.last_seen cost.subscriptions.name

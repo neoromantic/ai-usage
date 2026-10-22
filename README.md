@@ -105,7 +105,7 @@ ATTENTION
  OVER     codex sam@mail.test  runs out ~Sat 03:01 at the last day's pace, 2d 17h before reset
  OUTSIDE  codex lee@corp.test  +25 points in 20h, no team device spent
  ERROR    kim@Mac.localdomain  codex: app-server exited without answering
- +3 more: 1 no reading, 1 duplicate, 1 old
+ +7 more: 1 no reading, 1 duplicate, 1 old, 1 check, 3 cost
 
 SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
 
@@ -125,19 +125,19 @@ SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
 
 COST  $1,000/mo +1 without a price · used ~$787 (79%) over the last 4 weeks · next: Fri 25 Sep, $200
 
-  CLAUDE            PLAN        $/MO    USED       NEXT
-● ann@acme.dev      Max 20x     $200    $182  91%  Fri 25 Sep
-  kim@corp.test     max            ?       ?  64%  ·
-  old@acme.dev      Pro          $20      $0   0%  ·           still paid?
+  CLAUDE            PLAN             $/MO   USED       NEXT
+● ann@acme.dev      Max 20x          $200   $182  91%  Fri 25 Sep
+  kim@corp.test     max                 ?      ?  64%  ·
+  old@acme.dev      Pro               $20     $0   0%  ·           still paid?
 
   CODEX
-● ann@acme.dev      Pro 200     $180*   $155  86%  Mon 12 Oct
-  sam@mail.test     Pro 100     $100     $94  94%  ·           typed for plus
-● lee@corp.test     Pro 200     $200     $56  28%  ·
-  ann+old@acme.dev  Plus         $20      $3  15%  ·           ended
+● ann@acme.dev      Pro 200          $180*  $155  86%  Mon 12 Oct
+  sam@mail.test     Pro 100          $100    $94  94%  ·           typed for plus
+● lee@corp.test     Pro 200          $200    $56  28%  ·
+  ann+old@acme.dev  Plus              $20     $3  15%  ·           ended
 
   GROK
-● a4c2e917          SuperGrok…  $300   ~$300       ·
+● a4c2e917          SuperGrok Heavy  $300      ?       ·
 
 UTILIZATION  fullest % before each reset
   only this device's cycles: ci@ci-runner-eu-west-build-pool-node-0042ab runs v0.3…: it should update within 15 minutes
@@ -222,17 +222,17 @@ COST, after SUBSCRIPTIONS, is what the team's Claude, Codex, and Grok subscripti
 
 - **PLAN** as the price list names it.
 - **$/MO**, the price a month: the list price of the plan, or the price a person typed, marked `*`; a plan billed yearly counts a twelfth of the year's price. `?` marks a plan the list has no price for, such as a team, business, enterprise, or education plan, or a Claude Max whose tier an older release did not read, and the first line counts them. A price typed for another plan no longer counts: the row says `typed for max 5x`, and the list's price counts until someone types the new one. Prices are the providers' US list prices in USD; a Claude subscription billed through the App Store or Google Play may cost more there, and its detail says so.
-- **USED**, in dollars and percent: how much of the price the team used over the last 4 weeks. Each week counts as full as the subscription's weekly window got before it reset, or the longest window its tool has; a week with no reading and no tokens counts 0%, and a week with tokens but no reading is left out. After a change of plan, each week counts at the price of its plan. When no week is known, as when the machines that used it run a release that sends no quota cycles, the whole price counts as used, split by tokens, and is marked `~`.
+- **USED**, in dollars and percent: how much of the price the team used over the last 4 weeks. Each week counts as full as the subscription's weekly window got before it reset, or the longest window of a day or more its tool has, never Claude's 5-hour one; a week with no reading and no tokens counts 0%, and a week with tokens but no reading is left out, and so is a week before the team first found the subscription. After a change of plan, each week counts at the price of its plan. When no week is known, as when the subscription is new or the machines that used it run a release that sends no quota cycles, USED is `?`, and the matrix in dollars splits the whole price by tokens, marked `~`.
 - **NEXT**, the next charge, once a person said when it charges: the same day each month, the last day of a shorter month, or the same date each year.
 - What is wrong, when something is: `idle 9d`, a paid subscription no team machine used for a week; `still paid?`, when nobody can say, because its plan was last confirmed by a reading of its quota over 35 days ago, or no machine has had it logged in for 14 days, and nobody confirmed it in the last 35 days; and `ended`, when a reading found a free plan or a person cancelled it. An ended subscription counts in no total and goes after 30 days. A subscription stays in COST after the last machine that had it is gone, until it ends, so one nobody uses cannot drop out of the cost.
 
-ATTENTION gives IDLE its price, "idle 9d, $25/mo paid and unused"; asks CHECK of a subscription nobody can say is still paid, "still paid? last confirmed 21 Aug · on no device since 21 Aug: ai-usage cost confirm or cancel"; and for 3 days says COST when a subscription is new, its plan changed, as "plan Max 5x → Max 20x, +$81/mo", or the list price of its plan changed. Hermes borrows a Claude, Codex, or Grok login, so what it spends counts as that login's use, and it costs nothing of its own.
+ATTENTION gives IDLE its price, "idle 9d, $25/mo paid and unused"; asks CHECK of a subscription nobody can say is still paid, "still paid? last confirmed 21 Aug · no device since 21 Aug: ai-usage cost confirm claude:jun@studio.dev or cancel"; and for 3 days says COST when a subscription is new, its plan changed, as "plan Max 5x → Max 20x, +$81/mo", or the list price of its plan changed. Hermes borrows a Claude, Codex, or Grok login, so what it spends counts as that login's use, and it costs nothing of its own.
 
-In the interactive view, `$` shows DEVICES × SUBSCRIPTIONS in dollars over the last 4 weeks: a cell is what the machine used of the subscription, its part of the subscription's weighted tokens times the dollars used; `unused` is what nobody used, and the TOTAL row is each subscription's price, so every column adds up to it. `%` goes from dollars to shares. A subscription's detail adds its price and where it comes from, used and unused, the next charge, its state, who bills it, its price for a million weighted tokens, its plans, and what each machine used of it; a machine's detail adds what it used of each subscription, and in all.
+In the interactive view, `$` shows DEVICES × SUBSCRIPTIONS in dollars over the last 4 weeks: a cell is what the machine used of the subscription, its part of the subscription's weighted tokens times the dollars used; `unused` is what nobody used, and the TOTAL row is each subscription's price, so every column adds up to it, and the TOTAL column to the row; a line under it says what COST counts that no machine has, and the subscriptions without a price. `%` goes from dollars to shares. A subscription's detail adds its price and where it comes from, used and unused, the next charge, its state, who bills it, its price for a million weighted tokens, its plans, and what each machine used of it; a machine's detail adds what it used of each subscription, and in all.
 
 ![DEVICES × SUBSCRIPTIONS in dollars: what each machine of a made-up team used of each subscription over 4 weeks, what nobody used, and each subscription's price in the TOTAL row](docs/demo/social/team-dollars.png)
 
-**Questions.** ai-usage asks a person what no tool says: when a subscription logged in on this machine charges next, and whether monthly or yearly when the list prices its plan yearly too, with the day Claude Code says the subscription began as a suggestion; its price, when the list has none; and, on every machine, whether a subscription nobody can confirm is still paid. The interactive view asks one at a time, on the line over the key bar: type the answer, `Enter` takes the suggestion, `y` or `n` says whether it is still paid, `s` skips the question, `S` asks no more on this machine, and `Esc` asks later. The first run on a terminal asks them after the guide, and the [menu bar app](#menu-bar-app) asks in a notification and in Settings. A skipped question is not asked again of that subscription, except a charge day or a price after its plan changes. A scheduled run, a run without a terminal, and `--json` ask nothing. `e` on a picked or open subscription asks for its cadence, price, and next charge.
+**Questions.** ai-usage asks a person what no tool says: when a subscription logged in on this machine charges next, and whether monthly or yearly when the list prices its plan yearly too, with the day Claude Code says the subscription began as a suggestion; its price, when the list has none, offering the list's tiers when a plan was read without its tier, as Claude's Max from an older release; and, on every machine, whether a subscription nobody can confirm is still paid. The interactive view asks one at a time, on the line over the key bar: type the answer, `Enter` takes the suggestion, `y` or `n` says whether it is still paid, `s` skips the question, `S` asks no more on this machine, and `Esc` asks later. The first run on a terminal asks them after the guide, and the [menu bar app](#menu-bar-app) asks in a notification and in Settings. A skipped question is not asked again of that subscription, except a charge day or a price after its plan changes. A scheduled run, a run without a terminal, and `--json` ask nothing. `e` on a picked or open subscription asks for its cadence, price, and next charge.
 
 ```sh
 ai-usage cost                                           # COST, and what each machine used
@@ -282,7 +282,7 @@ On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/A
 - **Usage:** the tokens of each device or each subscription, today or over 7, 30, or 90 days, in whole millions.
 - **Projects:** this Mac's repositories, their worktrees counted in, grouped by the folder they share.
 
-A click on a row opens its details: each window with its forecast, and the forecast of the one that runs out with the pace it takes, or where it was headed when nobody spent on it since; who spent the window since it began, "root@build-01 84M, hermes@scout 35M, +8 more · since 21 Sep 02:40", the busiest first and the rest as a count; when the subscription was last used; how old its reading is and which device took it, when the reading is old or another device's; and why the report calls it idle or could not read it, which a click on the line of the subscriptions not read also gives whole; its cost, "$238/mo typed · used ~$238", or "$200/mo · used 46% · next charge Sun 27 Sep", with `idle 9d`, `still paid?`, or `ended` when it is so; a device's release, tools, and errors, in the words of the report's NOTE; a project's sessions. Color means a problem only: red is out, orange runs out before the reset, yellow is tight. `⌘1` to `⌘3` switch the tabs and `⌘R` collects now.
+A click on a row opens its details: each window with its forecast, and the forecast of the one that runs out with the pace it takes, or where it was headed when nobody spent on it since; who spent the window since it began, "root@build-01 84M, hermes@scout 35M, +8 more · since 21 Sep 02:40", the busiest first and the rest as a count; when the subscription was last used; how old its reading is and which device took it, when the reading is old or another device's; and why the report calls it idle or could not read it, which a click on the line of the subscriptions not read also gives whole; its cost, "$238/mo typed · used ?" when no week of its Used is known, or "$200/mo · used 46% · next charge Sun 27 Sep", with `idle 9d`, `still paid?`, or `ended` when it is so; a device's release, tools, and errors, in the words of the report's NOTE; a project's sessions. Color means a problem only: red is out, orange runs out before the reset, yellow is tight. `⌘1` to `⌘3` switch the tabs and `⌘R` collects now.
 
 <table>
 <tr>
@@ -597,7 +597,7 @@ Or, from a clone with the Vercel CLI logged in, run `sh scripts/deploy-relay.sh`
 | `ai-usage alias ACCOUNT NAME` | name an account for the whole team, in at most 12 columns; `ACCOUNT` is a label, a name, or `PROVIDER:LABEL` |
 | `ai-usage alias ACCOUNT --clear` | go back to the account's default name |
 | `ai-usage cost [--json] [DISPLAY]` | what the team's subscriptions cost a month, how much of it the team used over the last 4 weeks, and which machine used it; see [Cost](#cost) |
-| `ai-usage cost set ACCOUNT [--price N] [--monthly\|--yearly] [--renews DAY]` | type what a subscription costs each charge, a year's with `--yearly`, and its next charge, DAY as `YYYY-MM-DD` or a day of the month; the whole team sees it |
+| `ai-usage cost set ACCOUNT [--price N] [--monthly\|--yearly] [--renews DAY]` | type what a subscription costs each charge, a year's with `--yearly`, and its next charge, DAY as `YYYY-MM-DD`, or a day of the month when it is billed monthly; a change of cadence alone turns a typed price into the new cadence's; the whole team sees it |
 | `ai-usage cost confirm ACCOUNT`, `ai-usage cost cancel ACCOUNT` | say a subscription is still paid, or that it was cancelled |
 | `ai-usage cost reset ACCOUNT` | clear the typed price, cadence, and charge day, so the list price counts again |
 | `ai-usage cost skip ACCOUNT renewal\|price\|still_paid` | never ask this machine that question of the subscription again |

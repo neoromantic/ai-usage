@@ -5,6 +5,7 @@ import (
 	"maps"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
@@ -180,11 +181,15 @@ type Question struct {
 	Account  string `json:"account"`
 	// Text is the question in words.
 	Text string `json:"text"`
-	// Suggestion is the answer offered, a YYYY-MM-DD day for a renewal;
-	// nil when there is none.
-	Suggestion *string `json:"suggestion"`
+	// Suggestion is the answer offered, a YYYY-MM-DD day for a renewal at
+	// the cadence it has now; nil when there is none. SuggestionYearly is
+	// the one to offer when a person chooses yearly from Choices.
+	Suggestion       *string `json:"suggestion"`
+	SuggestionYearly *string `json:"suggestion_yearly"`
 	// Choices are the cadences to choose from, for a renewal of a plan the
-	// list prices yearly too.
+	// list prices yearly too; for the price of a plan read without its
+	// tier, the list's tiers of it, each its name and price a month, as
+	// "Max 5x $100", whose price an answer types.
 	Choices []string `json:"choices"`
 }
 
@@ -252,9 +257,18 @@ func (m *merger) costSeen(t Team) []cost.Seen {
 			if a.Plan != nil {
 				g.Plan = *a.Plan
 			}
-			if len(a.Utilization) > 0 && a.Utilization[0].Main {
-				for _, c := range a.Utilization[0].Cycles {
-					g.Cycles = append(g.Cycles, cost.Cycle{ResetsAt: c.ResetsAt, Percent: c.Percent})
+			if a.Quota != nil {
+				g.QuotaAt = a.Quota.ObservedAt
+			}
+			g.LoggedIn = slices.ContainsFunc(a.PerDevice, func(d DeviceUsage) bool { return d.Current })
+			if w := costWindow(a); w != "" {
+				for _, u := range a.Utilization {
+					if u.Window != w {
+						continue
+					}
+					for _, c := range u.Cycles {
+						g.Cycles = append(g.Cycles, cost.Cycle{ResetsAt: c.ResetsAt, Percent: c.Percent})
+					}
 				}
 			}
 			byDev := tokens[m.byProv[tp.Provider][snapshot.LabelKey(a.Label)]]
@@ -268,6 +282,29 @@ func (m *merger) costSeen(t Team) []cost.Seen {
 		}
 	}
 	return out
+}
+
+// costWindow is the window an account's Used is counted in, of those its
+// reading and its history name: the weekly one, else the longest. A window
+// shorter than a day, as Claude's 5-hour one, fills and empties many times
+// a week and says nothing of how much of the week was used, so it is never
+// the one: "" when the account has no other. A week whose window has not
+// reset yet is then not known, rather than taken from a shorter window.
+func costWindow(a TeamAccount) string {
+	var rs []reading
+	if a.Quota != nil {
+		for _, w := range a.Quota.Windows {
+			rs = append(rs, reading{Window: snapshot.Window{Name: w.Name, Minutes: w.Minutes}})
+		}
+	}
+	for _, u := range a.Utilization {
+		rs = append(rs, reading{Window: snapshot.Window{Name: u.Window}})
+	}
+	rs = slices.DeleteFunc(rs, func(r reading) bool { return r.Length() > 0 && r.Length() < 24*time.Hour })
+	if i := mainIndex(rs); i >= 0 {
+		return rs[i].Name
+	}
+	return ""
 }
 
 // billing is who bills this device's account of provider with label, and
@@ -323,7 +360,11 @@ func buildCost(in Input, t Team, seen []cost.Seen, now time.Time, loc *time.Loca
 		}
 	}
 	for _, q := range b.Questions {
-		qv := Question{ID: q.ID, Kind: q.Kind, Provider: q.Provider, Account: q.Label, Suggestion: strPtr(q.Suggestion), Choices: q.Choices}
+		qv := Question{ID: q.ID, Kind: q.Kind, Provider: q.Provider, Account: q.Label, Suggestion: strPtr(q.Suggestion),
+			SuggestionYearly: strPtr(q.SuggestionYearly), Choices: q.Choices}
+		for _, pl := range q.Tiers {
+			qv.Choices = append(qv.Choices, pl.DisplayName()+" "+usd(pl.USD))
+		}
 		if qv.Choices == nil {
 			qv.Choices = []string{}
 		}
@@ -538,7 +579,11 @@ func (c *Cost) questionText(q Question, loc *time.Location) string {
 		}
 		return out
 	case AskPrice:
-		return "What does " + who + " cost a month? The price list has no price for its plan."
+		out := "What does " + who + " cost a month?"
+		if len(q.Choices) > 0 {
+			return out + " Its tool did not say its tier: " + orWords(q.Choices) + "."
+		}
+		return out + " The price list has no price for its plan."
 	case AskStillPaid:
 		out := "Is " + who + " still paid?"
 		if s != nil {
@@ -549,6 +594,14 @@ func (c *Cost) questionText(q Question, loc *time.Location) string {
 		return out
 	}
 	return who
+}
+
+// orWords joins choices as words: "a, b or c".
+func orWords(choices []string) string {
+	if len(choices) < 2 {
+		return strings.Join(choices, "")
+	}
+	return strings.Join(choices[:len(choices)-1], ", ") + " or " + choices[len(choices)-1]
 }
 
 // dayWords is a YYYY-MM-DD day as a date in words: "Thu 23 Oct".

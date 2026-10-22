@@ -19,8 +19,10 @@ type Seen struct {
 	// Here says it is logged in on this device: only then are its charge
 	// day and price asked here.
 	Here bool
+	// LoggedIn says a device of the team has it logged in.
+	LoggedIn bool
 	// Cycles are the ended periods of its main window, the weekly one,
-	// else the longest it has, across the team.
+	// else the longest it has of a day or more, across the team.
 	Cycles []Cycle
 	// Consumers are its consumers' weighted tokens by week of SlotOf.
 	Consumers []Consumer
@@ -30,6 +32,8 @@ type Seen struct {
 	// who bills it and when it began.
 	Billing      string
 	SubscribedAt time.Time
+	// QuotaAt is the team's newest reading of its quota, zero when none.
+	QuotaAt time.Time
 }
 
 // Question is one thing to ask a person of a subscription. Its ID is the
@@ -41,11 +45,18 @@ type Question struct {
 	Label    string
 	Plan     string
 	// Suggestion is the answer offered, when there is one: for a renewal,
-	// the next date on the day the tool says the subscription began.
-	Suggestion string
+	// the next date on the day the tool says the subscription began, the
+	// next one of the month, or of the year when it is billed yearly.
+	// SuggestionYearly is the next one of the year, for a renewal whose
+	// cadence is asked too.
+	Suggestion       string
+	SuggestionYearly string
 	// Choices are the cadences to choose from, for a renewal of a plan the
-	// list prices yearly too.
+	// list prices yearly too. Tiers are the list's tiers of the plan, for
+	// the price of a plan read without its tier, as Claude's "max" from a
+	// release that did not read it: its price is one of theirs.
 	Choices []string
+	Tiers   []Plan
 }
 
 // Book is the cost of the team's subscriptions as of a report.
@@ -84,7 +95,7 @@ func Build(s *Store, list Prices, source, self string, seen []Seen, now time.Tim
 		keys[k] = true
 	}
 	for k, g := range by {
-		if s.Subs[k] == nil && g.Plan != "" && !Free(g.Plan) && Norm(g.Plan) != "unknown" {
+		if s.Subs[k] == nil && g.Plan != "" && !Free(g.Plan) && Norm(g.Plan) != "unknown" && Fresh(g.Here || g.LoggedIn, g.QuotaAt, s.Dropped[k], now) {
 			keys[k] = true
 		}
 	}
@@ -93,6 +104,7 @@ func Build(s *Store, list Prices, source, self string, seen []Seen, now time.Tim
 		in := Input{
 			Now: now, Loc: loc, List: list, Sub: sub, Provider: g.Provider, Label: g.Label, Plan: g.Plan,
 			Cycles: g.Cycles, Consumers: g.Consumers, IdleSince: g.IdleSince, Billing: g.Billing, SubscribedAt: g.SubscribedAt,
+			QuotaAt: g.QuotaAt,
 		}
 		if sub != nil {
 			in.Provider, in.Label, in.Answer = sub.Provider, cmp.Or(g.Label, sub.Label), sub.Merged(self)
@@ -104,10 +116,20 @@ func Build(s *Store, list Prices, source, self string, seen []Seen, now time.Tim
 			q := Question{Kind: kind, Provider: r.Provider, Label: r.Label, Plan: r.Plan}
 			q.ID = questionID(q)
 			if kind == AskRenewal {
+				q.Choices = Cadences(list, r.Provider, r.Plan)
 				if r.SuggestedDay > 0 {
 					q.Suggestion = RenewsOn(r.SuggestedDay, now, cmp.Or(loc, time.Local))
+					yearly := Anniversary(g.SubscribedAt, now, cmp.Or(loc, time.Local))
+					if r.Cadence == Yearly {
+						q.Suggestion = yearly
+					}
+					if len(q.Choices) > 0 {
+						q.SuggestionYearly = yearly
+					}
 				}
-				q.Choices = Cadences(list, r.Provider, r.Plan)
+			}
+			if kind == AskPrice {
+				q.Tiers = list.Tiers(r.Provider, r.Plan)
 			}
 			b.Questions = append(b.Questions, q)
 		}

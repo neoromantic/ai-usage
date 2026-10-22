@@ -7,7 +7,7 @@ ATTENTION
  OVER     codex sam@mail.test  runs out ~Sat 03:01, 2d 17h before reset
  OUTSIDE  codex lee@corp.test  +25 points in 20h, no team device spent
  ERROR    kim@Mac.localdomain  codex: app-server exited without answering
- +3 more: 1 no reading, 1 duplicate, 1 old
+ +7 more: 1 no reading, 1 duplicate, 1 old, 1 check, 3 cost
 
 SUBSCRIPTIONS  7 . 2 out . 1 over . 3 no reading
 
@@ -27,19 +27,19 @@ SUBSCRIPTIONS  7 . 2 out . 1 over . 3 no reading
 
 COST  $1,000/mo +1 without a price . used ~$787 (79%) . next: Fri 25 Sep, $200
 
-  CLAUDE            PLAN        $/MO    USED       NEXT
-* ann@acme.dev      Max 20x     $200    $182  91%  Fri 25 Sep
-  kim@corp.test     max            ?       ?  64%  .
-  old@acme.dev      Pro          $20      $0   0%  .           still paid?
+  CLAUDE            PLAN        $/MO   USED       NEXT
+* ann@acme.dev      Max 20x     $200   $182  91%  Fri 25 Sep
+  kim@corp.test     max            ?      ?  64%  .
+  old@acme.dev      Pro          $20     $0   0%  .           still paid?
 
   CODEX
-* ann@acme.dev      Pro 200     $180*   $155  86%  Mon 12 Oct
-  sam@mail.test     Pro 100     $100     $94  94%  .           typed for plus
-* lee@corp.test     Pro 200     $200     $56  28%  .
-  ann+old@acme.dev  Plus         $20      $3  15%  .           ended
+* ann@acme.dev      Pro 200     $180*  $155  86%  Mon 12 Oct
+  sam@mail.test     Pro 100     $100    $94  94%  .           typed for plus
+* lee@corp.test     Pro 200     $200    $56  28%  .
+  ann+old@acme.dev  Plus         $20     $3  15%  .           ended
 
   GROK
-* a4c2e917          SuperGr...  $300   ~$300       .
+* a4c2e917          SuperGr...  $300      ?       .
 
 UTILIZATION  fullest % before each reset
   only this device's cycles: ci@ci-runne...: it should update within 15 minutes
@@ -72,8 +72,9 @@ x kim@Mac.localdomain          .        .        .        .         .         ?
   hermes@bot-h                 .        .        .        .         .         .
   hermes@bot-i                 .        .        .        .         .         .
 ~ kim@Mac.localdomain          .        .        .        .         .         .
-  unused                    $144      $25        .       $6       $18     ~$213
-  TOTAL                     $200     $180        .     $100      $500    $1,000
+  unused                    $144      $25        .       $6       $18     ~$193
+  TOTAL                     $200     $180        .     $100      $500      $980
+  +$20/mo on no device . +1 without a price; COST has every subscription
 
 PROJECTS  ann@annbook . by 7d . M weighted tokens . claude since Sep 2
   PROJECT                                   7D   90D  SESS  VIA            LAST

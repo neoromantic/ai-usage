@@ -122,7 +122,7 @@
   {
     "kind": "check",
     "subject": "claude gone@mail.test",
-    "text": "still paid? last confirmed 13 Jul · on no device since 12 Aug: ai-usage cost confirm or cancel",
+    "text": "still paid? last confirmed 13 Jul · no device since 12 Aug: ai-usage cost confirm claude:gone@mail.test or cancel",
     "provider": "claude",
     "account": "gone@mail.test",
     "name": "gone",

@@ -722,12 +722,15 @@ private struct CostRow: View {
                 CommitField(title: "Price", prompt: s.priceUsd.map { Format.usd($0) + "/mo, " + s.priceWords } ?? "Dollars",
                             value: typed, width: 150) { v in
                     guard !v.isEmpty else { throw CostEditError.empty("price") }
-                    try await run(CostCommand.set(s.target, price: v.hasPrefix("$") ? String(v.dropFirst()) : v))
+                    guard let usd = CostCommand.dollars(v) else { throw CostEditError.notPrice }
+                    try await run(CostCommand.set(s.target, price: usd))
                 }
             }
             LabeledContent("Billed") {
+                // A typed price is turned into the new cadence's, so the
+                // cost a month stays; ai-usage says so in the result.
                 Picker("Billed", selection: Binding(get: { s.cadence }, set: { c in
-                    Task { try? await run(CostCommand.set(s.target, cadence: c)) }
+                    if let args = CostCommand.set(s.target, cadence: c) { act(args) }
                 })) {
                     Text("Monthly").tag("monthly")
                     Text("Yearly").tag("yearly")
@@ -825,10 +828,12 @@ private struct CostRow: View {
 /// Why an edit of the cost ran nothing.
 private enum CostEditError: LocalizedError {
     case empty(String)
+    case notPrice
 
     var errorDescription: String? {
         switch self {
         case .empty(let what): return "Type a \(what); Reset clears what was typed"
+        case .notPrice: return "Type the price in dollars, as 20 or 1,200"
         }
     }
 }
@@ -853,12 +858,21 @@ private struct QuestionRow: View {
                 case "still_paid":
                     Button("Still Paying") { answer(CostCommand.confirm(target)) }
                     Button("Cancelled") { answer(CostCommand.cancel(target)) }
-                default:
-                    TextField(q.kind, text: $text, prompt: Text(q.kind == "price" ? "Dollars each charge" : q.suggestion ?? "YYYY-MM-DD or day"))
+                case "price" where !q.choices.isEmpty:
+                    // A plan read without its tier: its tiers' prices, or
+                    // one typed.
+                    ForEach(q.choices, id: \.self) { c in
+                        Button(c) { if let args = CostCommand.answer(kind: q.kind, target: target, text: c) { answer(args) } }
+                            .fixedSize()
+                    }
+                    TextField(q.kind, text: $text, prompt: Text("Dollars"))
                         .labelsHidden()
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: 110)
+                        .frame(width: 80)
                         .onSubmit(save)
+                default:
+                    // The cadence first: a yearly subscription charges on a
+                    // date of its own, and is offered its own.
                     if !q.choices.isEmpty {
                         Picker("Billed", selection: $cadence) {
                             ForEach(q.choices, id: \.self) { Text(Format.plan($0)).tag($0) }
@@ -867,11 +881,17 @@ private struct QuestionRow: View {
                         .labelsHidden()
                         .fixedSize()
                     }
+                    TextField(q.kind, text: $text, prompt: Text(q.kind == "price" ? "Dollars each charge"
+                        : suggestion ?? (cadence == "yearly" ? "YYYY-MM-DD" : "YYYY-MM-DD or day")))
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 110)
+                        .onSubmit(save)
                     // Return takes the suggestion, as the console's prompt
                     // does.
                     Button("Save", action: save)
                         .fixedSize()
-                        .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty && q.suggestion == nil)
+                        .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty && suggestion == nil)
                 }
                 Spacer(minLength: 0)
                 Button("Skip") { answer(CostCommand.skip(target, q.kind)) }
@@ -889,13 +909,19 @@ private struct QuestionRow: View {
         .padding(.vertical, 2)
     }
 
+    /// The day offered at the cadence chosen.
+    private var suggestion: String? {
+        cadence == "yearly" ? question.suggestionYearly : question.suggestion
+    }
+
     private func save() {
         let q = question
         let typed = text.trimmingCharacters(in: .whitespaces)
-        let given = typed.isEmpty ? q.suggestion ?? "" : typed
-        guard let args = CostCommand.answer(kind: q.kind, target: q.provider + ":" + q.account,
-                                            text: given + (q.choices.isEmpty ? "" : " " + cadence)) else {
-            error = q.kind == "price" ? "Type the price in dollars, as 20" : "Type a day, as 2026-10-04, or a day of the month"
+        let given = typed.isEmpty ? suggestion ?? "" : typed
+        // A price question's choices are prices, not cadences.
+        let billed = q.kind == "renewal" && !q.choices.isEmpty ? " " + cadence : ""
+        guard let args = CostCommand.answer(kind: q.kind, target: q.provider + ":" + q.account, text: given + billed) else {
+            error = q.kind == "price" ? "Type the price in dollars, as 20 or 1,200" : "Type a day, as 2026-10-04, or a day of the month"
             return
         }
         answer(args)

@@ -30,7 +30,7 @@ ATTENTION
  OLD         1 device on v0.2.0              srv1 · cannot read Claude quota; reinstall with install.sh
  OLD         1 device on v0.3.4              bot-a · latest v0.4.0
  UNDER       claude kim@corp.test            leaves ~65% unused at this week's pace, resets Fri 12:00, in 3d
- CHECK       claude gone@mail.test           still paid? last confirmed 13 Jul · on no device since 12 Aug
+ CHECK       claude gone@mail.test           still paid? last confirmed 13 Jul · no device since 12 Aug
  IDLE        claude max@mail.test            idle 11d, $100/mo paid and unused
  COST        claude bob@mail.test            new subscription: Pro at $20/mo
  COST        claude ann@acme.dev             plan Max 5x → Max 20x, +$100/mo

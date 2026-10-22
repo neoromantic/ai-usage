@@ -267,6 +267,9 @@ final class Store: ObservableObject {
         guard !demo else { return "" }
         guard let cli = locate() else { throw CLIError.launch("ai-usage is not installed") }
         let out = try await cli.run(args, input: input.map { Data($0.utf8) }, timeout: timeout)
+        if args.count > 2, args[0] == "cost" {
+            Notifier.shared.noteEdit(args[2])
+        }
         if changes {
             Task { await refresh() }
         }

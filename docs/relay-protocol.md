@@ -221,13 +221,13 @@ Unsigned, and needs no store. Answers `200` with the price list built into the r
 | `plans` | one entry per plan with a list price |
 | `provider` | a provider of §7.2 other than `hermes` |
 | `plan` | the plan as the provider's tool reports it, a plain string (§7.2). A reader matches it by a key: lower case, `+` as `plus`, and only letters and digits, so `X Premium+` and `XPremiumPlus` are one plan |
-| `name` | how the plan is called, when not as `plan` |
-| `usd` | the price a month, billed monthly |
-| `annual_usd` | the price a year, when the plan is billed yearly too |
-| `was` | the ids the provider used for the same plan before |
+| `name` | how the plan is called, when not as `plan`: a plain string (§7.2) |
+| `usd` | the price a month, billed monthly, from 0 to 100000 |
+| `annual_usd` | the price a year, when the plan is billed yearly too, from 0 to 100000 |
+| `was` | the ids the provider used for the same plan before, each a plain string (§7.2) whose key is not empty |
 | `source` | where the price was checked; readers ignore it |
 
-A reader ignores members it does not know, and plans of a provider it does not know. The reference collector asks for the list at most once a day, keeps it, and uses whichever of its built-in list and the relay's has the later `updated`, so a relay on an older release cannot take prices back. A relay before v0.10.0 answers `404`, and a collector then uses its built-in list. The reference Vercel function serves the list even when it has no store. The list holds nothing of any team.
+A reader ignores members it does not know, and plans of a provider it does not know. A plan of a known provider that breaks a rule of the table, such as a `plan` or `name` that is not a plain string or a price out of range, makes the reference collector ignore the whole list and keep the one it has: a list editor keeps every plan within these rules, as the oldest collector still running checks them. The reference collector asks for the list at most once a day, keeps it, and uses whichever of its built-in list and the relay's has the later `updated`, so a relay on an older release cannot take prices back. A relay before v0.10.0 answers `404`, and a collector then uses its built-in list. The reference Vercel function serves the list even when it has no store. The list holds nothing of any team.
 
 ### 6.9 Status codes
 

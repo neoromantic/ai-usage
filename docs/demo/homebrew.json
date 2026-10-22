@@ -2604,6 +2604,7 @@
         "account": "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64",
         "text": "When does grok 7f3b9c21 (SuperGrok at $30/mo) charge next?",
         "suggestion": null,
+        "suggestion_yearly": null,
         "choices": [
           "monthly",
           "yearly"
@@ -2612,7 +2613,7 @@
     ],
     "events": [
       {
-        "id": "charges_soon-ca8a451dff58",
+        "id": "charges_soon-0269a948e6d5",
         "kind": "charges_soon",
         "at": "2026-09-22T22:00:00Z",
         "provider": "claude",

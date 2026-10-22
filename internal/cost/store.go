@@ -452,7 +452,8 @@ func (s *Store) Observe(self string, seen []Sighting, heard map[string]map[strin
 		sub := s.Subs[k]
 		if sub == nil {
 			quota := slices.ContainsFunc(ss, func(g Sighting) bool { return !g.QuotaAt.IsZero() })
-			if Free(plan) || plan == "" && !quota {
+			fresh := slices.ContainsFunc(ss, func(g Sighting) bool { return Fresh(g.Current, g.QuotaAt, s.Dropped[k], now) })
+			if Free(plan) || plan == "" && !quota || !fresh {
 				continue
 			}
 			sub = s.Sub(ss[0].Provider, ss[0].Label, now)
@@ -462,6 +463,10 @@ func (s *Store) Observe(self string, seen []Sighting, heard map[string]map[strin
 		for _, g := range ss {
 			if g.Current && g.At.After(sub.LastSeen) {
 				sub.LastSeen = g.At.UTC()
+			}
+			// A device that read the quota had the account logged in then.
+			if g.QuotaAt.After(sub.LastSeen) && !g.QuotaAt.After(now) {
+				sub.LastSeen = g.QuotaAt.UTC()
 			}
 			if g.QuotaAt.After(sub.PlanConfirmedAt) {
 				sub.PlanConfirmedAt = g.QuotaAt.UTC()
@@ -504,6 +509,20 @@ func (s *Store) Observe(self string, seen []Sighting, heard map[string]map[strin
 			delete(s.Shown, id)
 		}
 	}
+}
+
+// Fresh says a sighting of a subscription the store does not keep makes it
+// one: a device has it logged in, or read its quota in the last ConfirmAge.
+// A device keeps an account it logged out of for 90 days, and a teammate's
+// snapshot carries it as long, so an old reading of a paid plan is no news
+// of one. Of a subscription dropped after it ended at dropped, only a
+// reading of its quota after the drop is: one from before may be of the
+// paid time a cancelled subscription runs out.
+func Fresh(current bool, quotaAt, dropped, now time.Time) bool {
+	if !dropped.IsZero() {
+		return quotaAt.After(dropped.Add(Kept)) && !quotaAt.After(now)
+	}
+	return current || !quotaAt.IsZero() && now.Sub(quotaAt) <= ConfirmAge
 }
 
 // notePlan records plan, read at at. The same plan spelled anew, renamed or

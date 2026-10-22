@@ -399,7 +399,7 @@ A cell:
 
 What the team pays for its subscriptions a month, how much of it the team used over the last 4 weeks, and who used it: a budget, not accounting. Every number is in `currency`, a month, as the price list or a person says; the console's COST section, header, and the matrix's `$` mode draw this object, and `ai-usage cost --json` prints it alone.
 
-A subscription is one account of Claude, Codex, or Grok that the team found on a paid plan, or that this device's cost store keeps. The store keeps a subscription after every device has logged out of it, so that a forgotten one stays in the cost, until a person cancels it or a reading finds it on a free plan, and 30 days after that. Hermes accounts borrow the quota of another login and cost nothing of their own; what they spend counts under the login they spend through. Team, business, enterprise, and education plans have no list price.
+A subscription is one account of Claude, Codex, or Grok that the team found on a paid plan, logged in on a device or with a reading of its quota in the last 35 days, or that this device's cost store keeps. An account a device logged out of long ago is no news of a paid plan, and one that ended and dropped out of the store comes back only with a reading of its quota after it dropped. The store keeps a subscription after every device has logged out of it, so that a forgotten one stays in the cost, until a person cancels it or a reading finds it on a free plan, and 30 days after that. Hermes accounts borrow the quota of another login and cost nothing of their own; what they spend counts under the login they spend through. Team, business, enterprise, and education plans have no list price.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -425,7 +425,7 @@ A subscription:
 | `account` | string | its label |
 | `name`, `alias` | | as on its team account; one no device has any more goes by its short name |
 | `current` | bool | it is logged in on this device |
-| `plan` | string | its plan as its tool reports it, the newest any device read: Claude's with its tier, as `max 20x` |
+| `plan` | string | its plan as its tool reports it, the newest any device read: Claude's with its tier, as `max 20x`. One that ended on a free plan has the last plan it was paid for |
 | `plan_name` | string | its plan as the price list calls it, as `Max 20x`, else as its tool reports it |
 | `price_usd` | number | its price a month: a person's typed for its plan, a year's over 12 when it is billed yearly, else the list price of its plan, at the cadence a person gave when the list prices it yearly too; `0` on a free plan; `null` when unknown |
 | `price_source` | string | `typed`; `list`; `stale`, the list price, as a person typed one for another plan, `typed_for`; or `unknown` |
@@ -434,9 +434,9 @@ A subscription:
 | `renews_at` | time | its next charge, midnight of its day in the time zone of the machine that made the report: the day a person gave, rolled forward each month, the last day of a shorter month, or each year; `null` when nobody gave one |
 | `renews_confirmed` | bool | a person gave its charge day; a report says no charge that nobody confirmed |
 | `suggested_renewal_day` | number | the day of the month its tool says it began, offered when asking for its charge day; Claude Code's subscription date, on a device logged in to it. `null` otherwise, and once a charge day is confirmed |
-| `used_pct` | number | how full its main window got over the last 4 weeks: the mean of 4 weeks, each the fullest period of its main window that reset in it, at most 100, or 0 for a week in which no period reset and the team spent no tokens on it. A week with tokens and no period, as a reading missed, is left out. The main window is the weekly one, else the longest. `null` when no week is known |
-| `used_usd` | number | the part of its price the team used: each known week's price, from the plan it had then, times how full it got, averaged. With no week known, its whole price, split by tokens, and `used_estimated`; with no tokens either, `0`. `null` when its price is unknown |
-| `used_estimated` | bool | `used_usd` is its whole price, as no week of its Used is known but the team spent tokens on it |
+| `used_pct` | number | how full its main window got over the last 4 weeks: the mean of 4 weeks, each the fullest period of its main window that reset in it, at most 100, or 0 for a week in which no period reset and the team spent no tokens on it while it watched the subscription. A week with tokens and no period, as a reading missed, is left out, and so is one that began before this device first found the subscription and the team's oldest period of its main window. The main window is the weekly one, else the longest of a day or more; a window shorter than a day, as Claude's 5-hour one, never counts. `null` when no week is known |
+| `used_usd` | number | the part of its price the team used: each known week's price, from the plan it had then, times how full it got, averaged. With no week known, an estimate, `used_estimated`: its whole price, split by tokens, or `0` with no tokens either. `null` when its price is unknown |
+| `used_estimated` | bool | `used_usd` is an estimate, as no week of its Used is known: its whole price when the team spent tokens on it, else `0`. The console and the app show such a subscription's Used, and what nobody used of it, as unknown, `?`, and only its split by device as an estimate, `~` |
 | `unused_usd` | number | its price less `used_usd`; `null` when either is unknown |
 | `state` | string | `active`; `idle`, as `idle` in `attention`; `unconfirmed`, when its paid plan was last confirmed over 35 days ago, or no device has had it logged in for 14 days, and nobody said it is still paid in the last 35 days; or `ended`, when a person said it was cancelled, or a reading found it on a free plan. An ended subscription is in no total and shows for 30 days |
 | `idle_since`, `unconfirmed_since`, `ended_at` | time | since when it is in its `state`; `null` in another |
@@ -456,14 +456,15 @@ A question is asked of a person only: in the interactive view, on the first run 
 | `kind` | string | `renewal`, its next charge, asked when nobody gave one; `price`, its price, asked when the list has none and nobody typed one; or `still_paid`, asked when its `state` is `unconfirmed` |
 | `provider`, `account` | string | the subscription |
 | `text` | string | the question in words, as `When does codex ann@acme.dev (Pro 200 at $200/mo) charge next?` |
-| `suggestion` | string | the answer offered: for a `renewal`, the next date, `YYYY-MM-DD`, on the day its tool says it began; `null` when there is none |
-| `choices` | list of strings | `monthly` and `yearly`, for a `renewal` of a plan the list prices yearly too, as the answer's cadence; `[]` otherwise |
+| `suggestion` | string | the answer offered: for a `renewal`, the next date, `YYYY-MM-DD`, on the day its tool says it began, the next one of the month, or of the year when a person said it is billed yearly; `null` when there is none |
+| `suggestion_yearly` | string | for a `renewal` with `choices`, the next anniversary of the day its tool says it began, `YYYY-MM-DD`, to offer when a person chooses `yearly`; `null` otherwise. Ask the cadence first, then the date with the suggestion of that cadence; `ai-usage cost set --renews` takes a day of the month only for a monthly subscription |
+| `choices` | list of strings | `monthly` and `yearly`, for a `renewal` of a plan the list prices yearly too, as the answer's cadence; for a `price` of a plan read without its tier, as Claude's `max` from a release that does not read it, the list's tiers of it, each its name and price a month, as `Max 5x $100`, whose dollars are the answer's price; `[]` otherwise |
 
 An event:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `id` | string | the event's id, the same in every report, so that a reader tells it once |
+| `id` | string | the event's id, the same in every report, so that a reader tells it once: it is made of the subscription, the kind, and `at`, so a plan's tier read later does not change it |
 | `kind` | string | `new`, a subscription this device found after it began keeping costs; `plan_changed`, a read plan that is not the same plan as the one before, a provider's rename and a tier first read not counted; `price_changed`, the list price of its unchanged plan changed between two lists this device used; `ended`; `charges_soon`, from 3 days before a confirmed charge; or `unconfirmed`, when nobody could say any more that it is still paid |
 | `at` | time | when it happened: for `charges_soon`, 3 days before the charge |
 | `provider`, `account` | string | the subscription |

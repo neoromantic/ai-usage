@@ -148,6 +148,45 @@
         "ci@ci-runner-eu-west-build-pool-node-0042ab"
       ],
       "message": "v1.4.2"
+    },
+    {
+      "kind": "check",
+      "subject": "claude old@acme.dev",
+      "text": "still paid? last confirmed 12 Aug · no device since 2 Sep: ai-usage cost confirm claude:old@acme.dev or cancel",
+      "provider": "claude",
+      "account": "old@acme.dev",
+      "name": "old",
+      "at": "2026-08-12T09:00:00Z"
+    },
+    {
+      "kind": "cost",
+      "subject": "claude ann@acme.dev",
+      "text": "plan Max 5x → Max 20x, +$100/mo",
+      "provider": "claude",
+      "account": "ann@acme.dev",
+      "name": "ann",
+      "at": "2026-09-21T08:00:00Z",
+      "event": "plan_changed-3c4d5e6f7a8b"
+    },
+    {
+      "kind": "cost",
+      "subject": "grok a4c2e917",
+      "text": "new subscription: SuperGrok Heavy at $300/mo",
+      "provider": "grok",
+      "account": "a4c2e917-6b3d-4f81-9c2a-5e7d1b8f0a36",
+      "name": "a4c2e917",
+      "at": "2026-09-22T06:00:00Z",
+      "event": "new-5e6f7a8b9c0d"
+    },
+    {
+      "kind": "cost",
+      "subject": "claude old@acme.dev",
+      "text": "list price $17 → $20/mo; ai-usage cost set claude:old@acme.dev --price 17 keeps $17",
+      "provider": "claude",
+      "account": "old@acme.dev",
+      "name": "old",
+      "at": "2026-09-22T09:00:00Z",
+      "event": "price_changed-6f7a8b9c0d1e"
     }
   ],
   "providers": [
@@ -7560,6 +7599,7 @@
         "account": "a4c2e917-6b3d-4f81-9c2a-5e7d1b8f0a36",
         "text": "When does grok a4c2e917 (SuperGrok Heavy at $300/mo) charge next? Its tool suggests Sun 4 Oct.",
         "suggestion": "2026-10-04",
+        "suggestion_yearly": null,
         "choices": []
       },
       {
@@ -7569,6 +7609,7 @@
         "account": "old@acme.dev",
         "text": "Is claude old@acme.dev (Pro at $20/mo) still paid? Last confirmed 12 Aug.",
         "suggestion": null,
+        "suggestion_yearly": null,
         "choices": []
       }
     ],

@@ -71,17 +71,20 @@ func TestParsePrices(t *testing.T) {
 		t.Fatalf("ParsePrices = %+v, %v", p, err)
 	}
 	for name, body := range map[string]string{
-		"not JSON":      `{"v":1`,
-		"version":       `{"v":2,"updated":"2026-11-01","currency":"USD","plans":[]}`,
-		"no day":        `{"v":1,"currency":"USD","plans":[]}`,
-		"bad day":       `{"v":1,"updated":"Nov 1","currency":"USD","plans":[]}`,
-		"currency":      `{"v":1,"updated":"2026-11-01","currency":"EUR","plans":[]}`,
-		"negative":      `{"v":1,"updated":"2026-11-01","currency":"USD","plans":[{"provider":"codex","plan":"plus","usd":-1}]}`,
-		"too dear":      `{"v":1,"updated":"2026-11-01","currency":"USD","plans":[{"provider":"codex","plan":"plus","usd":1e9}]}`,
-		"no plan":       `{"v":1,"updated":"2026-11-01","currency":"USD","plans":[{"provider":"codex","plan":"","usd":1}]}`,
-		"control":       `{"v":1,"updated":"2026-11-01","currency":"USD","plans":[{"provider":"codex","plan":"a\tb","usd":1}]}`,
-		"empty was":     `{"v":1,"updated":"2026-11-01","currency":"USD","plans":[{"provider":"codex","plan":"a","usd":1,"was":["--"]}]}`,
-		"plans as text": `{"v":1,"updated":"2026-11-01","currency":"USD","plans":"none"}`,
+		"not JSON":       `{"v":1`,
+		"version":        `{"v":2,"updated":"2026-11-01","currency":"USD","plans":[]}`,
+		"no day":         `{"v":1,"currency":"USD","plans":[]}`,
+		"bad day":        `{"v":1,"updated":"Nov 1","currency":"USD","plans":[]}`,
+		"currency":       `{"v":1,"updated":"2026-11-01","currency":"EUR","plans":[]}`,
+		"negative":       `{"v":1,"updated":"2026-11-01","currency":"USD","plans":[{"provider":"codex","plan":"plus","usd":-1}]}`,
+		"too dear":       `{"v":1,"updated":"2026-11-01","currency":"USD","plans":[{"provider":"codex","plan":"plus","usd":1e9}]}`,
+		"no plan":        `{"v":1,"updated":"2026-11-01","currency":"USD","plans":[{"provider":"codex","plan":"","usd":1}]}`,
+		"control":        `{"v":1,"updated":"2026-11-01","currency":"USD","plans":[{"provider":"codex","plan":"a\tb","usd":1}]}`,
+		"empty was":      `{"v":1,"updated":"2026-11-01","currency":"USD","plans":[{"provider":"codex","plan":"a","usd":1,"was":["--"]}]}`,
+		"escape in name": `{"v":1,"updated":"2026-11-01","currency":"USD","plans":[{"provider":"claude","plan":"pro","name":"\u001b[2JPro","usd":20}]}`,
+		"long name":      `{"v":1,"updated":"2026-11-01","currency":"USD","plans":[{"provider":"claude","plan":"pro","name":"` + strings.Repeat("P", 41) + `","usd":20}]}`,
+		"escape in was":  `{"v":1,"updated":"2026-11-01","currency":"USD","plans":[{"provider":"claude","plan":"pro","usd":20,"was":["\u001b[31mX"]}]}`,
+		"plans as text":  `{"v":1,"updated":"2026-11-01","currency":"USD","plans":"none"}`,
 	} {
 		if _, err := ParsePrices([]byte(body)); err == nil {
 			t.Errorf("%s: ParsePrices took it", name)

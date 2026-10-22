@@ -156,7 +156,7 @@
     {
       "kind": "check",
       "subject": "claude jun@studio.dev",
-      "text": "still paid? last confirmed 21 Aug · on no device since 21 Aug: ai-usage cost confirm or cancel",
+      "text": "still paid? last confirmed 21 Aug · no device since 21 Aug: ai-usage cost confirm claude:jun@studio.dev or cancel",
       "provider": "claude",
       "account": "jun@studio.dev",
       "name": "jun",
@@ -179,7 +179,7 @@
       "account": "mira@studio.dev",
       "name": "mira",
       "at": "2026-09-22T08:40:00Z",
-      "event": "plan_changed-7a0b62bfe894"
+      "event": "plan_changed-94000980db01"
     }
   ],
   "providers": [
@@ -7321,6 +7321,7 @@
         "account": "jun@studio.dev",
         "text": "Is claude jun@studio.dev (Pro at $20/mo) still paid? Last confirmed 21 Aug.",
         "suggestion": null,
+        "suggestion_yearly": null,
         "choices": []
       },
       {
@@ -7330,12 +7331,13 @@
         "account": "mira@studio.dev",
         "text": "When does claude mira@studio.dev (Max 20x at $200/mo) charge next? Its tool suggests Sun 11 Oct.",
         "suggestion": "2026-10-11",
+        "suggestion_yearly": null,
         "choices": []
       }
     ],
     "events": [
       {
-        "id": "unconfirmed-622b215b2253",
+        "id": "unconfirmed-1341f4d86a41",
         "kind": "unconfirmed",
         "at": "2026-09-04T16:05:00Z",
         "provider": "claude",
@@ -7348,7 +7350,7 @@
         "text": "nobody can say claude jun@studio.dev is still paid; last confirmed 21 Aug"
       },
       {
-        "id": "ended-673527f3fd8c",
+        "id": "ended-d478b85ab536",
         "kind": "ended",
         "at": "2026-09-14T08:30:00Z",
         "provider": "codex",
@@ -7361,7 +7363,7 @@
         "text": "codex ci@studio.dev ended; its $20/mo no longer counts"
       },
       {
-        "id": "plan_changed-7a0b62bfe894",
+        "id": "plan_changed-94000980db01",
         "kind": "plan_changed",
         "at": "2026-09-22T08:40:00Z",
         "provider": "claude",
@@ -7374,7 +7376,7 @@
         "text": "claude mira@studio.dev changed plan: Max 5x to Max 20x, +$81/mo"
       },
       {
-        "id": "charges_soon-08be5d2b4f98",
+        "id": "charges_soon-da55e626f27b",
         "kind": "charges_soon",
         "at": "2026-09-23T22:00:00Z",
         "provider": "codex",

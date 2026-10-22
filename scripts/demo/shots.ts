@@ -40,7 +40,7 @@ type Shot = {
   // Only lines [first, last) of the printed report.
   lines?: [number, number];
   // Only the section from the line that starts with the first text to the
-  // line before the one that starts with the second.
+  // line before the one that starts with the second, printed or on screen.
   cut?: [string, string];
   // A shell line run instead of ai-usage, with $AI_USAGE as the binary.
   shell?: string;
@@ -58,7 +58,9 @@ const shots: Shot[] = [
   { name: "team-matrix", from: "team.json", cols: 124, typed: "ai-usage", cut: ["DEVICES", "PROJECTS"], social: true },
   { name: "team-bots", from: "team.json", cols: 124, keys: ["%", "G"], rows: 52, social: true },
   { name: "team-cost", from: "team.json", cols: 124, typed: "ai-usage", cut: ["COST", "UTILIZATION"], social: true },
-  { name: "team-dollars", from: "team.json", cols: 124, keys: ["$", "G"], rows: 52, social: true },
+  // The matrix in dollars, framed as team-matrix frames it in tokens: on a
+  // screen tall enough for the whole page.
+  { name: "team-dollars", from: "team.json", cols: 124, keys: ["$"], rows: 160, cut: ["DEVICES", "PROJECTS"], social: true },
   { name: "team-status", from: "team.json", cols: 124, keys: ["s"], rows: 52 },
   {
     name: "devices-status",
@@ -276,14 +278,17 @@ async function printed(s: Shot, theme: Theme): Promise<string> {
     text = await $`${bin} report --from ${join(out, s.from)} --width ${s.cols} --color always --plain ${s.args ?? []}`.env(e).text();
   }
   if (s.lines) text = text.split("\n").slice(...s.lines).join("\n");
-  if (s.cut) {
-    const lines = text.split("\n");
-    const plain = lines.map((l) => l.replace(/\x1b\[[0-9;]*m/g, ""));
-    const first = plain.findIndex((l) => l.startsWith(s.cut![0]));
-    const last = plain.findIndex((l, i) => i > first && l.startsWith(s.cut![1]));
-    text = lines.slice(first, last < 0 ? undefined : last).join("\n");
-  }
-  return text;
+  return s.cut ? cutText(text, s.cut) : text;
+}
+
+// cutText is the section of text from the line that starts with cut[0] to
+// the line before the one that starts with cut[1].
+function cutText(text: string, cut: [string, string]): string {
+  const lines = text.split("\n");
+  const plain = lines.map((l) => l.replace(/\x1b\[[0-9;]*m/g, ""));
+  const first = plain.findIndex((l) => l.startsWith(cut[0]));
+  const last = plain.findIndex((l, i) => i > first && l.startsWith(cut[1]));
+  return lines.slice(first, last < 0 ? undefined : last).join("\n");
 }
 
 async function browser(...args: string[]) {
@@ -315,7 +320,8 @@ async function shoot(s: Shot) {
   let body: string;
   let title = "ai-usage";
   if (s.keys) {
-    body = html(await view(s.from, s.cols, s.rows ?? 50, theme, s.keys), theme);
+    const screen = await view(s.from, s.cols, s.rows ?? 50, theme, s.keys);
+    body = html(s.cut ? cutText(screen, s.cut) : screen, theme);
   } else {
     const typed = `<div class="l"><span class="prompt">❯ </span><span>${esc(s.typed ?? "ai-usage")}</span></div>`;
     body = typed + html(await printed(s, theme), theme);

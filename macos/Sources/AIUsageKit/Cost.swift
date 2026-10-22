@@ -59,8 +59,11 @@ public struct Cost: Decodable, Sendable {
         public let provider: String
         public let account: String
         public let text: String
-        /// For a renewal, a YYYY-MM-DD day.
+        /// For a renewal, a YYYY-MM-DD day, at the cadence it has now.
         public let suggestion: String?
+        /// For a renewal with choices, the day to offer when a person
+        /// chooses yearly.
+        public let suggestionYearly: String?
         /// `monthly` and `yearly`, for a renewal of a plan the list prices
         /// yearly too.
         public let choices: [String]
@@ -139,8 +142,12 @@ public struct CostSubscription: Decodable, Sendable {
     /// "Claude ann".
     public var title: String { Format.provider(provider) + " " + name }
 
-    /// The plan as the price list names it, else as its tool reports it.
-    public var planTitle: String? { planName ?? plan.map(Format.plan) }
+    /// The plan as the price list names it, else as its tool reports it,
+    /// as Limits names it: "Pro 200", "Max".
+    public var planTitle: String? {
+        guard let planName, planName != plan else { return plan.map(Format.plan) }
+        return planName
+    }
 
     public var ended: Bool { state == "ended" }
 
@@ -161,10 +168,11 @@ public struct CostSubscription: Decodable, Sendable {
     }
 
     /// How full its main window got over the last 4 weeks: "used 91%",
-    /// or what an estimate split, "used ~$300"; nil when unknown.
+    /// or "used ?" when no week of it is known, as only the split of its
+    /// price by its devices' tokens is estimated; nil when unknown.
     public var usedText: String? {
         if let p = usedPct { return "used \(Int(p.rounded()))%" }
-        if usedEstimated, let u = usedUsd { return "used ~" + Format.usd(u) }
+        if usedEstimated { return "used ?" }
         return nil
     }
 
@@ -200,8 +208,9 @@ public struct CostSubscription: Decodable, Sendable {
         }
         if let u = usedUsd, let p = usedPct {
             lines.append("Used \(Format.usd(u)) of it over the last 4 weeks: its main window got \(Int(p.rounded()))% full")
-        } else if usedEstimated, let u = usedUsd {
-            lines.append("Used ~\(Format.usd(u)) over the last 4 weeks, an estimate: no week of its main window is known")
+        } else if usedEstimated {
+            lines.append("Used: not known, as no week of its main window over the last 4 weeks is known; "
+                + "the Team window's Cost splits its price by its devices' tokens, an estimate")
         }
         lines.append(renewsAt.map { "Next charge \(Format.day($0, timeZone: timeZone))" } ?? "Nobody gave its next charge")
         if let m = usdPerMWeighted {
@@ -351,7 +360,8 @@ public struct CostMatrix: Sendable {
                                                           spoken: "Total: \(text == Format.none ? "none" : text)"))
         }
         unused = subs.enumerated().map { i, s in
-            let text = s.unusedUsd.map { Format.dollars($0, estimated: s.usedEstimated) } ?? (s.priceUsd == nil ? "?" : Format.none)
+            // With its Used not known, neither is what nobody used of it.
+            let text = s.usedEstimated ? "?" : s.unusedUsd.map { Format.dollars($0) } ?? (s.priceUsd == nil ? "?" : Format.none)
             return TeamMatrix.Cell(text: text, value: s.unusedUsd ?? 0, heat: 0, help: "\(cols[i].name): \(text) unused",
                                    spoken: "Unused: \(text == Format.none ? "none" : text)")
         }
@@ -404,24 +414,44 @@ public enum CostCommand {
 
     /// The command for an answer typed to a renewal or price question, as
     /// in a notification's field: a day, "2026-10-04" or "4", or dollars,
-    /// "$20", and "monthly" or "yearly" among the words. Nil when it says
-    /// nothing the question asks; ai-usage checks the rest.
+    /// "$20" or "1,200", and "monthly" or "yearly" among the words. A price
+    /// is the first word that is dollars, so a choice of a price question,
+    /// "Max 20x $200", answers it too. Nil when it says nothing the
+    /// question asks; ai-usage checks the rest.
     public static func answer(kind: String, target: String, text: String) -> [String]? {
-        var cadence: String?, value: String?
-        for word in text.lowercased().split(whereSeparator: { $0 == " " || $0 == "," || $0 == "\n" }) {
-            switch word {
-            case "monthly", "yearly": cadence = String(word)
-            default: value = value ?? String(word)
+        var cadence: String?, value: String?, price: String?
+        for word in text.lowercased().split(whereSeparator: \.isWhitespace) {
+            let w = word.trimmingCharacters(in: CharacterSet(charactersIn: ",;"))
+            switch w {
+            case "": continue
+            case "monthly", "yearly": cadence = w
+            default:
+                value = value ?? w
+                // The word as typed, whose comma may be a thousands one.
+                price = price ?? dollars(word.hasSuffix(",") || word.hasSuffix(";") ? String(word.dropLast()) : String(word))
             }
         }
         switch kind {
         case "price":
-            guard let v = value.map({ $0.hasPrefix("$") ? String($0.dropFirst()) : $0 }), Double(v) != nil else { return nil }
+            guard let v = price else { return nil }
             return set(target, price: v, cadence: cadence)
         case "renewal":
             return set(target, cadence: cadence, renews: value)
         default:
             return nil
         }
+    }
+
+    /// Dollars as a person types them, "$20", "19.99", or "1,200", as
+    /// `ai-usage cost set --price` takes them: nil for what is no price,
+    /// and for "19,99", whose comma may be a decimal point.
+    public static func dollars(_ typed: String) -> String? {
+        var v = typed.trimmingCharacters(in: .whitespaces)
+        if v.hasPrefix("$") { v.removeFirst() }
+        if v.contains(",") {
+            guard v.range(of: #"^[0-9]{1,3}(,[0-9]{3})+(\.[0-9]+)?$"#, options: .regularExpression) != nil else { return nil }
+            v.removeAll { $0 == "," }
+        }
+        return Double(v) != nil ? v : nil
     }
 }

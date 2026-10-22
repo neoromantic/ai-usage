@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"math"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
@@ -26,16 +28,23 @@ type prompt struct {
 	input    []rune
 	// args are what the steps answered so far, after `set ACCOUNT`.
 	args []string
+	// problem is what was wrong with the answer Enter last took, shown
+	// until the next key.
+	problem string
 }
 
 // step is one thing the prompt asks: its words, the answer Enter takes on
 // an empty line, if any, which keys it takes, and the arguments an answer
-// gives the command. An empty answer with no suggestion gives none.
+// gives the command. An empty answer with no suggestion gives none. check,
+// when set, says what is wrong with an answer, and then, when set, changes
+// the steps after it by the answer.
 type step struct {
 	ask        string
 	suggestion string
 	keys       func(r rune) bool
 	answer     func(s string) []string
+	check      func(s string) string
+	then       func(pr *prompt, s string)
 }
 
 // costDoneMsg ends a cost command the prompt ran.
@@ -46,6 +55,40 @@ type costDoneMsg struct {
 
 func digits(r rune) bool { return unicode.IsDigit(r) || r == '.' || r == '-' }
 
+// dayCheck says what is wrong with a next charge typed: a YYYY-MM-DD day,
+// or, unless yearly, a day of the month.
+func dayCheck(yearly bool) func(s string) string {
+	return func(s string) string {
+		if n, err := strconv.Atoi(s); err == nil {
+			switch {
+			case yearly:
+				return "a yearly subscription charges on a date: YYYY-MM-DD"
+			case n < 1 || n > 31:
+				return "a day of the month is from 1 to 31"
+			}
+			return ""
+		}
+		if _, err := time.Parse(time.DateOnly, s); err != nil {
+			return "a day is YYYY-MM-DD"
+		}
+		return ""
+	}
+}
+
+// renewsStep asks the next charge, of a subscription billed yearly or not,
+// offering suggestion.
+func renewsStep(yearly bool, suggestion *string) step {
+	s := step{ask: "next charge, YYYY-MM-DD or a day of the month", keys: digits, check: dayCheck(yearly),
+		answer: func(s string) []string { return []string{"--renews", s} }}
+	if yearly {
+		s.ask = "next charge, YYYY-MM-DD"
+	}
+	if suggestion != nil {
+		s.suggestion = *suggestion
+	}
+	return s
+}
+
 // account is the subscription as `ai-usage cost` takes it.
 func (pr *prompt) account() string { return pr.provider + ":" + pr.label }
 
@@ -54,17 +97,32 @@ func questionPrompt(q view.Question) *prompt {
 	pr := &prompt{question: &q, provider: q.Provider, label: q.Account}
 	switch q.Kind {
 	case view.AskRenewal:
-		s := step{ask: "next charge, YYYY-MM-DD or a day of the month", keys: digits,
-			answer: func(s string) []string { return []string{"--renews", s} }}
-		if q.Suggestion != nil {
-			s.suggestion = *q.Suggestion
-		}
-		pr.steps = append(pr.steps, s)
+		// The cadence first: a yearly subscription charges on a date of
+		// its own, and is offered its own.
 		if len(q.Choices) > 1 {
-			pr.steps = append(pr.steps, cadenceStep("monthly"))
+			c := cadenceStep("monthly")
+			// Monthly is how it counts unless a person says otherwise.
+			c.answer = func(s string) []string {
+				if s == "y" {
+					return []string{"--yearly"}
+				}
+				return nil
+			}
+			c.then = func(pr *prompt, s string) {
+				if s == "y" {
+					pr.steps[pr.at+1] = renewsStep(true, q.SuggestionYearly)
+				}
+			}
+			pr.steps = append(pr.steps, c)
 		}
+		pr.steps = append(pr.steps, renewsStep(false, q.Suggestion))
 	case view.AskPrice:
-		pr.steps = []step{{ask: "price a month, in USD", keys: digits, answer: func(s string) []string { return []string{"--price", s} }}}
+		ask := "price a month, in USD"
+		if len(q.Choices) > 0 {
+			// A plan read without its tier: its tiers' prices.
+			ask += ", as " + strings.Join(q.Choices, " or ")
+		}
+		pr.steps = []step{{ask: ask, keys: digits, answer: func(s string) []string { return []string{"--price", s} }}}
 	case view.AskStillPaid:
 		pr.steps = []step{{ask: "y still paid, n cancelled"}}
 	}
@@ -84,26 +142,42 @@ func cadenceStep(cur string) step {
 
 // editPrompt edits s's cadence, price, and next charge, each kept as it
 // is on an empty line. The price is of each charge: a year's when it is
-// billed yearly.
+// billed yearly. A typed price kept through a change of cadence is turned
+// into the new cadence's, as the price step says.
 func editPrompt(s view.CostSubscription) *prompt {
-	price := step{ask: "price of each charge in USD, a year's when yearly, empty keeps it", keys: digits,
-		answer: func(v string) []string { return []string{"--price", v} }}
-	if s.PriceSource == view.PriceTyped && s.PriceUSD != nil {
-		now := *s.PriceUSD
-		if s.Cadence == "yearly" {
-			now *= 12
+	priceStep := func(yearly bool) step {
+		st := step{ask: "price of each charge in USD, a year's when yearly, empty keeps it", keys: digits,
+			answer: func(v string) []string { return []string{"--price", v} }}
+		if s.PriceSource == view.PriceTyped && s.PriceUSD != nil {
+			now := *s.PriceUSD
+			if yearly {
+				now *= 12
+			}
+			st.ask = "price of each charge in USD, a year's when yearly, now " + strconv.FormatFloat(math.Round(now*100)/100, 'f', -1, 64) + ", empty keeps it"
 		}
-		price.ask = "price of each charge in USD, a year's when yearly, now " + strconv.FormatFloat(now, 'f', -1, 64) + ", empty keeps it"
+		return st
 	}
+	chargeStep := func(yearly bool) step {
+		st := step{ask: "next charge, YYYY-MM-DD or a day of the month, empty keeps it", keys: digits, check: dayCheck(yearly),
+			answer: func(v string) []string { return []string{"--renews", v} }}
+		if yearly {
+			st.ask = "next charge, YYYY-MM-DD, empty keeps it"
+		}
+		if s.RenewsAt != nil {
+			st.ask = "next charge, now " + s.RenewsAt.Local().Format("2006-01-02") + ", empty keeps it"
+		}
+		return st
+	}
+	yearly := s.Cadence == "yearly"
 	cadence := cadenceStep(s.Cadence)
 	cadence.suggestion = ""
 	cadence.ask += ", now " + s.Cadence + ", empty keeps it"
-	renews := step{ask: "next charge, YYYY-MM-DD or a day of the month, empty keeps it", keys: digits,
-		answer: func(v string) []string { return []string{"--renews", v} }}
-	if s.RenewsAt != nil {
-		renews.ask = "next charge, now " + s.RenewsAt.Local().Format("2006-01-02") + ", empty keeps it"
+	cadence.then = func(pr *prompt, v string) {
+		if v != "" {
+			pr.steps[pr.at+1], pr.steps[pr.at+2] = priceStep(v == "y"), chargeStep(v == "y")
+		}
 	}
-	return &prompt{provider: s.Provider, label: s.Account, steps: []step{cadence, price, renews}}
+	return &prompt{provider: s.Provider, label: s.Account, steps: []step{cadence, priceStep(yearly), chargeStep(yearly)}}
 }
 
 // promptKey is a key while the prompt shows. It takes the keys its step
@@ -112,6 +186,7 @@ func editPrompt(s view.CostSubscription) *prompt {
 func (m Model) promptKey(k string) (tea.Model, tea.Cmd, bool) {
 	pr := m.prompt
 	st := pr.steps[pr.at]
+	pr.problem = ""
 	switch k {
 	case "esc":
 		// Later: the question comes back the next time the view opens.
@@ -127,8 +202,20 @@ func (m Model) promptKey(k string) (tea.Model, tea.Cmd, bool) {
 		if v == "" {
 			v = st.suggestion
 		}
+		// A question with nothing to take waits for an answer, or Esc.
+		if v == "" && pr.question != nil && st.answer != nil {
+			return m, nil, true
+		}
+		if v != "" && st.check != nil {
+			if pr.problem = st.check(v); pr.problem != "" {
+				return m, nil, true
+			}
+		}
 		if v != "" && st.answer != nil {
 			pr.args = append(pr.args, st.answer(v)...)
+		}
+		if st.then != nil {
+			st.then(pr, v)
 		}
 		pr.at, pr.input = pr.at+1, nil
 		if pr.at < len(pr.steps) {
@@ -258,6 +345,9 @@ func (m Model) promptLine() string {
 	ask := st.ask
 	if st.suggestion != "" {
 		ask += ", Enter takes " + st.suggestion
+	}
+	if pr.problem != "" {
+		ask = pr.problem + "; " + ask
 	}
 	input := m.style(string(pr.input)+"_", styleKey)
 	var line string

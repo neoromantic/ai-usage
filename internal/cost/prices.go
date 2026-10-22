@@ -122,12 +122,13 @@ func (p Plan) check() error {
 	switch {
 	case Norm(p.Plan) == "" || snapshot.PlainLabel(p.Plan) != p.Plan:
 		return errors.New("plan is not a short label")
-	case len(p.Name) > snapshot.MaxPlain:
-		return errors.New("name is too long")
+	case snapshot.PlainLabel(p.Name) != p.Name:
+		// A relay's list reaches every report: its words are plain.
+		return errors.New("name is not a short label")
 	case !price(p.USD) || !price(p.AnnualUSD):
 		return errors.New("price out of range")
-	case slices.ContainsFunc(p.Was, func(w string) bool { return Norm(w) == "" }):
-		return errors.New("was names an empty plan")
+	case slices.ContainsFunc(p.Was, func(w string) bool { return Norm(w) == "" || snapshot.PlainLabel(w) != w }):
+		return errors.New("was names a plan that is not a short label")
 	}
 	return nil
 }
@@ -190,6 +191,19 @@ func (p Prices) Name(provider, plan string) string {
 		return pl.DisplayName()
 	}
 	return plan
+}
+
+// Tiers are the list's plans of a provider that are plan with a tier added,
+// as "max 5x" and "max 20x" are "max", in the list's order: what a plan
+// read without its tier may be.
+func (p Prices) Tiers(provider, plan string) []Plan {
+	var out []Plan
+	for _, pl := range p.Plans {
+		if pl.Provider == provider && Refines(plan, pl.Plan) {
+			out = append(out, pl)
+		}
+	}
+	return out
 }
 
 // Same says two plans a provider's tools reported are one: the same by Norm,

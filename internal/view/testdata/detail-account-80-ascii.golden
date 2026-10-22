@@ -13,6 +13,7 @@
 [1mATTENTION[m
 [7m OUT  [m claude ann . Fable   back Sun 01:00, in 3d 7h
 [7m OVER [m claude ann@acme.dev  runs out ~Thu 01:17, 2d 23h before reset . 1d old
+[7m COST [m claude ann@acme.dev  plan Max 5x -> Max 20x, +$100/mo
 
 [1mWINDOWS[m  3 . how full each is, and how full it ends
   WINDOW  USED          LEFT  RESETS               AT RESET  RUNS OUT

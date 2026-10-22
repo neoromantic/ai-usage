@@ -166,12 +166,12 @@ func (p *page) grid() []chunks {
 	}
 	grandText := totalOf(grand)
 	if money {
-		grandText, estimated = usd(p.r.Cost.TotalUSD), false
+		grandText, estimated = usd(mx.sum(cols, mx.priceOf)), false
 	}
 	lead := 2 + nameW
 	totalW := max(gridCell, width(grandText)+btoi(estimated))
 	if money {
-		totalW = max(totalW, width(mx.unusedTotal(p)))
+		totalW = max(totalW, width(mx.unusedTotal(p, cols)))
 		for _, r := range rows {
 			totalW = max(totalW, width(mx.rowText(p, r.DeviceID)))
 		}
@@ -295,7 +295,7 @@ func (p *page) grid() []chunks {
 			unused = append(unused, p.right(restMoney(func(c gridCol) float64 { return mx.unusedOf(c) }), restW)...)
 		}
 		unused = append(unused, p.space(2))
-		out = append(out, append(unused, p.right(p.cell(mx.unusedTotal(p)), totalW)...))
+		out = append(out, append(unused, p.right(p.cell(mx.unusedTotal(p, cols)), totalW)...))
 	}
 
 	total := p.totalLead(nameW)
@@ -316,7 +316,13 @@ func (p *page) grid() []chunks {
 	}
 	total = append(total, p.space(2))
 	total = append(total, p.right(p.cell(est(grandText, estimated)), totalW)...)
-	return append(out, total)
+	out = append(out, total)
+	if money {
+		if l := mx.beyond(p, cols); l != nil {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // rest is the burn of the matrix's folded columns: each row's, in the order

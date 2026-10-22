@@ -182,6 +182,52 @@ func TestObserveKeepsAndDrops(t *testing.T) {
 	}
 }
 
+// An account a device logged out of long ago, as a device keeps it for 90
+// days, makes no subscription; nor does one that was cancelled and dropped
+// come back from the same old reading.
+func TestObserveStale(t *testing.T) {
+	list := Builtin()
+	s := (&Store{}).fill()
+	old := t0.Add(-60 * day)
+	stale := []Sighting{see("claude", "ann@acme.dev", "pro", old, false, old), see("claude", "ann@acme.dev", "pro", t0, false, old)}
+	s.Observe(self, stale, nil, list, t0)
+	if len(s.Subs) != 0 {
+		t.Fatalf("a stale account became a subscription: %+v", s.Subs)
+	}
+	// Logged out, read 20 days ago: a subscription, gone from every device.
+	s.Observe(self, []Sighting{see("codex", "kim@acme.dev", "plus", t0, false, t0.Add(-20*day))}, nil, list, t0)
+	kim := s.Subs[Key("codex", "kim@acme.dev")]
+	if kim == nil || !kim.LastSeen.Equal(t0.Add(-20*day)) {
+		t.Fatalf("kim %+v", kim)
+	}
+	if r := Compute(Input{Now: t0, List: list, Sub: kim, Provider: "codex", Label: "kim@acme.dev"}); r.State != StateUnconfirmed {
+		t.Fatalf("gone 20 days: %s", r.State)
+	}
+	// Found today with a quota last read 60 days ago: unconfirmed at once.
+	s.Observe(self, []Sighting{see("claude", "leo@acme.dev", "pro", t0, true, old)}, nil, list, t0)
+	leo := s.Subs[Key("claude", "leo@acme.dev")]
+	if r := Compute(Input{Now: t0, List: list, Sub: leo, Provider: "claude", Label: "leo@acme.dev"}); r.State != StateUnconfirmed {
+		t.Fatalf("confirmed 60 days ago: %s", r.State)
+	}
+	// Cancelled 40 days ago and dropped: the reading it had before the
+	// drop does not open it again, and one after does.
+	leo.Answer.Cancel(t0.Add(-40 * day))
+	s.Observe(self, nil, nil, list, t0)
+	if s.Subs[Key("claude", "leo@acme.dev")] != nil {
+		t.Fatal("the cancelled subscription was not dropped")
+	}
+	again := []Sighting{see("claude", "leo@acme.dev", "pro", t0, true, t0.Add(-20*day))}
+	s.Observe(self, again, nil, list, t0.Add(time.Hour))
+	if s.Subs[Key("claude", "leo@acme.dev")] != nil {
+		t.Fatal("an old reading opened a dropped subscription again")
+	}
+	again[0].QuotaAt = t0.Add(time.Hour)
+	s.Observe(self, again, nil, list, t0.Add(time.Hour))
+	if sub := s.Subs[Key("claude", "leo@acme.dev")]; sub == nil || !sub.Reopened.Equal(t0.Add(-40*day)) {
+		t.Fatalf("a new reading after the drop: %+v", sub)
+	}
+}
+
 func TestObserveHeard(t *testing.T) {
 	s := (&Store{}).fill()
 	k := Key("codex", "ann@acme.dev")

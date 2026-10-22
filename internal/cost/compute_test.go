@@ -52,7 +52,8 @@ func TestUsedSlots(t *testing.T) {
 		{t0.Add(-20 * day), 40}, {t0.Add(-19 * day), 76},
 		{t0.Add(-40 * day), 100},
 	}
-	got := UsedSlots(cycles, [Slots]int64{0, 900, 900, 0}, t0)
+	long := t0.Add(-60 * day)
+	got := UsedSlots(cycles, [Slots]int64{0, 900, 900, 0}, long, t0)
 	want := [Slots]Slot{
 		{Known: true, Percent: 0},
 		{Known: true, Percent: 76, Tokens: 900},
@@ -62,9 +63,20 @@ func TestUsedSlots(t *testing.T) {
 	if got != want {
 		t.Fatalf("UsedSlots = %+v", got)
 	}
-	got = UsedSlots(nil, [Slots]int64{0, 5, 0, 1}, t0)
+	got = UsedSlots(nil, [Slots]int64{0, 5, 0, 1}, long, t0)
 	if got[0].Known != true || got[1].Known || got[2].Known != true || got[3].Known {
 		t.Fatalf("a week with tokens and no period is unknown: %+v", got)
+	}
+	// Watched since 10 days ago: the weeks that began before it are not
+	// known to be unused; one with a period that reset in it is known.
+	got = UsedSlots([]Cycle{{t0.Add(-20 * day), 40}}, [Slots]int64{}, t0.Add(-10*day), t0)
+	if !got[1].Known || got[0].Known || got[2].Known || !got[3].Known {
+		t.Fatalf("weeks before anybody watched: %+v", got)
+	}
+	// Watched since today: no week is known.
+	got = UsedSlots(nil, [Slots]int64{}, t0, t0)
+	if got[0].Known || got[1].Known || got[2].Known || got[3].Known {
+		t.Fatalf("a subscription found today: %+v", got)
 	}
 }
 
@@ -147,6 +159,39 @@ func TestNextCharge(t *testing.T) {
 	} {
 		if got := RenewsOn(c.day, c.now, time.UTC); got != c.want {
 			t.Errorf("RenewsOn(%d, %v) = %s, want %s", c.day, c.now, got, c.want)
+		}
+	}
+	// A day of the month a shorter month lacks is kept in the months after.
+	for _, c := range []struct {
+		day       int
+		now, next time.Time
+		anchor    string
+	}{
+		{31, d(2026, 2, 10), d(2026, 2, 28), "2026-01-31"},
+		{31, d(2026, 9, 10), d(2026, 9, 30), "2026-08-31"},
+		{15, t0, d(2026, 11, 15), "2026-10-15"},
+		{30, d(2026, 3, 1), d(2026, 3, 30), "2026-03-30"},
+		{31, d(2026, 1, 5), d(2026, 1, 31), "2026-01-31"},
+	} {
+		a := DayAnchor(c.day, c.now, time.UTC)
+		next, _ := NextCharge(a, Monthly, c.now, time.UTC)
+		if a != c.anchor || !next.Equal(c.next) {
+			t.Errorf("DayAnchor(%d, %v) = %s, next %v", c.day, c.now, a, next)
+		}
+		if after, _ := NextCharge(a, Monthly, c.next.AddDate(0, 0, 1), time.UTC); after.Day() != min(c.day, monthDay(after.Year(), after.Month(), 31, time.UTC).Day()) {
+			t.Errorf("DayAnchor(%d): the charge after %v is %v", c.day, c.next, after)
+		}
+	}
+	for _, c := range []struct {
+		began, now time.Time
+		want       string
+	}{
+		{d(2026, 3, 15), d(2026, 10, 22), "2027-03-15"},
+		{d(2025, 10, 22), d(2026, 10, 22), "2026-10-22"},
+		{d(2024, 2, 29), d(2026, 10, 22), "2027-02-28"},
+	} {
+		if got := Anniversary(c.began, c.now, time.UTC); got != c.want {
+			t.Errorf("Anniversary(%v) = %s, want %s", c.began, got, c.want)
 		}
 	}
 }
@@ -265,6 +310,38 @@ func TestCompute(t *testing.T) {
 			t.Fatal(r.BilledThrough)
 		}
 	})
+	t.Run("found today: no week is known", func(t *testing.T) {
+		sub := sub60("claude", "ann@acme.dev", "max 20x")
+		sub.FirstSeen = t0.Add(-time.Hour)
+		r := Compute(in(sub, nil, nil))
+		if r.UsedPct != nil || !near(r.UsedUSD, 0) || !r.UsedEstimated || !near(r.UnusedUSD, 200) {
+			t.Fatalf("%+v", r)
+		}
+		// A week that began after it was found counts.
+		sub.FirstSeen = t0.Add(-8 * day)
+		if r := Compute(in(sub, nil, nil)); !near(r.UsedPct, 0) || r.UsedEstimated || r.Slots[2].Known || !r.Slots[3].Known {
+			t.Fatalf("%+v", r.Slots)
+		}
+	})
+	t.Run("a price known before, not now", func(t *testing.T) {
+		sub := sub60("codex", "ann@acme.dev", "plus")
+		sub.Plans = append(sub.Plans, PlanAt{t0.Add(-2 * day), "team"})
+		r := Compute(in(sub, weekly(80, 80, 80, 80), consumers(map[string]int64{"a": 1})))
+		if r.Price.USD != nil || !near(r.UsedPct, 80) || r.UsedUSD != nil || r.Consumers[0].USD != nil {
+			t.Fatalf("%+v", r)
+		}
+	})
+	t.Run("ended on a free plan: the plan it was paid for", func(t *testing.T) {
+		sub := sub60("claude", "ann@acme.dev", "max 20x")
+		sub.Plans = append(sub.Plans, PlanAt{t0.Add(-2 * day), "free"})
+		i := in(sub, nil, nil)
+		r := Compute(i)
+		evs := Events(i, r, t0.Add(-90*day))
+		if r.State != StateEnded || r.Plan != "max 20x" || r.PlanName != "Max 20x" || !near(r.Price.USD, 200) ||
+			len(evs) != 1 || evs[0].From != "max 20x" || !near(evs[0].FromUSD, 200) {
+			t.Fatalf("%+v, events %+v", r, evs)
+		}
+	})
 	t.Run("not in the store yet", func(t *testing.T) {
 		r := Compute(Input{Now: t0, List: list, Provider: "codex", Label: "ann@acme.dev", Plan: "plus"})
 		if r.Plan != "plus" || !near(r.Price.USD, 20) || r.State != StateActive || !r.FirstSeen.Equal(t0) {
@@ -362,6 +439,13 @@ func TestEvents(t *testing.T) {
 	if !reflect.DeepEqual(again, evs) || evs[0].ID == evs[1].ID || evs[0].ID[:len(EventPlanChanged)] != EventPlanChanged {
 		t.Fatal("event ids change between reports, or repeat")
 	}
+	// The tier read later spells the plan anew, not the event.
+	sub.Plans[2].Plan = "max"
+	coarse := Events(i, Compute(i), t0.Add(-90*day))
+	if coarse[0].ID != evs[0].ID || coarse[0].To != "max" {
+		t.Fatalf("the tier changed the id: %+v, %+v", coarse[0], evs[0])
+	}
+	sub.Plans[2].Plan = "max 20x"
 
 	// New since the store began, and ended; a charge 5 days off is no news.
 	sub = sub60("codex", "bob@srv1", "pro")
