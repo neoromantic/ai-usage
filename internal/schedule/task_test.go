@@ -14,6 +14,7 @@ import (
 // fakeTasks answers schtasks. A nil query means the task does not exist.
 type fakeTasks struct {
 	query *string
+	err   error
 	calls [][]string
 	// task is the definition the last /Create read from its /XML file.
 	task []byte
@@ -26,8 +27,11 @@ func (f *fakeTasks) run(_ context.Context, name string, args []string, _ []byte)
 	}
 	switch args[0] {
 	case "/Query":
+		if f.err != nil {
+			return nil, f.err
+		}
 		if f.query == nil {
-			return nil, errors.New("schtasks: ERROR: The system cannot find the file specified.")
+			return nil, fmt.Errorf("schtasks: ERROR: The system cannot find the file specified: %w", taskExit(-2147024894))
 		}
 		return []byte(*f.query), nil
 	case "/Create":
@@ -39,6 +43,11 @@ func (f *fakeTasks) run(_ context.Context, name string, args []string, _ []byte)
 	}
 	return nil, fmt.Errorf("unexpected schtasks %v", args)
 }
+
+type taskExit int
+
+func (e taskExit) Error() string { return fmt.Sprintf("exit status %d", e) }
+func (e taskExit) ExitCode() int { return int(e) }
 
 // taskXML reads a task definition as schtasks does: UTF-16LE with a BOM.
 func taskXML(t *testing.T, b []byte) string {
@@ -108,7 +117,7 @@ func TestTaskInstall(t *testing.T) {
 	if tr := def.Triggers.Time; tr.Interval != "PT15M" || tr.Duration != "" || tr.Start == "" {
 		t.Fatalf("task trigger = %+v", tr)
 	}
-	if def.Exec.Command != winExe || def.Exec.Arguments != `collect --quiet --home "`+winHome+`"` {
+	if def.Exec.Command != `%SystemRoot%\System32\conhost.exe` || def.Exec.Arguments != `--headless "`+winExe+`" collect --quiet --home "`+winHome+`"` {
 		t.Fatalf("task action = %+v", def.Exec)
 	}
 }
@@ -122,6 +131,7 @@ func TestTaskLookup(t *testing.T) {
 	umlautHome := "C:\\Users\\J\u00fcrgen\\ai-usage-state"
 	cp850 := strings.ReplaceAll(TaskXML(umlautExe, umlautHome), "\u00fc", "\x81")
 	registered := TaskXML(winExe, winHome)
+	console := strings.Replace(registered, `<Command>%SystemRoot%\System32\conhost.exe</Command>`, `<Command>`+winExe+`</Command>`, 1)
 	disabled := strings.Replace(registered, "<Enabled>true</Enabled>\n    <RunOnlyIfIdle>", "<Enabled>false</Enabled>\n    <RunOnlyIfIdle>", 1)
 	utf16 := string(utf16LE(registered))
 	for _, tc := range []struct {
@@ -134,6 +144,7 @@ func TestTaskLookup(t *testing.T) {
 		{"code page output", cp850, umlautExe, umlautHome, Active},
 		{"other binary", registered, `C:\other\ai-usage.exe`, winHome, Other},
 		{"other state folder", registered, winExe, `D:\ai-usage`, Other},
+		{"direct console task", console, winExe, winHome, Other},
 		{"made by schtasks /SC", "<Task><Actions><Exec><Command>" + winExe + "</Command></Exec></Actions></Task>", winExe, winHome, Other},
 		{"disabled", disabled, winExe, winHome, Disabled},
 	} {
@@ -144,13 +155,42 @@ func TestTaskLookup(t *testing.T) {
 			if err != nil || got != tc.want {
 				t.Fatalf("Lookup = %v, %v; want %v", got, err, tc.want)
 			}
-			if want := []string{"schtasks", "/Query", "/TN", "ai-usage", "/XML"}; !reflect.DeepEqual(f.calls[0], want) {
+			if want := []string{"schtasks", "/Query", "/TN", "ai-usage", "/XML", "/HRESULT"}; !reflect.DeepEqual(f.calls[0], want) {
 				t.Fatalf("Lookup ran %q, want %q", f.calls[0], want)
 			}
 		})
 	}
 	if disabled == registered {
 		t.Fatal("test did not disable the task")
+	}
+}
+
+func TestTaskLookupErrors(t *testing.T) {
+	ctx := context.Background()
+	for _, failure := range []error{
+		fmt.Errorf("schtasks: FEHLER: Zugriff verweigert: %w", taskExit(-2147024891)),
+		context.DeadlineExceeded,
+	} {
+		f := &fakeTasks{err: failure}
+		s := Scheduler{GOOS: "windows", Run: f.run}
+		if _, err := s.Lookup(ctx, winExe, winHome); !errors.Is(err, failure) {
+			t.Fatalf("Lookup error = %v; want %v", err, failure)
+		}
+		if err := s.Remove(ctx); !errors.Is(err, failure) {
+			t.Fatalf("Remove error = %v; want %v", err, failure)
+		}
+		for _, call := range f.calls {
+			if call[1] != "/Query" {
+				t.Fatalf("Remove ran %q after a query error", call)
+			}
+		}
+	}
+
+	t.Setenv("AIU_SCHEDULE_HELPER", "no-crontab")
+	_, err := execRunner(ctx, os.Args[0], helperArgs, nil)
+	var exit interface{ ExitCode() int }
+	if !errors.As(err, &exit) || exit.ExitCode() != 1 {
+		t.Fatalf("runner discarded the exit code: %v", err)
 	}
 }
 

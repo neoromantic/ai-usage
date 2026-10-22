@@ -410,7 +410,7 @@ The crontab line looks like this. It keeps the `PATH` of the shell that installe
 
 On macOS the same command and `PATH` go into `~/Library/LaunchAgents/io.github.neoromantic.ai-usage.plist`, which launchd runs at every quarter hour in your login session, where the collector can read the keychain. Registering it needs no prompt, though macOS may show a notification that ai-usage added a background item. If the Mac missed runs while asleep, launchd runs it once on wake. With no one logged in at the screen, as over SSH before the first login, there is no session to register in, and `ai-usage status` says so.
 
-The Windows task runs `ai-usage.exe collect --quiet --home <state folder>` every 15 minutes. Unlike Task Scheduler's defaults, it also runs on battery, runs once after the computer wakes if it missed a run, never runs twice at once, and is stopped after 10 minutes.
+The Windows task runs `ai-usage.exe collect --quiet --home <state folder>` every 15 minutes through `conhost.exe --headless`, without opening a console window. Unlike Task Scheduler's defaults, it also runs on battery, runs once after the computer wakes if it missed a run, never runs twice at once, and is stopped after 10 minutes. Check `ai-usage status` for collection errors: Task Scheduler reports the launcher's exit code. Scheduler failures are reported on localized Windows too, instead of being treated as a missing task.
 
 A scheduled run, `collect --quiet`, first waits up to a minute, the same for a machine every time, so that a team's machines do not all reach the relay at the quarter hour. It sends this machine's snapshot every time and reads the team when its last read is 20 minutes old, every other run.
 
