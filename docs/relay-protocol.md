@@ -100,7 +100,7 @@ To seal a non-empty plaintext `P`, its UTF-8 bytes:
 
 The empty string seals to the empty string. Nothing is encrypted, and an optional sealed field is then left out (§7.1).
 
-A sealed string for an `n`-byte plaintext is `ceil(4 × (28 + n) / 3)` characters long. A snapshot allows at most 512 characters, so a plaintext MUST be at most 356 bytes. The reference collector shortens longer text to 300 bytes, keeping the end and putting `…` in front.
+A sealed string for an `n`-byte plaintext is `ceil(4 × (28 + n) / 3)` characters long. A snapshot allows at most 512 characters, so a plaintext MUST be at most 356 bytes. The reference collector shortens longer text to 300 bytes, keeping the end and putting `…` in front. A Cost's `data` (§7.4) is JSON and is never shortened: the reference collector leaves out an entry whose data would be longer.
 
 To open a sealed string, decode it, take the first 12 bytes as the nonce, and decrypt the rest with the same additional data. A reader that cannot open a string SHOULD show a placeholder rather than drop the document; the reference reader shows `(unreadable)`.
 
@@ -132,7 +132,7 @@ Clients SHOULD use `https`. Over plain HTTP, snapshots are still sealed and sign
 
 ### 6.2 Common rules
 
-- Every response SHOULD carry `Cache-Control: no-store`. The reference relay sends it on every response.
+- Every response SHOULD carry `Cache-Control: no-store`, except the price list's (§6.8). The reference relay sends it on every other response.
 - A JSON response has `Content-Type: application/json`. Its body is one JSON object; the reference relay ends it with a newline.
 - An error is `{"error": "<text>"}`. The text is for people. Clients MUST act on the status code, not the text.
 - `{team}` MUST match the fingerprint shape and `{device}` the device id shape (§7.3). A relay answers `404` to any other value.
@@ -205,7 +205,31 @@ Removes one device's snapshot. Signed as in §5. Answers `200` whether or not a 
 {"deleted":true}
 ```
 
-### 6.8 Status codes
+### 6.8 `GET /v1/prices`
+
+Unsigned, and needs no store. Answers `200` with the price list built into the relay, with `Cache-Control: public, max-age=3600`:
+
+```json
+{"v":1,"updated":"2026-10-22","currency":"USD","plans":[{"provider":"claude","plan":"pro","name":"Pro","usd":20,"annual_usd":200,"source":"https://claude.com/pricing"}]}
+```
+
+| Member | Value |
+| --- | --- |
+| `v` | `1`, the list's version. A reader ignores a list of another version |
+| `updated` | the day the prices were last checked, `YYYY-MM-DD` |
+| `currency` | `USD` |
+| `plans` | one entry per plan with a list price |
+| `provider` | a provider of §7.2 other than `hermes` |
+| `plan` | the plan as the provider's tool reports it, a plain string (§7.2). A reader matches it by a key: lower case, `+` as `plus`, and only letters and digits, so `X Premium+` and `XPremiumPlus` are one plan |
+| `name` | how the plan is called, when not as `plan` |
+| `usd` | the price a month, billed monthly |
+| `annual_usd` | the price a year, when the plan is billed yearly too |
+| `was` | the ids the provider used for the same plan before |
+| `source` | where the price was checked; readers ignore it |
+
+A reader ignores members it does not know, and plans of a provider it does not know. The reference collector asks for the list at most once a day, keeps it, and uses whichever of its built-in list and the relay's has the later `updated`, so a relay on an older release cannot take prices back. A relay before v0.10.0 answers `404`, and a collector then uses its built-in list. The reference Vercel function serves the list even when it has no store. The list holds nothing of any team.
+
+### 6.9 Status codes
 
 | Status | Requests | Meaning |
 | --- | --- | --- |
@@ -219,7 +243,7 @@ Removes one device's snapshot. Signed as in §5. Answers `200` whether or not a 
 | `413` | `PUT` | the body is larger than 65536 bytes |
 | `422` | `PUT` | the body is not a valid snapshot in canonical form, or it names another team or device |
 | `429` | all | a rate limit; `Retry-After` gives the seconds until the window ends |
-| `503` | all | the store is unavailable; the reference Vercel function also answers `503` with `{"error":"relay store not configured"}` to every request when it has no store |
+| `503` | all but `GET /v1/prices` | the store is unavailable; the reference Vercel function also answers `503` with `{"error":"relay store not configured"}` to every other request when it has no store |
 
 A `409` means the relay holds a newer snapshot for this device id: the device's clock went back, or another machine uses the same id. The reference collector reports it and still reads the team. After any other error it keeps its newest snapshot pending, sends it on a later run, and skips the team read for that run. A snapshot holds running totals, so the newest one also covers the runs that could not reach the relay.
 
@@ -276,8 +300,9 @@ Every integer the document allows fits exactly in an IEEE 754 double, so readers
 | `accounts` | array of Account | required | at most 24 |
 | `sources` | array of Source | required | at most 12 |
 | `aliases` | array of Alias | omitted when empty | at most 48: the short names this device gave accounts, newest first. The newest one for an account, from any device in the team, names it everywhere |
+| `costs` | array of Cost | omitted when empty | at most 24: what people typed on this device of what the team's subscriptions cost, newest first. Added in v0.10.0; see §11 |
 
-The body as a whole MUST be at most 65536 bytes. The reference collector fits the document without `cycles` first: it drops projects, then the oldest `days` down to 7 per account, then accounts until it fits. It then puts back the `cycles` of the accounts it kept, and drops them one at a time until the document fits: the oldest of the window with the most in the account with the most.
+The body as a whole MUST be at most 65536 bytes. The reference collector fits the document as the release before each member did, oldest first. Without `cycles`, the hours, and `costs`, it drops projects, then the oldest `days` down to 7 per account, then accounts until it fits. It then puts back the `cycles` of the accounts it kept, and drops them one at a time until the document fits: the oldest of the window with the most in the account with the most. It then puts back the hours, and drops both hour arrays of the account with the most hours while the document is too big. Last it puts back `costs`, and while the document is too big drops projects, then the oldest entries: no account goes for them.
 
 ### 7.4 Nested objects
 
@@ -358,6 +383,31 @@ The body as a whole MUST be at most 65536 bytes. The reference collector fits th
 | `at` | time | required | when the name was set or cleared. MUST NOT be `0001-01-01T00:00:00Z` |
 
 The relay cannot see a sealed name, so it cannot check it. The reference collector sets names of at most 12 display columns, with no spaces or invisible characters. Any member of the team can seal anything, so a reader SHOULD check an opened name the same way.
+
+**Cost**: what people typed on one device of one subscription's cost. Only typed answers travel; what a tool reads of a plan is in the account's plain `plan` and its quota readings, which every reader has.
+
+| Member | Type | Presence | Rule and meaning |
+| --- | --- | --- | --- |
+| `provider` | provider | required | the subscription's provider. The reference collector sends none of `hermes` |
+| `label` | sealed | required | the account's label |
+| `data` | sealed | required | the answers, as compact JSON of at most 356 bytes |
+| `at` | time | required | when the newest of the answers was given. MUST NOT be `0001-01-01T00:00:00Z` |
+
+`data` opens to a JSON object with short keys. Each answer has its own time, in Unix seconds, and an answer cleared on this device is `null` with its time, so that the clearing outranks an older answer of another device:
+
+| Key | Value |
+| --- | --- |
+| `p` | the price of each charge in USD, a number from 0 to 100000: a year's when `c` is `y`; or `null` |
+| `pl` | the plan the price was typed for, a plain string; on another plan the price is stale and not used |
+| `pt` | when `p` was given |
+| `c` | how the subscription is billed: `m` monthly or `y` yearly; or `null` |
+| `ct` | when `c` was given |
+| `r` | a day the subscription charges, `YYYY-MM-DD`, from which the reader counts on by month or year; or `null` |
+| `rt` | when `r` was given |
+| `x` | when a person said the subscription was cancelled, a time of §7.2 |
+| `ok` | when a person said it is still paid, a time of §7.2. Of `x` and `ok`, the later stands |
+
+For each subscription and each answer, a reader takes the one with the latest time across the team's documents, and of two given at once, the one of the smaller device id. The relay cannot see `data`, and any member of the team can seal anything, so a reader MUST read it leniently and check each answer on its own: it leaves out an answer that is not of the form above, or is dated more than 10 minutes after the document's `collected_at`, and keeps the rest. A reader ignores keys it does not know, so a later release adds answers without a new member.
 
 **Source**: the health of one tool's reader on this device.
 
@@ -541,7 +591,9 @@ The members v0.4.0 added, `last_error_at`, `burn_days`, and Recent's `burn`, are
 
 `hours` and `burn_hours`, added in v0.7.0, take the same gate, with v0.7.0 in place of v0.5.0: the reference collector sends them only when every other device it found, or still remembers, runs v0.7.0 or later. Otherwise it sends the document without them, and the team's readers count today as the report's UTC day. When its relay answers `422` to a document with them, it sends the document without them, with `cycles` and v0.4.0's members when their gates are open, in the same run, and does not send the hours again for 24 hours. A relay before v0.7.0 answers so; the reference relay accepts them from v0.7.0, so it is deployed before collectors on v0.7.0. When the document is over the size limit, the reference collector fits it as a release before v0.7.0 does, then drops both hour arrays of the account with the most hours, as many accounts as it takes: a reader uses an account's hours only whole, and its `days` otherwise.
 
-One case remains: a device the team has never seen, installed with a release before v0.4.0, can read documents with the new members on its first run. It drops them, as any older reader drops a document it cannot decode, until it updates itself, within its next run, or the others' next team read closes the gate, within about half an hour. The same holds for a new device on a release before v0.5.0 and `cycles`, and on one before v0.7.0 and the hours. The installer always installs the newest release.
+`costs`, added in v0.10.0, takes the same gate, with v0.10.0 in place of v0.7.0: the reference collector sends it only when every other device it found, or still remembers, runs v0.10.0 or later. Otherwise it sends the document without `costs`, and what people typed on a device counts on that device alone until the gate opens. When its relay answers `422` to a document with them, it sends the document without them, with the hours and older members when their gates are open, in the same run, and does not send `costs` again for 24 hours. A relay before v0.10.0 answers so; the reference relay accepts `costs` from v0.10.0, so it is deployed before collectors on v0.10.0.
+
+One case remains: a device the team has never seen, installed with a release before v0.4.0, can read documents with the new members on its first run. It drops them, as any older reader drops a document it cannot decode, until it updates itself, within its next run, or the others' next team read closes the gate, within about half an hour. The same holds for a new device on a release before v0.5.0 and `cycles`, on one before v0.7.0 and the hours, and on one before v0.10.0 and `costs`. The installer always installs the newest release.
 
 ## 12. Security notes
 
@@ -550,6 +602,7 @@ One case remains: a device the team has never seen, installed with a release bef
 - A captured `GET` or `DELETE` stays valid for 300 seconds either side of its time, for the same team and device. A replayed `DELETE` removes the device until its next write.
 - The additional data of a sealed string binds it to the team, not to a field. Any member of the team can move a sealed string between fields; the relay cannot, since documents are signed.
 - Nonces are 96 random bits, taken fresh for every sealed string.
+- `costs` hold the prices, cadences, and charge days people typed, sealed. The plain `plan` names the plan, and with it the price list's price, as it already does for Codex and Grok, and for Claude from v0.10.0, which writes its tier, as `max 20x`.
 
 ## 13. Test vectors
 

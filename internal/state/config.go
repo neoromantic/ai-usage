@@ -76,21 +76,32 @@ func (d Dir) SaveConfig(c Config) error { return writeJSON(d.Path("config.json")
 // and a run that records a newly found folder does not undo the command's
 // change, or the other way round.
 func (d Dir) EditConfig(edit func(*Config) error) (Config, error) {
+	var c Config
+	err := d.ConfigLocked("config.json", func() error {
+		var err error
+		if c, err = d.LoadConfig(); err != nil {
+			return err
+		}
+		if err := edit(&c); err != nil {
+			return err
+		}
+		return d.SaveConfig(c)
+	})
+	return c, err
+}
+
+// ConfigLocked runs fn under the short lock EditConfig holds, for a file a
+// person's command and a run both change, named file in errors. A person's
+// command never waits for a collection.
+func (d Dir) ConfigLocked(file string, fn func() error) error {
 	unlock, err := d.lockWait(context.Background(), "config.lock", 10*time.Second, nil)
 	if errors.Is(err, ErrBusy) {
 		// Not ErrBusy, which means a run is collecting.
-		return Config{}, errors.New("another ai-usage command is changing config.json")
+		return errors.New("another ai-usage command is changing " + file)
 	}
 	if err != nil {
-		return Config{}, fmt.Errorf("config.json: %w", err)
+		return fmt.Errorf("%s: %w", file, err)
 	}
 	defer unlock()
-	c, err := d.LoadConfig()
-	if err != nil {
-		return c, err
-	}
-	if err := edit(&c); err != nil {
-		return c, err
-	}
-	return c, d.SaveConfig(c)
+	return fn()
 }

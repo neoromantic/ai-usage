@@ -342,6 +342,39 @@ func TestClaudeBadCacheKeepsAccount(t *testing.T) {
 	}
 }
 
+// The config's profile of the account gives a Max plan its tier, and says
+// who bills it and when it began; another account's profile says nothing.
+func TestClaudeSubscription(t *testing.T) {
+	profile := func(email, tier, billing string) string {
+		return `{"oauthAccount":{"accountUuid":"acct-1","emailAddress":"` + email + `","organizationRateLimitTier":` + tier +
+			`,"userRateLimitTier":"default_claude_max_5x","billingType":"` + billing + `","subscriptionCreatedAt":"2025-03-09T10:11:12.123456Z"},` +
+			`"cachedUsageUtilization":{"fetchedAtMs":1790000000000,"accountUuid":"acct-1","utilization":{"limits":[{"kind":"session","percent":12}]}}}`
+	}
+	began := time.Date(2025, 3, 9, 10, 11, 12, 123456000, time.UTC)
+	for _, tc := range []struct {
+		name, config, plan, billing string
+		began                       time.Time
+	}{
+		{"max 20x", profile("Dev@Example.com", `"default_claude_max_20x"`, "stripe_subscription"), "max 20x", "stripe_subscription", began},
+		{"the user's tier when the organization has none", profile("dev@example.com", `null`, "apple_subscription"), "max 5x", "apple_subscription", began},
+		{"another tier", profile("dev@example.com", `"default_claude_zero"`, "stripe_subscription"), "max", "stripe_subscription", began},
+		{"another account's profile", profile("kim@example.com", `"default_claude_max_20x"`, "apple_subscription"), "max", "", time.Time{}},
+		{"no profile", claudeCache, "max", "", time.Time{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env, _ := fakeEnv(t, "claude-ok")
+			writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), tc.config)
+			r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", time.Time{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if r.Plan != tc.plan || r.Billing != tc.billing || !r.SubscribedAt.Equal(tc.began) {
+				t.Errorf("plan %q, billing %q, began %v", r.Plan, r.Billing, r.SubscribedAt)
+			}
+		})
+	}
+}
+
 // A claude that hangs, and leaves a child holding its output, times out.
 func TestClaudeTimeout(t *testing.T) {
 	release := filepath.Join(t.TempDir(), "release")

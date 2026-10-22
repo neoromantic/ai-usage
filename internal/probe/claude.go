@@ -101,6 +101,7 @@ func Claude(ctx context.Context, env Env, home, remembered string, lastUse time.
 	// The usage Claude Code printed is newer than the cache it left.
 	if st.AuthMethod == "claude.ai" {
 		r.Quota = cmp.Or(printed, cfg.quota())
+		cfg.subscription(&r)
 	}
 	return r, joinErrors(errs)
 }
@@ -767,8 +768,36 @@ type claudeConfig struct {
 	OAuthAccount *struct {
 		AccountUUID  string `json:"accountUuid"`
 		EmailAddress string `json:"emailAddress"`
+		// The plan's tier, who bills it, and when it began, as Claude
+		// Code's profile of the account last said.
+		OrgTier      string `json:"organizationRateLimitTier"`
+		UserTier     string `json:"userRateLimitTier"`
+		BillingType  string `json:"billingType"`
+		SubscribedAt string `json:"subscriptionCreatedAt"`
 	} `json:"oauthAccount"`
 	Cached *claudeUsageCache `json:"cachedUsageUtilization"`
+}
+
+// subscription adds to r what the config says of the subscription of r's
+// account: the tier of a Max plan, as "max 20x" or "max 5x", who bills it,
+// and when it began. A config of another account says nothing of it.
+func (cfg claudeConfig) subscription(r *Reading) {
+	a := cfg.OAuthAccount
+	if a == nil || !strings.EqualFold(strings.TrimSpace(a.EmailAddress), strings.TrimSpace(r.Account)) {
+		return
+	}
+	if strings.EqualFold(strings.TrimSpace(r.Plan), "max") {
+		switch cmp.Or(a.OrgTier, a.UserTier) {
+		case "default_claude_max_20x":
+			r.Plan = "max 20x"
+		case "default_claude_max_5x":
+			r.Plan = "max 5x"
+		}
+	}
+	r.Billing = snapshot.PlainLabel(a.BillingType)
+	if t, err := time.Parse(time.RFC3339Nano, a.SubscribedAt); err == nil {
+		r.SubscribedAt = t.UTC()
+	}
 }
 
 // email is the email of the account the config says is logged in, or "".

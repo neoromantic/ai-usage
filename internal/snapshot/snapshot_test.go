@@ -246,6 +246,50 @@ func TestWithoutHoursIsTheOlderWireFormat(t *testing.T) {
 	}
 }
 
+// v1-cost.json is v1-hours.json with the costs v0.10.0 added, and
+// WithoutCosts is the body v0.7.0 to v0.9.x read. Every older body is
+// without them too.
+func TestWithoutCostsIsTheOlderWireFormat(t *testing.T) {
+	read := func(name string) []byte {
+		b, err := os.ReadFile(filepath.Join("testdata", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return bytes.TrimSpace(b)
+	}
+	d, err := Decode(read("v1-cost.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.HasCosts() || !d.HasHours() {
+		t.Fatal("the costs golden has no costs or hours")
+	}
+	if b := encode(t, d); !bytes.Equal(b, read("v1-cost.json")) {
+		t.Fatalf("the costs golden encodes to\n%s", b)
+	}
+	without := d.WithoutCosts()
+	if without.HasCosts() || !without.HasHours() {
+		t.Fatal("WithoutCosts has costs, or lost the hours")
+	}
+	if b := encode(t, without); !bytes.Equal(b, read("v1-hours.json")) {
+		t.Fatalf("WithoutCosts encodes to\n%s", b)
+	}
+	for name, body := range map[string]Doc{"WithoutHours": d.WithoutHours(), "WithoutCycles": d.WithoutCycles(), "Legacy": d.Legacy()} {
+		if body.HasCosts() {
+			t.Fatalf("%s has costs", name)
+		}
+	}
+	// The bodies share no slice with d.
+	without.Accounts[0].Hours[0] = 99
+	without.Sources[0].Status = "error"
+	if d.Accounts[0].Hours[0] == 99 || d.Sources[0].Status == "error" {
+		t.Fatal("WithoutCosts shares a slice with the document")
+	}
+	if d.WithoutCosts().Extended() != d.Extended() || !d.Extended() {
+		t.Fatal("the costs count as a field v0.4.0 added")
+	}
+}
+
 func TestExtended(t *testing.T) {
 	at := t0.Add(-time.Hour)
 	for name, c := range map[string]struct {

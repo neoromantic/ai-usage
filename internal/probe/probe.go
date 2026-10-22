@@ -31,6 +31,12 @@ type Reading struct {
 	Account string
 	Plan    string
 	Quota   *Quota
+	// Billing is who bills the subscription, as Claude Code's
+	// billingType names it, and SubscribedAt when its config says the
+	// subscription began, zero when it does not say. Neither leaves this
+	// device.
+	Billing      string
+	SubscribedAt time.Time
 }
 
 // Quota is a set of windows observed at one moment.

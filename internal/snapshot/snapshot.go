@@ -31,6 +31,7 @@ const (
 	MaxDays           = 90
 	MaxHours          = 48
 	MaxAliases        = 48
+	MaxCosts          = 24
 	MaxCycles         = 64
 	MaxSealed         = 512
 	MaxPlain          = 40
@@ -66,11 +67,16 @@ type Doc struct {
 	// `ai-usage alias`. The newest one for an account, from any device in
 	// the team, names it everywhere.
 	Aliases []Alias `json:"aliases,omitempty"`
+	// Costs are what people typed on this device of the cost of
+	// subscriptions, such as a price or the day one charges. A collector
+	// before v0.10.0 neither sends nor reads them.
+	Costs []Cost `json:"costs,omitempty"`
 }
 
 // Extended reports whether d carries any field a collector before v0.4.0
 // does not know, and so would drop d as undecodable: those v0.4.0 added,
-// the cycles v0.5.0 added, and the hours v0.7.0 added.
+// the cycles v0.5.0 added, and the hours v0.7.0 added. The costs v0.10.0
+// added are not counted: every body without the hours is without them.
 func (d Doc) Extended() bool {
 	if d.LastErrorAt != nil || d.HasCycles() || d.HasHours() {
 		return true
@@ -94,6 +100,10 @@ func (d Doc) HasCycles() bool {
 func (d Doc) HasHours() bool {
 	return slices.ContainsFunc(d.Accounts, func(a Account) bool { return len(a.Hours) > 0 || len(a.BurnHours) > 0 })
 }
+
+// HasCosts reports whether d carries costs, which a collector before
+// v0.10.0 does not know, and so would drop d as undecodable.
+func (d Doc) HasCosts() bool { return len(d.Costs) > 0 }
 
 // Legacy is d without the fields a collector before v0.4.0 does not know:
 // the body such a collector decodes. It shares no slice with d, so either
@@ -124,15 +134,28 @@ func (d Doc) WithoutCycles() Doc {
 }
 
 // WithoutHours is d without the hours a collector before v0.7.0 does not
-// know: the body a collector from v0.5.0 on, and before v0.7.0, decodes. It
-// shares no slice with d, so either can be changed without the other.
+// know, and without its costs: the body a collector from v0.5.0 on, and
+// before v0.7.0, decodes. It shares no slice with d, so either can be
+// changed without the other.
 func (d Doc) WithoutHours() Doc {
+	d = d.WithoutCosts()
+	for i := range d.Accounts {
+		d.Accounts[i].Hours, d.Accounts[i].BurnHours = nil, nil
+	}
+	return d
+}
+
+// WithoutCosts is d without the costs a collector before v0.10.0 does not
+// know: the body a collector from v0.7.0 on, and before v0.10.0, decodes.
+// It shares no slice with d, so either can be changed without the other.
+func (d Doc) WithoutCosts() Doc {
+	d.Costs = nil
 	d.Sources = slices.Clone(d.Sources)
 	d.Aliases = slices.Clone(d.Aliases)
 	d.Accounts = slices.Clone(d.Accounts)
 	for i := range d.Accounts {
 		a := &d.Accounts[i]
-		a.Hours, a.BurnHours = nil, nil
+		a.Hours, a.BurnHours = slices.Clone(a.Hours), slices.Clone(a.BurnHours)
 		a.Cycles = slices.Clone(a.Cycles)
 		a.Windows = slices.Clone(a.Windows)
 		a.Projects = slices.Clone(a.Projects)
@@ -166,6 +189,17 @@ type Alias struct {
 	Provider string    `json:"provider"`
 	Label    string    `json:"label"`
 	Name     string    `json:"name,omitempty"`
+	At       time.Time `json:"at"`
+}
+
+// Cost is what people typed on one device of one subscription's cost.
+// Label and Data are sealed: Data is JSON with short keys, which a reader
+// reads leniently, so that later answers need no gate. At is when the
+// newest of them was given.
+type Cost struct {
+	Provider string    `json:"provider"`
+	Label    string    `json:"label"`
+	Data     string    `json:"data"`
 	At       time.Time `json:"at"`
 }
 

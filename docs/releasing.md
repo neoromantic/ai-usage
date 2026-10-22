@@ -100,6 +100,10 @@ Self-update, both installers, and the formula find their file by these names, so
 
 Set the repository variable `AI_USAGE_RELAY_URL` (Settings, Secrets and variables, Actions, Variables) to build that relay into the binaries with `-X main.defaultRelay=…`. A collector uses it until someone runs `ai-usage relay set`, and `ai-usage relay clear` goes back to it. It must be an `https://` URL. Leave the variable unset to ship binaries without a relay.
 
+## Prices
+
+The price list is `internal/cost/prices.json`, built into every binary and into the relay. The relay serves its copy at `/v1/prices`, and collectors take it once a day when its `updated` day is later than their own list's. The production relay deploys from `main`, so a price merged to `main` reaches every collector within a day, without a release: review a change to the list as you would a release. Each plan gives the page its price was checked on as `source`; check every changed price there, in a browser, since chatgpt.com and x.ai turn scripts away, and set `updated` to the day you checked. Team, business, enterprise, and education plans stay out of the list.
+
 ## Build locally
 
 `dist.sh` is what the workflow runs, from the repository's root:
