@@ -100,7 +100,7 @@ func execRunner(ctx context.Context, name string, args []string, stdin []byte) (
 		msg := strings.TrimSpace(stderr.String())
 		if msg != "" {
 			line, _, _ := strings.Cut(msg, "\n")
-			return out, fmt.Errorf("%s: %s", name, line)
+			return out, fmt.Errorf("%s: %s: %w", name, line, err)
 		}
 		return out, fmt.Errorf("%s: %w", name, err)
 	}

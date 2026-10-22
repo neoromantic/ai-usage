@@ -69,8 +69,8 @@ func TaskXML(exe, home string) string {
   </Settings>
   <Actions Context="Author">
     <Exec>
-      <Command>` + xmlText(exe) + `</Command>
-      <Arguments>` + xmlText(args(home, winQuote)) + `</Arguments>
+      <Command>%SystemRoot%\System32\conhost.exe</Command>
+      <Arguments>` + xmlText("--headless "+winQuote(exe)+" "+args(home, winQuote)) + `</Arguments>
     </Exec>
   </Actions>
 </Task>
@@ -125,23 +125,27 @@ func decodeText(b []byte) string {
 }
 
 func (s Scheduler) removeTask(ctx context.Context) error {
-	if got, _ := s.Lookup(ctx, "", ""); got == Absent {
-		return nil
+	if got, err := s.Lookup(ctx, "", ""); err != nil || got == Absent {
+		return err
 	}
 	_, err := s.Run(ctx, "schtasks", []string{"/Delete", "/F", "/TN", Marker}, nil)
 	return err
 }
 
 func (s Scheduler) lookupTask(ctx context.Context, exe, home string) (State, error) {
-	out, err := s.Run(ctx, "schtasks", []string{"/Query", "/TN", Marker, "/XML"}, nil)
+	out, err := s.Run(ctx, "schtasks", []string{"/Query", "/TN", Marker, "/XML", "/HRESULT"}, nil)
 	if err != nil {
-		return Absent, nil
+		var exit interface{ ExitCode() int }
+		if errors.As(err, &exit) && uint32(exit.ExitCode()) == 0x80070002 {
+			return Absent, nil
+		}
+		return Absent, err
 	}
 	task := decodeText(out)
 	switch {
 	case strings.Contains(task, "<Enabled>false</Enabled>"):
 		return Disabled, nil
-	case strings.Contains(task, jobToken(s.GOOS, exe, home)):
+	case strings.Contains(task, jobToken(s.GOOS, exe, home)) && strings.Contains(task, `<Command>%SystemRoot%\System32\conhost.exe</Command>`):
 		return Active, nil
 	}
 	return Other, nil
