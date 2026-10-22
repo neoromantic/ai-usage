@@ -7,12 +7,22 @@
 // it could not run. The Prices workflow runs it every week and keeps one
 // issue open while something differs.
 //
+// With -write, run from the repository's root, it also sets in
+// internal/cost/prices.json each price that differs where the page shows
+// one price that could be the plan's, and the list's updated day to today,
+// leaving every other byte of the file as it was. New plans, plans a page no
+// longer shows, and pages it could not read stay in the report for a person.
+// The Prices workflow opens a pull request with what it wrote.
+//
 //	go run ./scripts/prices
+//	go run ./scripts/prices -write
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -60,20 +70,53 @@ const (
 var client = &http.Client{Timeout: 30 * time.Second}
 
 func main() {
+	write := flag.Bool("write", false, "set the prices that differ in "+pricesPath+", from the repository's root")
+	flag.Parse()
+	if flag.NArg() > 0 {
+		flag.Usage()
+		os.Exit(2)
+	}
 	var l list
 	if err := json.Unmarshal(cost.PricesJSON, &l); err != nil {
-		fmt.Fprintln(os.Stderr, "prices: price list:", err)
-		os.Exit(2)
+		fail("price list:", err)
+	}
+	var file os.FileInfo
+	if *write {
+		b, err := os.ReadFile(pricesPath)
+		if err == nil && !bytes.Equal(b, cost.PricesJSON) {
+			err = errors.New("it is not the list this program was built with")
+		}
+		if err == nil {
+			file, err = os.Stat(pricesPath)
+		}
+		if err != nil {
+			fail(pricesPath+":", err)
+		}
 	}
 	pages := map[string]page{}
 	for _, u := range pageURLs(l) {
 		pages[u] = readPage(u)
 	}
 	r := compare(l, pages)
+	if fixes := r.fixes(); *write && len(fixes) > 0 {
+		b, err := rewrite(cost.PricesJSON, fixes, time.Now().UTC().Format(time.DateOnly))
+		if err == nil {
+			err = os.WriteFile(pricesPath, b, file.Mode().Perm())
+		}
+		if err != nil {
+			fail("-write:", err)
+		}
+		fmt.Fprintf(os.Stderr, "prices: set %d prices in %s\n", len(fixes), pricesPath)
+	}
 	fmt.Print(r.markdown())
 	if r.findings() {
 		os.Exit(1)
 	}
+}
+
+func fail(a ...any) {
+	fmt.Fprintln(os.Stderr, append([]any{"prices:"}, a...)...)
+	os.Exit(2)
 }
 
 // pageURLs are the pages to read: each plan's source that has a reader, and
