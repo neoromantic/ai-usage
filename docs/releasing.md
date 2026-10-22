@@ -106,6 +106,17 @@ The price list is `internal/cost/prices.json`, built into every binary and into 
 
 A collector takes the relay's list only when its `updated` is later than the list built into its release, so every change moves `updated` forward, or no collector sees it until a release builds it in. The relay serves the list from its own build, so the change reaches collectors once the relay's deploy of that commit is live, not when a release is tagged; check `curl -s https://<relay>/v1/prices` after the deploy. Keep every plan within the rules of [relay-protocol.md §6.8](relay-protocol.md#68-get-v1prices): a collector ignores a list with one plan that breaks them, so a list that needs a looser rule waits until no collector of an older release is left. A change of a list price shows on each team as a COST entry in ATTENTION and an event the menu bar app notifies once, saying the new price applies and how to keep the old one; say why in the commit.
 
+The workflow `.github/workflows/prices.yml` watches the providers every Monday, and when run by hand from the Actions tab. It runs `scripts/prices`, which reads each plan's `source`, compares its price a month, and a year when the list has one, and prints a report in Markdown; it exits 0 when everything it checked matches. It reads only pages that answer a script without a login: claude.com/pricing for Pro, the support article on the Max plan for Max 5x and Max 20x, and the App Store pages of ChatGPT and Grok, whose In-App Purchases name each plan and its price, $19.99 counting as $20. It also reads the In-App Purchases of the Claude, ChatGPT, and Grok apps for paid plans the list lacks, leaving out credits and team, business, enterprise, and education plans; Claude's App Store prices are higher than the web's, so that page gives only names. A plan whose source no reader knows, such as X Premium+, is listed as not checked: check it by hand. The App Store shows only an app's ten best-selling purchases, so a new tier can be missed there, and a plan that drops out of the ten shows as no longer on its page.
+
+When something differs, or a page could not be read, the workflow opens the issue "Price list differs from the providers", or updates its body when it is already open, and closes it once a run finds everything matching again. Then:
+
+- **A price that differs**: open the page in a browser, and when the provider did change the price, fix `usd` or `annual_usd`, move `updated` to today, and merge as above; the next run closes the issue, or run the workflow by hand. App Store prices can lead or lag the web's: for Codex and Grok, check the provider's own page too.
+- **A plan the list lacks**: add it, with `plan` the id its tool reports. A purchase that is not a plan, such as a new kind of credits, goes in `notPlanRe` in `scripts/prices/compare.go`.
+- **A plan its page no longer shows**: the provider renamed or dropped it, or it fell out of the App Store's ten. Rename it with `was`, or keep it while collectors still read it.
+- **A page that could not be read**: the provider changed the page or turned scripts away. Run `go run ./scripts/prices` locally; when the page changed, fix its reader in `scripts/prices/read.go` and its made-up page in `scripts/prices/testdata/`. A page that turns scripts away needs another source, or a check by hand.
+
+A pull request that changes `prices.json` or the watcher runs it too: the report is the run's summary, and the run fails when anything differs.
+
 ## Build locally
 
 `dist.sh` is what the workflow runs, from the repository's root:
