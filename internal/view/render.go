@@ -35,6 +35,10 @@ type Options struct {
 	// Share shows each value in the matrix as a part of its column's total,
 	// instead of tokens.
 	Share bool
+	// Cost shows the matrix in dollars instead: what each device used of
+	// each subscription over the last 4 weeks, what nobody used, and each
+	// subscription's price. It wins over Share.
+	Cost bool
 	// AllProjects lists every project, not the top 10.
 	AllProjects bool
 	// DeviceStatus shows DEVICES as its status table, a row per device with
@@ -101,8 +105,8 @@ func Render(r Report, o Options) Page {
 	// Where DEVICES heads its rows, and where it ends.
 	var devHead [2]int
 	devEnd := 0
-	sections := []func() []chunks{p.attention, p.subscriptions, p.utilization, p.devices, p.projects}
-	const devices = 3
+	sections := []func() []chunks{p.attention, p.subscriptions, p.costSection, p.utilization, p.devices, p.projects}
+	const devices = 4
 	for i, section := range sections {
 		p.picks = nil
 		s := section()

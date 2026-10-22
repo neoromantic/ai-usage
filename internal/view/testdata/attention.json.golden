@@ -120,12 +120,51 @@
     "percent": 35
   },
   {
+    "kind": "check",
+    "subject": "claude gone@mail.test",
+    "text": "still paid? last confirmed 13 Jul · on no device since 12 Aug: ai-usage cost confirm or cancel",
+    "provider": "claude",
+    "account": "gone@mail.test",
+    "name": "gone",
+    "at": "2026-07-13T12:00:00Z"
+  },
+  {
     "kind": "idle",
     "subject": "claude max@mail.test",
-    "text": "idle 11d, paid and unused",
+    "text": "idle 11d, $100/mo paid and unused",
     "provider": "claude",
     "account": "max@mail.test",
     "name": "max",
     "at": "2026-08-21T12:00:00Z"
+  },
+  {
+    "kind": "cost",
+    "subject": "claude bob@mail.test",
+    "text": "new subscription: Pro at $20/mo",
+    "provider": "claude",
+    "account": "bob@mail.test",
+    "name": "bob",
+    "at": "2026-08-30T12:00:00Z",
+    "event": "new-bob"
+  },
+  {
+    "kind": "cost",
+    "subject": "claude ann@acme.dev",
+    "text": "plan Max 5x → Max 20x, +$100/mo",
+    "provider": "claude",
+    "account": "ann@acme.dev",
+    "name": "ann",
+    "at": "2026-08-31T10:00:00Z",
+    "event": "plan_changed-ann"
+  },
+  {
+    "kind": "cost",
+    "subject": "claude kim@corp.test",
+    "text": "list price $17 → $20/mo; ai-usage cost set claude:kim@corp.test --price 17 keeps $17",
+    "provider": "claude",
+    "account": "kim@corp.test",
+    "name": "kim",
+    "at": "2026-09-01T09:00:00Z",
+    "event": "price_changed-kim"
   }
 ]

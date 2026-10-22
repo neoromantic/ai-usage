@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/neoromantic/ai-usage/internal/cost"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
@@ -38,6 +39,10 @@ func (p *page) badgeOf(kind string) (string, color.Color) {
 		return "UNDER", t.Under
 	case AttentionIdle:
 		return "IDLE", t.Muted
+	case AttentionCheck:
+		return "CHECK", t.Muted
+	case AttentionCost:
+		return "COST", t.Muted
 	}
 	return strings.ToUpper(kind), t.Muted
 }
@@ -130,10 +135,13 @@ func (p *page) moreText(hidden []Attention) string {
 // device, or the devices on an old release.
 func (p *page) subject(a Attention) chunks {
 	switch a.Kind {
-	case AttentionOut, AttentionOver, AttentionTight, AttentionUnder, AttentionOutside, AttentionNoReading, AttentionIdle:
+	case AttentionOut, AttentionOver, AttentionTight, AttentionUnder, AttentionOutside, AttentionNoReading, AttentionIdle,
+		AttentionCheck, AttentionCost:
 		label := shortID(a.Account)
 		if acct := p.account(a.Provider, a.Account); acct != nil {
 			label = shownLabel(acct)
+		} else if s := p.r.Cost.Subscription(a.Provider, a.Account); s != nil && s.Alias != nil && s.Name == *s.Alias {
+			label = *s.Alias
 		}
 		if a.Window != "" && a.Name != "" {
 			// The short name leaves room for the window.
@@ -206,6 +214,10 @@ func (p *page) attentionText(a Attention, room int) []chunks {
 		return p.underForms(a)
 	case AttentionIdle:
 		return p.idleForms(a)
+	case AttentionCheck:
+		return p.checkForms(a)
+	case AttentionCost:
+		return p.costForms(a)
 	case AttentionError:
 		if a.At != nil {
 			// How long ago, while the whole error fits beside it.
@@ -381,14 +393,90 @@ func (p *page) underForms(a Attention) []chunks {
 }
 
 // idleForms is what to know about a paid subscription no team device has
-// used for a week or more, dim, as it asks for nothing soon.
+// used for a week or more, and what it costs a month when that is known,
+// dim, as it asks for nothing soon.
 func (p *page) idleForms(a Attention) []chunks {
 	s := "idle"
 	if a.At != nil {
 		s += " " + age(p.now.Sub(*a.At))
 	}
+	if c := p.r.Cost.Subscription(a.Provider, a.Account); c != nil && c.PriceUSD != nil && *c.PriceUSD > 0 {
+		paid := usd(*c.PriceUSD) + "/mo"
+		return []chunks{{p.muted(s + ", " + paid + " paid and unused")}, {p.muted(s + ", " + paid + " unused")}, {p.muted(s)}}
+	}
 	return []chunks{{p.muted(s + ", paid and unused")}, {p.muted(s)}}
 }
+
+// checkForms is what to know about a subscription nobody can say is still
+// paid: when it was last confirmed, and since when no device has it, and
+// the command that answers.
+func (p *page) checkForms(a Attention) []chunks {
+	s := "still paid?"
+	if a.At != nil {
+		s += " last confirmed " + a.At.In(p.loc).Format("2 Jan")
+	}
+	gone := ""
+	if c := p.r.Cost.Subscription(a.Provider, a.Account); c != nil && c.LastSeen != nil && p.now.Sub(*c.LastSeen) >= cost.GoneAfter {
+		gone = p.g.sep + "on no device since " + c.LastSeen.In(p.loc).Format("2 Jan")
+	}
+	act := ": ai-usage cost confirm or cancel"
+	return p.forms(s+gone+act, s+gone, s)
+}
+
+// costForms is what to know about a cost event of the last few days: a new
+// subscription, a change of plan, or of a list price.
+func (p *page) costForms(a Attention) []chunks {
+	e := p.r.Cost.event(a.Event)
+	if e == nil {
+		return p.forms("cost changed")
+	}
+	c := p.r.Cost.Subscription(e.Provider, e.Account)
+	plan := func(s *string) string {
+		if s == nil {
+			return "?"
+		}
+		return p.txt(p.planName(e.Provider, *s))
+	}
+	arrow := " " + p.arrow() + " "
+	delta := ""
+	if e.DeltaUSD != nil {
+		delta = ", " + signedUSD(*e.DeltaUSD) + "/mo"
+	}
+	switch e.Kind {
+	case EventNew:
+		s := "new subscription"
+		if w := planWords(c); w != "" {
+			return p.forms(s+": "+p.txt(w), s)
+		}
+		return p.forms(s)
+	case EventPlanChanged:
+		s := "plan " + plan(e.From) + arrow + plan(e.To)
+		return p.forms(s+delta, s)
+	case EventPriceChanged:
+		s := "list price changed" + delta
+		if e.FromUSD != nil && e.ToUSD != nil {
+			was := *e.FromUSD
+			s = "list price " + usd(was) + arrow + usd(*e.ToUSD) + "/mo"
+			keep := "; ai-usage cost set " + e.Provider + ":" + p.txt(shortID(e.Account)) + " --price " + strconv.FormatFloat(was, 'f', -1, 64) + " keeps " + usd(was)
+			return p.forms(s+keep, s+"; cost set keeps "+usd(was), s)
+		}
+		return p.forms(s)
+	}
+	return p.forms(e.Kind)
+}
+
+// arrow is the mark of a change from one thing to another.
+func (p *page) arrow() string {
+	if p.o.ASCII {
+		return "->"
+	}
+	return "→"
+}
+
+// planName is a provider's plan as the built-in price list calls it, else
+// as its tool reports it. A report keeps no list: the names change with a
+// release, not with a price.
+func (p *page) planName(provider, plan string) string { return cost.Builtin().Name(provider, plan) }
 
 // silentForms is what to know about a device that has not reported.
 func (p *page) silentForms(a Attention, room int) []chunks {

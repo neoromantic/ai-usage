@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/cost"
 	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/probe"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
@@ -101,7 +102,9 @@ type merger struct {
 	midnight   time.Time
 }
 
-func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
+// buildTeam merges this device's doc and the team's into the team, and
+// says what it found of each subscription, for its cost.
+func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) (Team, []cost.Seen) {
 	t := Team{Devices: []TeamDevice{}, Providers: []TeamProvider{}}
 	m := &merger{
 		in: in, now: now, local: map[string]*Link{},
@@ -153,7 +156,7 @@ func buildTeam(in Input, totals []collect.AccountTotals, now time.Time) Team {
 	})
 	m.estimate(&t)
 	m.cyclesGate(&t)
-	return t
+	return t, m.costSeen(t)
 }
 
 // localToday says the team's today can count from local midnight: none of

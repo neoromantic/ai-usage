@@ -100,6 +100,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdName(args, stdout)
 	case "alias":
 		err = cmdAlias(args, stdout)
+	case "cost":
+		err = cmdCost(args, stdout)
 	case "schedule":
 		err = cmdSchedule(ctx, args, stdout, stderr)
 	case "update":

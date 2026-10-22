@@ -14,8 +14,9 @@ type healthItem struct {
 }
 
 // header is `ai-usage`, this device, and the team on the left, and the
-// collector's health on the right, ending where the page does. A failure
-// turns its dot red; the error itself is in ATTENTION.
+// collector's health on the right, then what the team's subscriptions cost
+// a month, ending where the page does. A failure turns its dot red; the
+// error itself is in ATTENTION.
 func (p *page) header(pageWidth int) chunks {
 	c := p.r.Collector
 	g := p.g
@@ -43,7 +44,7 @@ func (p *page) header(pageWidth int) chunks {
 			}
 			out = append(out, p.paint(g.here, h.dot, false, false), p.plain(" "), p.muted(text))
 		}
-		return out
+		return append(out, p.moneyTotal()...)
 	}
 	// The health words shorten first, then the team goes, then the device
 	// is cut.

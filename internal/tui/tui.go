@@ -48,6 +48,10 @@ type Config struct {
 	// Detail draws what a row of the page opens, false when the report no
 	// longer has it; nil is view.Detail.
 	Detail func(view.Report, view.Options, view.Pick) (view.Page, bool)
+	// Cost runs `ai-usage cost` with args, such as set ACCOUNT --price 20,
+	// and says what it did in a line; nil leaves out `e` and the report's
+	// questions.
+	Cost func(args []string) (string, error)
 }
 
 const (
@@ -144,6 +148,14 @@ type Model struct {
 	sig string
 
 	refreshErr, loadErr string
+	// note is what the last cost command did.
+	note string
+
+	// prompt asks a question of the report's, or edits a subscription,
+	// over the key bar; nil when nothing is asked. dismissed are the
+	// questions answered or put away while the view is open.
+	prompt    *prompt
+	dismissed map[string]bool
 }
 
 // New is the view before it knows the terminal's size.
@@ -189,6 +201,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if bottom && !m.choosing() {
 			m.top = m.maxTop()
 		}
+		m.nextQuestion()
 	case tea.BackgroundColorMsg:
 		m.opts.Dark = msg.IsDark()
 		m.theme = view.NewTheme(m.opts.Dark)
@@ -215,6 +228,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loadErr = ""
 		m.report = msg.report
 		m.draw()
+		m.nextQuestion()
 	case spinMsg:
 		if !m.busy || msg.gen != m.gen {
 			break
@@ -222,6 +236,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.frame++
 		m.draw()
 		return m, m.spin()
+	case costDoneMsg:
+		m.note, m.refreshErr = msg.text, ""
+		if msg.err != nil {
+			m.note, m.refreshErr = "", firstLine(msg.err)
+		}
+		m.draw()
+		return m, m.load()
 	case refreshedMsg:
 		m.busy = false
 		if msg.err != nil {
@@ -236,8 +257,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) key(k string) (tea.Model, tea.Cmd) {
+	if k == "ctrl+c" {
+		return m, tea.Quit
+	}
+	if m.prompt != nil && !m.help {
+		if mm, cmd, ok := m.promptKey(k); ok {
+			return mm, cmd
+		}
+	}
 	switch k {
-	case "ctrl+c", "q":
+	case "q":
 		return m, tea.Quit
 	case "esc", "backspace":
 		// Back: from the help, a detail, or a pick. Esc on the page quits.
@@ -314,11 +343,20 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	case "%":
 		// Share mode can always be left, even when the matrix is gone,
 		// as after a refresh that left one device. The status view has no
-		// share; the mode waits for the matrix.
+		// share; the mode waits for the matrix. From dollars it goes to
+		// share.
 		if m.shareKey() {
-			m.opts.Share = !m.opts.Share
+			m.opts.Share = !m.opts.Share || m.opts.Cost
+			m.opts.Cost = false
 			m.draw()
 		}
+	case "$":
+		if m.costKey() {
+			m.opts.Cost = !m.opts.Cost
+			m.draw()
+		}
+	case "e":
+		m.edit()
 	case "s":
 		// The two views of DEVICES are as tall, so the page keeps its top.
 		if m.page.DeviceViews {
@@ -571,7 +609,13 @@ func (m Model) statusView() bool { return m.opts.DeviceStatus && m.page.DeviceVi
 // shareKey says % does something: the matrix shows, and has a column to
 // share or is in share mode.
 func (m Model) shareKey() bool {
-	return m.open == nil && !m.statusView() && (m.page.MatrixColumns > 0 || m.opts.Share)
+	return m.open == nil && !m.statusView() && (m.page.MatrixColumns > 0 || m.opts.Share || m.opts.Cost)
+}
+
+// costKey says $ does something: the matrix shows, has a column, and the
+// report has a cost, or the matrix is in dollars.
+func (m Model) costKey() bool {
+	return m.open == nil && !m.statusView() && (m.page.MatrixColumns > 0 && m.report.Cost != nil || m.opts.Cost)
 }
 
 func (m *Model) setPeriod(p view.Period) {
@@ -697,6 +741,9 @@ func (m Model) bodyHeight() int {
 	if m.statusText() != "" {
 		h--
 	}
+	if m.prompt != nil {
+		h--
+	}
 	return max(0, h)
 }
 
@@ -708,7 +755,10 @@ func (m Model) statusText() string {
 	if m.refreshErr != "" {
 		return m.refreshErr
 	}
-	return m.loadErr
+	if m.loadErr != "" {
+		return m.loadErr
+	}
+	return m.note
 }
 
 func (m Model) View() tea.View {
@@ -754,8 +804,15 @@ func (m Model) screen() string {
 			rows = append(rows, "")
 		}
 	}
+	if m.prompt != nil {
+		rows = append(rows, m.promptLine())
+	}
 	if s := m.statusText(); s != "" {
-		rows = append(rows, fit(m.style(" "+s, styleError), w))
+		k := styleError
+		if s == m.note {
+			k = styleAction
+		}
+		rows = append(rows, fit(m.style(" "+s, k), w))
 	}
 	rule := "─"
 	if m.opts.ASCII {

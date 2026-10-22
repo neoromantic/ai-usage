@@ -540,8 +540,9 @@ func TestStatusVia(t *testing.T) {
 			t.Errorf("ascii %v: legend %q", c.ascii, p.Legend)
 		}
 	}
-	// At 80 VIA goes, and its marks with it. UTILIZATION, which has a · of
-	// its own, is left out.
+	// At 80 VIA goes, and its marks with it. UTILIZATION and COST, which
+	// have a · of their own, are left out.
+	r.Cost = nil
 	for i := range r.Team.Providers {
 		for j := range r.Team.Providers[i].Accounts {
 			r.Team.Providers[i].Accounts[j].Utilization = nil
@@ -571,7 +572,7 @@ func TestStatusViews(t *testing.T) {
 		}
 	}
 	// The matrix names both views where they fit beside its modes.
-	for w, want := range map[int]string{80: "15 · 7d UTC · M weighted tokens       ‹tokens›  share", 120: "‹usage›  status   ‹tokens›  share"} {
+	for w, want := range map[int]string{80: "15 · 7d UTC · M weighted tokens   ‹tokens›  share   $", 120: "‹usage›  status   ‹tokens›  share   $"} {
 		if got := pageSection(Render(team, Options{Width: w}), "DEVICES")[0]; !strings.HasSuffix(got, want) {
 			t.Errorf("matrix title at %d: %q", w, got)
 		}

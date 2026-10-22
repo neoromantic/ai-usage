@@ -67,7 +67,16 @@ func cmdCollect(ctx context.Context, args []string, stdout, stderr io.Writer) er
 	if disp.interactive(stdout, *jsonOut, guide) {
 		return tui.Run(ctx, viewConfig(d, res, disp, *offline, stdout), os.Stdin, stdout)
 	}
-	return printReport(stdout, reportAt(d, res, clock().UTC()), *jsonOut, guide, disp)
+	r := reportAt(d, res, clock().UTC())
+	if err := printReport(stdout, r, *jsonOut, guide, disp); err != nil {
+		return err
+	}
+	// The first run a person reads asks what the report cannot read, on a
+	// terminal only: the installer's has none.
+	if _, tty := terminal(stdout); guide && tty && stdinTTY() && !*jsonOut && r.Cost != nil {
+		askCost(r.Cost.Questions, os.Stdin, stdout)
+	}
+	return nil
 }
 
 // takeGuide clears the guide's due mark under the run lock and reports

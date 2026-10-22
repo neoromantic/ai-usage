@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/cost"
 	"github.com/neoromantic/ai-usage/internal/meter"
 	"github.com/neoromantic/ai-usage/internal/selfupdate"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
@@ -76,7 +77,9 @@ func Build(in Input) Report {
 		r.Projects = append(r.Projects, projectView(pr, now, loc))
 	}
 	sortProjects(r.Projects, Week)
-	r.Team = buildTeam(in, totals, now)
+	var seen []cost.Seen
+	r.Team, seen = buildTeam(in, totals, now)
+	r.Cost = buildCost(in, r.Team, seen, now, loc)
 	listDefaults(&r)
 	for i := range r.Providers {
 		for j := range r.Providers[i].Accounts {
@@ -85,7 +88,7 @@ func Build(in Input) Report {
 		}
 	}
 	stopRunOuts(&r, now)
-	r.Attention = attention(r.Team, r.Collector, now)
+	r.Attention = attentionWith(r.Team, r.Collector, r.Cost, now)
 	describe(&r, loc)
 	return r
 }
@@ -143,13 +146,15 @@ func Fill(r *Report) {
 	describe(r, nil)
 }
 
-// describe gives each ATTENTION entry its subject and text, and each team
-// device its note, as the console words them in full, with clocks in loc,
-// nil for local time, where they have none.
+// describe gives each ATTENTION entry its subject and text, each team
+// device its note, and each cost question and event its words, as the
+// console words them in full, with clocks in loc, nil for local time, where
+// they have none.
 func describe(r *Report, loc *time.Location) {
 	// So wide that no form is cut, and every device of an OLD entry named.
 	const full = 1 << 16
 	p := newPage(r, Options{Loc: loc})
+	describeCost(r.Cost, p.loc)
 	for i := range r.Attention {
 		if a := &r.Attention[i]; a.Text == "" {
 			a.Subject, a.Text = p.subject(*a).text(), p.attentionText(*a, full)[0].text()
@@ -290,6 +295,24 @@ func listDefaults(r *Report) {
 			d.Limitations = []string{}
 		}
 	}
+	if c := r.Cost; c != nil {
+		c.Subscriptions, c.Devices, c.Questions, c.Events = orNone(c.Subscriptions), orNone(c.Devices), orNone(c.Questions), orNone(c.Events)
+		for i := range c.Subscriptions {
+			s := &c.Subscriptions[i]
+			s.Consumers, s.Plans = orNone(s.Consumers), orNone(s.Plans)
+		}
+		for i := range c.Questions {
+			c.Questions[i].Choices = orNone(c.Questions[i].Choices)
+		}
+	}
+}
+
+// orNone is xs, or an empty list for nil.
+func orNone[T any](xs []T) []T {
+	if xs == nil {
+		return []T{}
+	}
+	return xs
 }
 
 // fillFolders gives each project saved without its working folders the one

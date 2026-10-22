@@ -349,8 +349,38 @@ func newKindsReport() Report {
 		d := &r.Team.Devices[i]
 		d.Name = DeviceName(d.Label, d.OSUser)
 	}
-	r.Attention = attention(r.Team, r.Collector, now)
+	r.Cost = kindsCost()
+	r.Attention = attentionWith(r.Team, r.Collector, r.Cost, now)
 	return r
+}
+
+// kindsCost is the cost of newKindsReport: the idle subscription's price,
+// one no device has any more that nobody can say is still paid, and the
+// news of the last days: a new subscription, a plan changed, and a list
+// price changed, besides a change too old to show.
+func kindsCost() *Cost {
+	usd := func(v float64) *float64 { return &v }
+	plan := func(s string) *string { return &s }
+	confirmed := now.Add(-50 * 24 * time.Hour)
+	gone := now.Add(-20 * 24 * time.Hour)
+	return &Cost{
+		Subscriptions: []CostSubscription{
+			{Provider: "claude", Account: "max@mail.test", Name: "max", Plan: plan("max 5x"), PlanName: plan("Max 5x"), PriceUSD: usd(100), State: CostIdle, IdleSince: tp(now.Add(-11 * 24 * time.Hour))},
+			{Provider: "claude", Account: "gone@mail.test", Name: "gone", Plan: plan("pro"), PlanName: plan("Pro"), PriceUSD: usd(20), State: CostUnconfirmed,
+				PlanConfirmedAt: &confirmed, LastSeen: &gone},
+			{Provider: "claude", Account: "bob@mail.test", Name: "bob", Plan: plan("pro"), PlanName: plan("Pro"), PriceUSD: usd(20)},
+			{Provider: "claude", Account: "ann@acme.dev", Name: "ann", Plan: plan("max 20x"), PlanName: plan("Max 20x"), PriceUSD: usd(200)},
+			{Provider: "claude", Account: "kim@corp.test", Name: "kim", Plan: plan("pro"), PlanName: plan("Pro"), PriceUSD: usd(20)},
+		},
+		Events: []CostEvent{
+			{ID: "plan_changed-old", Kind: EventPlanChanged, At: now.Add(-5 * 24 * time.Hour), Provider: "claude", Account: "kim@corp.test", From: plan("max 5x"), To: plan("pro"), DeltaUSD: usd(-80)},
+			{ID: "new-bob", Kind: EventNew, At: now.Add(-2 * 24 * time.Hour), Provider: "claude", Account: "bob@mail.test", To: plan("pro"), DeltaUSD: usd(20)},
+			{ID: "plan_changed-ann", Kind: EventPlanChanged, At: now.Add(-26 * time.Hour), Provider: "claude", Account: "ann@acme.dev", From: plan("max 5x"), To: plan("max 20x"), DeltaUSD: usd(100)},
+			{ID: "price_changed-kim", Kind: EventPriceChanged, At: now.Add(-3 * time.Hour), Provider: "claude", Account: "kim@corp.test", From: plan("pro"), To: plan("pro"),
+				FromUSD: usd(17), ToUSD: usd(20), DeltaUSD: usd(3)},
+			{ID: "charges_soon-ann", Kind: EventChargesSoon, At: now.Add(-time.Hour), Provider: "claude", Account: "ann@acme.dev", To: plan("max 20x")},
+		},
+	}
 }
 
 // Every kind in its place: what runs out, a tight window of one's own, one
@@ -366,7 +396,7 @@ func TestAttentionOrderOfEveryKind(t *testing.T) {
 	want := []string{
 		"out lee", "over bob", "tight ann", "outside sam", "error bot-b",
 		"no_reading a-very-long-subscription-name", "silent bot-c", "duplicate ann@annbook",
-		"old srv1", "old bot-a", "under kim", "idle max",
+		"old srv1", "old bot-a", "under kim", "check gone", "idle max", "cost bob", "cost ann", "cost kim",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("attention =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -405,7 +435,9 @@ func TestAttentionLinesAt80(t *testing.T) {
 		8:  "DUPLICATE ann@annbook ai-usage team forget-device 3f9a1c2e",
 		9:  "OLD 1 device on v0.2.0 no Claude quota; reinstall",
 		10: "OLD 1 device on v0.3.4 bot-a · latest v0.4.0",
-		12: "IDLE claude max@mail.test idle 11d, paid and unused",
+		12: "CHECK claude gone@mail.test still paid? last confirmed 13 Jul",
+		13: "IDLE claude max@mail.test idle 11d, $100/mo paid and unused",
+		16: "COST claude kim@corp.test list price $17 → $20/mo",
 	} {
 		if got := squeeze(lines[i]); got != want {
 			t.Errorf("line %d = %q, want %q", i, got, want)
@@ -570,7 +602,9 @@ func TestAttentionWordsAreTheLines(t *testing.T) {
 		"claude lee@corp.test":                            "back Fri 12:00, in 3d · reading 1d old",
 		"claude a-very-long-subscription-name@acme.devxy": "annbook runs v0.2.0: reinstall with install.sh",
 		"1 device on v0.2.0":                              "srv1 · cannot read Claude quota; reinstall with install.sh",
-		"claude max@mail.test":                            "idle 11d, paid and unused",
+		"claude max@mail.test":                            "idle 11d, $100/mo paid and unused",
+		"claude gone@mail.test":                           "still paid? last confirmed 13 Jul · on no device since 12 Aug: ai-usage cost confirm or cancel",
+		"claude bob@mail.test":                            "new subscription: Pro at $20/mo",
 	} {
 		if got[subject] != text {
 			t.Errorf("%s: %q, want %q", subject, got[subject], text)
@@ -618,7 +652,7 @@ func TestAttentionGolden(t *testing.T) {
 	unknown := subAccount(collect.UnknownAccount, false, now)
 	unknown.NoReading = strPtr("not logged in on srv1: run claude and log in")
 	r.Team.Providers[0].Accounts = append(r.Team.Providers[0].Accounts, unknown)
-	r.Attention = attention(r.Team, r.Collector, now)
+	r.Attention = attentionWith(r.Team, r.Collector, r.Cost, now)
 	describe(&r, time.UTC)
 	var b strings.Builder
 	for _, w := range []int{80, 120} {

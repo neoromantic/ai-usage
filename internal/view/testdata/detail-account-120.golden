@@ -1,7 +1,12 @@
-[1mai-usage[m · ann@annbook · team qmvrtzpa                   ● collected 7m ago  ● relay 7m ago  ● up to date
+[1mai-usage[m · ann@annbook · team qmvrtzpa        ● collected 7m ago  ● relay 7m ago  ● up to date  $1,000/mo
 
 [1mCLAUDE[m  [1mann@acme.dev[m  ● logged in here
   PLAN      max
+  PRICE     $200/mo · the list price of Max 20x
+  USED      $182 (91%) over the last 4 weeks · unused $18
+  NEXT      Fri 25 Sep · monthly
+  PER M     $0.21 a month per M weighted tokens of the last 4 weeks
+  PLANS     Max 5x since 2 Jun → Max 20x since 21 Sep
   READING   18m ago · Wed 17:20 · on ann@annbook
   LAST USE  7m ago · Wed 17:31
 
@@ -26,3 +31,8 @@
 ● ann@annbook     48  230   968  2534    90%
   root@srv1        3   25    76   214    10%
   TOTAL           51  256  1043  2749   100%
+
+[1mCOST[m  2 · by device · last 4 weeks
+  DEVICE       USED  SHARE
+● ann@annbook  $164    90%
+  root@srv1     $18    10%

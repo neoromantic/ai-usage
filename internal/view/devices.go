@@ -1,6 +1,7 @@
 package view
 
 import (
+	"cmp"
 	"math"
 	"slices"
 	"strconv"
@@ -56,11 +57,14 @@ const (
 // are a heat map on a log scale; without color, the largest in each column
 // is bold. The share mode shows each value as a part of its column's total:
 // a subscription's column adds up to 100, and TOTAL is each device's part
-// of the team's burn. A TOTAL estimated from input and output has a ~.
+// of the team's burn. A TOTAL estimated from input and output has a ~. The
+// $ mode shows what each device used of each subscription over the last 4
+// weeks, the most first, with a row of what nobody used, so that each
+// column adds up to the subscription's price a month in TOTAL.
 func (p *page) grid() []chunks {
 	g := p.g
 	m := p.r.Team.Matrix
-	per, share := p.o.Period, p.o.Share
+	per, share, money := p.o.Period, p.o.Share, p.o.Cost && p.r.Cost != nil
 	var cols []gridCol
 	for _, i := range columnOrder(m.Columns, per) {
 		c := &m.Columns[i]
@@ -72,12 +76,20 @@ func (p *page) grid() []chunks {
 	}
 	rows := append([]Row(nil), m.Rows...)
 	sortRows(rows, per)
+	mx := p.moneyMatrix(cols)
+	if money {
+		// The most dollars first, then as the tokens order them.
+		slices.SortStableFunc(rows, func(a, b Row) int { return cmp.Compare(mx.row(b), mx.row(a)) })
+	}
 	value := func(r Row, c gridCol) float64 {
 		if c.idx >= len(r.Cells) {
 			return 0
 		}
 		cell := r.Cells[c.idx]
-		if share {
+		switch {
+		case money:
+			return mx.cell(r.DeviceID, c)
+		case share:
 			if v := per.share(cell.BurnShare); v != nil {
 				return *v
 			}
@@ -104,16 +116,29 @@ func (p *page) grid() []chunks {
 			return g.none
 		}
 		cell := r.Cells[c.idx]
-		if share {
+		switch {
+		case money:
+			return mx.text(p, r.DeviceID, c)
+		case share:
 			return part(cell.BurnShare)
 		}
 		return p.millions(per.Of(cell.Burn))
+	}
+	// colTotal prints a column's TOTAL: its burn, its share, or its price.
+	colTotal := func(c gridCol) string {
+		if money {
+			return mx.price(p, c)
+		}
+		return totalOf(c.c.Burn)
 	}
 
 	var top float64
 	for k := range cols {
 		c := &cols[k]
-		c.w = max(gridCell, width(p.txt(c.c.Name)), width(totalOf(c.c.Burn)))
+		c.w = max(gridCell, width(p.txt(c.c.Name)), width(colTotal(*c)))
+		if money {
+			c.w = max(c.w, width(mx.unused(p, *c)))
+		}
 		for _, r := range rows {
 			c.w = max(c.w, width(text(r, *c)))
 			c.top = max(c.top, value(r, *c))
@@ -121,6 +146,9 @@ func (p *page) grid() []chunks {
 		top = max(top, c.top)
 	}
 	nameW := width("TOTAL")
+	if money {
+		nameW = max(nameW, width("unused"))
+	}
 	var grand Usage
 	estimated := false
 	for _, r := range rows {
@@ -136,10 +164,20 @@ func (p *page) grid() []chunks {
 		}
 		return s
 	}
+	grandText := totalOf(grand)
+	if money {
+		grandText, estimated = usd(p.r.Cost.TotalUSD), false
+	}
 	lead := 2 + nameW
-	totalW := max(gridCell, width(totalOf(grand))+btoi(estimated))
+	totalW := max(gridCell, width(grandText)+btoi(estimated))
+	if money {
+		totalW = max(totalW, width(mx.unusedTotal(p)))
+		for _, r := range rows {
+			totalW = max(totalW, width(mx.rowText(p, r.DeviceID)))
+		}
+	}
 	// A fold of columns is at most all of them.
-	restW := max(gridCell, width(totalOf(grand)))
+	restW := max(gridCell, width(grandText))
 	shown, folded, edge := p.fitColumns(cols, lead, restW, totalW)
 	rest := p.restColumn(cols, folded, rows)
 	out := []chunks{p.gridTitle(len(rows), edge)}
@@ -199,6 +237,18 @@ func (p *page) grid() []chunks {
 		}
 		return p.muted(s)
 	}
+	// restMoney prints REST's dollars, the sum of what f gives each folded
+	// column.
+	restMoney := func(f func(gridCol) float64) chunk {
+		var v float64
+		for _, k := range folded {
+			v += f(cols[k])
+		}
+		if v <= 0 {
+			return p.cell(g.none)
+		}
+		return p.muted(usd(v))
+	}
 	for i, r := range rows {
 		line := p.deviceLead(r, nameW)
 		cur := lead
@@ -210,16 +260,42 @@ func (p *page) grid() []chunks {
 		}
 		if len(folded) > 0 {
 			line = append(line, p.space(restX-cur))
-			line = append(line, p.right(restCell(rest.rows[i], rest.total), restW)...)
+			if money {
+				line = append(line, p.right(restMoney(func(c gridCol) float64 { return value(r, c) }), restW)...)
+			} else {
+				line = append(line, p.right(restCell(rest.rows[i], rest.total), restW)...)
+			}
 		}
 		line = append(line, p.space(2))
-		if share {
+		switch {
+		case money:
+			line = append(line, p.right(p.cell(mx.rowText(p, r.DeviceID)), totalW)...)
+		case share:
 			line = append(line, p.right(p.cell(est(part(r.BurnShare), r.BurnEstimated)), totalW)...)
-		} else {
+		default:
 			line = append(line, p.right(p.cell(est(p.millions(per.Of(r.Burn)), r.BurnEstimated)), totalW)...)
 		}
 		p.pick(len(out), Pick{Device: r.DeviceID})
 		out = append(out, line)
+	}
+
+	if money {
+		// What nobody used of each subscription, under the devices.
+		unused := chunks{p.space(2)}
+		unused = append(unused, p.left(p.muted("unused"), nameW)...)
+		cur = lead
+		for _, k := range shown {
+			c := cols[k]
+			unused = append(unused, p.space(c.x-cur))
+			unused = append(unused, p.right(p.cell(mx.unused(p, c)), c.w)...)
+			cur = c.x + c.w
+		}
+		if len(folded) > 0 {
+			unused = append(unused, p.space(restX-cur))
+			unused = append(unused, p.right(restMoney(func(c gridCol) float64 { return mx.unusedOf(c) }), restW)...)
+		}
+		unused = append(unused, p.space(2))
+		out = append(out, append(unused, p.right(p.cell(mx.unusedTotal(p)), totalW)...))
 	}
 
 	total := p.totalLead(nameW)
@@ -227,15 +303,19 @@ func (p *page) grid() []chunks {
 	for _, k := range shown {
 		c := cols[k]
 		total = append(total, p.space(c.x-cur))
-		total = append(total, p.right(p.cell(totalOf(c.c.Burn)), c.w)...)
+		total = append(total, p.right(p.cell(colTotal(c)), c.w)...)
 		cur = c.x + c.w
 	}
 	if len(folded) > 0 {
 		total = append(total, p.space(restX-cur))
-		total = append(total, p.right(p.cell(totalOf(rest.total)), restW)...)
+		if money {
+			total = append(total, p.right(restMoney(func(c gridCol) float64 { return mx.priceOf(c) }), restW)...)
+		} else {
+			total = append(total, p.right(p.cell(totalOf(rest.total)), restW)...)
+		}
 	}
 	total = append(total, p.space(2))
-	total = append(total, p.right(p.cell(est(totalOf(grand), estimated)), totalW)...)
+	total = append(total, p.right(p.cell(est(grandText, estimated)), totalW)...)
 	return append(out, total)
 }
 
@@ -329,16 +409,22 @@ func (p *page) teamPeriod() string {
 // the period and the days it counts, and the unit, and the pills of its
 // views and modes, ending at edge.
 func (p *page) gridTitle(rows, edge int) chunks {
-	g, share := p.g, p.o.Share
+	g, share, money := p.g, p.o.Share, p.o.Cost && p.r.Cost != nil
 	title := chunks{p.bold("DEVICES " + g.times + " SUBSCRIPTIONS"), p.plain("  ")}
-	unit := "M weighted tokens"
-	if share {
+	unit, period := "M weighted tokens", p.teamPeriod()
+	switch {
+	case money:
+		unit, period = "$ used, unused, and price a month", "last 4 weeks"
+	case share:
 		unit = "% of column total"
 	}
-	title = append(title, p.muted(strconv.Itoa(rows)+g.sep+p.teamPeriod()+g.sep+unit))
+	title = append(title, p.muted(strconv.Itoa(rows)+g.sep+period+g.sep+unit))
 	// The views go before the matrix's modes, and are the first to go
 	// where both do not fit.
-	modes := chunks{p.pill("tokens", !share), p.plain(" "), p.pill("share", share)}
+	modes := chunks{p.pill("tokens", !share && !money), p.plain(" "), p.pill("share", share && !money)}
+	if p.r.Cost != nil {
+		modes = append(modes, p.plain(" "), p.pill("$", money))
+	}
 	if t, ok := p.pillsAt(title, append(append(p.viewPills(), p.plain("  ")), modes...), edge); ok {
 		return t
 	}

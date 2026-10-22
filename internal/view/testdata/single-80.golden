@@ -1,10 +1,11 @@
-ai-usage · sam@sam-air          ● collected 8m  ● no relay  ● v1.4.3 available
+ai-usage · sam@sam-air  ● collected 8m  ● no relay  ● v1.4.3 available  $65/mo
 
 ATTENTION
  OVER   claude sam · 5h         runs out ~Wed 18:27, 12m before reset
  TIGHT  claude sam@example.com  ~95% at reset Sat 12:00 at the last day's pace
  OLD    1 device on v1.4.2      sam@sam-air · latest v1.4.3
  UNDER  codex sam@example.com   leaves ~73% unused at this week's pace
+ IDLE   codex work@example.org  idle 45d, paid and unused
 
 SUBSCRIPTIONS  5 · 1 over · 2 no reading
 
@@ -19,6 +20,19 @@ SUBSCRIPTIONS  5 · 1 over · 2 no reading
 
   GROK
 ● 3f2a9c1e             ┈┈┈┈┈┈┈┈┈┈┈┈     ?                  —        1
+
+COST  $65/mo +1 without a price · used $39 (60%) · next: Sat 3 Oct, $20
+
+  CLAUDE               PLAN       $/MO   USED       NEXT
+● sam@example.com      Pro         $20    $17  85%  ·          App Store
+
+  CODEX
+● sam@example.com      Plus        $20     $6  29%  Sat 3 Oct
+  work@example.org     team          ?      ?   0%  ·          idle 45d
+  sam+old@example.com  free         $0     $0   0%  ·          ended
+
+  GROK
+● 3f2a9c1e             SuperGrok   $25*   $16  64%  Tue 2 Mar
 
 UTILIZATION  fullest % before each reset
 
@@ -59,5 +73,5 @@ PROJECTS  sam@sam-air · by 7d · M weighted tokens · claude since Aug 26
   ~/Документы/черновики  14   96     1  claude                   2d
   ~/work/legacy           ·   50     ·  codex                   45d
 
-━ used  ─ left  ┃╋ even use  ┈ no reading
-~ stale  ? unknown  — no forecast  ● here  · none
+━ used  ─ left  ┃╋ even use  ┈ no reading  ~ stale
+* typed  ? unknown  — no forecast  ● here  · none

@@ -13,7 +13,8 @@ import (
 // attentionOrder is the kinds, most urgent first.
 var attentionOrder = []string{
 	AttentionOut, AttentionOver, AttentionTight, AttentionOutside, AttentionError,
-	AttentionNoReading, AttentionSilent, AttentionDuplicate, AttentionOld, AttentionUnder, AttentionIdle,
+	AttentionNoReading, AttentionSilent, AttentionDuplicate, AttentionOld, AttentionUnder, AttentionCheck, AttentionIdle,
+	AttentionCost,
 }
 
 // attention is what needs attention now, most urgent first: windows that
@@ -23,15 +24,20 @@ var attentionOrder = []string{
 // reading, devices that are silent or were reinstalled, devices on an older
 // release, windows past half that will be left mostly unused, and paid
 // subscriptions no team device uses.
-func attention(t Team, c Collector, now time.Time) []Attention {
+func attention(t Team, c Collector, now time.Time) []Attention { return attentionWith(t, c, nil, now) }
+
+// attentionWith is attention with what the cost adds: the subscriptions
+// nobody can say are still paid, and the news of the last few days.
+func attentionWith(t Team, c Collector, cost *Cost, now time.Time) []Attention {
 	out := append(append([]Attention{}, quotaAttention(t, now)...), deviceAttention(t, c)...)
+	out = append(out, costAttention(cost, now)...)
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if ra, rb := slices.Index(attentionOrder, a.Kind), slices.Index(attentionOrder, b.Kind); ra != rb {
 			return ra < rb
 		}
 		switch a.Kind {
-		case AttentionOut, AttentionOver, AttentionSilent, AttentionIdle:
+		case AttentionOut, AttentionOver, AttentionSilent, AttentionIdle, AttentionCheck, AttentionCost:
 			// A window that would have run out, had the team kept
 			// spending, comes after those that run out.
 			if sa, sb := stopped(&t, a), stopped(&t, b); sa != sb {

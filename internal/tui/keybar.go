@@ -6,6 +6,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/neoromantic/ai-usage/internal/view"
 )
 
 // kind is what a piece of the view's own text is, for its style.
@@ -104,6 +106,17 @@ func (m Model) items() []item {
 		vertical, sideways, enter = "j k", "h l", "enter"
 	}
 	var its []item
+	if pr := m.prompt; pr != nil && !m.help {
+		if pr.question != nil && pr.question.Kind == view.AskStillPaid {
+			its = append(its, item{key: "y", action: "still paid"}, item{key: "n", action: "cancelled"})
+		} else {
+			its = append(its, item{key: enter, action: "answer"})
+		}
+		if pr.question != nil {
+			its = append(its, item{key: "s", action: "skip", drop: 20}, item{key: "S", action: "never ask", drop: 10})
+		}
+		return append(its, item{key: "esc", action: "later"}, item{key: "?", action: "help"}, item{key: "q", action: "quit"})
+	}
 	if m.help {
 		if m.maxHelpTop() > 0 {
 			its = append(its, item{key: vertical, action: "scroll", drop: 1})
@@ -113,11 +126,17 @@ func (m Model) items() []item {
 	switch {
 	case m.choosing():
 		its = append(its, item{key: vertical, action: "pick", drop: 70}, item{key: enter, action: "open"}, item{key: "esc", action: "back", drop: 50})
+		if _, ok := m.editable(); ok {
+			its = append(its, item{key: "e", action: "edit cost", drop: 45})
+		}
 	case m.open != nil:
 		if m.maxTop() > 0 {
 			its = append(its, item{key: vertical, action: "scroll", drop: 70})
 		}
 		its = append(its, item{key: "esc", action: "back", drop: 50})
+		if _, ok := m.editable(); ok {
+			its = append(its, item{key: "e", action: "edit cost", drop: 45})
+		}
 	default:
 		if m.maxTop() > 0 {
 			its = append(its, item{key: vertical, action: "scroll", drop: 70})
@@ -146,10 +165,17 @@ func (m Model) items() []item {
 	its = append(its, item{key: "p", action: "period", pill: m.opts.Period.String(), drop: 60})
 	if m.shareKey() {
 		share := item{key: "%", action: "share", drop: 10}
-		if m.opts.Share {
+		if m.opts.Share && !m.opts.Cost {
 			share.action, share.pill = "", "share"
 		}
 		its = append(its, share)
+	}
+	if m.costKey() {
+		dollars := item{key: "$", action: "cost", drop: 9}
+		if m.opts.Cost {
+			dollars.action, dollars.pill = "", "cost"
+		}
+		its = append(its, dollars)
 	}
 	if m.cfg.Refresh != nil && !m.busy {
 		its = append(its, item{key: "r", action: "refresh", drop: 20})

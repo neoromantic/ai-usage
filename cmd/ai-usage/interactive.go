@@ -66,7 +66,8 @@ func viewConfig(d state.Dir, res *collect.Result, disp *display, offline bool, s
 	c.Stopping = func() {
 		fmt.Fprintln(os.Stderr, "ai-usage: stopping the collection r started")
 	}
-	c.Watch = []string{d.StateFile(), d.TeamCacheFile()}
+	c.Cost = costRunner
+	c.Watch = []string{d.StateFile(), d.TeamCacheFile(), d.Path("cost.json")}
 	c.Now = clock
 	return c
 }

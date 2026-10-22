@@ -42,6 +42,17 @@ var help = []helpSection{
 		{"ai-usage alias [ACCOUNT NAME | ACCOUNT --clear]",
 			"list or set the short name the whole team sees for an account; ACCOUNT is a label, a name, or PROVIDER:LABEL"},
 	}},
+	{"COST", []helpLine{
+		{"ai-usage cost [--json] [DISPLAY]",
+			"what the team's subscriptions cost a month, how much of it the team used over the last 4 weeks, and which device used it"},
+		{"ai-usage cost set ACCOUNT [--price N] [--monthly|--yearly] [--renews DAY]",
+			"type what a subscription costs each charge, a year's with `--yearly`, and its next charge, DAY as YYYY-MM-DD or a day of the month; the whole team sees it"},
+		{"ai-usage cost confirm|cancel ACCOUNT", "say a subscription is still paid, or that it was cancelled"},
+		{"ai-usage cost reset ACCOUNT", "clear the typed price, cadence, and charge day, so the list price counts again"},
+		{"ai-usage cost skip ACCOUNT renewal|price|still_paid", "never ask this device that question of the subscription again"},
+		{"ai-usage cost never-ask [--undo]", "ask no cost questions on this device"},
+		{"ai-usage cost prices", "the price list in use, when it was checked, and where it came from"},
+	}},
 	{"THIS DEVICE", []helpLine{
 		{"ai-usage name show|set NAME|clear", "what the team calls this device, instead of its host name"},
 		{"ai-usage home", "list the harness homes this device reads"},

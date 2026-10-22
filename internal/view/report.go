@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
+	"github.com/neoromantic/ai-usage/internal/cost"
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
@@ -42,6 +43,9 @@ type Report struct {
 	// PROJECTS shows them by 7d: the most burn first.
 	Projects []Project `json:"projects"`
 	Team     Team      `json:"team"`
+	// Cost is what the team's subscriptions cost. A report saved before it
+	// has none.
+	Cost *Cost `json:"cost"`
 
 	// inOut says Fill gave this device's accounts or projects their input
 	// plus output as burn, from a report saved before burn, so PROJECTS
@@ -163,6 +167,8 @@ const (
 	AttentionOld       = "old"        // devices run an older release
 	AttentionUnder     = "under"      // past half of a window, its forecast is under 50%
 	AttentionIdle      = "idle"       // no team device has used a paid subscription for a week
+	AttentionCheck     = "check"      // nobody can say a subscription is still paid
+	AttentionCost      = "cost"       // a new subscription, a change of plan, or of a list price, for 3 days
 )
 
 // Attention is one thing that needs attention. The fields that apply depend
@@ -191,8 +197,9 @@ type Attention struct {
 	// its reset, when an outside window began to rise, when a silent or
 	// duplicate device last reported, when a device's last error happened,
 	// when its collector says, the earliest BehindSince of old devices
-	// that do not update themselves, or when an idle subscription was last
-	// used.
+	// that do not update themselves, when an idle subscription was last
+	// used, when a subscription nobody can say is still paid was last
+	// confirmed, or when a cost event happened.
 	At *time.Time `json:"at,omitempty"`
 	// ResetsAt is when an over, tight, or under window resets.
 	ResetsAt *time.Time `json:"resets_at,omitempty"`
@@ -210,6 +217,8 @@ type Attention struct {
 	// TeamDevice.Limitations; such devices need a reinstall, and have an
 	// entry of their own.
 	Limitations []string `json:"limitations,omitempty"`
+	// Event is the ID of a cost entry's event in Cost.Events.
+	Event string `json:"event,omitempty"`
 }
 
 type Provider struct {
@@ -723,4 +732,10 @@ type Input struct {
 	// upgrades it, "" for root.
 	Homebrew    bool
 	BrewCommand string
+	// Cost is this device's cost store, nil for an empty one, and Prices
+	// the price list in use, which PricesFrom says where it came from; a
+	// list of no version is the built-in one.
+	Cost       *cost.Store
+	Prices     cost.Prices
+	PricesFrom string
 }

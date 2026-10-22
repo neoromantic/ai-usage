@@ -59,8 +59,13 @@ func (p *page) legend() string {
 	// An old reading, a silent device, and a period last read long before
 	// it ended are all stale, and a total from input and output estimated.
 	stale := s["stale"] || s["silent"] || s["partial"]
-	short, long := p.staleItem(stale, s["estimated"])
-	add(long == "" && (stale || s["estimated"]), short)
+	short, long := p.staleItem(stale, s["estimated"] || s["costEstimated"])
+	if !s["estimated"] {
+		// Why totals of tokens are estimated says nothing of a cost.
+		long = ""
+	}
+	add(long == "" && (stale || s["estimated"] || s["costEstimated"]), short)
+	add(s["typed"], "* typed")
 	// A window not read since a refusal is not known either.
 	add(s["unknown"] || s["unread"], "? unknown")
 	add(s["dash"], g.dash+" no forecast")

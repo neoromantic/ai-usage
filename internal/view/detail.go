@@ -33,7 +33,7 @@ func (p *page) pick(i int, k Pick) {
 // or its one device; none for a line about several devices.
 func (p *page) attentionPick(a Attention) (Pick, bool) {
 	if a.Account != "" {
-		return Pick{Provider: a.Provider, Label: a.Account}, p.account(a.Provider, a.Account) != nil
+		return Pick{Provider: a.Provider, Label: a.Account}, p.account(a.Provider, a.Account) != nil || p.r.Cost.Subscription(a.Provider, a.Account) != nil
 	}
 	if a.DeviceID == "" && len(a.Devices) != 1 {
 		return Pick{}, false
@@ -86,6 +86,9 @@ func Detail(r Report, o Options, k Pick) (Page, bool) {
 		sections = p.deviceDetail(d)
 	default:
 		a := p.account(k.Provider, k.Label)
+		if s := p.r.Cost.Subscription(k.Provider, k.Label); a == nil && s != nil {
+			a = costStub(s)
+		}
 		if a == nil {
 			return Page{}, false
 		}
@@ -107,7 +110,11 @@ func (p *page) accountDetail(provider string, a *TeamAccount) [][]chunks {
 	about := func(at Attention) bool {
 		return at.Provider == provider && at.Account == a.Label && at.Kind != AttentionNoReading
 	}
-	return [][]chunks{p.accountFacts(provider, a), p.attentionOf(about), p.windows(a), p.history(a), p.spenders(provider, a), p.accountProjects(provider, a)}
+	var consumers []chunks
+	if s := p.r.Cost.Subscription(provider, a.Label); s != nil {
+		consumers = p.costConsumers(s)
+	}
+	return [][]chunks{p.accountFacts(provider, a), p.attentionOf(about), p.windows(a), p.history(a), p.spenders(provider, a), consumers, p.accountProjects(provider, a)}
 }
 
 // deviceDetail is the sections of a device's detail. Its ATTENTION leaves
@@ -130,7 +137,7 @@ func (p *page) deviceDetail(d *TeamDevice) [][]chunks {
 		}
 		return true
 	}
-	out := [][]chunks{p.deviceFacts(d), p.attentionOf(about), p.deviceAccounts(d)}
+	out := [][]chunks{p.deviceFacts(d), p.attentionOf(about), p.deviceAccounts(d), p.deviceCost(d)}
 	if d.This {
 		out = append(out, p.projects())
 	}
@@ -206,6 +213,9 @@ func (p *page) accountFacts(provider string, a *TeamAccount) []chunks {
 	}
 	if a.Plan != nil {
 		add("PLAN", p.plain(p.txt(*a.Plan)))
+	}
+	if s := p.r.Cost.Subscription(provider, a.Label); s != nil {
+		facts = append(facts, p.costFacts(s)...)
 	}
 	if q := a.Quota; q != nil {
 		s := p.when(q.ObservedAt)

@@ -1,4 +1,4 @@
-ai-usage · ann@annbook · team qmvrtzpa                                 ● collected 7m ago  ● relay 7m ago  ● up to date
+ai-usage · ann@annbook · team qmvrtzpa                      ● collected 7m ago  ● relay 7m ago  ● up to date  $1,000/mo
 
 ATTENTION
  OUT      codex ann@acme.dev   back Fri 17:09, in 1d 23h
@@ -25,6 +25,22 @@ SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
   GROK
 ● a4c2e917       SuperGrok…  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈     ?                             —   1  ann@annbook          11h
 
+COST  $1,000/mo +1 without a price · used ~$787 (79%) over the last 4 weeks · next: Fri 25 Sep, $200
+
+  CLAUDE            PLAN        $/MO    USED       NEXT
+● ann@acme.dev      Max 20x     $200    $182  91%  Fri 25 Sep
+  kim@corp.test     max            ?       ?  64%  ·
+  old@acme.dev      Pro          $20      $0   0%  ·           still paid?
+
+  CODEX
+● ann@acme.dev      Pro 200     $180*   $155  86%  Mon 12 Oct
+  sam@mail.test     Pro 100     $100     $94  94%  ·           typed for plus
+● lee@corp.test     Pro 200     $200     $56  28%  ·
+  ann+old@acme.dev  Plus         $20      $3  15%  ·           ended
+
+  GROK
+● a4c2e917          SuperGrok…  $300   ~$300       ·
+
 UTILIZATION  fullest % before each reset
   only this device's cycles: ci@ci-runner-eu-west-build-pool-node-0042ab runs v0.3…: it should update within 15 minutes
 
@@ -38,7 +54,7 @@ UTILIZATION  fullest % before each reset
   sam@mail.test       4    1  94%    97   91  100  ~88
 ● lee@corp.test       9    ·  28%    22  ~35   18   40   27   31   12   44   19
 
-DEVICES × SUBSCRIPTIONS  15 · 7d UTC · % of column total                  ‹usage›  status    tokens  ‹share›
+DEVICES × SUBSCRIPTIONS  15 · 7d UTC · % of column total              ‹usage›  status    tokens  ‹share›  $
                         CODEX ─────────────────────────────  CLAUDE ──────────  GROK ───  NO QUOTA
                              lee      ann  unknown      sam       ann      kim  a4c2e917    hermes     TOTAL
   root@srv1                   69        6        ·        ·        10        ·         ·        83        34
@@ -72,5 +88,5 @@ PROJECTS  ann@annbook · by 7d · M weighted tokens · claude since Sep 2
   ~/src/acme/landing                                  4    32     1  codex            6d
   + 4 more
 
-━ used  ─ left  ┃╋ even use  ┈ no reading  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
+━ used  ─ left  ┃╋ even use  ┈ no reading  * typed  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
 ~ stale/estimated: ci@ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it should update within 15 minutes
