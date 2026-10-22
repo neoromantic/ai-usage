@@ -129,7 +129,14 @@ func brewUpdate(ctx context.Context, prefix string, stdout, stderr io.Writer) er
 		fmt.Fprintf(stdout, "Homebrew's formula is at %s; GitHub has %s, which reaches Homebrew soon\n", got, latest)
 		return exitCode(1)
 	case got == version:
+		// Someone may have run brew upgrade themselves, so the menu bar app
+		// can still be at an earlier release.
+		res, err := checkHere(ctx, stderr, false)
 		fmt.Fprintf(stdout, "up to date (%s)\n", version)
+		if res.AppDownloaded && err == nil {
+			fmt.Fprintf(stdout, "installed the menu bar app of %s\n", version)
+		}
+		return err
 	}
 	return nil
 }
@@ -193,30 +200,40 @@ func brew(ctx context.Context, prefix string, stderr io.Writer, args ...string) 
 // brings the menu bar app to this release, notes the check, and has launchd
 // start the launch agent, whose binary brew replaced.
 func afterBrew(ctx context.Context, stdout, stderr io.Writer) error {
-	d, err := state.DefaultDir()
-	if err != nil {
-		return err
-	}
-	unlock, err := waitLock(ctx, d, stderr)
-	if err != nil {
-		return err
-	}
-	defer unlock()
-	st, err := d.LoadState()
-	if err != nil {
-		return err
-	}
-	res, err := newUpdater().Check(ctx)
-	noteUpdate(st, clock().UTC(), res, err)
-	repairAgent(ctx, d, st, true)
-	if serr := d.SaveState(st); serr != nil && err == nil && !errors.Is(serr, state.ErrNewer) {
-		err = serr
-	}
+	res, err := checkHere(ctx, stderr, true)
 	fmt.Fprintf(stdout, "installed %s with Homebrew; the next run uses it\n", version)
 	if res.AppDownloaded && err == nil {
 		fmt.Fprintf(stdout, "installed the menu bar app of %s\n", version)
 	}
 	return err
+}
+
+// checkHere checks for a release under the run lock, which brings the menu
+// bar app to this binary's release, and notes the check. repair has launchd
+// start the launch agent, whose binary brew replaced.
+func checkHere(ctx context.Context, stderr io.Writer, repair bool) (selfupdate.Result, error) {
+	d, err := state.DefaultDir()
+	if err != nil {
+		return selfupdate.Result{}, err
+	}
+	unlock, err := waitLock(ctx, d, stderr)
+	if err != nil {
+		return selfupdate.Result{}, err
+	}
+	defer unlock()
+	st, err := d.LoadState()
+	if err != nil {
+		return selfupdate.Result{}, err
+	}
+	res, err := newUpdater().Check(ctx)
+	noteUpdate(st, clock().UTC(), res, err)
+	if repair {
+		repairAgent(ctx, d, st, true)
+	}
+	if serr := d.SaveState(st); serr != nil && err == nil && !errors.Is(serr, state.ErrNewer) {
+		err = serr
+	}
+	return res, err
 }
 
 // lastLine keeps the last line written to it that says something, without
