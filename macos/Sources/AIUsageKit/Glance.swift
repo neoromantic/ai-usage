@@ -396,6 +396,9 @@ public struct AlertLine: Sendable {
         case notRead(provider: String)
         /// The devices in Usage.
         case devices([String])
+        /// A subscription's cost, in Settings, where its questions are
+        /// answered.
+        case cost(provider: String, label: String)
         case none
     }
 
@@ -410,6 +413,9 @@ public struct AlertLine: Sendable {
     }
 
     private static func target(_ a: Attention, _ r: Report) -> Target {
+        if a.kind == .check || a.kind == .cost, let p = a.provider, let l = a.account {
+            return .cost(provider: p, label: l)
+        }
         if let p = a.provider {
             guard let account = r.teamAccount(provider: p, label: a.account ?? ""), account.subscription else { return .none }
             return LimitLine(account) == nil ? .notRead(provider: p) : .limits(provider: p, label: account.label)

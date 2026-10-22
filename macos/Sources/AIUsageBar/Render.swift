@@ -120,11 +120,14 @@ enum Renderer {
                 try write(showcase(store, dark: look == "dark"), appearance, to: png("menubar"))
                 try write(ringStates(store.now, dark: look == "dark"), appearance, to: png("menubar-states"))
                 if !report.solo {
-                    let views: [(String, (TeamOptions) -> Void)] = [
+                    var views: [(String, (TeamOptions) -> Void)] = [
                         ("team-usage", { _ in }),
                         ("team-share", { $0.mode = .share }),
                         ("team-status", { $0.segment = .status }),
                     ]
+                    if report.cost != nil {
+                        views.append(("team-cost", { $0.segment = .cost }))
+                    }
                     for (name, setUp) in views {
                         let options = TeamOptions()
                         setUp(options)

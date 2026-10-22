@@ -758,6 +758,136 @@ equal("sorted by total", matrix.lines(sortedBy: .total, ascending: false).map(\.
 equal("not sorted", matrix.lines(sortedBy: nil, ascending: true).map(\.device), matrix.lines.map(\.device))
 equal("sorted by share", shares.lines(sortedBy: .column(3), ascending: false).map(\.device).prefix(3), ["mira@mira-mbp", "root@build-01", "leo@leo-air"])
 
+// Cost: the reports of the console's own tests, whose cost has every state:
+// active, idle, unconfirmed, ended, a typed price, a stale one, an unknown
+// one, and an estimate. The app words and lays out what they say.
+let costFixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../internal/view/testdata").standardized
+let costTeam = try Report.decode(Data(contentsOf: costFixtures.appendingPathComponent("team.json")))
+let costSolo = try Report.decode(Data(contentsOf: costFixtures.appendingPathComponent("single.json")))
+let tz3 = TimeZone(secondsFromGMT: 3 * 3600)!
+check("a report before the cost has none", team.cost == nil && CostTotal(team) == nil && CostMatrix(team) == nil)
+equal("no cost notices", CostNotice.notices(team, now: team.generatedAt).count, 0)
+equal("no cost keys", CostNotice.keys(team).count, 0)
+let cost = costTeam.cost!
+equal("cost totals", [cost.totalUsd, cost.usedUsd, cost.usedPct, cost.unusedUsd], [1000, 787, 78.7, 213])
+equal("cost subscriptions", cost.subscriptions.map { "\($0.provider) \($0.name) \($0.state) \($0.priceSource)" },
+      ["claude ann active list", "claude kim active unknown", "claude old unconfirmed list", "codex ann active typed", "codex sam active stale",
+       "codex lee active list", "codex ann+old ended list", "grok a4c2e917 active list"])
+equal("cost devices", cost.devices.map { Format.dollars($0.usd) }, ["$610", "$94", "$66", "$5", "$4", "$3", "<$1", "?"])
+equal("cost questions", cost.questions.map(\.kind), ["renewal", "still_paid"])
+equal("cost events", cost.events.map(\.kind), ["ended", "unconfirmed", "plan_changed", "charges_soon", "new", "price_changed"])
+equal("prices", [cost.prices.updated, cost.prices.source], ["2026-09-20", "relay"])
+// Dollars as the console prints them.
+equal("usd", [1000, 609.5, 2.5, 0.6, 0, 1234567].map(Format.usd), ["$1,000", "$610", "$2", "<$1", "$0", "$1,234,567"])
+equal("dollars", [Format.dollars(nil), Format.dollars(0), Format.dollars(300, estimated: true), Format.dollars(18.2)], ["?", "–", "~$300", "$18"])
+equal("charge day", Format.day(time("2026-09-24T21:00:00Z"), timeZone: tz3), "Fri 25 Sep")
+// The popover's total, which ends its header.
+let total = CostTotal(costTeam, timeZone: tz3)
+equal("cost total", total?.text, "$1,000/mo")
+equal("cost total help", total?.help,
+      "The team's subscriptions cost $1,000 a month, +1 without a price · used ~$787 (79%) over the last 4 weeks · next charge Fri 25 Sep, $200")
+equal("solo cost total", CostTotal(costSolo)?.text, "$65/mo")
+check("no total without a price", try CostTotal(edited("team.json") { json in
+    var o = json as! [String: Any]
+    o["cost"] = ["currency": "USD", "total_usd": 0, "without_price": 1, "used_usd": NSNull(), "used_pct": NSNull(), "unused_usd": NSNull(),
+                 "used_estimated": false, "next_charge": NSNull(), "prices": ["updated": "2026-09-20", "source": "built in"],
+                 "subscriptions": [], "devices": [], "questions": [], "events": []]
+    return o
+}) == nil)
+// A subscription's cost in Limits' details: price, Used, next charge, and
+// its state when not active.
+let costLine = { (r: Report, p: String, l: String) in r.costSubscription(provider: p, label: l)?.line(now: r.generatedAt, timeZone: tz3) }
+equal("cost line", costLine(costTeam, "claude", "ann@acme.dev"), "$200/mo · used 91% · next charge Fri 25 Sep")
+equal("typed cost line", costLine(costTeam, "codex", "ann@acme.dev"), "$180/mo typed · used 86% · next charge Mon 12 Oct")
+equal("unknown price", costLine(costTeam, "claude", "kim@corp.test"), "no price · used 64%")
+equal("still paid?", costLine(costTeam, "claude", "old@acme.dev"), "$20/mo · used 0% · still paid?")
+equal("estimated", costLine(costTeam, "grok", "a4c2e917-6b3d-4f81-9c2a-5e7d1b8f0a36"), "$300/mo · used ~$300")
+equal("ended", costLine(costTeam, "codex", "ann+old@acme.dev"), "$20/mo · used 15% · ended")
+equal("idle", costLine(costSolo, "codex", "work@example.org"), "no price · used 0% · idle 45d")
+equal("price words", ["claude/kim@corp.test", "codex/ann@acme.dev", "codex/sam@mail.test", "claude/ann@acme.dev"].map { k in
+    let (p, l) = (String(k.split(separator: "/")[0]), String(k.split(separator: "/")[1]))
+    return costTeam.costSubscription(provider: p, label: l)!.priceWords
+}, ["no price", "typed", "list price; typed for Plus", "list price"])
+let billed = costSolo.costSubscription(provider: "claude", label: "sam@example.com")!
+check("billed through the App Store", billed.help(now: costSolo.generatedAt).contains("Billed through App Store; the price may differ"))
+check("a price a million", costTeam.costSubscription(provider: "claude", label: "ann@acme.dev")!.help(now: costTeam.generatedAt)
+    .contains("$0.21 a month for a million of the team's weighted tokens on it"))
+// The Team window's Cost: every subscription that has not ended, under its
+// provider, each device's dollars, what nobody used, and the prices.
+let money = CostMatrix(costTeam)!
+equal("cost groups", money.groups.map { "\($0.title) \($0.columns)" }, ["Claude 0..<3", "Codex 3..<6", "Grok 6..<7"])
+equal("cost columns", money.columns.map(\.title), ["ann", "kim", "old", "ann", "sam", "lee", "a4c2e917"])
+equal("cost rows", money.lines.map(\.device), costTeam.team.matrix.rows.map(\.device))
+let annbook = money.lines.first { $0.device == "ann@annbook" }!
+equal("cost row", annbook.cells.map(\.text), ["$164", "–", "–", "$146", "–", "–", "~$300"])
+equal("cost row total", annbook.total.text, "~$610")
+equal("cost unknown cell", money.lines.first { $0.device == "kim@Mac.localdomain" }?.cells[1].text, "?")
+equal("cost cell help", annbook.cells[0].help, "ann@annbook · Claude ann: $164 of $200/mo · 90% of its tokens")
+equal("unused", money.unused.map(\.text) + [money.unusedTotal.text], ["$18", "?", "$20", "$25", "$6", "$144", "–", "~$213"])
+equal("prices row", money.totals.map(\.text) + [money.total.text], ["$200", "?", "$20", "$180", "$100", "$200", "$300", "$1,000 +?"])
+equal("cost heat", annbook.cells.map(\.heat), [5, 0, 0, 5, 0, 0, 5])
+equal("cost sorted", money.lines(sortedBy: .total, ascending: false).map(\.device).prefix(3), ["ann@annbook", "sam@MacBook-Pro-Kim", "root@srv1"])
+equal("cost header", TeamHeader(costTeam, span: "Last 4 Weeks", unit: money.unit).text,
+      "15 devices · 1 error · 1 not reporting · Last 4 Weeks · $ used, unused, and price a month")
+// The answers the app runs: ai-usage cost, which checks them.
+equal("confirm", CostCommand.confirm("claude:old@acme.dev"), ["cost", "confirm", "claude:old@acme.dev"])
+equal("skip", CostCommand.skip("claude:old@acme.dev", "still_paid"), ["cost", "skip", "claude:old@acme.dev", "still_paid"])
+equal("typed price", CostCommand.answer(kind: "price", target: "claude:kim@corp.test", text: "$20"), ["cost", "set", "claude:kim@corp.test", "--price", "20"])
+equal("typed yearly price", CostCommand.answer(kind: "price", target: "c:k", text: " 200 yearly"), ["cost", "set", "c:k", "--price", "200", "--yearly"])
+check("not a price", CostCommand.answer(kind: "price", target: "c:k", text: "soon") == nil)
+equal("typed day", CostCommand.answer(kind: "renewal", target: "c:k", text: "2026-10-04, yearly"),
+      ["cost", "set", "c:k", "--yearly", "--renews", "2026-10-04"])
+equal("typed day of the month", CostCommand.answer(kind: "renewal", target: "c:k", text: "4"), ["cost", "set", "c:k", "--renews", "4"])
+check("nothing typed", CostCommand.answer(kind: "renewal", target: "c:k", text: " ") == nil)
+check("no answer to a still paid question", CostCommand.answer(kind: "still_paid", target: "c:k", text: "yes") == nil)
+// Notifications: each event of the last 3 days and each question, of this
+// Mac's subscriptions or the team's, in the report's words.
+let costNow = costTeam.generatedAt
+let macCost = CostNotice.notices(costTeam, now: costNow)
+equal("cost notices", macCost.map { "\($0.kind) \($0.id)" },
+      ["change plan_changed-3c4d5e6f7a8b", "chargesSoon charges_soon-4d5e6f7a8b9c", "change new-5e6f7a8b9c0d", "renewal renewal-1a2b3c4d5e6f"])
+equal("cost notice words", [macCost[0].title, macCost[0].body],
+      ["Claude ann · changed plan", "Claude ann@acme.dev changed plan: Max 5x to Max 20x, +$100/mo"])
+equal("question notice", [macCost[3].title, macCost[3].target, macCost[3].suggestion, macCost[3].questionKind],
+      ["Grok a4c2e917 · when does it charge next?", "grok:a4c2e917-6b3d-4f81-9c2a-5e7d1b8f0a36", "2026-10-04", "renewal"])
+let teamCost = CostNotice.notices(costTeam, NoticeSettings(scope: .team), now: costNow)
+equal("the team's cost notices", teamCost.map(\.kind.rawValue), ["change", "chargesSoon", "change", "change", "renewal", "stillPaid"])
+equal("still paid notice", teamCost.last.map { [$0.title, $0.questionKind ?? "-"] }, ["Claude old · still paid?", "still_paid"])
+equal("only questions", CostNotice.notices(costTeam, NoticeSettings(costChanges: false, chargesSoon: false), now: costNow).map(\.kind.rawValue), ["renewal"])
+equal("no questions", CostNotice.notices(costTeam, NoticeSettings(costQuestions: false), now: costNow).count, 3)
+check("cost off", NoticeSettings(costChanges: false, chargesSoon: false, costQuestions: false).costOff && !NoticeSettings().costOff)
+equal("old news", CostNotice.notices(costTeam, now: costNow.addingTimeInterval(4 * 86400)).map(\.kind.rawValue), ["renewal"])
+// Each is said once, in the ledger windows use; one asked for later says
+// nothing old, and one the report no longer has is forgotten.
+let costKeys = CostNotice.keys(costTeam)
+equal("cost keys", costKeys.count, 8)
+var costLedger = NoticeLedger()
+equal("cost said", costLedger.record(macCost, among: costKeys, now: costNow).count, 4)
+equal("cost said once", costLedger.record(macCost, among: costKeys, now: costNow + 900).count, 0)
+var costRestarted = try JSONDecoder().decode(NoticeLedger.self, from: JSONEncoder().encode(costLedger))
+equal("cost said once over a restart", costRestarted.record(teamCost, among: costKeys, now: costNow + 1800).count, 0)
+equal("cost forgotten", costRestarted.record([], among: [], now: costNow + 2700).count, 0)
+check("cost ledger empty", costRestarted.costs.isEmpty)
+equal("said again once back", costRestarted.record(macCost, among: costKeys, now: costNow + 3600).count, 4)
+let olderLedger = try JSONDecoder().decode(NoticeLedger.self, from: Data(#"{"said":{"claude/ann@acme.dev/5h":{"kind":"out"}}}"#.utf8))
+check("a ledger before the cost", olderLedger.said.count == 1 && olderLedger.costs.isEmpty)
+// ATTENTION's cost kinds: what nobody can say is still paid, and a cost
+// event; a click opens the cost in Settings.
+let costAlerts = try edited("team.json") { json in
+    var o = json as! [String: Any]
+    o["attention"] = (o["attention"] as! [Any]) + [
+        ["kind": "check", "provider": "claude", "account": "mira@studio.dev", "name": "mira", "subject": "claude mira",
+         "text": "still paid? last confirmed 12 Aug: ai-usage cost confirm or cancel", "at": "2026-08-12T09:00:00Z"],
+        ["kind": "cost", "provider": "codex", "account": "leo@studio.dev", "name": "leo", "subject": "codex leo",
+         "text": "changed plan: Plus to Pro 200, +$180/mo", "at": "2026-09-23T09:00:00Z", "event": "plan_changed-0a1b2c3d4e5f"],
+    ]
+    return o
+}
+equal("cost kinds", costAlerts.attention.suffix(2).map(\.kind), [.check, .cost])
+equal("cost event", costAlerts.attention.last?.event, "plan_changed-0a1b2c3d4e5f")
+equal("cost alert targets", AlertLine.lines(costAlerts).suffix(2).map(\.target),
+      [.cost(provider: "claude", label: "mira@studio.dev"), .cost(provider: "codex", label: "leo@studio.dev")])
+
 // The status: each device as the report has it, a line each in the
 // matrix's order.
 let status = DeviceStatusTable(team)

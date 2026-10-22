@@ -13,6 +13,9 @@ public struct Report: Decodable, Sendable {
     public let providers: [Provider]
     public let projects: [Project]
     public let team: Team
+    /// What the team's subscriptions cost; nil from an ai-usage before
+    /// v0.10.0.
+    public let cost: Cost?
 
     /// Decodes a report, or says which schema version it has when that is
     /// not the one this app reads.
@@ -202,11 +205,16 @@ public struct Attention: Decodable, Sendable {
     /// The kinds, most urgent first, as the report orders them.
     public enum Kind: Hashable, Decodable, Sendable {
         case out, over, tight, outside, error, noReading, silent, duplicate, old, under, idle
+        /// Nobody can say a subscription is still paid, and a cost event of
+        /// the last 3 days: a new subscription, a plan or list price that
+        /// changed.
+        case check, cost
         /// A kind this app does not know, by its name: a later ai-usage
         /// can add one within schema version 4.
         case other(String)
 
-        private static let known: [Kind] = [.out, .over, .tight, .outside, .error, .noReading, .silent, .duplicate, .old, .under, .idle]
+        private static let known: [Kind] = [.out, .over, .tight, .outside, .error, .noReading, .silent, .duplicate, .old, .under, .idle,
+                                            .check, .cost]
 
         public init(rawValue: String) {
             self = Self.known.first { $0.rawValue == rawValue } ?? .other(rawValue)
@@ -230,6 +238,8 @@ public struct Attention: Decodable, Sendable {
             case .old: return "old"
             case .under: return "under"
             case .idle: return "idle"
+            case .check: return "check"
+            case .cost: return "cost"
             case .other(let name): return name
             }
         }
@@ -257,6 +267,8 @@ public struct Attention: Decodable, Sendable {
     /// What the releases of the devices of an old entry cannot do, such as
     /// `no_claude_quota`: they need a reinstall.
     @Absent public var limitations: [String]
+    /// A cost entry's event, by its id in the cost's events.
+    @Absent public var event: String?
 }
 
 public struct Provider: Decodable, Sendable {

@@ -6,7 +6,7 @@ import SwiftUI
 @MainActor
 final class TeamOptions: ObservableObject {
     enum Segment: String, CaseIterable, Identifiable {
-        case usage, status
+        case usage, status, cost
 
         var id: Self { self }
         var title: String { rawValue.capitalized }
@@ -18,18 +18,23 @@ final class TeamOptions: ObservableObject {
     /// How each table is sorted; none keeps the report's order.
     @Published var usageSort: TeamSort?
     @Published var statusSort: TeamSort?
+    @Published var costSort: TeamSort?
 
     /// The console's keys: 1, 7, 3, and 9 pick the period, % switches the
-    /// matrix between tokens and shares, and s between usage and status.
-    /// Says whether it took the key.
+    /// matrix between tokens and shares, and out of dollars to shares, $
+    /// to dollars and back, and s between usage and status. Says whether it
+    /// took the key.
     func press(_ key: String) -> Bool {
         switch key {
         case "1": period = .today
         case "7": period = .week
         case "3": period = .month
         case "9": period = .quarter
+        case "%" where segment == .cost:
+            (segment, mode) = (.usage, .share)
         case "%" where segment == .usage: mode = mode == .tokens ? .share : .tokens
-        case "s": segment = segment == .usage ? .status : .usage
+        case "$": segment = segment == .cost ? .usage : .cost
+        case "s": segment = segment == .status ? .usage : .status
         default: return false
         }
         return true
@@ -46,7 +51,11 @@ enum TeamWindow {
     static let options = TeamOptions()
     private static let frameName = "TeamWindow"
 
-    static func show() {
+    /// Opens the window, on a segment when one is named.
+    static func show(_ segment: TeamOptions.Segment? = nil) {
+        if let segment {
+            options.segment = segment
+        }
         if window == nil {
             let host = NSHostingController(rootView: TeamView().environmentObject(Store.shared).environmentObject(options))
             // The window is the size the person makes it.
@@ -91,16 +100,29 @@ struct TeamView: View {
             controls
             if let r = store.report, !r.solo {
                 let matrix = TeamMatrix(r, period: options.period, mode: options.mode)
-                let unit = options.segment == .usage ? matrix.unit : "M " + r.tokenLabel
-                HeaderLine(header: TeamHeader(r, period: options.period, unit: unit))
+                let money = CostMatrix(r)
+                switch options.segment {
+                case .usage:
+                    HeaderLine(header: TeamHeader(r, period: options.period, unit: matrix.unit), total: nil)
+                case .status:
+                    HeaderLine(header: TeamHeader(r, period: options.period, unit: "M " + r.tokenLabel), total: nil)
+                case .cost:
+                    HeaderLine(header: TeamHeader(r, span: "Last 4 Weeks", unit: money?.unit ?? "$"), total: CostTotal(r))
+                }
                 Divider()
                 switch options.segment {
                 case .usage:
                     MatrixTable(report: r, matrix: matrix, sort: $options.usageSort)
                 case .status:
                     StatusTable(report: r, period: options.period, now: store.now, sort: $options.statusSort)
+                case .cost:
+                    if let money {
+                        CostTable(report: r, matrix: money, sort: $options.costSort)
+                    } else {
+                        Placeholder(title: "No cost in this report", text: "ai-usage v0.10.0 and later report what the subscriptions cost.")
+                    }
                 }
-                if r.team.estimated {
+                if r.team.estimated && options.segment != .cost {
                     let reason = r.team.estimatedReason ?? "Some devices' weighted tokens are estimated from their input and output"
                     Divider()
                     Text("~ " + reason)
@@ -115,13 +137,8 @@ struct TeamView: View {
                 }
             } else {
                 Divider()
-                VStack(spacing: 6) {
-                    Text(store.report == nil ? "No report yet" : "This Mac is the team's only device")
-                        .font(.title3)
-                    Text(store.report == nil ? "The team shows here once ai-usage has collected." : "Usage in the menu bar shows its subscriptions.")
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Placeholder(title: store.report == nil ? "No report yet" : "This Mac is the team's only device",
+                            text: store.report == nil ? "The team shows here once ai-usage has collected." : "Usage in the menu bar shows its subscriptions.")
             }
         }
         .frame(minWidth: 640, minHeight: 300)
@@ -133,13 +150,18 @@ struct TeamView: View {
                 ForEach(TeamOptions.Segment.allCases) { Text($0.title).tag($0) }
             }
             .fixedSize()
-            .help("Usage or Status (S)")
+            .help("Usage, Status (S), or Cost ($)")
             Spacer(minLength: 12)
+            // The cost is of the last 4 weeks, in dollars.
+            let cost = options.segment == .cost
             Picker("Period", selection: $options.period) {
                 ForEach(Period.allCases) { Text($0.title).tag($0) }
             }
             .fixedSize()
             .help("The period; the header says which days it counts (1, 7, 3, 9)")
+            .opacity(cost ? 0 : 1)
+            .disabled(cost)
+            .accessibilityHidden(cost)
             let usage = options.segment == .usage
             Picker("Show", selection: $options.mode) {
                 ForEach(TeamMatrix.Mode.allCases) { Text($0.title).tag($0) }
@@ -159,9 +181,11 @@ struct TeamView: View {
 }
 
 /// "12 devices · 2 errors · 1 not reporting · 7 Days UTC · M weighted
-/// tokens", the errors and the silence in their colors.
+/// tokens", the errors and the silence in their colors, and in Cost the
+/// team's total a month at its end.
 private struct HeaderLine: View {
     let header: TeamHeader
+    let total: CostTotal?
 
     var body: some View {
         let dot = Text(" · ")
@@ -172,14 +196,39 @@ private struct HeaderLine: View {
         if let s = header.silentText {
             line = line + dot + Text(s).foregroundColor(Palette.text("tight"))
         }
-        return (line + dot + Text(header.period) + dot + Text(header.unit))
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
-            .accessibilityLabel(header.text)
+        return HStack(spacing: 12) {
+            (line + dot + Text(header.period) + dot + Text(header.unit))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel(header.text)
+            if let total {
+                Text(total.text)
+                    .fontWeight(.semibold)
+                    .monospacedDigit()
+                    .help(total.help)
+                    .accessibilityLabel(total.help)
+            }
+        }
+        .font(.callout)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+}
+
+/// What a segment shows instead of a table, centered.
+private struct Placeholder: View {
+    let title: String
+    let text: String
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text(title)
+                .font(.title3)
+            Text(text)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -239,6 +288,62 @@ private struct MatrixTable: View {
     }
 }
 
+// MARK: - Cost
+
+/// DEVICES × SUBSCRIPTIONS in dollars: what each device used of each
+/// subscription that has not ended over the last 4 weeks, TOTAL across
+/// them, and under the devices what nobody used and each one's price, as
+/// the console's `$` mode has them.
+private struct CostTable: View {
+    let report: Report
+    let matrix: CostMatrix
+    @Binding var sort: TeamSort?
+
+    var body: some View {
+        let lines = matrix.lines(sortedBy: key, ascending: sort?.ascending ?? true)
+        TeamTable(columns: columns, rows: lines.count + 2, cell: { cell($0, $1, lines) }, sort: $sort, name: "Devices and what they cost")
+    }
+
+    private var columns: [TeamColumn] {
+        let subscriptions = matrix.columns.enumerated().map { i, c in
+            TeamColumn(id: "c:" + c.id, group: matrix.groups.first { $0.columns.contains(i) }?.title, title: c.title, spoken: c.name,
+                       help: c.help, width: 72)
+        }
+        return [TeamColumn(id: "device", title: "Device", width: 150, minWidth: 90, trailing: false, sortsAscending: true)]
+            + subscriptions
+            + [TeamColumn(id: "total", title: "Total", help: "What the device used of every subscription over the last 4 weeks", width: 80)]
+    }
+
+    private var key: TeamMatrix.SortKey? {
+        guard let s = sort else { return nil }
+        switch s.column {
+        case "device": return .device
+        case "total": return .total
+        default: return matrix.columns.firstIndex { "c:" + $0.id == s.column }.map { .column($0) }
+        }
+    }
+
+    /// The devices' rows, then unused, then TOTAL, the prices.
+    private func cell(_ row: Int, _ id: String, _ lines: [TeamMatrix.Line]) -> AnyView {
+        let unused = row == lines.count, total = row > lines.count
+        if id == "device" {
+            if total { return AnyView(TotalLabel(rule: false)) }
+            if unused { return AnyView(TotalLabel(title: "Unused", rule: true)) }
+            let l = lines[row]
+            return AnyView(DeviceCell(name: l.device, device: report.team.devices.first { $0.device == l.deviceId }))
+        }
+        let c: TeamMatrix.Cell
+        if id == "total" {
+            c = total ? matrix.total : unused ? matrix.unusedTotal : lines[row].total
+        } else if let i = matrix.columns.firstIndex(where: { "c:" + $0.id == id }) {
+            c = total ? matrix.totals[i] : unused ? matrix.unused[i] : lines[row].cells[i]
+        } else {
+            return AnyView(EmptyView())
+        }
+        return AnyView(HeatCell(cell: c, strong: total || id == "total", rule: unused))
+    }
+}
+
 /// A number of the matrix on its step of the heat map, the top step's in
 /// bold, as the console's.
 private struct HeatCell: View {
@@ -288,15 +393,19 @@ private struct DeviceCell: View {
     }
 }
 
-/// TOTAL's name, under the rule over its line.
+/// TOTAL's name, under the rule over its line, or another line's after
+/// the devices, as Cost's Unused.
 private struct TotalLabel: View {
+    var title = "Total"
+    var rule = true
+
     var body: some View {
-        Text("Total")
-            .fontWeight(.semibold)
+        Text(title)
+            .fontWeight(title == "Total" ? .semibold : .regular)
             .foregroundStyle(.secondary)
             .padding(.leading, 8 + Metrics.slot + 2)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .overlay(alignment: .top) { Divider() }
+            .overlay(alignment: .top) { if rule { Divider() } }
     }
 }
 

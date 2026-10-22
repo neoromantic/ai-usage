@@ -321,7 +321,7 @@ private struct LimitRow: View {
     /// each window, where the one that runs out is headed and at what pace,
     /// what fills it from outside the team, how old the reading is and who
     /// read it when that says something, who spent the window so far, when
-    /// it was last used, and why it is idle or not read. A caveat has its
+    /// it was last used, what it costs, and why it is idle or not read. A caveat has its
     /// line whatever the line under the row says.
     private var details: some View {
         let a = account
@@ -338,6 +338,9 @@ private struct LimitRow: View {
                 DetailLine("This window", forms: spent.forms, help: spent.help)
             }
             DetailLine("Last used", more.lastUsed)
+            if let c = report.costSubscription(provider: provider, label: a.label) {
+                DetailLine("Cost", c.line(now: now), help: c.help(now: now))
+            }
             DetailLine("Idle", idle)
             DetailLine("Not read", a.noReading)
             ForEach(Array(a.linkedUsage.enumerated()), id: \.offset) { _, l in

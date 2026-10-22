@@ -297,11 +297,17 @@ public struct TeamHeader: Equatable, Sendable {
     public let unit: String
 
     public init(_ r: Report, period: Period, unit: String) {
+        self.init(r, span: period == .today && r.team.todayLocal ? period.title : period.title + " UTC", unit: unit)
+    }
+
+    /// The header of a span that is no period of the report's, such as the
+    /// cost's last 4 weeks.
+    public init(_ r: Report, span: String, unit: String) {
         let ds = r.team.devices
         devices = ds.count
         silent = ds.filter(\.silent).count
         errors = ds.filter { !$0.silent && $0.error != nil }.count
-        self.period = period == .today && r.team.todayLocal ? period.title : period.title + " UTC"
+        period = span
         self.unit = unit
     }
 

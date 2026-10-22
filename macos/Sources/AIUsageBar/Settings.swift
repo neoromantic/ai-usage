@@ -36,13 +36,20 @@ enum AppWindows {
 enum SettingsWindow {
     private static var window: NSWindow?
 
+    /// The panes, in the order of `panes`.
+    enum Pane: Int {
+        case general, accounts, team, cost
+    }
+
     static let panes: [(title: String, symbol: String, view: AnyView)] = [
         ("General", "gearshape", AnyView(GeneralSettings())),
         ("Accounts", "person.crop.circle", AnyView(AccountSettings())),
         ("Team", "person.2", AnyView(TeamSettings())),
+        ("Cost", "dollarsign.circle", AnyView(CostSettings())),
     ]
 
-    static func show() {
+    /// Opens the window, on a pane when one is named.
+    static func show(pane: Pane? = nil) {
         if window == nil {
             let tabs = NSTabViewController()
             tabs.tabStyle = .toolbar
@@ -64,6 +71,9 @@ enum SettingsWindow {
             w.center()
             AppWindows.register(w)
             window = w
+        }
+        if let pane, let tabs = window?.contentViewController as? NSTabViewController {
+            tabs.selectedTabViewItemIndex = pane.rawValue
         }
         window.map(AppWindows.show)
     }
@@ -605,6 +615,300 @@ private struct JoinSheet: View {
                 self.error = error.localizedDescription
             }
             busy = false
+        }
+    }
+}
+
+// MARK: - Cost
+
+/// Each subscription's cost as the report has it, under the questions this
+/// Mac asks, and which notifications the cost gets. Every answer and edit
+/// runs `ai-usage cost`, and the next report shows it: the app keeps and
+/// works out nothing of its own.
+struct CostSettings: View {
+    @EnvironmentObject private var store: Store
+    @AppStorage(NoticeSettings.costChangesKey) private var costChanges = true
+    @AppStorage(NoticeSettings.chargesSoonKey) private var chargesSoon = true
+    @AppStorage(NoticeSettings.costQuestionsKey) private var costQuestions = true
+    @ObservedObject private var notifier = Notifier.shared
+
+    var body: some View {
+        let cost = store.report?.cost
+        // Each provider's subscriptions, in the report's order.
+        let groups = (cost?.subscriptions ?? []).reduce(into: [(provider: String, subs: [CostSubscription])]()) { g, s in
+            if g.last?.provider == s.provider {
+                g[g.count - 1].subs.append(s)
+            } else {
+                g.append((s.provider, [s]))
+            }
+        }
+        Form {
+            if let cost {
+                if !cost.questions.isEmpty {
+                    Section {
+                        ForEach(cost.questions, id: \.id) { q in
+                            QuestionRow(question: q)
+                        }
+                    } header: {
+                        Text("Questions")
+                    } footer: {
+                        Footnote("Answers are shared with the team. Skip asks that question no more on this Mac.")
+                    }
+                }
+                ForEach(Array(groups.enumerated()), id: \.element.provider) { i, g in
+                    Section {
+                        ForEach(g.subs, id: \.account) { s in
+                            CostRow(subscription: s)
+                        }
+                    } header: {
+                        Text(Format.provider(g.provider))
+                    } footer: {
+                        if i == groups.count - 1 {
+                            Footnote(summary(cost))
+                        }
+                    }
+                }
+                if groups.isEmpty {
+                    Text("No paid subscriptions yet.").foregroundStyle(.secondary)
+                }
+            } else {
+                Text(store.report == nil ? "No report yet." : "This ai-usage reports no cost; v0.10.0 and later do.")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle("When a Subscription Starts, Changes, or Ends", isOn: $costChanges)
+                Toggle("3 Days Before a Charge", isOn: $chargesSoon)
+                Toggle("Questions About the Cost", isOn: $costQuestions)
+            } header: {
+                Text("Notifications")
+            } footer: {
+                Footnote("Of this Mac's subscriptions or the team's, as General sets. A question's notification takes its answer.")
+            }
+            .onChange(of: costChanges) { _, on in
+                if on { notifier.enable() }
+            }
+            .onChange(of: chargesSoon) { _, on in
+                if on { notifier.enable() }
+            }
+            .onChange(of: costQuestions) { _, on in
+                if on { notifier.enable() }
+            }
+        }
+        .pane(height: 600)
+    }
+
+    /// "$1,000/mo in all, +1 without a price. Prices of 20 Sep, from the
+    /// relay."
+    private func summary(_ c: Cost) -> String {
+        let total = Format.usd(c.totalUsd) + "/mo in all" + (c.withoutPrice > 0 ? ", +\(c.withoutPrice) without a price" : "")
+        let from = c.prices.source == "relay" ? "from the relay" : "built in"
+        return "\(total). The price list of \(c.prices.updated), \(from); a typed price counts instead, for the whole team."
+    }
+}
+
+/// A subscription's cost in a line, and under it, open, what a person can
+/// say of it: its price, how it is billed, its next charge, and that it is
+/// still paid or cancelled.
+private struct CostRow: View {
+    @EnvironmentObject private var store: Store
+    let subscription: CostSubscription
+    @ViewState private var open = false
+    @ViewState private var result: (text: String, failed: Bool)?
+
+    var body: some View {
+        let s = subscription
+        DisclosureGroup(isExpanded: $open) {
+            LabeledContent(s.cadence == "yearly" ? "Price a Year" : "Price a Month") {
+                CommitField(title: "Price", prompt: s.priceUsd.map { Format.usd($0) + "/mo, " + s.priceWords } ?? "Dollars",
+                            value: typed, width: 150) { v in
+                    guard !v.isEmpty else { throw CostEditError.empty("price") }
+                    try await run(CostCommand.set(s.target, price: v.hasPrefix("$") ? String(v.dropFirst()) : v))
+                }
+            }
+            LabeledContent("Billed") {
+                Picker("Billed", selection: Binding(get: { s.cadence }, set: { c in
+                    Task { try? await run(CostCommand.set(s.target, cadence: c)) }
+                })) {
+                    Text("Monthly").tag("monthly")
+                    Text("Yearly").tag("yearly")
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+            }
+            LabeledContent("Next Charge") {
+                CommitField(title: "Next charge", prompt: "YYYY-MM-DD or day",
+                            value: s.renewsAt.map(Self.isoDay) ?? "", width: 150) { v in
+                    guard !v.isEmpty else { throw CostEditError.empty("next charge") }
+                    try await run(CostCommand.set(s.target, renews: v))
+                }
+            }
+            HStack(spacing: 8) {
+                Button("Still Paying") { act(CostCommand.confirm(s.target)) }
+                    .help("Runs ai-usage cost confirm: nobody is asked again for 35 days")
+                Button("Cancelled") { act(CostCommand.cancel(s.target)) }
+                    .help("Runs ai-usage cost cancel: it counts in no total, and shows as ended for 30 days")
+                Spacer()
+                Button("Reset") { act(CostCommand.reset(s.target)) }
+                    .help("Runs ai-usage cost reset: clears the typed price, cadence, and charge day")
+            }
+            if let r = result {
+                Label(r.text, systemImage: r.failed ? "xmark.circle.fill" : "checkmark")
+                    .font(.subheadline)
+                    .foregroundStyle(r.failed ? .red : .secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(s.alias ?? s.account)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(details)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                Spacer(minLength: 8)
+                Text(s.priceText + (s.priceSource == "typed" ? "*" : ""))
+                    .monospacedDigit()
+                    .foregroundStyle(s.ended ? .secondary : .primary)
+            }
+            .help(s.account + "\n" + s.help(now: store.now))
+        }
+        .opacity(s.ended ? 0.6 : 1)
+    }
+
+    /// "Max 20x · via App Store · used 91% · next Fri 25 Sep · idle 23d".
+    private var details: String {
+        let s = subscription
+        let next = s.renewsAt.map { "next " + Format.day($0) }
+        return ([s.planTitle, s.priceSource == "typed" ? "typed" : nil, s.billedThrough.map { "via " + $0 }, s.usedText, next,
+                 s.stateText(now: store.now)] as [String?])
+            .compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// The price a person typed, for its field: a month's, as a yearly
+    /// one's year is not in the report.
+    private var typed: String {
+        let s = subscription
+        guard s.priceSource == "typed", s.cadence == "monthly", let p = s.priceUsd else { return "" }
+        return p == p.rounded() ? String(Int(p)) : String(format: "%.2f", p)
+    }
+
+    private static func isoDay(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: d)
+    }
+
+    private func run(_ args: [String]?) async throws {
+        guard let args else { return }
+        let said = try await store.command(args)
+        result = (said, false)
+    }
+
+    private func act(_ args: [String]) {
+        Task {
+            do {
+                try await run(args)
+            } catch {
+                result = (error.localizedDescription, true)
+            }
+        }
+    }
+}
+
+/// Why an edit of the cost ran nothing.
+private enum CostEditError: LocalizedError {
+    case empty(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .empty(let what): return "Type a \(what); Reset clears what was typed"
+        }
+    }
+}
+
+/// A question this Mac asks, in the report's words, with its answers: still
+/// paying or cancelled, or a day or a price typed, and Skip.
+private struct QuestionRow: View {
+    @EnvironmentObject private var store: Store
+    let question: Cost.Question
+    @ViewState private var text = ""
+    @ViewState private var cadence = "monthly"
+    @ViewState private var error: String?
+
+    var body: some View {
+        let q = question
+        let target = q.provider + ":" + q.account
+        VStack(alignment: .leading, spacing: 6) {
+            Text(q.text)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                switch q.kind {
+                case "still_paid":
+                    Button("Still Paying") { answer(CostCommand.confirm(target)) }
+                    Button("Cancelled") { answer(CostCommand.cancel(target)) }
+                default:
+                    TextField(q.kind, text: $text, prompt: Text(q.kind == "price" ? "Dollars each charge" : q.suggestion ?? "YYYY-MM-DD or day"))
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 110)
+                        .onSubmit(save)
+                    if !q.choices.isEmpty {
+                        Picker("Billed", selection: $cadence) {
+                            ForEach(q.choices, id: \.self) { Text(Format.plan($0)).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                    // Return takes the suggestion, as the console's prompt
+                    // does.
+                    Button("Save", action: save)
+                        .fixedSize()
+                        .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty && q.suggestion == nil)
+                }
+                Spacer(minLength: 0)
+                Button("Skip") { answer(CostCommand.skip(target, q.kind)) }
+                    .fixedSize()
+                    .help("Asks this question of the subscription no more on this Mac")
+            }
+            if let error {
+                Text(error)
+                    .font(.subheadline)
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func save() {
+        let q = question
+        let typed = text.trimmingCharacters(in: .whitespaces)
+        let given = typed.isEmpty ? q.suggestion ?? "" : typed
+        guard let args = CostCommand.answer(kind: q.kind, target: q.provider + ":" + q.account,
+                                            text: given + (q.choices.isEmpty ? "" : " " + cadence)) else {
+            error = q.kind == "price" ? "Type the price in dollars, as 20" : "Type a day, as 2026-10-04, or a day of the month"
+            return
+        }
+        answer(args)
+    }
+
+    private func answer(_ args: [String]) {
+        Task {
+            do {
+                try await store.command(args)
+                error = nil
+            } catch {
+                self.error = error.localizedDescription
+            }
         }
     }
 }
