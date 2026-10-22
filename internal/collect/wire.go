@@ -79,6 +79,12 @@ const (
 // gateReadAge is how old a team read may be for the gate to go by it.
 const gateReadAge = 3 * time.Hour
 
+// StuckAfter is how long a device that keeps reporting may run a release
+// older than the team's newest before the gates stop waiting for it. It
+// reads the team without the new fields' documents until it updates, as an
+// older release drops a document with members it does not know.
+const StuckAfter = 3 * 24 * time.Hour
+
 // Gate says whether this device may send the snapshot fields a release
 // added: those ExtSince added, the cycles CyclesSince added, the hours
 // HoursSince added, or the costs CostSince added.
@@ -87,6 +93,10 @@ type Gate struct {
 	// HeldBack is the other devices of the team on a release before the
 	// one the gate waits for, by id, sorted.
 	HeldBack []string
+	// LeftOut is the devices on such a release that the gate no longer
+	// waits for, since they have run an older release than the team's
+	// newest for StuckAfter while reporting, by id, sorted.
+	LeftOut []string
 	// Reason is why the gate is closed: one of the Gate constants.
 	Reason string
 	// Until is, when the relay refused the fields, when to try them again.
@@ -163,7 +173,8 @@ func wireGate(c TeamCache, fingerprint, self string, until, now time.Time, old f
 	if c.Team == "" || c.Team != fingerprint {
 		return Gate{Reason: GateTeam}
 	}
-	g := Gate{HeldBack: heldBack(c, self, old)}
+	held, out := heldBack(c, self, now, old)
+	g := Gate{HeldBack: held, LeftOut: out}
 	switch age := now.Sub(c.PulledAt); {
 	case age < 0 || age > gateReadAge:
 		g.Reason = GateStale
@@ -178,13 +189,20 @@ func wireGate(c TeamCache, fingerprint, self string, until, now time.Time, old f
 }
 
 // heldBack is the devices other than self that c shows on a release old
-// tells is too old, sorted.
-func heldBack(c TeamCache, self string, old func(string) bool) []string {
-	var out []string
+// tells is too old, sorted, and of them those left out: the ones c.Behind
+// shows on that release for StuckAfter or longer. A device that stopped
+// reporting is not in c.Behind, so the gate still waits for it, as for a
+// laptop asleep while a release came out.
+func heldBack(c TeamCache, self string, now time.Time, old func(string) bool) (held, out []string) {
 	add := func(device, version string) {
-		if device != self && old(version) {
-			out = append(out, device)
+		if device == self || !old(version) {
+			return
 		}
+		if b, ok := c.Behind[device]; ok && b.Version == version && now.Sub(b.Since) >= StuckAfter {
+			out = append(out, device)
+			return
+		}
+		held = append(held, device)
 	}
 	for _, d := range c.Docs {
 		add(d.Device, d.CollectorVersion)
@@ -192,8 +210,12 @@ func heldBack(c TeamCache, self string, old func(string) bool) []string {
 	for id, k := range c.Known {
 		add(id, k.Version)
 	}
+	slices.Sort(held)
 	slices.Sort(out)
-	return slices.Compact(out)
+	held, out = slices.Compact(held), slices.Compact(out)
+	// A device both in the documents and in Known counts once, as left out.
+	held = slices.DeleteFunc(held, func(d string) bool { return slices.Contains(out, d) })
+	return held, out
 }
 
 // AccountBurn is what an account burned on the device whose snapshot,
