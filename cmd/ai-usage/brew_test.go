@@ -214,6 +214,45 @@ func TestUpdateWithHomebrewFailsOrHasNothingToDo(t *testing.T) {
 	}
 }
 
+// An up-to-date copy still brings the menu bar app to its release, as after
+// a brew upgrade someone ran themselves.
+func TestUpdateWithHomebrewUpToDateUpdatesTheApp(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions differ on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root can write anywhere")
+	}
+	hermetic(t)
+	d := newDevice(t)
+	b, g := homebrewBuild(t, "v1.3.0")
+	app := filepath.Join(t.TempDir(), "AI Usage.app")
+	plist := `<plist><dict><key>CFBundleShortVersionString</key><string>1.2.0</string></dict></plist>`
+	if err := os.MkdirAll(filepath.Join(app, "Contents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(app, "Contents", "Info.plist"), []byte(plist), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A folder the app cannot be replaced in shows that the update tried.
+	if err := os.Chmod(filepath.Dir(app), 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(filepath.Dir(app), 0o755) })
+	keg := filepath.Join(b.prefix, "Cellar", "ai-usage", "1.3.0", "bin", "ai-usage")
+	newUpdater = func() *selfupdate.Updater {
+		return &selfupdate.Updater{Current: version, Exe: keg, GitHub: g.URL, HTTP: g.Client(),
+			Managed: selfupdate.Homebrew, Stable: brewOpt(b.prefix), GOOS: "darwin", App: app}
+	}
+	r := d.run("", "update")
+	if r.code != 1 || r.stdout != "up to date (v1.3.0)\n" || !strings.Contains(r.stderr, "menu bar app: cannot write beside") {
+		t.Fatalf("update = %+v", r)
+	}
+	if st := d.state(); st.Update.CheckedAt.IsZero() || !strings.HasPrefix(st.Update.Error, "menu bar app: ") {
+		t.Fatalf("update = %+v", st.Update)
+	}
+}
+
 // The binary brew installed finishes the update: it checks, under the run
 // lock, and has launchd start the agent, whose binary brew replaced.
 func TestAfterBrew(t *testing.T) {
