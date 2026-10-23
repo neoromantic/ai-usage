@@ -1,6 +1,6 @@
 {"v":1,"updated":"2026-10-22","currency":"USD","plans":[
  {"provider":"claude","plan":"pro","name":"Pro","usd":20,"annual_usd":200,"source":"https://claude.com/pricing"},
- {"provider":"claude","plan":"max 5x","name":"Max 5x","usd":100,"source":"https://support.claude.com/en/articles/11049741-what-is-the-max-plan"},
+ {"provider":"claude","plan":"max 5x","name":"Max 5x","usd":90,"source":"https://support.claude.com/en/articles/11049741-what-is-the-max-plan"},
  {"provider":"claude","plan":"max 20x","name":"Max 20x","usd":200,"source":"https://support.claude.com/en/articles/11049741-what-is-the-max-plan"},
  {"provider":"codex","plan":"go","name":"Go","usd":8,"source":"https://apps.apple.com/us/app/chatgpt/id6448311069"},
  {"provider":"codex","plan":"plus","name":"Plus","usd":20,"source":"https://apps.apple.com/us/app/chatgpt/id6448311069"},

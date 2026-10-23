@@ -80,7 +80,7 @@ jobs:
   # request opened with GITHUB_TOKEN starts no workflow, CI among them.
   pull-request:
     needs: check
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/prices-e2e'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -93,8 +93,8 @@ jobs:
       PRICES: ${{ needs.check.outputs.prices }}
       REPORT: ${{ needs.check.outputs.report }}
       RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      BRANCH: prices/update
-      TITLE: Update the price list to the providers' prices
+      BRANCH: prices/e2e
+      TITLE: 'Test only, do not merge: price pull request end to end'
     steps:
       - name: Open, update, or close the pull request
         id: pr
