@@ -866,10 +866,27 @@ A shortened report from a team of two:
 
 ## status --json
 
-`ai-usage status --json` reads the saved state without collecting:
+`ai-usage status --json` reads the saved state without collecting. Before any run has saved a state, as on a machine where ai-usage was just installed, it creates nothing: no state folder, no team key, and no device id. It says how ai-usage is installed, with `collector` `null` and `sources` `[]`, so a front end such as an installer can ask before the first run.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `schema_version` | number | `4` |
-| `collector` | object | as in the report |
-| `sources` | list | `{provider, status, error, homes}` for each tool, as in the report's `providers` without the accounts |
+| `collector` | object | as in the report; `null` before any run has saved a state |
+| `sources` | list | `{provider, status, error, homes}` for each tool, as in the report's `providers` without the accounts; `[]` before any run has saved a state |
+| `install` | object | how ai-usage is installed on this device; see below |
+
+`install`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `version` | string | this binary's version, as `collector.version` |
+| `binary` | string | where this binary is, by the path Homebrew keeps across upgrades, as `/opt/homebrew/opt/ai-usage/bin/ai-usage`, when Homebrew installed it |
+| `method` | string | how this copy updates, as `collector.update.method`: `self` or `homebrew` |
+| `home` | string | the state folder this binary uses, from `AI_USAGE_HOME` or the default |
+| `collected` | bool | a run has collected into `home` |
+| `schedule.state` | string | `active`: the system scheduler runs this binary, or the copy Homebrew installed beside it, with `home`. `absent`: no entry. `other`: the entry runs another binary or state folder, which `schedule.program` and `schedule.home` name. `disabled`: the person disabled it. `refused`, `stale`, `unloaded`: macOS launchd refused the agent's last run, still runs an earlier definition, or has not loaded it, as `ai-usage schedule status` says. `foreground`: `ai-usage schedule run` collects into `home`. `unknown`: the scheduler could not be asked, and `schedule.error` says why |
+| `schedule.program` | string | the binary the scheduler's entry runs, from the launch agent's plist or the crontab line, whichever binary that is; `null` without an entry, and on Windows, whose task is not read back |
+| `schedule.home` | string | the state folder that entry's `--home` names; `null` as `schedule.program` is |
+| `schedule.error` | string | why the scheduler could not be asked; `null` otherwise |
+
+A front end that finds an ai-usage, on `PATH` or where the installer puts it, runs `status --json` with it. When `schedule.program` is another binary, that one is the copy that collects: run it, with `AI_USAGE_HOME` set to `schedule.home`, for `report --json`. `collected` `false` means `report --json` fails with `nothing collected yet` until `ai-usage collect --json`, the first run, which also registers the schedule. `ai-usage uninstall` takes ai-usage off the device again, as the README says.

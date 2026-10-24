@@ -155,12 +155,6 @@ func cmdStatus(ctx context.Context, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	res, err := loadResult(d)
-	if err != nil {
-		return err
-	}
-	healSchedule(ctx, d, res.State)
-	r := reportAt(d, res, clock().UTC())
 	type source struct {
 		Provider string   `json:"provider"`
 		Status   string   `json:"status"`
@@ -168,10 +162,29 @@ func cmdStatus(ctx context.Context, args []string, stdout io.Writer) error {
 		Homes    []string `json:"homes"`
 	}
 	out := struct {
-		SchemaVersion int            `json:"schema_version"`
-		Collector     view.Collector `json:"collector"`
-		Sources       []source       `json:"sources"`
-	}{SchemaVersion: view.SchemaVersion, Collector: r.Collector}
+		SchemaVersion int             `json:"schema_version"`
+		Collector     *view.Collector `json:"collector"`
+		Sources       []source        `json:"sources"`
+		Install       install         `json:"install"`
+	}{SchemaVersion: view.SchemaVersion, Sources: []source{}}
+	// Checked before loadResult, which would create a team key and a device
+	// id: before any run saved a state, status says how ai-usage is
+	// installed, and creates nothing.
+	if _, err := os.Stat(d.StateFile()); errors.Is(err, os.ErrNotExist) {
+		out.Install = installOf(ctx, d, false)
+		if *jsonOut {
+			return writeJSON(stdout, out)
+		}
+		_, err = io.WriteString(stdout, out.Install.text())
+		return err
+	}
+	res, err := loadResult(d)
+	if err != nil {
+		return err
+	}
+	healSchedule(ctx, d, res.State)
+	r := reportAt(d, res, clock().UTC())
+	out.Collector, out.Install = &r.Collector, installOf(ctx, d, !res.State.LastRunAt.IsZero())
 	for _, p := range r.Providers {
 		out.Sources = append(out.Sources, source{p.Provider, p.Status, p.Error, p.Homes})
 	}
