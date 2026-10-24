@@ -447,6 +447,22 @@ func TestStatusNoteReplacedLimitGap(t *testing.T) {
 	if got := note(botC, -1); got != "update: latest v1.4.2" {
 		t.Errorf("old and limited: %q", got)
 	}
+	// Sessions through BB's Account Pooler come before a gap.
+	r.Team.Devices[botD].Limitations = nil
+	r.Team.Devices[botD].Pooled = []string{"claude", "codex"}
+	for _, c := range []struct {
+		w    int
+		want string
+	}{
+		{-1, "claude, codex via BB's Account Pooler · accounts not exact"},
+		{40, "claude, codex via BB's Account Pooler"},
+		{20, "Account Pooler"},
+		{10, "pooled"},
+	} {
+		if got := note(botD, c.w); got != c.want {
+			t.Errorf("pooled in %d: %q, want %q", c.w, got, c.want)
+		}
+	}
 }
 
 // withoutReplaced is r without the devices reinstalled as another, whose

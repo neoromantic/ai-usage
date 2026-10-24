@@ -544,13 +544,15 @@ func TestLoadTeamCache(t *testing.T) {
 // the fields v0.4.0 added, as a relay before it does, while reject is set,
 // and those with cycles, as one before v0.5.0 does, while rejectCycles is,
 // and those with hours, as one before v0.7.0 does, while rejectHours is,
-// and those with costs, as one before v0.10.0 does, while rejectCosts is.
+// and those with costs, as one before v0.10.0 does, while rejectCosts is,
+// and those with pooled, as one before v0.11.0 does, while rejectPooled is.
 type putRecorder struct {
 	next         http.Handler
 	reject       bool
 	rejectCycles bool
 	rejectHours  bool
 	rejectCosts  bool
+	rejectPooled bool
 	mu           sync.Mutex
 	puts         []snapshot.Doc
 }
@@ -562,7 +564,7 @@ func (p *putRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		doc, err := snapshot.Decode(body)
 		p.mu.Lock()
 		p.puts = append(p.puts, doc)
-		reject := p.reject && doc.Extended() || p.rejectCycles && doc.HasCycles() || p.rejectHours && doc.HasHours() || p.rejectCosts && doc.HasCosts()
+		reject := p.reject && doc.Extended() || p.rejectCycles && doc.HasCycles() || p.rejectHours && doc.HasHours() || p.rejectCosts && doc.HasCosts() || p.rejectPooled && doc.HasPooled()
 		p.mu.Unlock()
 		if err == nil && reject {
 			http.Error(w, "snapshot: unknown field", http.StatusUnprocessableEntity)
@@ -591,8 +593,9 @@ func (p *putRecorder) sent(device string, from int) []bool {
 	return out
 }
 
-// wire is what each snapshot device put since from had: "costs", "hours",
-// "cycles", the fields v0.4.0 added ("extended"), or none ("legacy").
+// wire is what each snapshot device put since from had: "pooled", "costs",
+// "hours", "cycles", the fields v0.4.0 added ("extended"), or none
+// ("legacy").
 func (p *putRecorder) wire(device string, from int) []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -600,6 +603,8 @@ func (p *putRecorder) wire(device string, from int) []string {
 	for _, d := range p.puts[from:] {
 		switch {
 		case d.Device != device:
+		case d.HasPooled():
+			out = append(out, "pooled")
 		case d.HasCosts():
 			out = append(out, "costs")
 		case d.HasHours():

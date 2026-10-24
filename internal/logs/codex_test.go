@@ -706,3 +706,30 @@ func TestCodexHours(t *testing.T) {
 		checkHours(t, got, map[string]int64{"2026-09-20T10:00:00Z": 680, "2026-09-21T10:00:00Z": 110})
 	})
 }
+
+// A thread BB's Account Pooler served is Pooled, and its rate limits, which
+// are of whichever account the pool's hub picked, are neither the home's
+// fallback reading nor the session's. A thread of the home's own login,
+// with its sub-agent, is not Pooled.
+func TestCodexPooledThreads(t *testing.T) {
+	home := t.TempDir()
+	pooled := append([]string{cxMeta{at: "2026-09-20T09:00:00.000Z", id: guardID, cwd: "/work/app", extra: `,"model_provider":"bb-account-pool"`}.String()}, rootLines[1:]...)
+	mustWrite(t, rollout(home, "sessions", "20", guardID), pooled...)
+	mustWrite(t, rollout(home, "sessions", "20", rootID),
+		cxMeta{at: "2026-09-20T08:00:00.000Z", id: rootID, cwd: "/work/app"}.String(),
+		cxCount("2026-09-20T08:00:05.000Z", e1[0], e1[1]))
+	mustWrite(t, rollout(home, "sessions", "20", kidA),
+		cxMeta{at: "2026-09-20T08:01:00.000Z", id: kidA, session: rootID, cwd: "/work/app", source: spawnedBy(rootID)}.String(),
+		cxCount("2026-09-20T08:01:05.000Z", e1[0], e1[1]))
+
+	res := mustRead(t, "codex", home, since)
+	if got := byID(t, res, guardID); !got.Pooled || got.Limits != nil || got.Tokens != rootOwn {
+		t.Errorf("pooled session = %+v", got)
+	}
+	if got := byID(t, res, rootID); got.Pooled {
+		t.Errorf("own session = %+v", got)
+	}
+	if res.Limits != nil {
+		t.Errorf("home limits = %+v, want none", res.Limits)
+	}
+}

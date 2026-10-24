@@ -348,7 +348,8 @@ func (p *page) harnesses(d TeamDevice) chunks {
 // old release, why its release check failed, in the error's color, how long
 // it has not updated once that is longer than updating takes, in the tight
 // color, or the release it is behind; else why its release check failed;
-// else what its release cannot do; else its longest gap in reporting of the
+// else what its release cannot do; else the providers whose sessions go
+// through BB's Account Pooler; else its longest gap in reporting of the
 // last 2 days. The rest is dim. A short column cuts the error, then drops
 // the last one, says only "since" of the silence, then only its day, then
 // only "silent", so a time is never cut, and says only "latest" of the
@@ -423,6 +424,9 @@ func (p *page) deviceNote(d TeamDevice, w int) chunks {
 		return fit(p.muted("cannot read Claude quota"), p.muted("no Claude quota"))
 	case slices.Contains(d.Limitations, LimitNoUpdateErrors):
 		return fit(p.muted("does not report update errors"), p.muted("no update errors"))
+	case len(d.Pooled) > 0:
+		via := strings.Join(d.Pooled, ", ") + " via BB's Account Pooler"
+		return fit(p.muted(via+g.sep+"accounts not exact"), p.muted(via), p.muted("Account Pooler"), p.muted("pooled"))
 	case d.Gap != nil:
 		long := "gap " + age(time.Duration(d.Gap.Seconds)*time.Second)
 		return fit(p.muted(long+" "+d.Gap.At.In(p.loc).Format("Jan 2")), p.muted(long))

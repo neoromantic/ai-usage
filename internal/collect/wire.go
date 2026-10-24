@@ -32,6 +32,11 @@ const HoursSince = "v0.7.0"
 // sends them only while the whole team reads them.
 const CostSince = "v0.10.0"
 
+// PoolSince is the first release that reads the pooled a snapshot carries.
+// An older one drops a document that has it as undecodable, so a device
+// sends it only while the whole team reads it.
+const PoolSince = "v0.11.0"
+
 // legacyDev is the version a build from source of a release before ExtSince
 // reports. One from ExtSince on reports "devel", which does not parse as a
 // release either.
@@ -60,6 +65,10 @@ func BeforeHours(version string) bool { return before(version, HoursSince) }
 // or is a build from source of one, as BeforeHours tells.
 func BeforeCost(version string) bool { return before(version, CostSince) }
 
+// BeforePool says a collector of version runs a release before PoolSince,
+// or is a build from source of one, as BeforeHours tells.
+func BeforePool(version string) bool { return before(version, PoolSince) }
+
 // before says a collector of version runs a release before since, or is a
 // build from source of one.
 func before(version, since string) bool {
@@ -87,7 +96,8 @@ const StuckAfter = 3 * 24 * time.Hour
 
 // Gate says whether this device may send the snapshot fields a release
 // added: those ExtSince added, the cycles CyclesSince added, the hours
-// HoursSince added, or the costs CostSince added.
+// HoursSince added, the costs CostSince added, or the pooled PoolSince
+// added.
 type Gate struct {
 	Open bool
 	// HeldBack is the other devices of the team on a release before the
@@ -138,6 +148,20 @@ func HoursWire(c TeamCache, fingerprint, self string, noHoursUntil, now time.Tim
 // noCostUntil was set.
 func CostWire(c TeamCache, fingerprint, self string, noCostUntil, now time.Time) Gate {
 	return wireGate(c, fingerprint, self, noCostUntil, now, BeforeCost)
+}
+
+// PoolWire is the gate for pooled, as ExtendedWire is for the fields
+// ExtSince added: every other device must run PoolSince or later, as
+// BeforePool tells, and the relay must not have refused it since
+// noPoolUntil was set.
+func PoolWire(c TeamCache, fingerprint, self string, noPoolUntil, now time.Time) Gate {
+	return wireGate(c, fingerprint, self, noPoolUntil, now, BeforePool)
+}
+
+// NoPoolUntil is when the relay's refusal of pooled, or of what an older
+// release added, which a relay that refuses refuses pooled with, ends.
+func NoPoolUntil(r state.Relay) time.Time {
+	return latest(r.NoPoolUntil, NoCostUntil(r))
 }
 
 // NoCostUntil is when the relay's refusal of the costs, or of what an older

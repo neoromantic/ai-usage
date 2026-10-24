@@ -68,6 +68,7 @@ func fillFrom(dst *Session, src Session) {
 			dst.Homes = append(dst.Homes, h)
 		}
 	}
+	dst.Pooled = dst.Pooled || src.Pooled
 	dst.Limits = later(dst.Limits, src.Limits)
 	dst.Rejected = AddRejected(dst.Rejected, src.Rejected...)
 }

@@ -506,6 +506,11 @@ type TeamDevice struct {
 	// Limitations are what the device's release cannot do:
 	// "no_claude_quota" before v0.2.3, and "no_update_errors" before v0.2.5.
 	Limitations []string `json:"limitations"`
+	// Pooled are the providers whose sessions on the device go through BB's
+	// Account Pooler, which serves each request from one of several
+	// accounts: the device credits their tokens to the login of the folder
+	// that holds their logs, which may not be the account that served them.
+	Pooled []string `json:"pooled"`
 }
 
 // Gap is a time a device did not report: how long, and when it began.

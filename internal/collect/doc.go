@@ -87,6 +87,7 @@ func BuildDoc(st *state.State, cycles Cycles, key *team.Key, cfg state.Config, h
 		}
 		doc.Sources = append(doc.Sources, snapshot.Source{Provider: p, Status: src.Status, Error: seal(src.Error)})
 	}
+	doc.Pooled = Pooled(st, now)
 	// The snapshot keeps each working folder's usage, as the relay protocol
 	// has it: no view reads another device's projects.
 	for _, a := range Totals(st, nil) {
@@ -166,14 +167,15 @@ func aliases(set map[string]state.Alias, seal func(string) string) []snapshot.Al
 
 // fitDoc fits the document under the relay's size limit. The body a
 // release before HoursSince reads is fitted first, as such a release fits
-// its own: fitCycles. The hours of the accounts it kept then go back, and
-// while the whole is too big, the account with the most hours goes without
-// them, both kinds: a reader counts an account's day from its hours only
-// when they are whole, and from its days otherwise.
+// its own: fitCycles. Pooled and the hours of the accounts it kept then go
+// back, and while the whole is too big, the account with the most hours
+// goes without them, both kinds: a reader counts an account's day from its
+// hours only when they are whole, and from its days otherwise.
 func fitDoc(doc *snapshot.Doc) {
 	full := *doc
 	*doc = full.WithoutHours()
 	fitCycles(doc)
+	doc.Pooled = full.Pooled
 	accts := doc.Accounts
 	for i := range accts {
 		// Accounts go from the end, so the kept ones are a prefix.

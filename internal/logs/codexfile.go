@@ -43,7 +43,15 @@ type codexFile struct {
 	// own and hours are what this file counts once replays are matched.
 	own   Tokens
 	hours meter.Hours
+	// pooled is a thread BB's Account Pooler served.
+	pooled bool
 }
+
+// poolProvider is the model provider BB names in the config of the Codex
+// app-server it routes through its Account Pooler's hub, which picks one of
+// several accounts for each request. The rollout says so, but not which
+// account answered.
+const poolProvider = "bb-account-pool"
 
 // codexRecord is one response's usage from a token_usage_record line.
 type codexRecord struct {
@@ -91,6 +99,7 @@ func (f *codexFile) meta(row codexLine) {
 	p := row.Payload
 	f.id = cmp.Or(p.ID, p.SessionID)
 	f.project = strings.TrimSpace(p.Cwd)
+	f.pooled = p.ModelProvider == poolProvider
 	f.parent = cmp.Or(spawnParent(p.Source), p.ParentThreadID)
 	// session_id names the root thread of a sub-agent.
 	if f.parent == "" && p.SessionID != "" && p.SessionID != f.id {
@@ -303,5 +312,8 @@ type codexLine struct {
 			Last  *codexUsage `json:"last_token_usage"`
 		} `json:"info"`
 		RateLimits *codexLogLimits `json:"rate_limits"`
+		// ModelProvider names the model provider the thread asks, from
+		// Codex's config: "openai", or poolProvider.
+		ModelProvider string `json:"model_provider"`
 	} `json:"payload"`
 }

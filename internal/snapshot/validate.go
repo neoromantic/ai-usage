@@ -86,7 +86,27 @@ func (d Doc) Validate() error {
 		checkList("aliases", d.Aliases, MaxAliases, Alias.validate),
 		checkList("costs", d.Costs, MaxCosts, Cost.validate),
 		checkList("sources", d.Sources, MaxSources, Source.validate),
+		checkList("pooled", d.Pooled, len(Providers), checkPooled(d.Pooled)),
 	)
+}
+
+// checkPooled checks that each of pooled is a known provider, named once.
+func checkPooled(pooled []string) func(string) error {
+	return func(p string) error {
+		if !KnownProvider(p) {
+			return errors.New("unknown provider")
+		}
+		n := 0
+		for _, q := range pooled {
+			if q == p {
+				n++
+			}
+		}
+		if n > 1 {
+			return errors.New("provider named twice")
+		}
+		return nil
+	}
 }
 
 // checkLastErrorAt checks that last_error_at, when sent, dates a last_error

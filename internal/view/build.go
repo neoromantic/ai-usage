@@ -291,9 +291,8 @@ func listDefaults(r *Report) {
 		}
 	}
 	for i := range r.Team.Devices {
-		if d := &r.Team.Devices[i]; d.Limitations == nil {
-			d.Limitations = []string{}
-		}
+		d := &r.Team.Devices[i]
+		d.Limitations, d.Pooled = orNone(d.Limitations), orNone(d.Pooled)
 	}
 	if c := r.Cost; c != nil {
 		c.Subscriptions, c.Devices, c.Questions, c.Events = orNone(c.Subscriptions), orNone(c.Devices), orNone(c.Questions), orNone(c.Events)

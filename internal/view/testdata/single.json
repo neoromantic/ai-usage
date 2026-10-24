@@ -1316,7 +1316,8 @@
         "gap": null,
         "replaced_by": null,
         "note": "update: latest v1.4.3",
-        "limitations": []
+        "limitations": [],
+        "pooled": []
       }
     ],
     "providers": [

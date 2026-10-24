@@ -71,6 +71,11 @@ type Doc struct {
 	// subscriptions, such as a price or the day one charges. A collector
 	// before v0.10.0 neither sends nor reads them.
 	Costs []Cost `json:"costs,omitempty"`
+	// Pooled are the providers whose sessions on this device go through
+	// BB's Account Pooler, which serves each request from one of several
+	// accounts, so the device cannot say which account spent its tokens.
+	// A collector before v0.11.0 neither sends nor reads it.
+	Pooled []string `json:"pooled,omitempty"`
 }
 
 // Extended reports whether d carries any field a collector before v0.4.0
@@ -104,6 +109,11 @@ func (d Doc) HasHours() bool {
 // HasCosts reports whether d carries costs, which a collector before
 // v0.10.0 does not know, and so would drop d as undecodable.
 func (d Doc) HasCosts() bool { return len(d.Costs) > 0 }
+
+// HasPooled reports whether d says providers go through BB's Account
+// Pooler, which a collector before v0.11.0 does not know, and so would drop
+// d as undecodable.
+func (d Doc) HasPooled() bool { return len(d.Pooled) > 0 }
 
 // Legacy is d without the fields a collector before v0.4.0 does not know:
 // the body such a collector decodes. It shares no slice with d, so either
@@ -146,10 +156,22 @@ func (d Doc) WithoutHours() Doc {
 }
 
 // WithoutCosts is d without the costs a collector before v0.10.0 does not
-// know: the body a collector from v0.7.0 on, and before v0.10.0, decodes.
-// It shares no slice with d, so either can be changed without the other.
+// know, and without pooled: the body a collector from v0.7.0 on, and before
+// v0.10.0, decodes. It shares no slice with d, so either can be changed
+// without the other.
 func (d Doc) WithoutCosts() Doc {
+	d = d.WithoutPooled()
 	d.Costs = nil
+	return d
+}
+
+// WithoutPooled is d without the pooled a collector before v0.11.0 does
+// not know: the body a collector from v0.10.0 on, and before v0.11.0,
+// decodes. It shares no slice with d, so either can be changed without the
+// other.
+func (d Doc) WithoutPooled() Doc {
+	d.Pooled = nil
+	d.Costs = slices.Clone(d.Costs)
 	d.Sources = slices.Clone(d.Sources)
 	d.Aliases = slices.Clone(d.Aliases)
 	d.Accounts = slices.Clone(d.Accounts)

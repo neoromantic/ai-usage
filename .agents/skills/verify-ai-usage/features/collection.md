@@ -6,6 +6,7 @@
 - The account and quota, asked of each installed tool, which spends no tokens (`internal/probe`)
 - Weighted tokens by kind and by hour (`internal/meter`)
 - Harness homes: the default ones, `home add|remove`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GROK_HOME`, `HERMES_HOME`
+- BB's Account Pooler: probes drop its route from their environment (`internal/probe/pool.go`); a Codex rollout's `model_provider` and the run's own environment mark the device `pooled` (`internal/collect/pool.go`)
 - Samples, quota cycles, the ledger, and the snapshot a run publishes (`internal/collect`, `internal/state`)
 
 ## How to get to it (user POV)
