@@ -1449,7 +1449,8 @@
         "gap": null,
         "replaced_by": null,
         "note": null,
-        "limitations": []
+        "limitations": [],
+        "pooled": []
       },
       {
         "device": "d-demo-bot-archivist",
@@ -1507,7 +1508,8 @@
         "gap": null,
         "replaced_by": null,
         "note": null,
-        "limitations": []
+        "limitations": [],
+        "pooled": []
       },
       {
         "device": "d-demo-build",
@@ -1565,7 +1567,8 @@
         "gap": null,
         "replaced_by": null,
         "note": "claude: ~/triage/.claude: claude: not logged in",
-        "limitations": []
+        "limitations": [],
+        "pooled": []
       },
       {
         "device": "d-demo-bot-concierge",
@@ -1623,7 +1626,8 @@
         "gap": null,
         "replaced_by": null,
         "note": null,
-        "limitations": []
+        "limitations": [],
+        "pooled": []
       },
       {
         "device": "d-demo-bot-courier",
@@ -1681,7 +1685,8 @@
         "gap": null,
         "replaced_by": null,
         "note": "silent since Wed 10:28",
-        "limitations": []
+        "limitations": [],
+        "pooled": []
       },
       {
         "device": "d-demo-bot-critic",
@@ -1739,7 +1744,8 @@
         "gap": null,
         "replaced_by": null,
         "note": null,
-        "limitations": []
+        "limitations": [],
+        "pooled": []
       },
       {
         "device": "d-demo-bot-editor",
@@ -1797,7 +1803,8 @@
         "gap": null,
         "replaced_by": null,
         "note": null,
-        "limitations": []
+        "limitations": [],
+        "pooled": []
       },
       {
         "device": "d-demo-bot-herald",
@@ -1855,7 +1862,8 @@
         "gap": null,
         "replaced_by": null,
         "note": null,
-        "limitations": []
+        "limitations": [],
+        "pooled": []
       },
       {
         "device": "d-demo-leo",
@@ -1913,7 +1921,8 @@
         "gap": null,
         "replaced_by": null,
         "note": "codex: app-server exited without answering",
-        "limitations": []
+        "limitations": [],
+        "pooled": []
       },
       {
         "device": "d-demo-bot-scout",
@@ -1971,7 +1980,8 @@
         "gap": null,
         "replaced_by": null,
         "note": null,
-        "limitations": []
+        "limitations": [],
+        "pooled": []
       },
       {
         "device": "d-demo-bot-sentry",
@@ -2029,7 +2039,8 @@
         "gap": null,
         "replaced_by": null,
         "note": null,
-        "limitations": []
+        "limitations": [],
+        "pooled": []
       },
       {
         "device": "d-demo-bot-tutor",
@@ -2087,7 +2098,8 @@
         "gap": null,
         "replaced_by": null,
         "note": null,
-        "limitations": []
+        "limitations": [],
+        "pooled": []
       }
     ],
     "providers": [

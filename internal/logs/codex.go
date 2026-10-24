@@ -47,6 +47,10 @@ import (
 // saw; each home's newest reading is kept as a fallback quota reading for
 // whoever is logged in at that home.
 //
+// A thread BB's Account Pooler served ran under whichever account its hub
+// picked, not the home's login: its session says it is Pooled, and its
+// readings are no home's fallback, nor the session's.
+//
 // One file linked into several homes, as Orca links each rollout into every
 // account's home, is read once, from the first of them. Its readings are no
 // home's fallback, since the file does not say which account it ran under;
@@ -80,7 +84,7 @@ func readCodexHomes(homes []string, since time.Time, reads map[string]HomeRead) 
 	for _, h := range homes {
 		var own []*codexFile
 		for _, f := range files {
-			if f.fresh && f.home == h && len(f.mirrors) == 0 {
+			if f.fresh && f.home == h && len(f.mirrors) == 0 && !f.pooled {
 				own = append(own, f)
 			}
 		}
@@ -360,8 +364,8 @@ func countFamily(family []*codexFile, loaded map[string]bool) {
 // session is the file's row, with the usage countFamily gave it, and its
 // newest reading of the main limit with the other limits read around then.
 func (f *codexFile) session() Session {
-	s := Session{ID: f.id, ParentID: f.parent, Project: f.project, Tokens: f.own, Hours: f.hours, Updated: f.updated, Home: f.home}
-	if f.limits[CodexMainLimit] != nil {
+	s := Session{ID: f.id, ParentID: f.parent, Project: f.project, Tokens: f.own, Hours: f.hours, Updated: f.updated, Home: f.home, Pooled: f.pooled}
+	if f.limits[CodexMainLimit] != nil && !f.pooled {
 		s.Limits = codexLimits([]*codexFile{f})
 	}
 	if len(f.mirrors) > 0 {

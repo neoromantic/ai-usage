@@ -69,6 +69,9 @@ type Session struct {
 	// CreatorAccount is the account the harness's own thread table says
 	// created the session (Codex's creator_account_id).
 	CreatorAccount string
+	// Pooled is a session BB's Account Pooler served, or one with a part it
+	// served: its log says so, but not which account answered (Codex).
+	Pooled bool
 	// Folded lists the ids of the sessions this read finds inside this
 	// session's family, which an earlier read may have taken as roots of
 	// their own, so the ledger can move what it kept for them here (Codex,

@@ -89,6 +89,10 @@ type State struct {
 	Switched map[string]time.Time `json:"switched,omitempty"`
 	Accounts map[string]*Account  `json:"accounts"`
 	Sessions map[string]*Session  `json:"sessions"`
+	// Pooled is, by provider, when a run last found this device's sessions
+	// of it going through BB's Account Pooler: in a Codex session's log, or
+	// in the run's own environment.
+	Pooled map[string]time.Time `json:"pooled,omitempty"`
 
 	Relay    Relay    `json:"relay"`
 	Update   Update   `json:"update"`
@@ -211,6 +215,9 @@ type Relay struct {
 	// NoCostUntil is when the relay last refused a snapshot with costs,
 	// plus a day: until then the costs are not sent.
 	NoCostUntil time.Time `json:"no_cost_until,omitzero"`
+	// NoPoolUntil is when the relay last refused a snapshot with pooled,
+	// plus a day: until then pooled is not sent.
+	NoPoolUntil time.Time `json:"no_pool_until,omitzero"`
 }
 
 // Update is the self-update bookkeeping.
@@ -381,6 +388,7 @@ func mergeOlder(s, last *State) {
 	s.Relay.NoCyclesUntil = last.Relay.NoCyclesUntil
 	s.Relay.NoHoursUntil = last.Relay.NoHoursUntil
 	s.Relay.NoCostUntil = last.Relay.NoCostUntil
+	s.Relay.NoPoolUntil = last.Relay.NoPoolUntil
 	from := hourOf(last.LastRunAt) - 1
 	for k, sess := range s.Sessions {
 		if sess == nil {

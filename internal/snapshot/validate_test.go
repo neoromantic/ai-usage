@@ -449,3 +449,21 @@ func FuzzDecode(f *testing.F) {
 		}
 	})
 }
+
+func TestValidatePooled(t *testing.T) {
+	for _, c := range []struct {
+		pooled []string
+		ok     bool
+	}{
+		{nil, true},
+		{[]string{"claude", "codex"}, true},
+		{[]string{"cursor"}, false},
+		{[]string{"codex", "codex"}, false},
+	} {
+		d := validDoc()
+		d.Pooled = c.pooled
+		if err := d.Validate(); (err == nil) != c.ok {
+			t.Errorf("pooled %q: %v", c.pooled, err)
+		}
+	}
+}

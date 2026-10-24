@@ -425,6 +425,7 @@ func (s *sampler) collect(ctx context.Context, homes map[string][]string) (faile
 		}
 	}
 	prune(s.st, s.now)
+	prunePooled(s.st, s.now)
 	return failed
 }
 
@@ -455,6 +456,7 @@ func (s *sampler) provider(ctx context.Context, p string, homes []string) state.
 	if len(homes) > 0 {
 		res = s.ReadLogs(p, homes, s.since)
 	}
+	notePooled(s.st, p, s.pooledEnv(p), res.Sessions, s.now)
 	// partial means some home's read was incomplete, so a lower count than
 	// last time is a missing file rather than a real drop.
 	partial := false

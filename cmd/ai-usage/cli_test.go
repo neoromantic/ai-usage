@@ -53,7 +53,8 @@ func hermetic(t *testing.T) {
 	t.Helper()
 	t.Setenv("AI_USAGE_NO_SCHEDULE", "1")
 	t.Setenv("AI_USAGE_RELAY", "")
-	for _, k := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "GROK_HOME", "HERMES_HOME"} {
+	// The last two route a session through BB's Account Pooler.
+	for _, k := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "GROK_HOME", "HERMES_HOME", "ANTHROPIC_BASE_URL", "CODEX_OPENAI_BASE_URL"} {
 		t.Setenv(k, "")
 	}
 	// With these set, relay serve would keep its records in a real KV store.

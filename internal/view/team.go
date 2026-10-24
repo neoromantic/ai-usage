@@ -225,6 +225,7 @@ func (m *merger) teamDevice(d snapshot.Doc) (dev *TeamDevice, noQuota string) {
 		Sources:          []Source{},
 		Silent:           m.now.Sub(d.CollectedAt) > collect.SilentAfter,
 		Limitations:      limitations(d.CollectorVersion),
+		Pooled:           slices.Clone(d.Pooled),
 	}
 	for _, s := range d.Sources {
 		src := Source{Provider: s.Provider, Status: s.Status, Error: strPtr(m.open(s.Error))}

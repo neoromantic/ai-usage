@@ -60,7 +60,10 @@ func newWorld(t *testing.T) (*world, Options) {
 		OSUser:   "sam",
 		Probe: probe.Env{
 			LookPath: func(string) (string, error) { return "", exec.ErrNotFound },
-			HomeDir:  w.userHome,
+			// Not this process's, which may run in a session BB's Account
+			// Pooler routes.
+			Environ: []string{},
+			HomeDir: w.userHome,
 		},
 		Now:      func() time.Time { return w.now },
 		ReadLogs: w.read,
