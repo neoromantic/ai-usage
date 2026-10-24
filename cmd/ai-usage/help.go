@@ -75,6 +75,8 @@ var help = []helpSection{
 	{"RELEASES", []helpLine{
 		{"ai-usage update", "check for a release now; where Homebrew installed ai-usage, `brew upgrade` it"},
 		{"ai-usage app install", "add the menu bar app of this release, on macOS 14 or later"},
+		{"ai-usage uninstall [--forget] [--purge]",
+			"remove the schedule, the menu bar app, and this binary, or say how where Homebrew installed it; `--forget` also drops this device from its team on the relay; `--purge` does that and removes the state folder, with the team key"},
 		{"ai-usage version", "print this binary's version"},
 	}},
 	{"VIEW", []helpLine{

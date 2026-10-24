@@ -82,7 +82,9 @@ picture, not only in a Go test.
 
 Everything here is isolated. Never run a dev build with this machine's own
 home: it collects real data and publishes it, as a `devel` version, to the
-real team's relay. Never run `schedule install` outside a made-up home.
+real team's relay. Never run `schedule install` outside a made-up home,
+and never `uninstall` or `schedule remove` here at all: the launch agent's
+label and the crontab are this machine's whatever `HOME` says.
 
 - **The printed page:** `go build -o /tmp/au ./cmd/ai-usage`, then
   `TZ=Europe/Berlin /tmp/au report --from docs/demo/team.json --plain --width 110`.
