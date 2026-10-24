@@ -8,6 +8,8 @@
 - `ai-usage update`, `ai-usage version`
 - Homebrew, from v0.8.0: `.github/scripts/formula.sh` writes the formula, `tap.sh` puts it in `neoromantic/homebrew-tap` after a release; a copy in a keg never replaces itself, registers brew's opt path, and `ai-usage update` runs `brew upgrade neoromantic/tap/ai-usage` (`cmd/ai-usage/brew.go`); a script copy hands the schedule to the user's own Homebrew copy, and `install.sh` stops at one
 - `ai-usage app install`: the menu bar app of the binary's release, whatever installed it
+- `ai-usage uninstall [--forget] [--purge]`: the schedule, the app, and a script copy's binary go; a Homebrew copy and a build from source stay; the state folder stays unless `--purge` (`cmd/ai-usage/uninstall.go`)
+- `ai-usage status --json` before the first run: `install`, with what the scheduler's entry runs read back from the plist or crontab (`internal/schedule/entry.go`), and nothing written
 
 ## How to get to it (user POV)
 
@@ -34,6 +36,7 @@ runs the opt path, and runs `brew style` and `brew audit --strict`.
 
 - An install over an older release: is the old binary replaced and the schedule kept?
 - `AI_USAGE_NO_SCHEDULE=1`: is nothing registered?
+- In a made-up home, `status --json` before a first run: does the home stay empty? `uninstall` only in the Go tests (`cmd/ai-usage/install_test.go`), or on a throwaway machine.
 - A formula from a local build in a throwaway tap (`brew tap-new --no-git`, a
   `file://` base for `formula.sh`): does `brew install` and `brew test` pass?
   Run only `version` with what it installed, then `brew uninstall` and
@@ -42,7 +45,10 @@ runs the opt path, and runs `brew style` and `brew audit --strict`.
 ## Gotchas
 
 Never run `schedule install` or an installer against this machine's own
-home: it replaces the user's ai-usage and its launchd agent. On macOS 27,
+home: it replaces the user's ai-usage and its launchd agent. Never run
+`uninstall` or `schedule remove` on this machine at all, even in a made-up
+home: the launch agent's label and the crontab are the user's, whatever
+`HOME` says, so either removes the user's own schedule. On macOS 27,
 launchd pins the agent to the binary it registered; see `internal/schedule/launchd.go`
 for how an update survives it. CI runs no macOS job; `scripts/verify.sh
 --push` runs the install smoke on a Mac.

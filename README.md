@@ -611,6 +611,7 @@ Or, from a clone with the Vercel CLI logged in, run `sh scripts/deploy-relay.sh`
 | `ai-usage schedule run` | be the scheduler where there is none, as in a container: collect now and every 15 minutes until stopped |
 | `ai-usage update` | check for a release now; where Homebrew installed ai-usage, run `brew upgrade neoromantic/tap/ai-usage` |
 | `ai-usage app install` | add the menu bar app of this release, on macOS 14 and later, whatever installed ai-usage |
+| `ai-usage uninstall [--forget] [--purge]` | remove the schedule, the menu bar app, and the binary, or say how where Homebrew installed it; keep the state folder unless `--purge`; see [Uninstall](#uninstall) |
 | `ai-usage version` | print the version |
 | `ai-usage help` | print usage |
 
@@ -788,64 +789,31 @@ launchctl print gui/$(id -u)/io.github.neoromantic.ai-usage | sed -n '/^.argumen
 
 ## Uninstall
 
-Run these while the binary is still installed. `forget-device` is optional: it removes this machine's snapshot from the relay now instead of letting it expire. `ai-usage status` shows this machine's device id.
-
-macOS:
-
 ```sh
-pkill -x AIUsageBar
-rm -r ~/Applications/AI\ Usage.app
-rm -f ~/Library/LaunchAgents/io.github.neoromantic.ai-usage.bar.plist
-defaults delete io.github.neoromantic.ai-usage.bar
-ai-usage schedule remove
-ai-usage team forget-device d-…
-rm "$(command -v ai-usage)"
-rm -r ~/Library/Application\ Support/ai-usage
+ai-usage uninstall
 ```
 
-The first four quit the menu bar app and remove it and its settings. It opens at login as a login item; when macOS does not let it register as one, it writes that launch agent instead. Its settings remember that it set this up, so without the fourth line a later install would not open at login.
+It removes the schedule, the [menu bar app](#menu-bar-app) with the launch agent it may have written and its settings, and the binary the installer put in place. It keeps the state folder, with the team key and the history, so a later install goes on where this one stopped and registers the schedule again; `ai-usage status` shows where the folder is. It asks nothing, so a script or another app can run it, and it says what it did, a line a step. A step that fails does not stop the others, and the command then exits 1, saying which failed.
 
-Linux:
+| Flag | Also |
+| --- | --- |
+| `--forget` | asks the relay to drop this machine from its team now, instead of letting its snapshot expire |
+| `--purge` | does what `--forget` does, then removes the state folder. If no other machine is in the team, save `ai-usage team key` first: without the key, nobody can join that team again |
 
-```sh
-ai-usage schedule remove
-ai-usage team forget-device d-…
-rm "$(command -v ai-usage)"
-rm -r "${XDG_CONFIG_HOME:-$HOME/.config}/ai-usage"
-```
+A copy Homebrew installed stays: `ai-usage uninstall` says to remove it with `brew uninstall neoromantic/tap/ai-usage`, after which `brew untap neoromantic/tap` removes the tap, when you use nothing else from it. A build from source stays where it is too. On Windows, which does not delete a program while it runs, it says to remove the `…\AppData\Local\Programs\ai-usage` folder; then open *Edit environment variables for your account* from the Start menu and remove that folder from `Path`.
 
-Windows, in PowerShell:
-
-```powershell
-ai-usage schedule remove
-ai-usage team forget-device d-…
-Remove-Item -Recurse "$env:LOCALAPPDATA\Programs\ai-usage", "$env:LOCALAPPDATA\ai-usage"
-```
-
-Then open *Edit environment variables for your account* from the Start menu and remove the `…\AppData\Local\Programs\ai-usage` entry from `Path`.
-
-With Homebrew, on macOS, the first four lines above remove the menu bar app; then, on macOS and Linux:
-
-```sh
-ai-usage schedule remove
-ai-usage team forget-device d-…
-brew uninstall neoromantic/tap/ai-usage
-brew untap neoromantic/tap                       # optional, when you use nothing else from it
-rm -r ~/Library/Application\ Support/ai-usage    # on Linux: rm -r "${XDG_CONFIG_HOME:-$HOME/.config}/ai-usage"
-```
-
-Run `ai-usage schedule remove` before `brew uninstall`: without the binary, the launch agent or crontab line stays and fails every 15 minutes, silently. If the binary is gone already, remove the schedule by hand, on macOS with
+Run it while the binary is still installed: without the binary, the launch agent or crontab line stays and fails every 15 minutes, silently. If the binary is gone already, remove the schedule by hand, on macOS with
 
 ```sh
 launchctl bootout gui/$(id -u)/io.github.neoromantic.ai-usage
 rm ~/Library/LaunchAgents/io.github.neoromantic.ai-usage.plist
 ```
 
-and on Linux by deleting the line that ends in `# ai-usage` with `crontab -e`. After `ai-usage schedule remove`, a later install registers again only with `ai-usage schedule install`, unless you also removed the state folder.
+and on Linux by deleting the line that ends in `# ai-usage` with `crontab -e`.
 
 On macOS and Linux, if the installer added `~/.local/bin` to your shell profile, remove the block that starts with `# Added by the ai-usage installer`, or `conf.d/ai-usage.fish` for fish.
 
-If you set `AI_USAGE_BIN_DIR` or `AI_USAGE_HOME`, remove those folders instead.
+If you set `AI_USAGE_HOME`, run `ai-usage uninstall` with it set, so it finds that state folder.
 
 ## Build from source
 

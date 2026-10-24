@@ -108,6 +108,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdUpdate(ctx, args, stdout, stderr)
 	case "app":
 		err = cmdApp(ctx, args, stdout, stderr)
+	case "uninstall":
+		err = cmdUninstall(ctx, args, stdout, stderr)
 	case "version", "-version", "--version":
 		fmt.Fprintln(stdout, version)
 	case "help", "-h", "-help", "--help":
