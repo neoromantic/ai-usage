@@ -222,10 +222,11 @@ func (e Env) getenv(key string) string {
 	return value
 }
 
-// harnessEnv returns environ with each variable named in set removed, then
-// added with its value, in order, where that value is not empty. set holds
-// pairs of a name and its value.
+// harnessEnv returns environ without the Account Pooler's routes, and with
+// each variable named in set removed, then added with its value, in order,
+// where that value is not empty. set holds pairs of a name and its value.
 func (e Env) harnessEnv(set ...string) []string {
+	pool := e.poolVars()
 	out := slices.DeleteFunc(slices.Clone(e.environ()), func(kv string) bool {
 		name, _, ok := strings.Cut(kv, "=")
 		for i := 0; ok && i < len(set); i += 2 {
@@ -233,7 +234,7 @@ func (e Env) harnessEnv(set ...string) []string {
 				return true
 			}
 		}
-		return false
+		return ok && slices.ContainsFunc(pool, func(p string) bool { return sameEnvName(name, p) })
 	})
 	for i := 0; i < len(set); i += 2 {
 		if set[i+1] != "" {
