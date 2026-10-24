@@ -580,7 +580,7 @@ Or, from a clone with the Vercel CLI logged in, run `sh scripts/deploy-relay.sh`
 | `ai-usage collect [--quiet] [--json] [--offline] [--home DIR] [VIEW] [DISPLAY]` | the same; the scheduler runs `collect --quiet --home DIR`, and `--home` overrides `AI_USAGE_HOME` |
 | `ai-usage report [--json] [VIEW] [DISPLAY]` | print the last collected report without collecting |
 | `ai-usage report --from FILE [VIEW] [DISPLAY]` | show a report saved with `--json`, such as one in [docs/demo](docs/demo), instead of this machine's; it reads no state and collects nothing |
-| `ai-usage status [--json] [DISPLAY]` | version, last success, last error, relay, schedule, update, and each tool's state, with full error texts |
+| `ai-usage status [--json] [DISPLAY]` | version, last success, last error, relay, schedule, update, and each tool's state, with full error texts; before the first run, how ai-usage is installed and what the scheduler runs, creating nothing |
 | `ai-usage team` | the team fingerprint and its machines |
 | `ai-usage team key` | print the team's private key |
 | `ai-usage team join [KEY]` | join a team; the key is read from standard input when omitted |
@@ -689,7 +689,7 @@ cost        currency, total_usd, used_usd, used_pct, unused_usd, without_price, 
             last 30 days, each with an id that stays the same
 ```
 
-`ai-usage status --json` prints `schema_version`, `collector`, and `sources[]`. Every field is described in [docs/json-schema.md](docs/json-schema.md).
+`ai-usage status --json` prints `schema_version`, `collector`, `sources[]`, and `install`: the version, the binary, how it updates, the state folder, whether it has collected, and what the scheduler runs. Before the first run it creates nothing, with `collector` `null`, so an installer or another app can ask first. Every field is described in [docs/json-schema.md](docs/json-schema.md).
 
 ## Privacy
 

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -103,6 +105,10 @@ func hermetic(t *testing.T) {
 	probeEnv = fakeProbeEnv
 	newScheduler = func() schedule.Scheduler {
 		return schedule.Scheduler{GOOS: runtime.GOOS, Run: func(_ context.Context, name string, args []string, _ []byte) ([]byte, error) {
+			// status reads the crontab, which is empty, and writes nothing.
+			if name == "crontab" && slices.Equal(args, []string{"-l"}) {
+				return nil, errors.New("crontab: no crontab for tester")
+			}
 			t.Errorf("scheduler reached: %s %v", name, args)
 			return nil, fmt.Errorf("no scheduler in tests")
 		}}

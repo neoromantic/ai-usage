@@ -30,7 +30,7 @@ var help = []helpSection{
 		{"ai-usage [--json] [--offline] [VIEW] [DISPLAY]", "collect now and print the report"},
 		{"ai-usage report [--json] [VIEW] [DISPLAY]", "print the last collected report, no collection"},
 		{"ai-usage report --from FILE [VIEW] [DISPLAY]", "show a report saved with `--json`, such as a demo's, instead of this device's"},
-		{"ai-usage status [--json] [DISPLAY]", "collector health: version, last success, last error"},
+		{"ai-usage status [--json] [DISPLAY]", "collector health: version, last success, last error; before the first run, how ai-usage is installed, creating nothing"},
 		{"ai-usage collect [--quiet] [--json] [--offline] [--home DIR] [VIEW] [DISPLAY]",
 			"what the system scheduler runs; `--home` overrides `AI_USAGE_HOME`"},
 	}},
