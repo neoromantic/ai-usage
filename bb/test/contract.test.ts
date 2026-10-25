@@ -46,6 +46,17 @@ describe.each(["team.json", "solo.json", "homebrew.json"])("%s", (name) => {
   });
 });
 
+test("a total with an estimated row in it is an estimate, as the app's", () => {
+  const r = readReport(demo("team.json"));
+  const estimated = r.team.matrix.rows.filter((row) => row.burn_estimated).map((row) => row.device);
+  expect(estimated.length).toBeGreaterThan(0);
+  const m = matrixView(r, "7d");
+  for (const row of m.rows) expect(row.total.startsWith("~")).toBe(estimated.includes(row.device) && row.total !== "~–");
+  expect(m.total.startsWith("~")).toBe(true);
+  const sure = readReport(demo("solo.json"));
+  expect(matrixView(sure, "7d").total.startsWith("~")).toBe(false);
+});
+
 test("the example team the plugin bundles is the repository's", () => {
   expect(readFileSync(path.join(import.meta.dir, "../demo/team.json"), "utf8")).toBe(readFileSync(path.join(import.meta.dir, "../../docs/demo/team.json"), "utf8"));
 });
