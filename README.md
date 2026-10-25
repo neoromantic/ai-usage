@@ -41,6 +41,7 @@ ai-usage is one small binary for macOS, Linux, and Windows. The system scheduler
 - **Nothing to run or look after.** No daemon, no account, no config file. It installs with one line or with Homebrew, and schedules itself. A script install updates itself; a Homebrew one updates with `brew upgrade` or `ai-usage update`.
 - **Spends none of your quota.** It asks the tools you already have instead of calling Anthropic, OpenAI, or xAI, and never reads your credentials. Asking Claude Code for its usage spends no tokens. See [Other data folders](#other-data-folders).
 - **A menu bar app on macOS.** A ring in the menu bar shows what is left; a click says what is out or runs out, and when, and a notification says it once as it happens. See [Menu bar app](#menu-bar-app).
+- **A plugin for BB,** which shows the team report on a page and installs ai-usage where it is missing. See [In BB](#in-bb).
 - **JSON for agents,** with a versioned schema, so an agent can pick the account with room. See [JSON for agents](#json-for-agents).
 
 ## Quick start
@@ -78,6 +79,7 @@ Questions, ideas, a tool you want supported: write me on Telegram, [@usualguy](h
 ## Contents
 
 - [What it shows](#what-it-shows), and what the subscriptions [cost](#cost)
+- The [menu bar app](#menu-bar-app), and AI Usage [in BB](#in-bb)
 - [Install](#install) and the [first run](#first-run)
 - [Teams](#teams) and the [relay](#relay)
 - [Commands](#commands)
@@ -232,7 +234,7 @@ In the interactive view, `$` shows DEVICES × SUBSCRIPTIONS in dollars over the 
 
 ![DEVICES × SUBSCRIPTIONS in dollars: what each machine of a made-up team used of each subscription over 4 weeks, what nobody used, and each subscription's price in the TOTAL row](docs/demo/social/team-dollars.png)
 
-**Questions.** ai-usage asks a person what no tool says: when a subscription logged in on this machine charges next, and whether monthly or yearly when the list prices its plan yearly too, with the day Claude Code says the subscription began as a suggestion; its price, when the list has none, offering the list's tiers when a plan was read without its tier, as Claude's Max from an older release; and, on every machine, whether a subscription nobody can confirm is still paid. The interactive view asks one at a time, on the line over the key bar: type the answer, `Enter` takes the suggestion, `y` or `n` says whether it is still paid, `s` skips the question, `S` asks no more on this machine, and `Esc` asks later. The first run on a terminal asks them after the guide, and the [menu bar app](#menu-bar-app) asks in a notification and in Settings. A skipped question is not asked again of that subscription, except a charge day or a price after its plan changes. A scheduled run, a run without a terminal, and `--json` ask nothing. `e` on a picked or open subscription asks for its cadence, price, and next charge.
+**Questions.** ai-usage asks a person what no tool says: when a subscription logged in on this machine charges next, and whether monthly or yearly when the list prices its plan yearly too, with the day Claude Code says the subscription began as a suggestion; its price, when the list has none, offering the list's tiers when a plan was read without its tier, as Claude's Max from an older release; and, on every machine, whether a subscription nobody can confirm is still paid. The interactive view asks one at a time, on the line over the key bar: type the answer, `Enter` takes the suggestion, `y` or `n` says whether it is still paid, `s` skips the question, `S` asks no more on this machine, and `Esc` asks later. The first run on a terminal asks them after the guide, the [menu bar app](#menu-bar-app) asks in a notification and in Settings, and the [BB plugin](#in-bb) on its page. A skipped question is not asked again of that subscription, except a charge day or a price after its plan changes. A scheduled run, a run without a terminal, and `--json` ask nothing. `e` on a picked or open subscription asks for its cadence, price, and next charge.
 
 ```sh
 ai-usage cost                                           # COST, and what each machine used
@@ -332,6 +334,28 @@ The cost has three notifications of its own, each on by default and for the same
 </picture>
 
 The app computes nothing itself. It runs `ai-usage report --json` every minute and when the popover opens, and shows what the report says: forecasts, states, what needs attention, the cost, and the collector's health. It keeps no answer of its own either: each one runs `ai-usage cost`. Its notifications come from the same report. The tooltip of a release that is out takes its words from the report too: "ai-usage v0.5.0 installs v0.5.1 on its next check" for a script install, and "v0.5.1 is out; Update runs brew upgrade neoromantic/tap/ai-usage" for a Homebrew one. It finds the binary through the launch agent, or shows the install command when there is none, with the Homebrew one under it. To go without it, install with `AI_USAGE_NO_APP=1`, or remove it as [Uninstall](#uninstall) shows; neither self-update nor `brew upgrade` brings it back, and `ai-usage app install` does.
+
+## In BB
+
+AI Usage is also a plugin for [BB](https://getbb.app): the team report on a page of its own, with the same attention, subscriptions, forecasts, cost and its questions, devices × subscriptions, and devices as the console, and a Team usage card in the sidebar's footer. It shows `ai-usage report --json` as ai-usage words it, as the menu bar app does.
+
+```sh
+bb plugin install npm:@goodit/bb-plugin-ai-usage
+```
+
+![The AI Usage page in BB, on the made-up team: attention, then each subscription's limiting windows with what is left and the forecast at reset](docs/demo/bb-panel.png)
+
+When the plugin starts on a Mac or Linux machine that runs BB as a person, not root, and has no ai-usage, it installs ai-usage there once, with the install.sh of the latest release, the menu bar app and shell profiles left out. A machine that already has ai-usage, from the installer or Homebrew, is used as it is. Otherwise the page offers Install, with a team key a colleague sent, and an example team of made-up data. Settings → AI Usage says which ai-usage the plugin reads, and has Update, Pause collecting, Install menu bar app, Remove ai-usage, and the other BB machines, each with an Install that joins it to the same team. Invite copies a message with the team key; Join pastes one. The palette has AI Usage: Open and AI Usage: Refresh.
+
+![The page's cost, with its questions to answer, and devices × subscriptions over 7 days](docs/demo/bb-cost.png)
+
+What to know before you install it:
+
+- ai-usage runs from the scheduler every 15 minutes, with BB open or not, and updates itself from GitHub Releases. Removing the plugin leaves it collecting: Remove ai-usage in Settings, or [Uninstall](#uninstall), takes it off.
+- The relay sees what [Privacy](#privacy) says, whether ai-usage came from BB or not.
+- BB's Cursor, OpenCode and Pi agents are not counted. Sessions BB's Account Pooler routes count for the login of the folder that holds their logs, and their machine is marked; see `pooled` in [docs/json-schema.md](docs/json-schema.md).
+- Anything that runs in BB as you, agents included, can read the team report through the plugin and ask it for the team key, as it can read ai-usage's own files. The plugin answers no other plugin, keeps no copy of the key, and logs neither the key nor the report.
+- It sends no notifications; the menu bar app does.
 
 ## Install
 
