@@ -60,3 +60,15 @@ export function autoInstallable(f: HostFacts, recorded: boolean): boolean {
     !p.scheduleEntry
   );
 }
+
+/**
+ * Why ai-usage must not be installed on a machine now, or null when it may:
+ * a second copy would take turns with the first in the scheduler.
+ */
+export function installRefusal(p: Probe): string | null {
+  if (p.bin !== null) return "ai-usage is already installed on this machine";
+  if (p.scheduleEntry) {
+    return "The scheduler on this machine already runs an ai-usage this plugin cannot find. Put that copy on PATH or in ~/.local/bin, or remove its schedule (ai-usage uninstall), then try again.";
+  }
+  return null;
+}

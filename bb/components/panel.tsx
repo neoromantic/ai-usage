@@ -263,7 +263,8 @@ function Setup({ view, job }: { view: HostView; job: JobView | null }) {
       ) : null}
       {view.scheduleEntry ? (
         <Banner tone="tight">
-          {machine(view)} has a schedule of ai-usage, but its binary is not in PATH, ~/.local/bin, ~/bin or Homebrew. Install puts a new copy in ~/.local/bin.
+          The scheduler on {machine(view)} already runs an ai-usage this plugin cannot find, so it installs no second copy. Put that copy on PATH or in ~/.local/bin, or remove
+          its schedule with ai-usage uninstall, then open this page again.
         </Banner>
       ) : null}
       {view.root ? <Banner>BB runs as root on {machine(view)}: ai-usage installs for root, with root's crontab.</Banner> : null}
@@ -294,7 +295,7 @@ function Setup({ view, job }: { view: HostView; job: JobView | null }) {
           </button>
         )}
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy || view.scheduleEntry}>
             {busy ? <Spinner /> : null}
             {failed !== null ? "Retry" : `Install ai-usage on ${machine(view)}`}
           </Button>

@@ -61,6 +61,16 @@ async function scheduleEntry(m: Machine): Promise<boolean> {
   return r.code === 0 && r.stdout.split("\n").some((line) => line.trimEnd().endsWith("# ai-usage"));
 }
 
+/** The program the launch agent runs, read by plutil, when it is an ai-usage binary there. */
+async function agentProgram(m: Machine): Promise<string | null> {
+  if (m.platform !== "darwin") return null;
+  const plist = path.join(m.home, "Library/LaunchAgents", `${AGENT}.plist`);
+  const r = await run("plutil", ["-extract", "ProgramArguments.0", "raw", "-o", "-", plist], { env: m.env, timeoutMs: 10_000 });
+  const program = r.stdout.trim();
+  if (r.code !== 0 || !path.isAbsolute(program) || path.basename(program) !== "ai-usage") return null;
+  return (await executable(program)) ? program : null;
+}
+
 function appInstalled(m: Machine): boolean {
   if (m.platform !== "darwin") return false;
   return [path.join(m.home, "Applications/AI Usage.app"), "/Applications/AI Usage.app"].some((p) => existsSync(p));
@@ -136,7 +146,10 @@ export async function probe(m: Machine): Promise<Probe> {
   let bin = await findBinary(m);
   if (bin === null) {
     out.scheduleEntry = await scheduleEntry(m);
-    return out;
+    // A launch agent names the binary it runs, wherever that is: take it,
+    // and status --json then says the rest.
+    bin = out.scheduleEntry ? await agentProgram(m) : null;
+    if (bin === null) return out;
   }
   const ask = (file: string, aiHome: string | null, args: string[], json = false) =>
     runCommand(m, { bin: file, aiHome, args, stdin: null, json, timeoutMs: 30_000 });
