@@ -235,3 +235,47 @@ jobs:
           TAG: ${{ github.ref_name }}
           HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
         run: sh .github/scripts/tap.sh "$TAG" dist/checksums.txt
+
+  # The BB plugin, as @goodit/bb-plugin-ai-usage on npm, at the tag's
+  # version, after the release it installs is out. A prerelease leaves npm
+  # alone. npm trusts this workflow through OIDC (trusted publishing), so no
+  # token is stored; until the owner sets that up the job fails here, and a
+  # rerun is safe. See docs/releasing.md.
+  plugin:
+    needs: release
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          no-cache: true
+      - name: Build and check at the tag's version
+        working-directory: bb
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          bun install --frozen-lockfile
+          npm pkg set "version=${TAG#v}"
+          bun run check
+          test "$(jq -r .pluginVersion dist/host.meta.json)" = "${TAG#v}"
+      - name: Publish
+        working-directory: bb
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if npm view "@goodit/bb-plugin-ai-usage@${TAG#v}" version >/dev/null 2>&1; then
+            echo "@goodit/bb-plugin-ai-usage@${TAG#v} is already on npm"
+            exit 0
+          fi
+          npm publish --access public --ignore-scripts

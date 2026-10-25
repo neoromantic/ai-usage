@@ -20,6 +20,7 @@ The workflow then:
 5. checks that the macOS arm64 binary reports the tag as its version; that `checksums.txt` lists seven files that match it; that the app in `ai-usage_darwin_app.zip` reports the tag without its `v`, is built for both CPUs, and has a signature that verifies; and that the app and both macOS binaries are signed with the hardened runtime and notarized, and that the app's ticket is stapled; when the runner has Gatekeeper on, it also checks that Gatekeeper accepts them as `Notarized Developer ID`
 6. creates the release as a draft, uploads the files, and then publishes it. Its notes are `docs/releases/<tag>.md`, when that file exists, followed by GitHub's generated notes, which link the changes since the last release
 7. updates the Homebrew tap, in the step "Update the Homebrew tap", with `.github/scripts/tap.sh`; see [Homebrew](#homebrew)
+8. for a full release, publishes the BB plugin in `bb/` to npm at the tag's version, in the job `plugin`; see [BB plugin](#bb-plugin)
 
 The draft step keeps `releases/latest` from pointing at a release whose files are still uploading. The installers download from `releases/latest/download/`, and running collectors take the tag `releases/latest` redirects to and download from `releases/download/<tag>/`. If the workflow fails after the draft exists, rerun it: it replaces the files and publishes, and keeps the notes the draft was created with; change them with `gh release edit <tag> --notes-file docs/releases/<tag>.md`.
 
@@ -40,6 +41,23 @@ After "Publish", the step "Update the Homebrew tap" runs `.github/scripts/tap.sh
 It needs the deploy key: a key with write access among the tap's deploy keys, whose private half is the repository secret `HOMEBREW_TAP_KEY` (Settings, Secrets and variables, Actions). Without it the step fails for a full release, since Homebrew's collectors would otherwise report the release as out for good. Add the secret, then rerun the job. When the job cannot be fixed, write the formula by hand with `formula.sh` and push it to the tap.
 
 A release reaches Homebrew a few minutes after GitHub. Meanwhile `ai-usage update` on a Homebrew collector says the formula is behind and exits 1, and the collectors' reports say the release is out.
+
+## BB plugin
+
+The BB plugin in `bb/` ships as the npm package `@goodit/bb-plugin-ai-usage`, at the same version as the binary: there is no tag of its own. After the release job publishes, the job `plugin` sets `bb/package.json`'s version to the tag's, runs `bun run check` there (the types, the tests, and `bb plugin build` with the `bb-app` package it pins, which writes the prebuilt `dist/` a BB install of an npm package needs), checks that the build carries the tag's version, and runs `npm publish`. A prerelease leaves npm alone. A version already on npm is left as it is, so a rerun is safe. The commit keeps the version of the last release; nothing needs bumping by hand.
+
+npm takes the package through [trusted publishing](https://docs.npmjs.com/trusted-publishers): GitHub's OIDC token for this workflow, with provenance, and no npm token in the repository. A user's BB picks the new version up with `bb plugin update`, within the range its catalog entry gives. When a release changes what the report's JSON means, the plugin and the binary change in the same pull request; the plugin reads schema 4 only and says so on its page when ai-usage prints another.
+
+### One-time setup
+
+The owner does this once, before the first full release after the plugin lands; until then the job `plugin` fails, and the rest of the release is out.
+
+1. On npmjs.com, make sure the owner's account can publish to the `@goodit` scope, with two-factor authentication on.
+2. Publish the first version by hand, since npm sets up trusted publishing only on a package that exists: from a clean checkout of the release's tag, `cd bb && bun install --frozen-lockfile && npm pkg set version=X.Y.Z && bun run check && npm publish --access public --ignore-scripts`, logged in with `npm login`.
+3. In the package's settings on npmjs.com, under Trusted publishing, add GitHub Actions with the organization or user `neoromantic`, the repository `ai-usage`, the workflow `release.yml`, and no environment. Then, under Publishing access, require two-factor authentication and disallow tokens.
+4. Rerun the release's job `plugin`, or let the next release run it: it finds the version on npm and stops, or publishes the next one through OIDC.
+
+The plugin's listing in BB's catalog is a pull request to `get-bb/marketplace` with an entry that names this npm package and a range such as `>=0.11.0 <1.0.0`, the icon `bb/icons/ai-usage.svg`, `bb/PLUGIN_OVERVIEW.md` as its overview, and the pictures `docs/demo/bb-panel.png` and `docs/demo/bb-cost.png`. The range lets new versions reach users without another pull request.
 
 ## Signing and notarization
 
