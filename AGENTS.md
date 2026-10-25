@@ -69,6 +69,7 @@ ai-usage is a Go command-line tool: a collector that the system scheduler runs e
 | `internal/tui/` | the interactive report |
 | `internal/schedule/`, `internal/selfupdate/`, `internal/fsutil/` | the system scheduler, self-update, and shared file helpers |
 | `relay/`, `api/` | the relay and its client; the relay as a Vercel function |
+| `bb/` | the BB plugin, `@goodit/bb-plugin-ai-usage`, in TypeScript with Bun: `host.ts` runs ai-usage and its installer on a BB machine, `server.ts` keeps each machine's report and runs the long operations as jobs, `app.tsx` and `components/` draw the page, Settings, and the sidebar footer, `src/` holds what they share, `test/` its tests |
 | `macos/` | the menu bar app, a Swift package: `AIUsageBar`, the app; `AIUsageKit`, what it reads from the report and the words it shows; `AIUsageChecks`, its checks; `build.sh` builds the bundle |
 | `scripts/demo/` | the made-up reports and every picture in `docs/demo/` |
 | `scripts/prices/` | the weekly check of `internal/cost/prices.json` against the providers' pages, run by `.github/workflows/prices.yml` |

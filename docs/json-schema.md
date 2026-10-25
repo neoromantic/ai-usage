@@ -449,7 +449,7 @@ A subscription:
 | `usd_per_m_weighted` | number | its price a month for a million of the team's weighted tokens on it over the last 4 weeks; `null` without a price or tokens |
 | `plans` | list | the plans it had, `{at, plan}`, oldest first, each with when a device first read it, up to 12 |
 
-A question is asked of a person only: in the interactive view, on the first run after the guide on a terminal, and by the menu bar app; never in a scheduled run or in `--json`. A charge day and a price are asked only on a device logged in to the subscription; whether it is still paid, on every device. A person answers with `ai-usage cost`, which the app runs too. `ai-usage cost skip ACCOUNT KIND` asks that question of the subscription no more on this device, until its plan changes for a charge day or a price, and `ai-usage cost never-ask` asks none.
+A question is asked of a person only: in the interactive view, on the first run after the guide on a terminal, by the menu bar app, and on the BB plugin's page; never in a scheduled run or in `--json`. A charge day and a price are asked only on a device logged in to the subscription; whether it is still paid, on every device. A person answers with `ai-usage cost`, which the app and the plugin run too. `ai-usage cost skip ACCOUNT KIND` asks that question of the subscription no more on this device, until its plan changes for a charge day or a price, and `ai-usage cost never-ask` asks none.
 
 | Field | Type | Meaning |
 | --- | --- | --- |

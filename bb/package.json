@@ -1,0 +1,84 @@
+{
+  "name": "@goodit/bb-plugin-ai-usage",
+  "version": "0.11.0",
+  "description": "Your team's Claude Code, Codex and Grok subscriptions in BB: what is left of each limit, who used it, and what it costs, from ai-usage.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/neoromantic/ai-usage.git",
+    "directory": "bb"
+  },
+  "homepage": "https://github.com/neoromantic/ai-usage#in-bb",
+  "bugs": "https://github.com/neoromantic/ai-usage/issues",
+  "keywords": [
+    "bb-plugin",
+    "ai-usage",
+    "claude-code",
+    "codex",
+    "quota",
+    "usage-limits",
+    "team"
+  ],
+  "engines": {
+    "bb": ">=0.46.1",
+    "bbPluginSdk": ">=0.6.49"
+  },
+  "bb": {
+    "name": "AI Usage",
+    "description": "Shows your team's Claude Code, Codex and Grok subscriptions: what is left of each limit, when it runs out, who used it, and what it costs. Installs ai-usage on this machine when it is missing.",
+    "branding": {
+      "icon": "./icons/ai-usage.svg",
+      "experimental_icons": {
+        "team": "./icons/ai-usage.svg"
+      }
+    },
+    "server": "./server.ts",
+    "app": "./app.tsx",
+    "host": "./host.ts",
+    "skills": []
+  },
+  "files": [
+    "dist",
+    "demo",
+    "icons",
+    "components",
+    "hooks",
+    "lib",
+    "src",
+    "app.tsx",
+    "host.ts",
+    "server.ts",
+    "components.json",
+    "tsconfig.json",
+    "PLUGIN_OVERVIEW.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "sync-demo": "bun scripts/sync-demo.ts",
+    "build": "bun scripts/sync-demo.ts && bb plugin build",
+    "typecheck": "bun scripts/sync-demo.ts && tsc --noEmit",
+    "test": "bun scripts/sync-demo.ts && bun test",
+    "check": "bun run typecheck && bun run test && bun run build"
+  },
+  "dependencies": {
+    "@get-bb/plugin-sdk": "0.6.49",
+    "@radix-ui/react-checkbox": "^1.3.7",
+    "@radix-ui/react-slot": "^1.3.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@radix-ui/react-dialog": "^1.1.19",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/bun": "^1.3.0",
+    "@types/node": "^25",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "bb-app": "0.46.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "sonner": "^1.7.4",
+    "tailwind-merge": "^3.4.0",
+    "typescript": "^5.7.0"
+  }
+}

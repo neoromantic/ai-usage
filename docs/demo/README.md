@@ -50,6 +50,7 @@ TZ=Europe/Berlin ai-usage report --from docs/demo/solo.json --plain --width 110
 | `app-details.png`, `app-details-light.png` | the app's Limits with the details of a subscription that runs out open: its countdown, each window, the forecast, the bot that took its reading, who spent the window, and when it was last used |
 | `app-menubar.png`, `app-menubar-light.png` | the app's item in the menu bar in each state: on track, tight, used up, stale, over, out, time until reset, no reading, and the ring alone |
 | `app-menu.png`, `app-menu-light.png` | the app's menu, opened from the popover's ⋯: the collector's status and this Mac, then its actions, Terminal's views, Settings, and Quit, each under its header |
+| `bb-panel.png`, `bb-cost.png` | the BB plugin's page on the team, at its example path, with BB's sidebar hidden: attention and subscriptions, then cost with its questions and devices × subscriptions; the README's and the plugin catalog's pictures |
 | `app-team.png`, `app-team-light.png` | the app's Team window on Usage: every device against every subscription over 7 days, shaded by tokens |
 | `app-team-status.png`, `app-team-status-light.png` | the app's Team window on Status: each device's release, last report, tools, tokens in each period, and note |
 | `app-team-cost.png`, `app-team-cost-light.png` | the app's Team window on Cost: what each device used of each subscription in dollars, what nobody used, and each price |
@@ -93,3 +94,5 @@ TZ=Europe/Berlin "$(xcrun swift build --show-bin-path)/AIUsageBar" --render ../d
 ```
 
 It needs macOS 14 or later with Xcode or the Command Line Tools. `AIUsageBar --demo REPORT` runs the app in the menu bar on a report the same way, to try it by hand.
+
+The BB plugin's pictures come from a real BB, not a renderer: build and install `bb/` in a BB of your own (`cd bb && bun run build && bb plugin install "$PWD" --yes`), open `/plugins/ai-usage/usage/example`, which shows the bundled copy of `team.json` with its own `generated_at` as the time now and its clocks in Europe/Berlin, hide the sidebar, and capture the page at 1440 × 900 with a device pixel ratio of 2: `bb-panel.png` from the top, `bb-cost.png` scrolled to Cost. The catalog takes pictures at least 1200 pixels wide and at most 2 MiB.
