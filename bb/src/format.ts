@@ -178,6 +178,11 @@ export function heatStep(v: number, top: number): number {
   return Math.min(Math.max(5 - Math.floor(Math.log10(top / v) * 2), 1), 5);
 }
 
+/** "~" before a number that is an estimate, never before the none mark. */
+function estimated(text: string, on: boolean): string {
+  return on && text !== NONE ? `~${text}` : text;
+}
+
 /** The matrix in a period: each cell's tokens, the row totals, and each column's. */
 export function matrixView(r: Report, p: "today" | "7d" | "30d" | "90d") {
   const { columns, rows } = r.team.matrix;
@@ -198,9 +203,10 @@ export function matrixView(r: Report, p: "today" | "7d" | "30d" | "90d") {
       device: row.device,
       id: row.device_id,
       cells: columns.map((_, i) => cell(row.cells[i])),
-      total: `${row.burn_estimated && millions(shown(row)[p]) !== NONE ? "~" : ""}${millions(shown(row)[p])}`,
+      total: estimated(millions(shown(row)[p]), row.burn_estimated),
     })),
-    total: millions(rows.reduce((sum, row) => sum + shown(row)[p], 0)),
+    // The team's total is an estimate when a row in it is, as the app's.
+    total: estimated(millions(rows.reduce((sum, row) => sum + shown(row)[p], 0)), rows.some((row) => row.burn_estimated)),
   };
 }
 
