@@ -22,6 +22,8 @@
 #   stack    a relay on 127.0.0.1 and two made-up devices in homes of their
 #            own: a team key, a join, a collect on each, and the first's
 #            report lists both
+#   plugin   the BB plugin in bb/: bun install, its types, its tests, which
+#            read docs/demo, and bb plugin build
 #   app      the menu bar app's checks, and a build of it (macOS)
 #   pictures the app's pictures of the team demo, every tab and state in
 #            light and dark; with --push, of the solo demo too (macOS)
@@ -104,7 +106,7 @@ doctor() {
 		echo "deadcode    missing or not $dc: go install golang.org/x/tools/cmd/deadcode@$dc"
 		bad=1
 	fi
-	for tool in shellcheck tmux jq; do
+	for tool in shellcheck tmux jq bun; do
 		if has "$tool"; then printf '%-11s ok\n' "$tool"; else printf '%-11s missing\n' "$tool"; bad=1; fi
 	done
 	if [ "$goos" = darwin ]; then
@@ -173,6 +175,8 @@ else
 		macos/Sources/AIUsageBar/* | macos/Sources/AIUsageKit/* | docs/demo/*.json) want pictures "$f" ;;
 		esac
 		case $f in docs/demo/*.json) want page "$f" ;; esac
+		# The BB plugin reads the report's JSON and bundles the team demo.
+		case $f in bb/* | internal/view/* | internal/snapshot/* | docs/demo/*.json) want plugin "$f" ;; esac
 		case $f in *.sh | install.ps1) want shell "$f" ;; esac
 		if [ -n "$push" ]; then
 			case $f in macos/*) want build "$f" ;; esac
@@ -198,7 +202,7 @@ fi
 
 # Steps in the order that fails cheapest first.
 steps=
-for s in shell go lint page stack app pictures build install brew; do
+for s in shell go lint page stack plugin app pictures build install brew; do
 	case " $want_steps " in *" $s "*) steps="$steps $s" ;; esac
 done
 
@@ -418,6 +422,13 @@ step_stack() {
 	relay_pid=
 	rm -f "$s/key"
 	echo "  two devices, one team, through 127.0.0.1:$port"
+}
+
+step_plugin() {
+	has bun || fail "no bun on PATH; the plugin step needs Bun"
+	(cd bb && bun install --frozen-lockfile && bun run check) >"$ev/plugin.txt" 2>&1 ||
+		{ tail -n 30 "$ev/plugin.txt"; fail "bun run check in bb/; see plugin.txt"; }
+	grep -E '^ *[0-9]+ (pass|fail)' "$ev/plugin.txt" | sed 's/^ */  /'
 }
 
 step_app() {
