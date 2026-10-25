@@ -128,8 +128,9 @@ cat <<'EOF'
         rm ~/.local/bin/ai-usage
       If brew could not link ai-usage over an old copy in its bin folder:
         brew link --overwrite neoromantic/tap/ai-usage
-      Before `brew uninstall`, run `ai-usage schedule remove`; see
-        https://github.com/neoromantic/ai-usage#uninstall
+      To remove it, run `ai-usage uninstall` first, then
+        brew uninstall neoromantic/tap/ai-usage
+      See https://github.com/neoromantic/ai-usage#uninstall
     EOS
   end
 
