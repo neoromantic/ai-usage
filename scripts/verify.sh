@@ -247,6 +247,7 @@ cleanup() {
 	[ -z "$relay_pid" ] || kill "$relay_pid" 2>/dev/null || true
 	if [ -n "$brew_tap" ]; then
 		brew uninstall --force "$brew_tap/ai-usage" >/dev/null 2>&1 || true
+		brew untrust --tap "$brew_tap" >/dev/null 2>&1 || true
 		brew untap "$brew_tap" >/dev/null 2>&1 || true
 	fi
 	tmux -S "$tmux_socket" -f /dev/null kill-server 2>/dev/null || true
@@ -499,6 +500,11 @@ step_brew() {
 	brew_tap=verify/aiu
 	brew untap "$brew_tap" >/dev/null 2>&1 || true
 	brew tap-new --no-git "$brew_tap" >"$b/tap.txt" 2>&1 || { cat "$b/tap.txt"; fail "brew tap-new; see brew/tap.txt"; }
+	# Homebrew 7 loads a formula of a tap it does not trust only after brew
+	# trust; an older one has no such command. The trust goes with the tap.
+	if brew trust --help >/dev/null 2>&1; then
+		brew trust --tap "$brew_tap" >>"$b/tap.txt" 2>&1 || { cat "$b/tap.txt"; fail "brew trust; see brew/tap.txt"; }
+	fi
 	formula="$(brew --repo "$brew_tap")/Formula/ai-usage.rb"
 	sh .github/scripts/formula.sh v9.9.9 "$b/dist/checksums.txt" "file://$b/dist" >"$formula"
 	cp "$formula" "$b/local.rb"
@@ -525,6 +531,7 @@ step_brew() {
 	brew style "$brew_tap" >"$b/style.txt" 2>&1 || { tail -n 30 "$b/style.txt"; fail "brew style; see brew/style.txt"; }
 	brew audit --strict --formula "$brew_tap/ai-usage" >"$b/audit.txt" 2>&1 ||
 		{ tail -n 30 "$b/audit.txt"; fail "brew audit; see brew/audit.txt"; }
+	brew untrust --tap "$brew_tap" >/dev/null 2>&1 || true
 	brew untap "$brew_tap" >/dev/null 2>&1
 	brew_tap=
 	echo "  installed, tested, styled and audited from $prefix"
