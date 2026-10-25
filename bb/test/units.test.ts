@@ -5,7 +5,8 @@ import { candidates, cleanEnv, standardDirs } from "../src/env";
 import { inviteMessage } from "../src/invite";
 import { BusyError, Jobs } from "../src/jobs";
 import { errorMessage, redact } from "../src/message";
-import { autoInstallable, phaseOf, type HostFacts } from "../src/phase";
+import { autoInstallable, installRefusal, phaseOf, type HostFacts } from "../src/phase";
+import { NoTeamError, teamSource, type SourceMachine } from "../src/team-source";
 import type { Probe } from "../src/contract";
 import { atLeast } from "../src/version";
 
@@ -190,5 +191,42 @@ describe("jobs", () => {
     expect(jobs.get(b.id)?.status).toBe("failed");
     expect(jobs.get(b.id)?.message).toBe("no network");
     expect(events).toContain("collect:running");
+  });
+});
+
+describe("installing", () => {
+  test("never a second copy beside one the scheduler runs", () => {
+    expect(installRefusal(probe({ bin: null }))).toBeNull();
+    expect(installRefusal(probe())).toContain("already installed");
+    expect(installRefusal(probe({ bin: null, scheduleEntry: true }))).toContain("scheduler on this machine already runs an ai-usage");
+  });
+});
+
+describe("the team an install from Settings joins", () => {
+  const machines = (m: Record<string, { bin: boolean; collected?: boolean; key?: string; relay?: string | null; fails?: boolean }>): SourceMachine => ({
+    hasAiUsage: async (id) => m[id]?.bin === true,
+    collected: async (id) => m[id]?.collected === true,
+    key: async (id) => {
+      if (m[id]?.fails) throw new Error("did not answer");
+      return `${m[id]?.key ?? ""}\n`;
+    },
+    relay: async (id) => ({ configured: m[id]?.relay ?? "https://built-in.example", builtIn: "https://built-in.example" }),
+  });
+
+  test("no machine runs ai-usage: a team of its own", async () => {
+    expect(await teamSource(["a", "b"], machines({ a: { bin: false } }))).toBeNull();
+  });
+
+  test("the first machine that gives its key, with its relay only when it is not the built-in one", async () => {
+    const m = machines({ a: { bin: true, collected: true, fails: true }, b: { bin: true, collected: true, key: "aiu-team-1:made-up" } });
+    expect(await teamSource(["a", "b"], m)).toEqual({ key: "aiu-team-1:made-up", relay: null });
+    const custom = machines({ b: { bin: true, collected: true, key: "aiu-team-1:made-up", relay: "https://relay.example.com" } });
+    expect(await teamSource(["b"], custom)).toEqual({ key: "aiu-team-1:made-up", relay: "https://relay.example.com" });
+  });
+
+  test("a machine that runs ai-usage but gives no key is an error, never a new team", async () => {
+    await expect(teamSource(["a"], machines({ a: { bin: true, collected: false } }))).rejects.toThrow(NoTeamError);
+    await expect(teamSource(["a"], machines({ a: { bin: true, collected: true, fails: true } }))).rejects.toThrow("did not answer");
+    await expect(teamSource(["a"], machines({ a: { bin: true, collected: true, key: "" } }))).rejects.toThrow(NoTeamError);
   });
 });

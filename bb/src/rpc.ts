@@ -83,6 +83,8 @@ export const rpcContract = defineRpcContract({
           user: z.string().nullable(),
           root: z.boolean(),
           version: z.string().nullable(),
+          /** A schedule of ai-usage whose binary the plugin cannot find: no Install. */
+          scheduleEntry: z.boolean(),
           job: jobSchema.nullable(),
         }),
       ),

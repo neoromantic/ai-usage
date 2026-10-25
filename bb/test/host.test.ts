@@ -76,6 +76,29 @@ describe("probe", () => {
     rmSync(agents, { recursive: true });
   });
 
+  test("takes the binary a launch agent runs from outside PATH, but never another program", async () => {
+    const agents = path.join(home, "Library/LaunchAgents");
+    mkdirSync(agents, { recursive: true });
+    writeFileSync(path.join(agents, "io.github.neoromantic.ai-usage.plist"), "<plist/>");
+    const elsewhere = path.join(home, "apps/ai-usage");
+    fake(elsewhere, "v0.10.2", "{}");
+    const plutil = (program: string) => {
+      writeFileSync(path.join(home, "fakebin/plutil"), `#!/bin/sh\necho '${program}'\n`);
+      chmodSync(path.join(home, "fakebin/plutil"), 0o755);
+    };
+    plutil(elsewhere);
+    let p = await probe(machine());
+    expect(p.scheduleEntry).toBe(true);
+    expect(p.bin).toBe(elsewhere);
+    expect(p.version).toBe("v0.10.2");
+    plutil("/bin/sh");
+    p = await probe(machine());
+    expect(p.scheduleEntry).toBe(true);
+    expect(p.bin).toBeNull();
+    rmSync(agents, { recursive: true });
+    rmSync(path.join(home, "fakebin/plutil"));
+  });
+
   test("an older release is not asked for status, which made a team key before v0.11.0", async () => {
     fake(path.join(home, ".local/bin/ai-usage"), "v0.10.2", "{}");
     writeFileSync(calls, "");

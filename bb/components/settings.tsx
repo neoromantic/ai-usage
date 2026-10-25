@@ -178,6 +178,7 @@ interface MachineLine {
   user: string | null;
   root: boolean;
   version: string | null;
+  scheduleEntry: boolean;
   job: JobView | null;
 }
 
@@ -207,7 +208,7 @@ function Machines() {
                 {[m.platform, m.root ? "root" : m.user, m.version ?? PHASE_WORDS[m.phase]].filter((x) => x !== null).join(" · ")}
               </div>
             </div>
-            {(m.phase === "absent" || m.phase === "install-failed") && m.connected ? (
+            {(m.phase === "absent" || m.phase === "install-failed") && m.connected && !m.scheduleEntry ? (
               <Button
                 size="sm"
                 variant="outline"

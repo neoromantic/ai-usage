@@ -8,8 +8,9 @@ import demoTeam from "./demo/team.json" with { type: "json" };
 import { allowed } from "./src/args.js";
 import { hostContract, hostSignals, type Probe, type RunOutput } from "./src/contract.js";
 import { inviteMessage } from "./src/invite.js";
+import { teamSource, type TeamSource } from "./src/team-source.js";
 import { BusyError, Jobs } from "./src/jobs.js";
-import { autoInstallable, NOTHING_COLLECTED, phaseOf, type HostFacts } from "./src/phase.js";
+import { autoInstallable, installRefusal, NOTHING_COLLECTED, phaseOf, type HostFacts } from "./src/phase.js";
 import { readReport, SchemaError, type Report } from "./src/report.js";
 import { rpcContract, type HostView, type JobKind, type JobView } from "./src/rpc.js";
 
@@ -284,17 +285,22 @@ export default async function plugin(bb: BbPluginApi) {
   }
 
   /** The team key and relay of the first machine that runs ai-usage, read into memory only. */
-  async function sourceTeam(except: string): Promise<{ key: string; relay: string | null } | null> {
+  async function sourceTeam(except: string): Promise<TeamSource | null> {
     const h = await hosts();
-    const order = [h.primaryId, ...h.hosts.map((x) => x.id)].filter((x): x is string => x !== null && x !== except);
-    for (const id of new Set(order)) {
-      const p = caches.get(id)?.probe;
-      if (p === undefined || p === null || p.bin === null || caches.get(id)?.reportState?.ok !== true) continue;
-      const key = check(await run(id, p, ["team", "key"], TIMEOUT.short));
-      const relay = await host.call("relay", { bin: p.bin, aiHome: p.aiHome }, { hostId: id, timeoutMs: TIMEOUT.short });
-      return { key, relay: relay.configured !== null && relay.configured !== relay.builtIn ? relay.configured : null };
-    }
-    return null;
+    const connected = new Set(h.hosts.filter((x) => x.status === "connected").map((x) => x.id));
+    const order = [...new Set([h.primaryId, ...h.hosts.map((x) => x.id)])].filter((x): x is string => x !== null && x !== except && connected.has(x));
+    return teamSource(order, {
+      hasAiUsage: async (id) => (await probeHost(id))?.bin != null,
+      collected: async (id) => {
+        if (cache(id).reportState?.ok !== true) await refresh(id);
+        return cache(id).reportState?.ok === true;
+      },
+      key: async (id) => check(await run(id, (await probeHost(id))!, ["team", "key"], TIMEOUT.short)),
+      relay: async (id) => {
+        const p = (await probeHost(id))!;
+        return host.call("relay", { bin: p.bin!, aiHome: p.aiHome }, { hostId: id, timeoutMs: TIMEOUT.short });
+      },
+    });
   }
 
   // Installs ai-usage on the primary machine when the plugin starts and the
@@ -385,6 +391,7 @@ export default async function plugin(bb: BbPluginApi) {
           user: v.user,
           root: v.root,
           version: v.version,
+          scheduleEntry: v.scheduleEntry,
           job: jobs.latest(x.id),
         });
       }
@@ -406,7 +413,8 @@ export default async function plugin(bb: BbPluginApi) {
     install: async ({ hostId, teamKey, relay, copyTeam }, context) => {
       guard(context);
       const t = await target(hostId);
-      if (t.probe.bin !== null) throw new Error("ai-usage is already installed on this machine");
+      const refusal = installRefusal(t.probe);
+      if (refusal !== null) throw new Error(refusal);
       let key = teamKey;
       let url = relay;
       if (copyTeam && (key === null || key.trim() === "")) {
