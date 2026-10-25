@@ -1,6 +1,6 @@
 ---
 name: verify-ai-usage
-description: Prove an ai-usage change works the way a person sees it, at the least cost. Picks the checks from what changed with scripts/verify.sh (Go tests, lint, the printed report and the interactive view driven in tmux, two made-up devices through a local relay, the menu bar app's checks and pictures), keeps every screen as evidence, and says how to look further by hand. Use before saying an ai-usage change works, before a push, when a check fails, or when asked to QA or bug bash ai-usage.
+description: Prove an ai-usage change works the way a person sees it, at the least cost. Picks the checks from what changed with scripts/verify.sh (Go tests, lint, the printed report and the interactive view driven in tmux, two made-up devices through a local relay, the menu bar app's checks and pictures, the BB plugin's tests and build), keeps every screen as evidence, and says how to look further by hand. Use before saying an ai-usage change works, before a push, when a check fails, or when asked to QA or bug bash ai-usage.
 ---
 
 # Verify ai-usage
@@ -37,6 +37,7 @@ edit to a golden file.
 | `lint` | Go code changed | staticcheck and deadcode at CI's pinned versions for this OS; `--push`: linux, darwin, windows | 3s; 14s with `--push` |
 | `page` | Go code or a demo report | both demo reports printed at 80 and 110 columns, and the interactive view driven by keys in a tmux of its own | 4s |
 | `stack` | Go code | a relay on 127.0.0.1, two devices in made-up homes: `team key`, `team join`, a collect on each, and the first's report lists both | under 1s |
+| `plugin` | `bb/`, `internal/view`, `internal/snapshot`, a demo report | `bun run check` in `bb/`: the BB plugin's types, its tests, which read every demo report, an older one, and an unknown kind of attention, and its `bb plugin build` | 20s; a minute cold |
 | `app` | `macos/`, `internal/view`, `internal/snapshot`, a demo report | `AIUsageChecks`, the app's decoding and words, and a debug build of the app | 6s; 25s cold |
 | `pictures` | the app's UI or words (`AIUsageBar`, `AIUsageKit`), a demo report | every tab and state of the popover, the Team window, Settings, and the menu bar, light and dark, from `team.json`; `--push` adds `solo.json` | 45s; +20s |
 | `build` | `--push` and `macos/` changed | `macos/build.sh`: the universal, signed release bundle | 80s |
@@ -54,7 +55,7 @@ proves the page did not break, not that it says the right thing.
 `scripts/verify.sh --doctor` checks, read-only, the Go version against
 `go.mod`, staticcheck and deadcode against the versions CI pins in
 `.github/workflows/ci.yml` (and prints the `go install` line when one is
-off), shellcheck, tmux, jq, Swift, pwsh, and that the base ref exists. Run
+off), shellcheck, tmux, jq, Bun, Swift, pwsh, and that the base ref exists. Run
 it first when a step fails for a reason that is not the code.
 
 ## Evidence
@@ -69,6 +70,7 @@ and points `.verify/latest` at it.
 | `page/solo-80.txt` … `team-110.txt` | the printed page of each demo report at each width |
 | `page/tui-0-start.txt` … `tui-10-back.txt` | the interactive view at start, then after `s` (DEVICES as status), `%` (shares), `7` (the week), `G` (the bottom), `?` (help), `esc`, `enter` (a row picked), `j` (the next row), `enter` (its detail), `esc` (back) |
 | `stack/` | each device's commands and pages, `a.json`, the report of `dev-a` that lists both devices, and `relay.log` |
+| `plugin.txt` | the BB plugin's install, types, tests, and build |
 | `app/checks.txt`, `app/team/*.png`, `app/solo/*.png` | the app's checks, and its pictures |
 
 Read the screens a change touches; do not trust a passing step for words,
@@ -122,6 +124,8 @@ label and the crontab are this machine's whatever `HOME` says.
   only on a click on the menu bar, which takes over the user's pointer, so
   drive it (cua-driver) only when the user says so, and stop the process you
   started, by its PID.
+- **The BB plugin:** [features/bb-plugin.md](features/bb-plugin.md) says
+  how to install `bb/` in a BB of your own and open its example team.
 - **A picture for the README:** `bun scripts/demo/shots.ts NAME`, as
   docs/demo/README.md says, after a visible change, and look at it.
 
