@@ -173,7 +173,10 @@ func (c collection) run(ctx context.Context) (res *collect.Result, err error) {
 		opts.Wait = lockWait
 		opts.Waiting = c.waiting
 	}
-	return collect.Run(ctx, opts)
+	if res, err = collect.Run(ctx, opts); err == nil && !res.Waited {
+		stats.sources(res.State)
+	}
+	return res, err
 }
 
 // rescue runs when a collection failed before its housekeeping: it keeps a

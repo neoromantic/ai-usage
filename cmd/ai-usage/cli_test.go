@@ -53,6 +53,11 @@ func hermetic(t *testing.T) {
 	t.Helper()
 	t.Setenv("AI_USAGE_NO_SCHEDULE", "1")
 	t.Setenv("AI_USAGE_RELAY", "")
+	// Usage stats are off in tests, unless the machine's environment says
+	// otherwise; telemetry_test.go turns them on against a local server.
+	for _, k := range []string{"AI_USAGE_TELEMETRY", "DO_NOT_TRACK", callerEnv} {
+		t.Setenv(k, "")
+	}
 	// The last two route a session through BB's Account Pooler.
 	for _, k := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "GROK_HOME", "HERMES_HOME", "ANTHROPIC_BASE_URL", "CODEX_OPENAI_BASE_URL"} {
 		t.Setenv(k, "")

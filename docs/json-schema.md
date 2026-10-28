@@ -893,3 +893,19 @@ A shortened report from a team of two:
 | `schedule.error` | string | why the scheduler could not be asked; `null` otherwise |
 
 A front end that finds an ai-usage, on `PATH` or where the installer puts it, runs `status --json` with it. When `schedule.program` is another binary, that one is the copy that collects: run it, with `AI_USAGE_HOME` set to `schedule.home`, for `report --json`. `collected` `false` means `report --json` fails with `nothing collected yet` until `ai-usage collect --json`, the first run, which also registers the schedule. `ai-usage uninstall` takes ai-usage off the device again, as the README says.
+
+## telemetry status --json
+
+`ai-usage telemetry status --json` says whether [usage stats](../README.md#usage-stats) go to ai-usage's author, for a front end such as the menu bar app, which shows the notice and the switch. It has no `schema_version`: its fields are those of the usage stats client every product of the author's shares, and `notice`.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `enabled` | bool | usage stats are on, though nothing is sent while `notice` is due |
+| `debug` | bool | `AI_USAGE_TELEMETRY=debug`: each event is printed to standard error, not sent |
+| `reason` | string | what decided, the first that applies: `no-endpoint` (a build without them), `do-not-track` (`DO_NOT_TRACK`), `env` (`AI_USAGE_TELEMETRY`), `ci`, `test`, `dev-version` (a development build), `state` (`ai-usage telemetry on` or `off`), or `default` (on) |
+| `id` | string | the random install id; `null` until the notice has been seen, and after `ai-usage telemetry off` |
+| `stateFile` | string | `telemetry.json` in the state folder |
+| `endpoint` | string | where events go |
+| `notice` | string | the notice to show once, while usage stats are on and nobody has seen it; `null` otherwise. A front end that showed it runs `ai-usage telemetry notice --seen` |
+
+A front end's own runs of ai-usage set `AI_USAGE_CALLER`, as the menu bar app sets it to `app`, and record nothing. Its own events go with `ai-usage telemetry record app_started`, or `ai-usage telemetry record feature_used FEATURE`, which the app uses for `popover`, `team window`, and `settings`.
