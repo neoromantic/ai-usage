@@ -37,7 +37,7 @@ ai-usage is one small binary for macOS, Linux, and Windows. The system scheduler
 - **What the subscriptions cost,** a month, from a price list or the price you typed: how much of it the team used over the last 4 weeks, which machine used it, in dollars, when each one charges next, and which ones nobody uses or can say are still paid. See [Cost](#cost).
 - **ATTENTION, only when something is wrong.** A full window, one that will run out before its reset, a machine whose tool fails or that stopped reporting, an old release, a subscription nobody uses.
 - **The whole team.** Laptops, servers, and bots in containers, every machine against every subscription, with each one's share. A colleague joins with one command. See [Teams](#teams).
-- **Private by design.** The relay sees tools, plans, and numbers. Names, emails, and project paths are encrypted with the team key, and every snapshot is signed. ai-usage also sends its author anonymous [usage stats](#usage-stats), never your accounts, projects, or numbers; `ai-usage telemetry off` stops them. See [Privacy](#privacy).
+- **Private by design.** The relay sees tools, plans, and numbers. Names, emails, and project paths are encrypted with the team key, and every snapshot is signed. ai-usage also sends its author [usage stats](#usage-stats), never your accounts, projects, or numbers; `ai-usage telemetry off` stops them. See [Privacy](#privacy).
 - **Nothing to run or look after.** No daemon, no account, no config file. It installs with one line or with Homebrew, and schedules itself. A script install updates itself; a Homebrew one updates with `brew upgrade` or `ai-usage update`.
 - **Spends none of your quota.** It asks the tools you already have instead of calling Anthropic, OpenAI, or xAI, and never reads your credentials. Asking Claude Code for its usage spends no tokens. See [Other data folders](#other-data-folders).
 - **A menu bar app on macOS.** A ring in the menu bar shows what is left; a click says what is out or runs out, and when, and a notification says it once as it happens. See [Menu bar app](#menu-bar-app).
@@ -759,7 +759,7 @@ The state folder on your machine keeps account labels and project paths in plain
 
 ### Usage stats
 
-ai-usage sends its author anonymous usage stats: how often it runs, which commands and parts of the menu bar app are used, and what fails, so he can see which releases and features people use and fix what breaks. They go to [PostHog](https://posthog.com), which processes them for him, through `usage.sergeybaus.com`, and never to the relay. [usage.sergeybaus.com](https://usage.sergeybaus.com) shows what is sent and the totals.
+ai-usage sends its author usage stats: how often it runs, which commands and parts of the menu bar app are used, and what fails, so he can see which releases and features people use and fix what breaks. They go to [PostHog](https://posthog.com), which processes them for him, through `usage.sergeybaus.com`, and never to the relay. [usage.sergeybaus.com](https://usage.sergeybaus.com) shows what is sent and the totals.
 
 Each event is one of:
 
@@ -775,7 +775,7 @@ Nothing is sent until the notice has been shown once:
 ai-usage shares usage stats with its author: how often it runs, which features are used, errors, version and OS, tied to a random install ID. It never sends your files, arguments or account names. Nothing has been sent yet. Turn it off with `ai-usage telemetry off` or `DO_NOT_TRACK=1`. Details: https://usage.sergeybaus.com
 ```
 
-The installers print it, and so does the first `ai-usage` on a terminal or for an AI agent, on standard error; the menu bar app shows it once in the popover, with OK and Turn Off. The run that shows it sends nothing. A run from the scheduler shows nobody the notice, and sends nothing until someone has seen it; then it sends at most one of each event a day. The menu bar app's and BB's own runs of `ai-usage`, such as the report the app reads every minute, send nothing; the app sends only its events above. Nothing is sent in CI, in tests, or from a development build. An event is one HTTPS request in the background, given 3 seconds, and a run waits at most half a second for it before it exits.
+The installers print it, and so does the first `ai-usage` on a terminal or for an AI agent, on standard error; the menu bar app shows it once in the popover, with OK and Turn Off. The run that shows it sends nothing. A run from the scheduler shows nobody the notice, and sends nothing until someone has seen it. Runs from the scheduler or from a script, such as a status bar that runs ai-usage every minute, send at most one of each event a day. The menu bar app's and BB's own runs of `ai-usage`, such as the report the app reads every minute, send nothing; the app sends only its events above. Nothing is sent in CI, in tests, or from a development build. An event is one HTTPS request in the background, given 3 seconds, and a run waits at most half a second for it before it exits.
 
 To turn usage stats off:
 
