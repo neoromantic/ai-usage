@@ -767,7 +767,7 @@ Each event is one of:
 - a command ran, by its name alone, such as `collect`, `report`, or `team`; for the menu bar app, that it started or that its popover, Team window, or Settings opened
 - a command failed, with the error's type, such as `ENOENT`; for `collect`, `report`, `status`, `schedule`, `update`, and `app`, also its text, with your home folder as `~` and your user name as `<user>`, cut to 300 characters. The other commands, whose errors can repeat an account, a device, a key, or a relay you typed, and `report --from`, send the type alone; so does a tool that failed in a collection, as `source claude`
 
-with the ai-usage version, the OS and its version, the CPU, the Go version, how ai-usage was installed (Homebrew, the installer, or a binary), how it runs (in a terminal, for an AI agent and which one, from a script, from the scheduler, or for the menu bar app), and a random install id, kept in `telemetry.json` in the state folder. PostHog sees the IP address the request comes from, and takes the country from it. ai-usage never sends your files, folder or project names, arguments, account names or emails, host or device names, the team key, or the report's numbers.
+with the ai-usage version, the OS and its version, the CPU, the Go version, how ai-usage was installed (Homebrew, the installer, or a binary), how it runs (in a terminal, for an AI agent and which one, from a script, from the scheduler or `ai-usage schedule run`, as `ai-usage relay serve`, or for the menu bar app), and a random install id, kept in `telemetry.json` in the state folder. PostHog sees the IP address the request comes from, and takes the country from it. ai-usage never sends your files, folder or project names, arguments, account names or emails, host or device names, the team key, or the report's numbers.
 
 Nothing is sent until the notice has been shown once:
 
@@ -780,7 +780,7 @@ The installers print it, and so does the first `ai-usage` on a terminal or for a
 To turn usage stats off:
 
 - `ai-usage telemetry off`, or Share Usage Stats in the menu bar app's Settings, which also forgets the install id; `ai-usage telemetry on` turns them on again
-- `DO_NOT_TRACK=1` or `AI_USAGE_TELEMETRY=0` in the environment. A launch agent, a crontab line, or a scheduled task does not pass on your shell's variables, so to stop the scheduler's runs too, use `ai-usage telemetry off`
+- `DO_NOT_TRACK=1` or `AI_USAGE_TELEMETRY=0` in the environment. A launch agent, a crontab line, a scheduled task, or the menu bar app does not see your shell's variables, so to stop the scheduler's runs and the app's events too, use `ai-usage telemetry off` or the app's switch
 
 `ai-usage telemetry` says whether they are on, and which of these decided. A packager can build ai-usage without them with `-ldflags "-X github.com/neoromantic/ai-usage/internal/telemetry.endpoint="`.
 
