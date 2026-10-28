@@ -50,6 +50,7 @@ enum SettingsWindow {
 
     /// Opens the window, on a pane when one is named.
     static func show(pane: Pane? = nil) {
+        Store.shared.record(.settings)
         if window == nil {
             let tabs = NSTabViewController()
             tabs.tabStyle = .toolbar
@@ -300,6 +301,15 @@ struct GeneralSettings: View {
                     }
                     login = LoginItem.status
                 }))
+                if let stats = store.usageStats {
+                    // ai-usage's switch: what it shares with its author, by
+                    // the notice's words.
+                    Toggle("Share Usage Stats", isOn: Binding(get: { stats.enabled }, set: { on in
+                        Task { await store.shareUsageStats(on) }
+                    }))
+                    .disabled(!stats.switchable)
+                    .help("How often AI Usage runs, which features are used, errors, version and OS, with a random install ID; never your files, accounts, or projects. See usage.sergeybaus.com")
+                }
             } header: {
                 Text("This Mac")
             } footer: {
@@ -312,6 +322,8 @@ struct GeneralSettings: View {
                             .buttonStyle(.borderless)
                             .font(.subheadline)
                     }
+                } else if let stats = store.usageStats, let why = stats.decidedBy {
+                    Footnote("Usage stats are \(stats.enabled ? "on" : "off"): \(why).")
                 }
             }
             Section("About") {
@@ -383,10 +395,11 @@ struct GeneralSettings: View {
                 }
             }
         }
-        .pane(height: 647)
+        .pane(height: 685)
         .onAppear {
             login = LoginItem.status
             notifier.refreshStatus()
+            Task { await store.loadUsageStats() }
             Task {
                 if let v = try? await store.command(["version"], changes: false), !v.isEmpty {
                     cliVersion = v

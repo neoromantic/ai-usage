@@ -57,6 +57,10 @@ final class Store: ObservableObject {
     /// The time the popover measures ages from: the report's own in a demo.
     @Published private(set) var now = Date()
     @Published private(set) var cliPath: String?
+    /// Whether usage stats go to ai-usage's author, with the notice while
+    /// it is due; nil until read, in a demo, and with a release of ai-usage
+    /// before them.
+    @Published private(set) var usageStats: UsageStats?
 
     // What the popover shows, kept while the app runs.
     /// Picking a tab, or anything that opens one, closes the alerts list.
@@ -86,6 +90,8 @@ final class Store: ObservableObject {
 
     let demo: Bool
     private var fetchedAt = Date.distantPast
+    /// The popover's opening was recorded; it opens again once it closed.
+    private var popoverRecorded = false
     private var loading = false
     private var again = false
     private var timer: Timer?
@@ -102,6 +108,14 @@ final class Store: ObservableObject {
         // The path the launch agent names under Homebrew, or where the
         // installer puts ai-usage in the report's user's home.
         cliPath = report.collector.update.homebrew ? "/opt/homebrew/opt/ai-usage/bin/ai-usage" : home + "/.local/bin/ai-usage"
+        usageStats = UsageStats(enabled: true, reason: "default")
+    }
+
+    /// A demo store whose popover shows the usage stats notice, for its
+    /// picture.
+    convenience init(demo report: Report, usageNotice: String) {
+        self.init(demo: report)
+        usageStats = UsageStats(enabled: true, reason: "default", notice: usageNotice)
     }
 
     /// A store without a report, for pictures of the popover's empty states.
@@ -134,6 +148,7 @@ final class Store: ObservableObject {
 
     /// Closes what the popover opened, as it closes.
     func popoverClosed() {
+        popoverRecorded = false
         expanded = nil
         deviceFilter = nil
         showAllProjects = false
@@ -155,6 +170,10 @@ final class Store: ObservableObject {
     func start() {
         guard !demo else { return }
         Task { await refresh() }
+        Task {
+            await loadUsageStats()
+            record(.started)
+        }
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
             Task { @MainActor in await Store.shared.refresh() }
         }
@@ -167,6 +186,14 @@ final class Store: ObservableObject {
         now = Date()
         if Date().timeIntervalSince(fetchedAt) > 10 {
             Task { await refresh() }
+        }
+        if !popoverRecorded {
+            popoverRecorded = true
+            record(.popover)
+        }
+        // A notice someone saw in a terminal meanwhile goes from here too.
+        if usageStats?.notice != nil {
+            Task { await loadUsageStats() }
         }
     }
 
@@ -251,6 +278,33 @@ final class Store: ObservableObject {
     func openInTerminal(_ args: [String], named name: String) {
         guard !demo, let cli = locate() else { return }
         Terminal.open(cli.terminalScript(args), named: name)
+    }
+
+    /// Reads whether usage stats are shared, and the notice while it is due.
+    func loadUsageStats() async {
+        guard !demo, let cli = locate() else { return }
+        usageStats = (try? await cli.run(["telemetry", "status", "--json"], timeout: 10)).flatMap { try? UsageStats.decode($0) }
+    }
+
+    /// Settings' Share Usage Stats, and the notice's Turn Off. On also
+    /// counts as having seen the notice.
+    func shareUsageStats(_ on: Bool) async {
+        _ = try? await command(["telemetry", on ? "on" : "off"], changes: false)
+        await loadUsageStats()
+    }
+
+    /// The notice's OK: the app showed it, so the app's next events go.
+    func usageNoticeSeen() async {
+        _ = try? await command(["telemetry", "notice", "--seen"], changes: false)
+        await loadUsageStats()
+    }
+
+    /// Records one of the app's own events, with ai-usage, which sends it
+    /// in the background. Nothing runs while usage stats are off, before
+    /// the notice is seen, or with a release of ai-usage before them.
+    func record(_ e: UsageStats.Event) {
+        guard !demo, let s = usageStats, s.enabled, s.notice == nil, let cli = locate() else { return }
+        Task { _ = try? await cli.run(UsageStats.record(e), timeout: 10) }
     }
 
     private func locate() -> CLI? {

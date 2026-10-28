@@ -76,7 +76,9 @@ public struct CLI: Sendable {
     }
 
     /// The child's environment: this one, with the LaunchAgent's PATH, else
-    /// this PATH and the standard folders, and the collector's folder.
+    /// this PATH and the standard folders, and the collector's folder. It
+    /// marks the run as the app's, so that its reports every minute record
+    /// no usage stats; the app records its own events.
     public func environment(_ base: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
         var env = base
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -84,6 +86,7 @@ public struct CLI: Sendable {
         if let h = location.stateHome {
             env["AI_USAGE_HOME"] = h
         }
+        env[UsageStats.callerKey] = "app"
         return env
     }
 

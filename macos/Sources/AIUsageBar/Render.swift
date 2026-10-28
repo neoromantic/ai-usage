@@ -78,6 +78,8 @@ enum Renderer {
                 states.append(("projects-expanded", { $0.tab = .projects }, { $0.expanded = "proj:\(p.path)" }))
             }
             let calm = try calmStore(data)
+            // The usage stats notice as ai-usage words it, once, over Limits.
+            let noticed = Store(demo: report, usageNotice: "ai-usage shares usage stats with its author: how often it runs, which features are used, errors, version and OS, tied to a random install ID. It never sends your files, arguments or account names. Nothing has been sent yet. Turn it off with `ai-usage telemetry off` or `DO_NOT_TRACK=1`. Details: https://usage.sergeybaus.com")
             let stale = try staleStore(data)
             let empty: [(String, Store.Phase)] = [
                 ("loading", .loading),
@@ -106,6 +108,7 @@ enum Renderer {
                 if let calm {
                     try write(popover(calm), appearance, to: png("popover-calm"))
                 }
+                try write(popover(noticed), appearance, to: png("popover-usage-notice"))
                 if let stale, let a = stale.report?.attention.first(where: { $0.kind == .over && $0.window == nil }),
                    let p = a.provider, let l = a.account {
                     stale.popoverClosed()

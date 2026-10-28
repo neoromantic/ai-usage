@@ -53,6 +53,7 @@ enum TeamWindow {
 
     /// Opens the window, on a segment when one is named.
     static func show(_ segment: TeamOptions.Segment? = nil) {
+        Store.shared.record(.teamWindow)
         if let segment {
             options.segment = segment
         }
