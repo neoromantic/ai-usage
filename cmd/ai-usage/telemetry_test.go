@@ -261,6 +261,10 @@ func TestUsageStatsNotice(t *testing.T) {
 // TestUsageStatsOffInTests: a test run sends nothing and writes nothing.
 func TestUsageStatsOffInTests(t *testing.T) {
 	hermetic(t)
+	// CI decides before the test run does; this is the test run's rule.
+	for _, k := range []string{"CI", "GITHUB_ACTIONS", "GITLAB_CI", "BUILDKITE", "CIRCLECI", "TF_BUILD", "JENKINS_URL", "TEAMCITY_VERSION", "CODEBUILD_BUILD_ID"} {
+		t.Setenv(k, "")
+	}
 	d := newDevice(t)
 	d.ok("name", "show")
 	if out := d.ok("telemetry"); !strings.Contains(out, "usage stats  off: in tests") {
