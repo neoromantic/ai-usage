@@ -99,6 +99,7 @@ cat <<EOF
 EOF
 # Quoted, so the shell leaves Ruby's #{} and the backticks alone. The test
 # runs only version: a bare ai-usage would collect and register a schedule.
+# It turns usage stats off, as the caveats say how to.
 #
 # On a Linux whose glibc or libstdc++ is older than on Homebrew's own build
 # machines, Ubuntu 24.04's, Homebrew gives every formula its glibc and gcc
@@ -131,10 +132,18 @@ cat <<'EOF'
       To remove it, run `ai-usage uninstall` first, then
         brew uninstall neoromantic/tap/ai-usage
       See https://github.com/neoromantic/ai-usage#uninstall
+
+      ai-usage shares usage stats with its author: how often it runs, which
+      features are used, errors, version and OS, tied to a random install ID.
+      It never sends your files, arguments or account names, and sends
+      nothing until its notice has shown once, at your first `ai-usage`.
+      Turn it off with `ai-usage telemetry off` or DO_NOT_TRACK=1.
+      Details: https://usage.sergeybaus.com
     EOS
   end
 
   test do
+    ENV["AI_USAGE_TELEMETRY"] = "0"
     assert_equal "v#{version}", shell_output("#{bin}/ai-usage version").strip
   end
 end

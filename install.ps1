@@ -10,8 +10,10 @@
 #   AI_USAGE_DOWNLOAD_URL  where release files are fetched from (mirrors, tests)
 #
 # The script downloads the release file for this CPU, checks it against the
-# release's checksums.txt, installs it, adds its folder to the user PATH, and
-# runs it once. That first run registers the collector with Task Scheduler.
+# release's checksums.txt, installs it, adds its folder to the user PATH,
+# prints the usage stats notice (`ai-usage telemetry off` or DO_NOT_TRACK=1
+# turns them off), and runs it once. That first run registers the collector
+# with Task Scheduler.
 # Running the script again upgrades in place.
 
 # Everything is inside one script block, so a partly downloaded script does
@@ -125,6 +127,12 @@
         $key | & $exe team join
         if ($LASTEXITCODE -ne 0) { throw 'ai-usage install: team join failed' }
     }
+
+    # The binary prints the usage stats notice when someone can read it, on
+    # a console or to an AI agent, and marks it seen; until then it sends
+    # nothing.
+    $notice = & $exe telemetry notice
+    if ($LASTEXITCODE -eq 0 -and $notice) { Say "$notice" }
 
     Say 'first run: collecting and registering with Task Scheduler'
     # Piped input is not the console, so the report prints rather than open
