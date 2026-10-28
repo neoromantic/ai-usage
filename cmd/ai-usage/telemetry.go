@@ -281,12 +281,13 @@ func cmdTelemetry(args []string, stdout io.Writer) error {
 		if err := parse(fs, args); err != nil {
 			return err
 		}
-		if *seen {
+		switch {
+		case *seen:
 			c.MarkNoticeSeen()
-		} else {
+		case os.Getenv(callerEnv) == "":
 			// Printed, and marked seen, only on a terminal or for an AI
-			// agent: an installer run in the background, as BB's, shows
-			// nobody the notice.
+			// agent. An installer a front end runs, as BB's, shows nobody
+			// the notice, even where its environment names an agent.
 			c.ShowNotice(stdout)
 		}
 		return nil
