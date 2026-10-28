@@ -37,7 +37,7 @@ ai-usage is one small binary for macOS, Linux, and Windows. The system scheduler
 - **What the subscriptions cost,** a month, from a price list or the price you typed: how much of it the team used over the last 4 weeks, which machine used it, in dollars, when each one charges next, and which ones nobody uses or can say are still paid. See [Cost](#cost).
 - **ATTENTION, only when something is wrong.** A full window, one that will run out before its reset, a machine whose tool fails or that stopped reporting, an old release, a subscription nobody uses.
 - **The whole team.** Laptops, servers, and bots in containers, every machine against every subscription, with each one's share. A colleague joins with one command. See [Teams](#teams).
-- **Private by design.** The relay sees tools, plans, and numbers. Names, emails, and project paths are encrypted with the team key, and every snapshot is signed. See [Privacy](#privacy).
+- **Private by design.** The relay sees tools, plans, and numbers. Names, emails, and project paths are encrypted with the team key, and every snapshot is signed. ai-usage also sends its author anonymous [usage stats](#usage-stats), never your accounts, projects, or numbers; `ai-usage telemetry off` stops them. See [Privacy](#privacy).
 - **Nothing to run or look after.** No daemon, no account, no config file. It installs with one line or with Homebrew, and schedules itself. A script install updates itself; a Homebrew one updates with `brew upgrade` or `ai-usage update`.
 - **Spends none of your quota.** It asks the tools you already have instead of calling Anthropic, OpenAI, or xAI, and never reads your credentials. Asking Claude Code for its usage spends no tokens. See [Other data folders](#other-data-folders).
 - **A menu bar app on macOS.** A ring in the menu bar shows what is left; a click says what is out or runs out, and when, and a notification says it once as it happens. See [Menu bar app](#menu-bar-app).
@@ -321,11 +321,11 @@ A click on a row opens its details: each window with its forecast, and the forec
 
 The cost has three notifications of its own, each on by default and for the same subscriptions: a change, such as a new subscription, a change of plan or of a list price, or one that ended; a charge in 3 days, with how much of the subscription was used; and the [questions](#cost) the report asks on this Mac. Whether a subscription is still paid has the actions Still Paying, Cancelled, and Skip; a charge day or a price has a field to type it in and Skip, and a charge day also Use the Suggested Day when the report has one. An answer runs `ai-usage cost`, and when it refuses the answer, a notification says why. Each is said once, a change or a charge only within 3 days of it, so the first run of a new release does not tell a month of news. A click opens Settings on Cost.
 
-**Settings** does what the terminal commands do: this Mac's name in the team (`ai-usage name`), the names of accounts (`ai-usage alias`), the relay (`ai-usage relay`), the team key, open at login, what the menu bar shows and whose subscriptions it tracks, notifications, updates, and the cost (`ai-usage cost`). Cost has this Mac's questions on top, then each subscription with its plan, who bills it, Used, next charge, and state; a click on one opens its price, Billed (Monthly or Yearly), Next Charge, Still Paying, Cancelled, and Reset; and under them the cost's notifications. About names the app and its version once, beside Check for Updates, which runs `ai-usage update` and so updates the app too, and says where the command-line tool is, "Command-Line Tool (Homebrew)" when the report says Homebrew installed it. It names the tool's release only when it is another one, "Command-line tool v0.5.1: updates with Check for Updates", or "Command-line tool v0.5.1 (Homebrew): updates with Check for Updates or brew upgrade", or says the tool is not found. Under Homebrew, Check for Updates runs `ai-usage update`, which runs `brew upgrade neoromantic/tap/ai-usage` and brings the app to the release brew installed; it waits up to 15 minutes for it. When it fails, the app shows ai-usage's own error, not what brew printed before it.
+**Settings** does what the terminal commands do: this Mac's name in the team (`ai-usage name`), the names of accounts (`ai-usage alias`), the relay (`ai-usage relay`), the team key, open at login, Share Usage Stats (`ai-usage telemetry`), what the menu bar shows and whose subscriptions it tracks, notifications, updates, and the cost (`ai-usage cost`). Cost has this Mac's questions on top, then each subscription with its plan, who bills it, Used, next charge, and state; a click on one opens its price, Billed (Monthly or Yearly), Next Charge, Still Paying, Cancelled, and Reset; and under them the cost's notifications. About names the app and its version once, beside Check for Updates, which runs `ai-usage update` and so updates the app too, and says where the command-line tool is, "Command-Line Tool (Homebrew)" when the report says Homebrew installed it. It names the tool's release only when it is another one, "Command-line tool v0.5.1: updates with Check for Updates", or "Command-line tool v0.5.1 (Homebrew): updates with Check for Updates or brew upgrade", or says the tool is not found. Under Homebrew, Check for Updates runs `ai-usage update`, which runs `brew upgrade neoromantic/tap/ai-usage` and brings the app to the release brew installed; it waits up to 15 minutes for it. When it fails, the app shows ai-usage's own error, not what brew printed before it.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/demo/app-settings-light.png">
-  <img alt="Settings, General: what the menu bar shows and whose subscriptions it tracks, notifications when a window is out or will run out and for whose subscriptions, this Mac's name, open at login, and About with the app's version and where the command-line tool is" src="docs/demo/app-settings.png" width="460">
+  <img alt="Settings, General: what the menu bar shows and whose subscriptions it tracks, notifications when a window is out or will run out and for whose subscriptions, this Mac's name, open at login, Share Usage Stats, and About with the app's version and where the command-line tool is" src="docs/demo/app-settings.png" width="460">
 </picture>
 
 <picture>
@@ -333,7 +333,7 @@ The cost has three notifications of its own, each on by default and for the same
   <img alt="Settings, Cost: whether a former teammate's Claude Pro is still paid, with Still Paying, Cancelled, and Skip, and when this Mac's Claude charges next, with the suggested day; then each Claude and Codex subscription with its plan, Used, and price a month" src="docs/demo/app-settings-cost.png" width="460">
 </picture>
 
-The app computes nothing itself. It runs `ai-usage report --json` every minute and when the popover opens, and shows what the report says: forecasts, states, what needs attention, the cost, and the collector's health. It keeps no answer of its own either: each one runs `ai-usage cost`. Its notifications come from the same report. The tooltip of a release that is out takes its words from the report too: "ai-usage v0.5.0 installs v0.5.1 on its next check" for a script install, and "v0.5.1 is out; Update runs brew upgrade neoromantic/tap/ai-usage" for a Homebrew one. It finds the binary through the launch agent, or shows the install command when there is none, with the Homebrew one under it. To go without it, install with `AI_USAGE_NO_APP=1`, or remove it as [Uninstall](#uninstall) shows; neither self-update nor `brew upgrade` brings it back, and `ai-usage app install` does.
+The app computes nothing itself. It runs `ai-usage report --json` every minute and when the popover opens, and shows what the report says: forecasts, states, what needs attention, the cost, and the collector's health. It keeps no answer of its own either: each one runs `ai-usage cost`. Its notifications come from the same report. The tooltip of a release that is out takes its words from the report too: "ai-usage v0.5.0 installs v0.5.1 on its next check" for a script install, and "v0.5.1 is out; Update runs brew upgrade neoromantic/tap/ai-usage" for a Homebrew one. It finds the binary through the launch agent, or shows the install command when there is none, with the Homebrew one under it. Its runs of `ai-usage` record no [usage stats](#usage-stats); it records only that it started and that its popover, Team window, or Settings opened, and until you have seen the notice, which the popover shows once with OK and Turn Off, not even that. To go without it, install with `AI_USAGE_NO_APP=1`, or remove it as [Uninstall](#uninstall) shows; neither self-update nor `brew upgrade` brings it back, and `ai-usage app install` does.
 
 ## In BB
 
@@ -352,7 +352,7 @@ When the plugin starts on a Mac or Linux machine that runs BB as a person, not r
 What to know before you install it:
 
 - ai-usage runs from the scheduler every 15 minutes, with BB open or not, and updates itself from GitHub Releases. Removing the plugin leaves it collecting: Remove ai-usage in Settings, or [Uninstall](#uninstall), takes it off.
-- The relay sees what [Privacy](#privacy) says, whether ai-usage came from BB or not.
+- The relay sees what [Privacy](#privacy) says, whether ai-usage came from BB or not. The plugin's own runs of ai-usage send no [usage stats](#usage-stats), and its install shows nobody their notice, so the scheduler's runs send none until someone has seen it in a terminal or in the menu bar app.
 - BB's Cursor, OpenCode and Pi agents are not counted. Sessions BB's Account Pooler routes count for the login of the folder that holds their logs, and their machine is marked; see `pooled` in [docs/json-schema.md](docs/json-schema.md).
 - Anything that runs in BB as you, agents included, can read the team report through the plugin and ask it for the team key, as it can read ai-usage's own files. The plugin answers no other plugin, keeps no copy of the key, and logs neither the key nor the report.
 - It sends no notifications; the menu bar app does.
@@ -379,8 +379,9 @@ Releases are built for amd64 and arm64 on each OS, and the menu bar app is one b
 2. checks the SHA-256 checksums
 3. installs the binary into a folder on your `PATH` (see below), or to `%LOCALAPPDATA%\Programs\ai-usage\ai-usage.exe` on Windows, where it also adds that folder to your user `PATH`
 4. saves the relay and joins the team, if you gave them
-5. runs `ai-usage` once, which registers it with the scheduler and prints the report with a short guide under it
-6. on macOS 14 and later, puts the menu bar app in `~/Applications/AI Usage.app` in place of an earlier copy, quits the copy that runs, and opens the new one; with no one logged in at the screen, as over SSH, it says to open the app there once instead
+5. prints the [usage stats](#usage-stats) notice, when you or an AI agent can read it
+6. runs `ai-usage` once, which registers it with the scheduler and prints the report with a short guide under it
+7. on macOS 14 and later, puts the menu bar app in `~/Applications/AI Usage.app` in place of an earlier copy, quits the copy that runs, and opens the new one; with no one logged in at the screen, as over SSH, it says to open the app there once instead
 
 On macOS and Linux, an upgrade replaces the binary where it is: `~/.local/bin/ai-usage`, or the `ai-usage` found on `PATH` when you can write to its folder. A new install goes into the first of `~/.local/bin` and `~/bin` that is on your `PATH` and that you can write to, and never into a folder that belongs to another tool, such as `~/.cargo/bin` or Homebrew's `/opt/homebrew/bin` and `/usr/local/bin`.
 
@@ -456,7 +457,7 @@ ai-usage                    # collect, register with launchd or cron, and print 
 ai-usage app install        # on macOS 14 and later: the menu bar app
 ```
 
-Homebrew installs the binary and nothing else: it runs no command of ai-usage's, so the first `ai-usage` registers the schedule, as the installer's first run does, and `ai-usage app install` adds the menu bar app. If you ran `ai-usage schedule remove` before, run `ai-usage schedule install` instead of the bare `ai-usage`, since runs leave a removed schedule removed. Homebrew is per-user: run these as the person whose usage you want to collect, not with `sudo`.
+Homebrew installs the binary and nothing else: it runs no command of ai-usage's, so the first `ai-usage` registers the schedule, as the installer's first run does, and shows the [usage stats](#usage-stats) notice, and `ai-usage app install` adds the menu bar app. `brew info neoromantic/tap/ai-usage` repeats the notice, and the formula's test sends nothing. If you ran `ai-usage schedule remove` before, run `ai-usage schedule install` instead of the bare `ai-usage`, since runs leave a removed schedule removed. Homebrew is per-user: run these as the person whose usage you want to collect, not with `sudo`.
 
 The binary is static and needs nothing from Homebrew. On a Linux whose glibc is older than 2.39, such as Ubuntu 22.04 or Debian 12, Homebrew gives every formula its own glibc and gcc, about 650 MB; from v0.8.1 the formula of ai-usage leaves them out. If v0.8.0 brought them, `brew autoremove` removes them after `brew upgrade neoromantic/tap/ai-usage`, unless another formula needs them.
 
@@ -489,6 +490,7 @@ The first run:
 - registers with the scheduler: a line in your crontab on Linux, a launch agent on macOS, a task named `ai-usage` in Task Scheduler on Windows
 - collects and prints the report
 - prints a short guide under the report: which scheduler now collects every 15 minutes, or what to do when none could be registered; what the team and the relay see; what a weighted token weighs; when it applies, that the team's tables count UTC days, and today from your local midnight, that the ledger holds less than 90 days of Claude, or why the team's totals are estimated; and the commands worth knowing, with how to invite a colleague, `ai-usage app install` on a Mac with macOS 14 or later that does not have the menu bar app, how to pause the system scheduler's runs, and how to uninstall
+- on a terminal or for an AI agent, prints the [usage stats](#usage-stats) notice once, on standard error, unless the installer or the menu bar app showed it before
 - on a terminal, asks the [cost](#cost) questions after the guide, one per line: when each subscription logged in here charges, its price when the list has none, and whether one nobody can confirm is still paid. An empty line takes the suggestion, or leaves the question for later; `s` skips it for good, and `S` asks nothing more
 
 The guide is printed once. When the scheduler collected first, or the first run you started used `--json`, the guide comes with the next `ai-usage` that prints text; `ai-usage report` never prints it.
@@ -636,6 +638,9 @@ Or, from a clone with the Vercel CLI logged in, run `sh scripts/deploy-relay.sh`
 | `ai-usage update` | check for a release now; where Homebrew installed ai-usage, run `brew upgrade neoromantic/tap/ai-usage` |
 | `ai-usage app install` | add the menu bar app of this release, on macOS 14 and later, whatever installed ai-usage |
 | `ai-usage uninstall [--forget] [--purge]` | remove the schedule, the menu bar app, and the binary, or say how where Homebrew installed it; keep the state folder unless `--purge`; see [Uninstall](#uninstall) |
+| `ai-usage telemetry [status] [--json]` | whether [usage stats](#usage-stats) go to ai-usage's author, which setting decided, the install id, and its file |
+| `ai-usage telemetry off`, `ai-usage telemetry on` | stop sending usage stats and forget the install id, or send them again |
+| `ai-usage telemetry notice` | print the usage stats notice, once, on a terminal or for an AI agent, as the installers do |
 | `ai-usage version` | print the version |
 | `ai-usage help` | print usage |
 
@@ -656,6 +661,8 @@ Or, from a clone with the Vercel CLI logged in, run `sh scripts/deploy-relay.sh`
 | `AI_USAGE_RELAY` | the relay URL, overriding the saved one |
 | `AI_USAGE_NAME` | this machine's name in the team, overriding the saved one in the runs that see it; launchd and cron do not pass on a shell's variables, so name a computer with `ai-usage name set` |
 | `AI_USAGE_NO_SCHEDULE` | when set, this run does not register with the scheduler |
+| `AI_USAGE_TELEMETRY` | `0` turns [usage stats](#usage-stats) off in the runs that see it, `1` on, and `debug` prints each event to standard error instead of sending it |
+| `DO_NOT_TRACK` | `1` turns usage stats off in the runs that see it, as it does for other tools that read it |
 | `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GROK_HOME`, `HERMES_HOME` | another data folder for that tool |
 
 ## Other data folders
@@ -720,7 +727,7 @@ cost        currency, total_usd, used_usd, used_pct, unused_usd, without_price, 
 
 ## Privacy
 
-A snapshot is what leaves the machine. It is at most 64 KB, and the relay rejects any field it does not know.
+A snapshot is what goes to the relay. It is at most 64 KB, and the relay rejects any field it does not know. Apart from it, ai-usage sends its author [usage stats](#usage-stats), and asks GitHub for [updates](#updates).
 
 Sealed with the team key, so only the team can read them:
 
@@ -749,6 +756,33 @@ Once a day each collector also asks the relay for its price list, `GET /v1/price
 Every snapshot is signed with the team key, and each machine checks the signatures of what it reads. The relay cannot forge or change a snapshot without being noticed. It can withhold one, delete one, or keep serving an older one.
 
 The state folder on your machine keeps account labels and project paths in plain text.
+
+### Usage stats
+
+ai-usage sends its author anonymous usage stats: how often it runs, which commands and parts of the menu bar app are used, and what fails, so he can see which releases and features people use and fix what breaks. They go to [PostHog](https://posthog.com), which processes them for him, through `usage.sergeybaus.com`, and never to the relay. [usage.sergeybaus.com](https://usage.sergeybaus.com) shows what is sent and the totals.
+
+Each event is one of:
+
+- installed, the first time this install sends anything, and started, at each run
+- a command ran, by its name alone, such as `collect`, `report`, or `team`; for the menu bar app, that it started or that its popover, Team window, or Settings opened
+- a command failed, with the error's type, such as `ENOENT`; for `collect`, `report`, `status`, `schedule`, `update`, and `app`, also its text, with your home folder as `~` and your user name as `<user>`, cut to 300 characters. The other commands, whose errors can repeat an account, a device, a key, or a relay you typed, and `report --from`, send the type alone; so does a tool that failed in a collection, as `source claude`
+
+with the ai-usage version, the OS and its version, the CPU, the Go version, how ai-usage was installed (Homebrew, the installer, or a binary), how it runs (in a terminal, for an AI agent and which one, from a script, from the scheduler, or for the menu bar app), and a random install id, kept in `telemetry.json` in the state folder. PostHog sees the IP address the request comes from, and takes the country from it. ai-usage never sends your files, folder or project names, arguments, account names or emails, host or device names, the team key, or the report's numbers.
+
+Nothing is sent until the notice has been shown once:
+
+```
+ai-usage shares usage stats with its author: how often it runs, which features are used, errors, version and OS, tied to a random install ID. It never sends your files, arguments or account names. Nothing has been sent yet. Turn it off with `ai-usage telemetry off` or `DO_NOT_TRACK=1`. Details: https://usage.sergeybaus.com
+```
+
+The installers print it, and so does the first `ai-usage` on a terminal or for an AI agent, on standard error; the menu bar app shows it once in the popover, with OK and Turn Off. The run that shows it sends nothing. A run from the scheduler shows nobody the notice, and sends nothing until someone has seen it; then it sends at most one of each event a day. The menu bar app's and BB's own runs of `ai-usage`, such as the report the app reads every minute, send nothing; the app sends only its events above. Nothing is sent in CI, in tests, or from a development build. An event is one HTTPS request in the background, given 3 seconds, and a run waits at most half a second for it before it exits.
+
+To turn usage stats off:
+
+- `ai-usage telemetry off`, or Share Usage Stats in the menu bar app's Settings, which also forgets the install id; `ai-usage telemetry on` turns them on again
+- `DO_NOT_TRACK=1` or `AI_USAGE_TELEMETRY=0` in the environment. A launch agent, a crontab line, or a scheduled task does not pass on your shell's variables, so to stop the scheduler's runs too, use `ai-usage telemetry off`
+
+`ai-usage telemetry` says whether they are on, and which of these decided. A packager can build ai-usage without them with `-ldflags "-X github.com/neoromantic/ai-usage/internal/telemetry.endpoint="`.
 
 ## Updates
 

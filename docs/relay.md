@@ -69,7 +69,7 @@ Any machine that can run ai-usage can run the relay:
 ai-usage relay serve --addr :8080
 ```
 
-It uses the same store when the same variables are set, and memory otherwise. It prints the store it chose. A memory relay loses its snapshots when it stops. Each collector run publishes its device's whole snapshot, so the team is complete again within 15 minutes of a restart, except for devices that are switched off.
+It uses the same store when the same variables are set, and memory otherwise. It prints the store it chose. Like any run of ai-usage, it sends its author [usage stats](../README.md#usage-stats) once their notice has been seen: that the relay started, never what it stores or who connects. `DO_NOT_TRACK=1` turns that off. A memory relay loses its snapshots when it stops. Each collector run publishes its device's whole snapshot, so the team is complete again within 15 minutes of a restart, except for devices that are switched off.
 
 Put it behind a reverse proxy that terminates TLS, such as Caddy or nginx. The relay limits requests by the client's address. By default that is the connection's own address, which behind a proxy is the proxy's, so every client would share one limit. Tell the relay which header your proxy sets to the client's address:
 
