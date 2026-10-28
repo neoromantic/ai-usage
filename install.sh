@@ -14,7 +14,9 @@
 #   AI_USAGE_NO_APP          set to skip the menu bar app on macOS
 #
 # The script downloads the release file for this OS and CPU, checks it against
-# the release's checksums.txt, installs it, and runs it once. That first run
+# the release's checksums.txt, installs it, prints the usage stats notice
+# (`ai-usage telemetry off` or DO_NOT_TRACK=1 turns them off), and runs it
+# once. That first run
 # registers the collector with the system scheduler (cron on Linux, launchd
 # on macOS). On macOS 14 and later, the script then installs the menu bar
 # app from the same release into ~/Applications/AI Usage.app and opens it;
@@ -109,6 +111,13 @@ run \`brew uninstall neoromantic/tap/ai-usage\` first; the state folder and team
 	if [ -n "${AI_USAGE_TEAM_KEY:-}" ]; then
 		# The key goes through stdin so it never shows in the process list.
 		printf '%s\n' "$AI_USAGE_TEAM_KEY" | "$bin" team join
+	fi
+
+	# The binary prints the usage stats notice when someone can read it, on
+	# a terminal or to an AI agent, and marks it seen; until then it sends
+	# nothing.
+	if notice=$("$bin" telemetry notice </dev/null) && [ -n "$notice" ]; then
+		say "$notice"
 	fi
 
 	say "first run: collecting and registering with the system scheduler"
