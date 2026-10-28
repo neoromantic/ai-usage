@@ -14,7 +14,7 @@ function fake(file: string, version: string, status: string) {
   writeFileSync(
     file,
     `#!/bin/sh
-echo "$0 $* AI_USAGE_HOME=$AI_USAGE_HOME" >> "${calls}"
+echo "$0 $* AI_USAGE_HOME=$AI_USAGE_HOME CALLER=$AI_USAGE_CALLER" >> "${calls}"
 case "$1" in
   version) echo "${version}" ;;
   status) cat <<'JSON'
@@ -120,7 +120,8 @@ describe("probe", () => {
     expect(p.bin).toBe(scheduled);
     expect(p.aiHome).toBe(state);
     expect(p.version).toBe("v0.11.1");
-    expect(readFileSync(calls, "utf8")).toContain(`${scheduled} status --json AI_USAGE_HOME=${state}`);
+    // Marked as BB's, so the runs record no usage stats.
+    expect(readFileSync(calls, "utf8")).toContain(`${scheduled} status --json AI_USAGE_HOME=${state} CALLER=bb`);
   });
 });
 
@@ -145,7 +146,7 @@ describe("run", () => {
 describe("install", () => {
   test("runs install.sh of the latest release, pinned to it, without the app or shell profiles, with the key only in its environment", async () => {
     const script = `#!/bin/sh
-echo "ai-usage install: url=$AI_USAGE_DOWNLOAD_URL app=$AI_USAGE_NO_APP path=$AI_USAGE_NO_MODIFY_PATH relay=$AI_USAGE_RELAY" >&2
+echo "ai-usage install: url=$AI_USAGE_DOWNLOAD_URL app=$AI_USAGE_NO_APP path=$AI_USAGE_NO_MODIFY_PATH relay=$AI_USAGE_RELAY caller=$AI_USAGE_CALLER" >&2
 echo "ai-usage install: key=$AI_USAGE_TEAM_KEY" >&2
 echo "ai-usage install: PATH=$PATH" >&2
 echo "REPORT that stays out of the log"
@@ -165,7 +166,7 @@ echo "REPORT that stays out of the log"
     expect(out).toMatchObject({ ok: true, code: 0, tag: "v0.11.0" });
     expect(seen).toEqual(["https://github.com/neoromantic/ai-usage/releases/latest", "https://raw.githubusercontent.com/neoromantic/ai-usage/v0.11.0/install.sh"]);
     const log = lines.join("\n");
-    expect(log).toContain("url=https://github.com/neoromantic/ai-usage/releases/download/v0.11.0 app=1 path=1 relay=https://relay.example.com");
+    expect(log).toContain("url=https://github.com/neoromantic/ai-usage/releases/download/v0.11.0 app=1 path=1 relay=https://relay.example.com caller=bb");
     expect(log).toContain("key=aiu-team-…");
     expect(log).not.toContain("made-up-key");
     expect(log).not.toContain("REPORT");

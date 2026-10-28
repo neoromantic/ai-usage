@@ -27,11 +27,15 @@ export interface Machine {
   fetch: typeof fetch;
 }
 
-/** The clean PATH with the standard folders after it, where the tools ai-usage reads often are. */
+/**
+ * The clean PATH with the standard folders after it, where the tools ai-usage reads often are.
+ * AI_USAGE_CALLER marks the runs as BB's, so the reports it reads every minute record no usage
+ * stats.
+ */
 export function childEnv(m: Machine, aiHome: string | null): Env {
   const dirs = (m.env.PATH ?? "").split(path.delimiter).filter((d) => d !== "");
   for (const d of m.dirs) if (!dirs.includes(d) && existsSync(d)) dirs.push(d);
-  const env: Env = { ...m.env, PATH: dirs.join(path.delimiter) };
+  const env: Env = { ...m.env, PATH: dirs.join(path.delimiter), AI_USAGE_CALLER: "bb" };
   if (aiHome !== null) env.AI_USAGE_HOME = aiHome;
   return env;
 }
