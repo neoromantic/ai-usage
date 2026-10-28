@@ -25,6 +25,8 @@ A machine that already has ai-usage, from the installer or Homebrew, is used as 
 
 Each machine sends a signed snapshot to a relay, by default the one ai-usage's maintainer runs. The relay sees tools, plans, percentages and token counts. Names, emails and project paths are encrypted with the team key, which stays on your machines.
 
+ai-usage also sends its author anonymous usage stats, through PostHog: how often it runs, which commands are used, errors, version and OS, with a random install ID, never accounts, projects or the report's numbers. The plugin's own runs of ai-usage send none, and nothing is sent until someone has seen the notice in a terminal or in the menu bar app. `ai-usage telemetry off` or `DO_NOT_TRACK=1` turns them off; https://usage.sergeybaus.com has the details.
+
 ## Good to know
 
 - Removing the plugin leaves ai-usage collecting. Settings → AI Usage → Remove ai-usage takes it off a machine first.

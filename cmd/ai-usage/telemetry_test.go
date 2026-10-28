@@ -220,6 +220,12 @@ func TestUsageStatsNotice(t *testing.T) {
 	if m := status(d); m["enabled"] != true || m["reason"] != "env" || m["id"] != nil || !strings.Contains(m["notice"].(string), "Nothing has been sent yet") {
 		t.Fatalf("status before the notice %v", m)
 	}
+	// BB's installer runs it too, and shows its output to nobody.
+	t.Setenv(callerEnv, "bb")
+	if out := d.ok("telemetry", "notice"); out != "" {
+		t.Fatalf("notice printed for BB: %q", out)
+	}
+	t.Setenv(callerEnv, "")
 	if out := d.ok("telemetry", "notice"); !strings.HasPrefix(out, "ai-usage shares usage stats") {
 		t.Fatalf("notice printed %q", out)
 	}
