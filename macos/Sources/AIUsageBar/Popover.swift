@@ -16,6 +16,9 @@ struct PopoverView: View {
     var body: some View {
         VStack(spacing: 0) {
             Header().measure(ChromeHeight.self)
+            if let notice = store.usageStats?.notice {
+                UsageStatsNotice(text: notice).measure(ChromeHeight.self)
+            }
             if let report = store.report {
                 let chips = Chip.chips(report, refreshFailed: store.refreshError != nil)
                 if !chips.isEmpty {
@@ -73,6 +76,32 @@ struct PopoverView: View {
     private func isPopover(_ n: Notification) -> Bool {
         guard let w = store.popoverWindow else { return true }
         return n.object as? NSWindow === w
+    }
+}
+
+/// The usage stats notice, once, under the header until OK or Turn Off:
+/// what ai-usage shares with its author. Until then it sends nothing.
+private struct UsageStatsNotice: View {
+    @EnvironmentObject private var store: Store
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(LocalizedStringKey(UsageStats.markdown(text)))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Spacer()
+                Button("Turn Off") { Task { await store.shareUsageStats(false) } }
+                Button("OK") { Task { await store.usageNoticeSeen() } }
+            }
+            .controlSize(.small)
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.06)))
+        .padding(.horizontal, Metrics.inset)
+        .padding(.bottom, 10)
     }
 }
 

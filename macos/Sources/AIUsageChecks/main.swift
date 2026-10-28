@@ -1079,5 +1079,24 @@ equal("terminal script without the agent", CLI(location: CLILocation(executable:
         .terminalScript(["report", "--devices"]).split(separator: "\n").map(String.init).dropFirst().map { $0.hasPrefix("export PATH=\"$PATH\":'") ? "path" : $0 },
       ["path", "exec '/opt/ai usage/ai-usage' 'report' '--devices'"])
 
+// Usage stats. The app's runs of ai-usage say they are the app's, so its
+// report every minute records nothing; a command in Terminal is a
+// person's.
+equal("app's runs marked", cli.environment([:])[UsageStats.callerKey], "app")
+check("Terminal's runs not marked", !quoted.terminalScript(["report"]).contains(UsageStats.callerKey))
+// What `ai-usage telemetry status --json` prints, the notice while it is
+// due.
+let due = try UsageStats.decode(Data("""
+    {"enabled":true,"debug":false,"reason":"default","stateFile":"/state/ai-usage/telemetry.json","endpoint":"https://usage.sergeybaus.com/i/v0/e/","id":null,"notice":"ai-usage shares usage stats with its author. Turn it off with `ai-usage telemetry off` or `DO_NOT_TRACK=1`. Details: https://usage.sergeybaus.com"}
+    """.utf8))
+check("notice due", due.enabled && due.switchable && due.decidedBy == nil && due.notice?.hasPrefix("ai-usage shares usage stats") == true)
+check("notice links its page", UsageStats.markdown(due.notice ?? "").hasSuffix("Details: [usage.sergeybaus.com](https://usage.sergeybaus.com)"))
+let switchedOff = try UsageStats.decode(Data(#"{"enabled":false,"debug":false,"reason":"state","id":null,"notice":null}"#.utf8))
+check("switched off", !switchedOff.enabled && switchedOff.switchable && switchedOff.notice == nil)
+let dnt = try UsageStats.decode(Data(#"{"enabled":false,"debug":false,"reason":"do-not-track","id":null,"notice":null}"#.utf8))
+check("DO_NOT_TRACK decides", !dnt.switchable && dnt.decidedBy == "DO_NOT_TRACK is set")
+equal("record start", UsageStats.record(.started), ["telemetry", "record", "app_started"])
+equal("record team window", UsageStats.record(.teamWindow), ["telemetry", "record", "feature_used", "team window"])
+
 print(failures == 0 ? "all checks passed" : "\(failures) checks failed")
 exit(failures == 0 ? 0 : 1)
