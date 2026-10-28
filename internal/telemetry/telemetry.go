@@ -1,6 +1,6 @@
 // managed by devkit v1 — change it in neoromantic/devkit templates/telemetry/, not here. Spec: https://github.com/neoromantic/devkit/blob/main/docs/standards/telemetry.md
 
-// Package telemetry sends anonymous usage events (starts, features, errors) to PostHog through
+// Package telemetry sends usage events (starts, features, errors) to PostHog through
 // usage.sergeybaus.com. It uses only the standard library, swallows every error, prints nothing
 // but the notice and debug output, and sends in the background. A disabled client writes
 // nothing to disk and opens no connection.
@@ -242,7 +242,7 @@ func (c *Client) SetEnabled(on bool) (err error) {
 }
 
 // track sends event, after app_installed the first time, once the notice has been seen. In the
-// scheduled, daemon and plugin modes each event and key go out at most once per UTC day.
+// scheduled, daemon, plugin and script modes each event and key go out at most once per UTC day.
 func (c *Client) track(event string, props map[string]any, key string) {
 	defer guard()
 	c.mu.Lock()
@@ -263,7 +263,8 @@ func (c *Client) track(event string, props map[string]any, key string) {
 		st.Installed = true
 		send = append(send, "app_installed")
 	}
-	if !slices.Contains([]string{"scheduled", "daemon", "plugin"}, c.o.Mode) {
+	// c.o went through defaults, so Mode is the detected one when the product left it empty.
+	if !slices.Contains([]string{"scheduled", "daemon", "plugin", "script"}, c.o.Mode) {
 		send = append(send, event)
 	} else {
 		day, k := now().UTC().Format(time.DateOnly), event
@@ -449,7 +450,7 @@ func Capture(event string, props map[string]any, distinctID string, o Options) {
 	}
 	osName := map[string]string{"darwin": "macOS", "windows": "Windows", "linux": "Linux"}[runtime.GOOS]
 	p := map[string]any{
-		"$process_person_profile": false, // anonymous events, no person profiles
+		"$process_person_profile": false, // no person profiles in PostHog
 		"$lib":                    "devkit-telemetry",
 		"$lib_version":            "1",
 		"product":                 o.Product,
