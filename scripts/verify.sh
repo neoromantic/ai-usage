@@ -47,6 +47,8 @@
 # versions, as on CI's runners, call that SC2317 rather than SC2329.
 # shellcheck disable=SC2317,SC2329
 set -eu
+# No build a step runs sends usage stats, whatever the version it reports.
+export AI_USAGE_TELEMETRY=0
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
@@ -405,7 +407,7 @@ step_stack() {
 	dev() {
 		d=$1
 		shift
-		env -i HOME="$s/$d" PATH=/usr/bin:/bin TERM=dumb AI_USAGE_NO_SCHEDULE=1 \
+		env -i HOME="$s/$d" PATH=/usr/bin:/bin TERM=dumb AI_USAGE_NO_SCHEDULE=1 AI_USAGE_TELEMETRY=0 \
 			AI_USAGE_RELAY="http://127.0.0.1:$port" AI_USAGE_NAME="dev-$d" "$bin" "$@"
 	}
 	# Never collect --quiet here: that is the scheduled run, which first waits
@@ -519,7 +521,7 @@ step_brew() {
 	h=$b/home
 	mkdir -p "$h"
 	run() {
-		env -i HOME="$h" PATH="$prefix/bin:/usr/bin:/bin" TERM=dumb AI_USAGE_NO_SCHEDULE=1 "$prefix/bin/ai-usage" "$@"
+		env -i HOME="$h" PATH="$prefix/bin:/usr/bin:/bin" TERM=dumb AI_USAGE_NO_SCHEDULE=1 AI_USAGE_TELEMETRY=0 "$prefix/bin/ai-usage" "$@"
 	}
 	run </dev/null >"$b/first-run.txt" 2>&1 || fail "the first run; see brew/first-run.txt"
 	run report --json >"$b/report.json" 2>"$b/report.err" || fail "report --json; see brew/report.err"

@@ -15,4 +15,5 @@ field changes, change its file here in the same commit.
 | [Cost](cost.md) | COST on the page, `$` in the interactive view, `ai-usage cost`, the app's Cost | `internal/cost`, `internal/view` cost goldens, `internal/tui/cost_test.go`, `cmd/ai-usage/cost_test.go`, `scripts/demo` `TestTeamCost` | `page`, `stack` (`/v1/prices`), `app`, `pictures` |
 | [Menu bar app](menubar.md) | the ring in the menu bar, the popover, Team window, Settings | `AIUsageChecks` | `app`, `pictures` |
 | [BB plugin](bb-plugin.md) | AI Usage in BB: its page, Settings, the sidebar footer | `bb/test/` | `plugin` |
+| [Usage stats](usage-stats.md) | the notice, `ai-usage telemetry`, the app's Share Usage Stats | `cmd/ai-usage/telemetry_test.go`, `AIUsageChecks`, `bb/test/host.test.ts` | `go`, `app` |
 | [Install, update, schedule](install.md) | `install.sh`, `install.ps1`, `ai-usage update`, `schedule` | `internal/selfupdate`, `internal/schedule`, `install-smoke.sh` | `install` (`--push`) |

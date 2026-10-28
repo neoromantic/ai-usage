@@ -82,6 +82,11 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 			cmd, args = a, args[1:]
 		}
 	}
+	stats = startStats(cmd, args, stderr)
+	defer func() {
+		stats.flush()
+		stats = nil
+	}()
 	var err error
 	switch cmd {
 	case "", "collect":
@@ -110,6 +115,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdApp(ctx, args, stdout, stderr)
 	case "uninstall":
 		err = cmdUninstall(ctx, args, stdout, stderr)
+	case "telemetry":
+		err = cmdTelemetry(args, stdout)
 	case "version", "-version", "--version":
 		fmt.Fprintln(stdout, version)
 	case "help", "-h", "-help", "--help":
@@ -119,6 +126,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		writeHelp(stderr)
 		return 2
 	}
+	stats.failed(ctx, err)
 	if errors.Is(err, flag.ErrHelp) {
 		writeHelp(stdout)
 		return 0

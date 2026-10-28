@@ -79,6 +79,11 @@ var help = []helpSection{
 			"remove the schedule, the menu bar app, and this binary, or say how where Homebrew installed it; `--forget` also drops this device from its team on the relay; `--purge` does that and removes the state folder, with the team key"},
 		{"ai-usage version", "print this binary's version"},
 	}},
+	{"USAGE STATS", []helpLine{
+		{"ai-usage telemetry [status] [--json]", "whether usage stats go to ai-usage's author, why, the install id, and its file"},
+		{"ai-usage telemetry off|on", "stop sharing usage stats and forget the install id, or share them again"},
+		{"ai-usage telemetry notice", "print the notice of what is shared, once, as the installers do"},
+	}},
 	{"VIEW", []helpLine{
 		{"--projects", "every project on this device, not only the busiest"},
 		{"--devices", "DEVICES as each device's status; `s` switches views in the interactive view"},
@@ -94,6 +99,8 @@ var help = []helpSection{
 		{"AI_USAGE_RELAY", "relay URL, overrides the configured one"},
 		{"AI_USAGE_NAME", "this device's name in the team, over the configured one, in runs that see it"},
 		{"AI_USAGE_NO_SCHEDULE", "set to skip scheduler registration on this run"},
+		{"AI_USAGE_TELEMETRY", "`0` turns usage stats off, `1` on, `debug` prints each event instead of sending it"},
+		{"DO_NOT_TRACK", "set to `1` to turn usage stats off, here and in other tools that read it"},
 		{"CLAUDE_CONFIG_DIR", "another data folder for Claude Code"},
 		{"CODEX_HOME", "another data folder for Codex"},
 		{"GROK_HOME", "another data folder for Grok"},
