@@ -28,6 +28,8 @@ type world struct {
 	asked    []string
 	// lastUse is when each asked home was last used, as the probe was told.
 	lastUse map[string]time.Time
+	// pool is when BB's Account Pooler last served each harness, as BB says.
+	pool map[string]time.Time
 }
 
 // homeLogs is what a read of one home's logs finds.
@@ -68,6 +70,7 @@ func newWorld(t *testing.T) (*world, Options) {
 		Now:      func() time.Time { return w.now },
 		ReadLogs: w.read,
 		Ask:      w.ask,
+		PoolUse:  func(context.Context) map[string]time.Time { return w.pool },
 	}
 	return w, o
 }

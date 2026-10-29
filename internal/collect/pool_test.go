@@ -56,11 +56,36 @@ func TestPooledDevice(t *testing.T) {
 	}
 }
 
+// A scheduled run, which no session of the pool starts, marks a provider
+// pooled when BB says its pool, which routes it, served it in the last 7
+// days: at that time, or now when BB's clock is ahead.
+func TestPooledFromBB(t *testing.T) {
+	w, o := newWorld(t)
+	ch := w.home(t, "claude")
+	w.login("claude", ch, "ann@acme.dev", quota(t0, 10))
+	w.sessions("claude", ch, sess("a4c2e917", "/p", 100, t0))
+	w.pool = map[string]time.Time{"claude": t0.Add(-8 * 24 * time.Hour)}
+	if res := run(t, o); res.Doc.Pooled != nil {
+		t.Fatalf("served 8 days ago: pooled = %q", res.Doc.Pooled)
+	}
+	w.pool = map[string]time.Time{"claude": t0.Add(-time.Hour)}
+	w.now = t0.Add(15 * time.Minute)
+	res := run(t, o)
+	if !slices.Equal(res.Doc.Pooled, []string{"claude"}) || !res.State.Pooled["claude"].Equal(t0.Add(-time.Hour)) {
+		t.Fatalf("served an hour ago: pooled = %q, state %v", res.Doc.Pooled, res.State.Pooled)
+	}
+	w.pool = map[string]time.Time{"claude": t0.Add(time.Hour)}
+	w.now = t0.Add(30 * time.Minute)
+	if res = run(t, o); !res.State.Pooled["claude"].Equal(w.now) {
+		t.Fatalf("BB ahead: state %v", res.State.Pooled)
+	}
+}
+
 func TestNotePooledKeepsTheLatest(t *testing.T) {
 	_, o := newWorld(t)
 	st, _ := o.Dir.LoadState()
-	notePooled(st, "codex", false, []logs.Session{{Pooled: true, Updated: t0}}, t0.Add(time.Hour))
-	notePooled(st, "codex", false, []logs.Session{{Pooled: true, Updated: t0.Add(-time.Hour)}}, t0.Add(time.Hour))
+	notePooled(st, "codex", false, []logs.Session{{Pooled: true, Updated: t0}}, time.Time{}, t0.Add(time.Hour))
+	notePooled(st, "codex", false, []logs.Session{{Pooled: true, Updated: t0.Add(-time.Hour)}}, time.Time{}, t0.Add(time.Hour))
 	if got := st.Pooled["codex"]; !got.Equal(t0) {
 		t.Errorf("codex pooled at %v, want %v", got, t0)
 	}

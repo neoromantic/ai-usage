@@ -166,6 +166,7 @@ const (
 	AttentionDuplicate = "duplicate"  // a device was reinstalled, and its old record stays
 	AttentionOld       = "old"        // devices run an older release
 	AttentionUnder     = "under"      // past half of a window, its forecast is under 50%
+	AttentionPoolRise  = "pool_rise"  // a window fills while the team counts next to nothing on it, and BB's Account Pooler serves its provider
 	AttentionIdle      = "idle"       // no team device has used a paid subscription for a week
 	AttentionCheck     = "check"      // nobody can say a subscription is still paid
 	AttentionCost      = "cost"       // a new subscription, a change of plan, or of a list price, for 3 days
@@ -188,13 +189,14 @@ type Attention struct {
 	Name     string `json:"name,omitempty"`
 	// Window names the window when it is not the account's main one.
 	Window string `json:"window,omitempty"`
-	// Devices is the device of an error, silence, or duplicate, or every
-	// device on an old release.
+	// Devices is the device of an error, silence, or duplicate, every
+	// device on an old release, or the devices whose BB's Account Pooler
+	// may fill a pool_rise window.
 	Devices []string `json:"devices,omitempty"`
 	// DeviceID is a duplicate's device id, the one to forget.
 	DeviceID string `json:"device_id,omitempty"`
 	// At is when an out window resets, when an over window runs out before
-	// its reset, when an outside window began to rise, when a silent or
+	// its reset, when an outside or pool_rise window began to rise, when a silent or
 	// duplicate device last reported, when a device's last error happened,
 	// when its collector says, the earliest BehindSince of old devices
 	// that do not update themselves, when an idle subscription was last
@@ -579,6 +581,12 @@ type TeamAccount struct {
 	// Outside is a window that filled in the last day while the team spent
 	// next to nothing on it: someone outside the team uses it.
 	Outside *Outside `json:"outside"`
+	// PoolRise is such a window of a provider whose sessions go through
+	// BB's Account Pooler on a team device, in place of Outside: the pool
+	// serves its sessions from several accounts and their tokens count for
+	// the login of the folder that holds their logs, so the pool's sessions
+	// may have filled it.
+	PoolRise *PoolRise `json:"pool_rise"`
 	// Utilization is the history of a subscription's windows: each window
 	// with a period that ended, the main one first, then the longest.
 	Utilization []Utilization `json:"utilization"`
@@ -624,6 +632,13 @@ type Cycle struct {
 type Outside struct {
 	Points float64   `json:"points"`
 	Since  time.Time `json:"since"`
+}
+
+// PoolRise is an Outside that BB's Account Pooler may explain, and the team
+// devices whose sessions of the account's provider go through it.
+type PoolRise struct {
+	Outside
+	Devices []string `json:"devices"`
 }
 
 // DeviceUsage is one device's share of a team account.

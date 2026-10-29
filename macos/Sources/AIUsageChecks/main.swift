@@ -568,6 +568,9 @@ equal("v0.4 forecast", [forecast04?.basis, forecast04?.pace.map { "\($0)" }], ["
 equal("v0.4 attention", v04.attention.map(\.kind.rawValue), ["out", "tight", "outside", "no_reading", "duplicate", "old", "someday"])
 check("v0.4 kinds", v04.attention.map(\.kind) == [.out, .tight, .outside, .noReading, .duplicate, .old, .other("someday")])
 equal("v0.4 attention fields", [v04.attention[4].deviceId, v04.attention[5].limitations.first], ["d-3f9a1c2e7b5d", "no_claude_quota"])
+// A window BB's Account Pooler may have filled is a kind of its own, not
+// one from a later release.
+check("pool rise kind", Attention.Kind(rawValue: "pool_rise") == .poolRise && Attention.Kind.poolRise.rawValue == "pool_rise")
 // An entry from an ai-usage that does not word its entries: the subject
 // is the devices it is about, and the text its message, or nothing.
 let texts = v04.attention.map { AttentionText($0, report: v04) }

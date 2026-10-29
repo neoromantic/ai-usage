@@ -205,6 +205,9 @@ public struct Attention: Decodable, Sendable {
     /// The kinds, most urgent first, as the report orders them.
     public enum Kind: Hashable, Decodable, Sendable {
         case out, over, tight, outside, error, noReading, silent, duplicate, old, under, idle
+        /// A window that filled with next to no team tokens, which BB's
+        /// Account Pooler on a team device may have spent.
+        case poolRise
         /// Nobody can say a subscription is still paid, and a cost event of
         /// the last 3 days: a new subscription, a plan or list price that
         /// changed.
@@ -214,7 +217,7 @@ public struct Attention: Decodable, Sendable {
         case other(String)
 
         private static let known: [Kind] = [.out, .over, .tight, .outside, .error, .noReading, .silent, .duplicate, .old, .under, .idle,
-                                            .check, .cost]
+                                            .poolRise, .check, .cost]
 
         public init(rawValue: String) {
             self = Self.known.first { $0.rawValue == rawValue } ?? .other(rawValue)
@@ -238,6 +241,7 @@ public struct Attention: Decodable, Sendable {
             case .old: return "old"
             case .under: return "under"
             case .idle: return "idle"
+            case .poolRise: return "pool_rise"
             case .check: return "check"
             case .cost: return "cost"
             case .other(let name): return name

@@ -176,6 +176,7 @@ private struct AlertRow: View {
             if !a.limitations.isEmpty { return ("arrow.down.circle.fill", Palette.text("tight")) }
             return ("arrow.up.circle.fill", a.at != nil ? Palette.text("tight") : .secondary)
         case .idle: return ("moon.zzz", Color(nsColor: .tertiaryLabelColor))
+        case .poolRise: return ("person.2", .secondary)
         case .check: return ("questionmark.circle", Color(nsColor: .tertiaryLabelColor))
         case .cost: return ("dollarsign.circle", Color(nsColor: .tertiaryLabelColor))
         case .other: return ("circle", Color(nsColor: .tertiaryLabelColor))
@@ -196,6 +197,7 @@ private struct AlertRow: View {
         case .old: return "Older release"
         case .under: return "Underused"
         case .idle: return "Idle"
+        case .poolRise: return "Maybe the Account Pooler"
         case .check: return "Still paid?"
         case .cost: return "Cost"
         case .other(let name): return name

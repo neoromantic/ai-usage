@@ -267,7 +267,7 @@ team.providers.accounts.linked_usage team.providers.accounts.linked_usage.device
 team.providers.accounts.linked_usage.provider team.providers.accounts.linked_usage.sessions team.providers.accounts.linked_usage.tokens
 team.providers.accounts.linked_usage.tokens.cache_read team.providers.accounts.linked_usage.tokens.cache_write
 team.providers.accounts.linked_usage.tokens.input team.providers.accounts.linked_usage.tokens.output
-team.providers.accounts.name team.providers.accounts.no_reading team.providers.accounts.outside
+team.providers.accounts.name team.providers.accounts.no_reading team.providers.accounts.outside team.providers.accounts.pool_rise
 team.providers.accounts.per_device team.providers.accounts.per_device.burn team.providers.accounts.per_device.burn.30d team.providers.accounts.per_device.burn.7d team.providers.accounts.per_device.burn.90d team.providers.accounts.per_device.burn.today
 team.providers.accounts.per_device.current team.providers.accounts.per_device.device
 team.providers.accounts.per_device.device_id team.providers.accounts.per_device.last_active_at team.providers.accounts.per_device.sessions

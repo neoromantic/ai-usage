@@ -206,6 +206,21 @@ func fakeHarness(mode string, args []string) int {
 		return 1
 	case "claude-orphan":
 		return hangWithChild(rec)
+	case "bb-pool":
+		// The pool routes Claude, not Codex. Of its Claude accounts the
+		// disabled one was used last, and of the enabled ones the second.
+		fmt.Println(`{"route":"/api/v1/plugins/account-pool/http","routing":{"claude":true,"codex":false},"hosts":[],"accounts":[` +
+			`{"provider":"claude","email":"ann@acme.dev","enabled":true,"lastUsedAt":1790150400000},` +
+			`{"provider":"claude","email":"bo@acme.dev","enabled":true,"lastUsedAt":1790154000000},` +
+			`{"provider":"claude","email":"cy@acme.dev","enabled":false,"lastUsedAt":1790157600000},` +
+			`{"provider":"claude","email":"di@acme.dev","enabled":true,"lastUsedAt":null},` +
+			`{"provider":"codex","email":"ann@acme.dev","enabled":true,"lastUsedAt":1790154000000}]}`)
+	case "bb-other":
+		// Another tool named bb.
+		fmt.Println(`{"ok":true}`)
+	case "bb-fail":
+		fmt.Println(`{"ok":false,"error":{"code":"unavailable","message":"bb is not running"}}`)
+		return 1
 	default:
 		return 92
 	}

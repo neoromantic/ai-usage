@@ -48,6 +48,9 @@ type Options struct {
 	// one provider together and tags each session with its home.
 	ReadLogs func(provider string, homes []string, since time.Time) logs.Result
 	Ask      func(ctx context.Context, provider, home string, lastUse time.Time) (probe.Reading, error)
+	// PoolUse is when BB's Account Pooler last served each harness it
+	// routes, as Probe.PoolUse asks BB.
+	PoolUse func(ctx context.Context) map[string]time.Time
 	// After runs under the run lock before the state is saved. The command
 	// layer uses it for scheduler registration and self-update bookkeeping.
 	After func(ctx context.Context, cfg *state.Config, st *state.State)
@@ -86,6 +89,9 @@ func (o *Options) fill() {
 		// Only the run that holds the lock reads logs, so one read at a
 		// time uses the cache beside the state.
 		o.ReadLogs = logs.Reader{CacheDir: o.Dir.Path("cache")}.ReadHomes
+	}
+	if o.PoolUse == nil {
+		o.PoolUse = o.Probe.PoolUse
 	}
 }
 
@@ -391,6 +397,9 @@ type sampler struct {
 	faults, notes map[string][]string
 	// offline is the network failure the run had, when it was offline.
 	offline string
+	// pool is when BB's Account Pooler last served each harness, as BB
+	// said at the start of the run.
+	pool map[string]time.Time
 }
 
 // newSampler starts a run's reading of the sources at now. Unless o.Ask is
@@ -417,6 +426,7 @@ func newSampler(o Options, cfg state.Config, st *state.State, now time.Time) *sa
 // collect reads every provider into the state and prunes it. It reports
 // whether an installed source failed.
 func (s *sampler) collect(ctx context.Context, homes map[string][]string) (failed bool) {
+	s.pool = s.PoolUse(ctx)
 	for _, p := range snapshot.Providers {
 		src := s.source(ctx, p, homes[p])
 		s.st.Sources[p] = src
@@ -456,7 +466,7 @@ func (s *sampler) provider(ctx context.Context, p string, homes []string) state.
 	if len(homes) > 0 {
 		res = s.ReadLogs(p, homes, s.since)
 	}
-	notePooled(s.st, p, s.pooledEnv(p), res.Sessions, s.now)
+	notePooled(s.st, p, s.pooledEnv(p), res.Sessions, s.pool[p], s.now)
 	// partial means some home's read was incomplete, so a lower count than
 	// last time is a missing file rather than a real drop.
 	partial := false

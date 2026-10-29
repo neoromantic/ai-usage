@@ -88,7 +88,7 @@ A `health` entry:
 
 ### attention
 
-Each entry is one thing that needs attention, from the team's view of each subscription and device. The report lists them most urgent first, by `kind` in the order of this table, with an `over` entry whose window's forecast is `stopped` after the other `over` entries; within a kind, the earliest `at` first, which for an `over` without `at` is its `resets_at`, and for `idle` puts the longest idle first, the highest `percent` first for `tight` and `outside`, the lowest forecast first for `under`, and by device for `error`. The fields that apply depend on the kind; the others are absent. Every entry has `subject` and `text`, the console's words for it. A reader should skip a kind it does not know.
+Each entry is one thing that needs attention, from the team's view of each subscription and device. The report lists them most urgent first, by `kind` in the order of this table, with an `over` entry whose window's forecast is `stopped` after the other `over` entries; within a kind, the earliest `at` first, which for an `over` without `at` is its `resets_at`, and for `idle` puts the longest idle first, the highest `percent` first for `tight`, `outside`, and `pool_rise`, the lowest forecast first for `under`, and by device for `error`. The fields that apply depend on the kind; the others are absent. Every entry has `subject` and `text`, the console's words for it. A reader should skip a kind it does not know.
 
 | `kind` | When | Fields |
 | --- | --- | --- |
@@ -102,8 +102,9 @@ Each entry is one thing that needs attention, from the team's view of each subsc
 | `duplicate` | a device has `replaced_by` set: it was reinstalled, and its old record stays on the relay | `devices` names the device; `device_id` is its id, for `ai-usage team forget-device`, which takes its first 8 hex digits too; `message` is the `name` of the device that replaced it; `at` is when it last reported |
 | `old` | devices run an older release than the team's newest | `devices` lists every one of them; `message` is the newest release; `at` is the earliest `behind_since` among those that have reported for 7 hours since it and are not `silent`, absent when none has. Devices whose release has `limitations` have an entry of their own, first, with those in `limitations`: they need a reinstall. A `duplicate` device is not counted |
 | `under` | past half of a subscription's main window, its forecast is under 50% | `provider`, `account`, `name`; `resets_at` is when it resets, `percent` its forecast |
+| `pool_rise` | a subscription has `pool_rise` set: a window filled while next to no team tokens counted on it, and a team device sends that provider's sessions through BB's Account Pooler, which may have spent it | `provider`, `account`, `name`; `devices` names the pooled devices; `at` is when it began to rise, `percent` how many points it rose |
 | `check` | nobody can say a subscription is still paid: its cost's `state` is `unconfirmed` | `provider`, `account`, `name`; `at` is when its paid plan was last confirmed, its cost's `plan_confirmed_at`, else its `first_seen`. `text` says since when no device has it, when that is 14 days or more, and the commands that answer |
-| `idle` | no team device has used a subscription with a reading for 7 days, by its `last_active_at`, and nothing says someone outside the team does: it has no `outside`, and its main window is under 1% or began before that last use. Not the `unknown` account, a Hermes account, or a free plan. It has no `under` entry then. `text` says its price a month, when its cost has one | `provider`, `account`, `name`; `at` is when a team device last used it |
+| `idle` | no team device has used a subscription with a reading for 7 days, by its `last_active_at`, and nothing says someone outside the team does: it has no `outside` or `pool_rise`, and its main window is under 1% or began before that last use. Not the `unknown` account, a Hermes account, or a free plan. It has no `under` entry then. `text` says its price a month, when its cost has one | `provider`, `account`, `name`; `at` is when a team device last used it |
 | `cost` | for 3 days after it happened, a cost event of kind `new`, `plan_changed`, or `price_changed`: a new subscription, a change of plan, or of the list price of its plan | `provider`, `account`, `name`; `at` is when it happened; `event` is the event's `id` in the cost's `events` |
 
 A window is one with `limits`: the account's main one, or one that limits it more. An `over`, `tight`, or `under` entry has `reading_age_seconds` when its window's reading is stale, an `over` entry also when its window's forecast is `stopped`, and an `out` entry when its reading is over 6 hours old, as the provider can reset a full window early.
@@ -117,11 +118,11 @@ A window is one with `limits`: the account's main one, or one that limits it mor
 | `account` | string | the account's label |
 | `name` | string | the account's short name |
 | `window` | string | the window's name, when it is not the account's main one |
-| `devices` | list of strings | the devices it is about, by `name` |
+| `devices` | list of strings | the devices it is about, by `name`; of a `pool_rise` entry, which is about a subscription, the pooled devices that may have filled it |
 | `device_id` | string | a `duplicate` device's id |
 | `at` | time | as the table says for each kind |
 | `resets_at` | time | when the window resets |
-| `percent` | number | the window's forecast at its reset, or the points an `outside` window rose |
+| `percent` | number | the window's forecast at its reset, or the points an `outside` or `pool_rise` window rose |
 | `reading_age_seconds` | number | how old the reading is, as the paragraph above the table says when |
 | `message` | string | an error's text, the error a silent device last reported, why a subscription has no reading, the device that replaced a duplicate, or the newest release |
 | `limitations` | list of strings | what the releases of the devices of an `old` entry cannot do, as a team device's `limitations` says |
@@ -300,7 +301,7 @@ A device:
 | `replaced_by` | string | the `name` of the device that reinstalled this one: the same label and OS user, reporting while this one is silent; `null` otherwise |
 | `note` | string | what the status view's NOTE says of the device, uncut: its silence, the error it reports, the release it is behind and why it does not update, what its release cannot do, the providers in `pooled`, or its longest gap in reporting, as `ai-usage report --devices` shows it. Clocks are in the time zone of the machine that made the report. `null` when there is nothing to note |
 | `limitations` | list of strings | what its release cannot do: `no_claude_quota` before v0.2.3, and `no_update_errors` before v0.2.5 |
-| `pooled` | list of strings | the providers, `claude` or `codex`, whose sessions on the device went through BB's Account Pooler in the last 7 days. The pool serves each request from one of several accounts, and neither the logs nor the tools say which, so the device's tokens of that provider count for the login of the folder that holds their logs, which may not be the account that spent them. `[]` when none did, and for a device whose release does not send it, before v0.11.0 |
+| `pooled` | list of strings | the providers, `claude` or `codex`, whose sessions on the device went through BB's Account Pooler in the last 7 days, as the device's logs, a run in a session the pool routes, or, from v0.13.3, BB's own pool status say; BB's status says which of its machines used the pool but not which one is asking, so a device can be marked for another's. The pool serves each request from one of several accounts, and neither the logs nor the tools say which, so the device's tokens of that provider count for the login of the folder that holds their logs, which may not be the account that spent them. `[]` when none did, and for a device whose release does not send it, before v0.11.0 |
 
 #### Device names
 
@@ -328,7 +329,8 @@ A team account. Each provider's accounts are in the order the report lists them:
 | `burn` | object | the account's own weighted tokens, summed across devices |
 | `burn_estimated` | bool | some of `burn` is estimated, from a device whose release sends no weighted tokens |
 | `no_reading` | string | why a subscription has no reading of its main window, with what to do, when that is known; `null` otherwise. It is what kept a device the account is logged in to from reading it, as its tool's source says, this device first: the device's name after what is wrong, then what to do, if anything, as in `this codex cannot read its limits on root@srv1: update codex`, `codex's login was refused on root@srv1: run codex login`, `codex timed out on root@srv1 (~/.codex-work)`, which names the folder of a device that asks several, when the account is the one logged in to it, `Claude Code could not read the usage on ann@annbook: run /usage in claude to see why`, or `no credit usage logged yet on ann@annbook`, for Grok. It is in the report's own words, at most 200 bytes, and leaves out what the tool printed. Or every device that holds a Claude account runs a release that reads no Claude quota, as in `leo@leo-air runs v0.3.0: reinstall with install.sh`. For the `unknown` account, the tokens no login was known for, it is where its tool answered that nobody is logged in, as a device that holds them says, such as `not logged in on root@srv1 (~/.claude-work): run claude and log in` |
-| `outside` | object | `{points, since}`: the main window rose `points` since `since`, in the last day, while the team spent next to nothing on it, so someone outside the team uses it; `null` otherwise |
+| `outside` | object | `{points, since}`: the main window rose `points` since `since`, in the last day, while the team spent next to nothing on it, so someone outside the team uses it; `null` otherwise, and when `pool_rise` says it |
+| `pool_rise` | object | `{points, since, devices}`: as `outside`, in its place, while the team devices named, of those not `silent`, send this provider's sessions through BB's Account Pooler. Their tokens count for the login of the folder that holds their logs, so the pool's sessions may have filled the window, and whose they were is not known. `null` otherwise |
 | `utilization` | list | how full each of a subscription's windows got before each reset; see below. `[]` for an account that is not a subscription, and for one no device read a period of that ended |
 
 A window's `utilization`, the main window first, then the longest. A period is one reset time of the window, give or take 5 minutes, and its percent the fullest reading of it any device read, so a window that ran out stays at 100% when the provider resets it early or takes usage back. A device reads its periods from its samples of the last 90 days and sends them in its snapshot, and the team takes the fullest of each; while `cycles_held_back_by` is not empty, these are this device's alone. A period read only at 0% is left out, as are a window without a reset time, an account that is not known, and Hermes, whose quota is another login's.
@@ -496,6 +498,8 @@ An event:
 - `name` on the collector and on a team device, in v0.9.0: what the report calls a device, its OS user at its label, as `ann@mira-mbp`, so that the people and bots on one server read as the consumers they are. Every string that names a device, in rows, lists, and words, `replaced_by` and a `duplicate` entry's `message` among them, now says its `name` where it said its label, or `host (user)`. A device is still told apart by its `device` id, and `label` and `os_user` keep the parts. A report from an earlier release has no `name`: `ai-usage report --from` fills it in from `label` and `os_user`, and the rest of such a report names devices as it was saved. No field changed its type, so the version stays 4.
 - `method` and `command` in `collector.update`, in v0.8.0, so that a reader says how this copy updates instead of guessing from its path: `homebrew` with the command that upgrades it, or `self` with `null`. A report from an earlier release has neither: read a missing `method` as `self` and `command` as `null`, as `ai-usage report --from` fills them in. `schedule.error` can now be set while `schedule.registered` is `true`, to say another copy of ai-usage should go. No field changed meaning, so the version stays 4.
 - `no_reading` on a team account, in v0.9.0, says why for Codex and Grok too, and for a source that failed: a Codex that could not start app-server, answer, or read its limits, a login it refused, a Grok log with no credit usage or no signed-in user, and Claude Code's `/usage` that timed out or could not read the usage, each from a device the account is logged in to. The Grok provider's `error` can now say that its log has no credit usage yet, with `status` `ok`. No field changed meaning, so the version stays 4.
+
+- `pool_rise` on a team account and the `pool_rise` kind in `attention`, in v0.13.3: a window that `outside` would show, while BB's Account Pooler on a team device serves that provider, so it is not said to be used outside the team.
 
 - `pooled` on a team device, in v0.11.0: the providers whose sessions on the device go through BB's Account Pooler, so a reader does not take its accounts as exact; the device's `note` says so too. And `install` in `status --json`, which before any run creates nothing and has `collector` `null` and `sources` `[]`. A report from an earlier release has no `pooled`: read it as `[]`, as `ai-usage report --from` fills it in. No field changed meaning, so the version stays 4.
 
@@ -749,6 +753,7 @@ A shortened report from a team of two:
             "burn_estimated": false,
             "no_reading": null,
             "outside": null,
+            "pool_rise": null,
             "utilization": [
               {
                 "window": "7d",

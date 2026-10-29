@@ -1,8 +1,12 @@
 package probe
 
 import (
+	"context"
+	"encoding/json"
 	"net/url"
+	"path/filepath"
 	"strings"
+	"time"
 )
 
 // BB's Account Pooler routes the Claude Code and Codex sessions it starts
@@ -55,4 +59,47 @@ func (e Env) poolVars() []string {
 		}
 	}
 	return out
+}
+
+// PoolUse asks BB, with `bb pool status --json`, when its Account Pooler
+// last served each harness it routes: the newest last use of the pool's
+// enabled accounts of that harness, by harness. It is nil when no bb is
+// found or it does not answer as BB does. BB writes its command line to
+// ~/.bb/bin, which comes first, since another tool on PATH can be named
+// bb too. The pool serves every machine of that BB, and its status says
+// which machine used it but not which one is asking, so a use may be
+// another machine's. Only the routes and the times are read: not the
+// accounts' emails or quota.
+func (e Env) PoolUse(ctx context.Context) map[string]time.Time {
+	bin := filepath.Join(e.HomeDir, ".bb", "bin", "bb")
+	if e.HomeDir == "" || !isExecutable(bin) {
+		var ok bool
+		if bin, ok = e.find("bb"); !ok {
+			return nil
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, e.timeout())
+	defer cancel()
+	out, err := e.command(ctx, bin, nil, "pool", "status", "--json").Output()
+	if err != nil {
+		return nil
+	}
+	var st struct {
+		Routing  map[string]bool `json:"routing"`
+		Accounts []struct {
+			Provider   string `json:"provider"`
+			Enabled    bool   `json:"enabled"`
+			LastUsedAt int64  `json:"lastUsedAt"`
+		} `json:"accounts"`
+	}
+	if json.Unmarshal(out, &st) != nil || st.Routing == nil {
+		return nil
+	}
+	use := map[string]time.Time{}
+	for _, a := range st.Accounts {
+		if at := time.UnixMilli(a.LastUsedAt).UTC(); st.Routing[a.Provider] && a.Enabled && a.LastUsedAt > 0 && at.After(use[a.Provider]) {
+			use[a.Provider] = at
+		}
+	}
+	return use
 }
