@@ -179,9 +179,11 @@ extension Report {
     }
 
     /// A device the report names, as a sentence says it: "this Mac" for
-    /// this one, told by its id where the report has it, else its name.
+    /// this one, told by its id where the report has it, else by its name
+    /// when no other device has it.
     public func deviceWords(_ name: String, id: String? = nil) -> String {
-        let here = id.map { $0 == thisDevice?.device } ?? (teamDevice(named: name)?.thisDevice == true)
+        let named = team.devices.filter { $0.name == name || $0.name.isEmpty && $0.label == name }
+        let here = id.map { $0 == thisDevice?.device } ?? (named.count == 1 && named[0].thisDevice)
         return here ? "this Mac" : name
     }
 

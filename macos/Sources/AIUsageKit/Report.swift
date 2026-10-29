@@ -556,12 +556,12 @@ public struct TeamDevice: Decodable, Sendable {
     /// exact. Empty from an ai-usage before v0.11.0.
     @Absent public var pooled: [String]
 
-    /// The line under a device with nothing wrong: the report's NOTE when
-    /// the device's sessions go through BB's Account Pooler, so that tokens
-    /// that count for another account do not read as none; nil otherwise.
+    /// The line under a device with nothing wrong whose sessions go through
+    /// BB's Account Pooler, in the words of the status view's NOTE, so that
+    /// tokens that count for another account do not read as none; nil
+    /// otherwise. Its NOTE says one thing, as which release to update to.
     public var pooledNote: String? {
-        guard !pooled.isEmpty, let n = note, !n.isEmpty else { return nil }
-        return n
+        pooled.isEmpty ? nil : pooled.joined(separator: ", ") + " via BB's Account Pooler · accounts not exact"
     }
 
     public struct Gap: Decodable, Sendable {
