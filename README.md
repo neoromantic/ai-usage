@@ -339,9 +339,13 @@ The app computes nothing itself. It runs `ai-usage report --json` every minute a
 
 AI Usage is also a plugin for [BB](https://getbb.app): the team report on a page of its own, with the same attention, subscriptions, forecasts, cost and its questions, devices × subscriptions, and devices as the console, and a Team usage card in the sidebar's footer. It shows `ai-usage report --json` as ai-usage words it, as the menu bar app does.
 
+It is in BB's plugin catalog: in BB, open Plugins, search for AI Usage, and click Install. Or, in a terminal:
+
 ```sh
-bb plugin install npm:@goodit/bb-plugin-ai-usage
+bb plugin install ai-usage
 ```
+
+BB brings it to a new release with Update on its Plugins page or `bb plugin update ai-usage`.
 
 ![The AI Usage page in BB, on the made-up team: attention, then each subscription's limiting windows with what is left and the forecast at reset](docs/demo/bb-panel.png)
 

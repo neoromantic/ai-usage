@@ -57,7 +57,7 @@ The owner does this once, before the first full release after the plugin lands; 
 3. In the package's settings on npmjs.com, under Trusted publishing, add GitHub Actions with the organization or user `neoromantic`, the repository `ai-usage`, the workflow `release.yml`, and no environment. Then, under Publishing access, require two-factor authentication and disallow tokens.
 4. Rerun the release's job `plugin`, or let the next release run it: it finds the version on npm and stops, or publishes the next one through OIDC.
 
-The plugin's listing in BB's catalog is a pull request to `get-bb/marketplace` with an entry that names this npm package and a range such as `>=0.11.0 <1.0.0`, the icon `bb/icons/ai-usage.svg`, `bb/PLUGIN_OVERVIEW.md` as its overview, and the pictures `docs/demo/bb-panel.png` and `docs/demo/bb-cost.png`. The range lets new versions reach users without another pull request.
+The plugin is listed in BB's `bb-community` catalog as `ai-usage`, an entry in `get-bb/marketplace` that names this npm package, the icon `bb/icons/ai-usage.svg`, `bb/PLUGIN_OVERVIEW.md` as its overview, and the pictures `docs/demo/bb-panel.png` and `docs/demo/bb-cost.png`. The entry tracks `>=0.12.0 <1.0.0`, so each release reaches users through `bb plugin update` with no pull request to the catalog; a major version, 1.0.0, needs the entry's range updated there first.
 
 ## Signing and notarization
 
