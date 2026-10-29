@@ -551,6 +551,18 @@ public struct TeamDevice: Decodable, Sendable {
     /// What the report's status view says of the device in its NOTE, in
     /// full; nil from an ai-usage that does not say, or with nothing to say.
     @Absent public var note: String?
+    /// The providers whose sessions on the device went through BB's
+    /// Account Pooler in the last 7 days, so that its accounts are not
+    /// exact. Empty from an ai-usage before v0.11.0.
+    @Absent public var pooled: [String]
+
+    /// The line under a device with nothing wrong: the report's NOTE when
+    /// the device's sessions go through BB's Account Pooler, so that tokens
+    /// that count for another account do not read as none; nil otherwise.
+    public var pooledNote: String? {
+        guard !pooled.isEmpty, let n = note, !n.isEmpty else { return nil }
+        return n
+    }
 
     public struct Gap: Decodable, Sendable {
         public let seconds: Int

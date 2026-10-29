@@ -108,6 +108,15 @@ equal("self available help", solo.collector.update.available("v0.7.0", version: 
 let stuck = try edited("team.json") { objects($0) { $0["device"] as? String == team.team.devices[1].device ? $0.merging(["not_updating": true]) { $1 } : $0 } }
 equal("not updating", stuck.team.devices.map(\.notUpdating), team.team.devices.indices.map { $0 == 1 })
 check("older report updates", older.team.devices.allSatisfy { !$0.notUpdating })
+// A device whose sessions go through BB's Account Pooler shows the
+// report's NOTE under its row though nothing is wrong with it; a device
+// with none shows no such line, nor does one of a report from before pooled.
+let scout = team.teamDevice(named: "hermes@scout")!.device
+let poolNote = "codex via BB's Account Pooler · accounts not exact"
+let pooled = try edited("team.json") { objects($0) { $0["device"] as? String == scout && $0["os_user"] != nil ? $0.merging(["pooled": ["codex"], "note": poolNote]) { $1 } : $0 } }
+equal("pooled note", pooled.team.devices.map(\.pooledNote), team.team.devices.map { $0.device == scout ? poolNote : nil })
+let unpooled = try edited("team.json") { objects($0) { $0.filter { $0.key != "pooled" } } }
+check("no pool before v0.11.0", unpooled.team.devices.allSatisfy { $0.pooled.isEmpty && $0.pooledNote == nil })
 
 // The subscriptions with no window known now: never read, or each window
 // that limits it has reset since its reading or is not in it. Another
