@@ -206,8 +206,30 @@ func TestSharedClaudeLogsAreReadOnce(t *testing.T) {
 	if len(one.Sessions) == 0 || !reflect.DeepEqual(both.Sessions, one.Sessions) {
 		t.Errorf("sessions %+v, want the first home's %+v", both.Sessions, one.Sessions)
 	}
-	if hr, ok := both.Homes[alias]; !ok || !reflect.DeepEqual(hr, HomeRead{}) {
-		t.Errorf("alias read = %+v, %v", hr, ok)
+	if hr, ok := both.Homes[alias]; !ok || !reflect.DeepEqual(hr, both.Homes[home]) {
+		t.Errorf("alias read = %+v, %v, want the first home's %+v", hr, ok, both.Homes[home])
+	}
+}
+
+// A shared projects folder that cannot be read fails for each home that
+// shares it, as when each read it.
+func TestSharedClaudeLogsFailForEachHome(t *testing.T) {
+	needDeny(t)
+	root := t.TempDir()
+	home := fullHomes(t, root)["claude"]
+	alias := filepath.Join(root, "alias")
+	if err := os.MkdirAll(alias, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(home, "projects"), filepath.Join(alias, "projects")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	deny(t, filepath.Join(home, "projects"))
+	res := ReadHomes("claude", []string{home, alias}, since)
+	for _, h := range []string{home, alias} {
+		if res.Homes[h].Err == nil {
+			t.Errorf("%s read without an error: %+v", h, res.Homes[h])
+		}
 	}
 }
 

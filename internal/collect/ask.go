@@ -206,7 +206,7 @@ func lastUses(p string, homes []string, res logs.Result) (used map[string]bool, 
 			continue
 		}
 		for _, h := range hs {
-			used[h], lastUse[h] = true, last
+			lastUse[h] = last
 		}
 	}
 	return used, lastUse

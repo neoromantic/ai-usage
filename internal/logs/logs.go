@@ -171,16 +171,17 @@ func (r Reader) ReadHomes(provider string, homes []string, since time.Time) Resu
 		var files []*claudeFile
 		failed := false
 		// Homes that share one projects folder, through a symlink, read it
-		// once, from the first of them, which holds its sessions. Read again,
-		// a session growing meanwhile would go to the home read last.
-		read := map[string]bool{}
+		// once, from the first of them, which holds its sessions, and each
+		// read as that one did. Read again, a session growing meanwhile would
+		// go to the home read last.
+		readBy := map[string]string{}
 		for _, h := range homes {
 			if root, err := resolveDir(filepath.Join(h, "projects")); err == nil {
-				if read[root] {
-					res.Homes[h] = HomeRead{}
+				if first, ok := readBy[root]; ok {
+					res.Homes[h] = res.Homes[first]
 					continue
 				}
-				read[root] = true
+				readBy[root] = h
 			}
 			fs, hr := claudeFiles(h, since, cache)
 			files = append(files, fs...)
