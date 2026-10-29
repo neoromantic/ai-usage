@@ -439,6 +439,18 @@ func (m *merger) hermesActivity() {
 	}
 }
 
+// pooledOn is the devices whose sessions of provider p go through BB's
+// Account Pooler, by name.
+func (m *merger) pooledOn(p string) []string {
+	var out []string
+	for _, dv := range m.devs {
+		if slices.Contains(dv.dev.Pooled, p) {
+			out = append(out, dv.name)
+		}
+	}
+	return out
+}
+
 // markOld marks the devices on a release older than latest and, when the
 // team cache found a device behind on the release it runs, since when.
 func (m *merger) markOld(latest *string) {
@@ -477,6 +489,9 @@ func (m *merger) provider(p string) (TeamProvider, bool) {
 			x.ta.NoReading = m.noReading(x)
 		}
 		x.ta.Outside = outside(m.in.Team.History[collect.HistoryKey(p, x.ta.Label)], m.now)
+		if pooled := m.pooledOn(p); x.ta.Outside != nil && len(pooled) > 0 {
+			x.ta.PoolRise, x.ta.Outside = &PoolRise{Outside: *x.ta.Outside, Devices: pooled}, nil
+		}
 		x.ta.Utilization = []Utilization{}
 		if x.ta.Subscription {
 			x.ta.Utilization = utilization(x.cycles, x.ta.Quota, m.now)

@@ -13,8 +13,8 @@ import (
 // attentionOrder is the kinds, most urgent first.
 var attentionOrder = []string{
 	AttentionOut, AttentionOver, AttentionTight, AttentionOutside, AttentionError,
-	AttentionNoReading, AttentionSilent, AttentionDuplicate, AttentionOld, AttentionUnder, AttentionCheck, AttentionIdle,
-	AttentionCost,
+	AttentionNoReading, AttentionSilent, AttentionDuplicate, AttentionOld, AttentionUnder, AttentionPoolRise, AttentionCheck,
+	AttentionIdle, AttentionCost,
 }
 
 // attention is what needs attention now, most urgent first: windows that
@@ -22,8 +22,8 @@ var attentionOrder = []string{
 // spending on them, windows that will end nearly full, windows someone
 // outside the team fills, devices that fail, subscriptions in use with no
 // reading, devices that are silent or were reinstalled, devices on an older
-// release, windows past half that will be left mostly unused, and paid
-// subscriptions no team device uses.
+// release, windows past half that will be left mostly unused, windows BB's
+// Account Pooler may fill, and paid subscriptions no team device uses.
 func attention(t Team, c Collector, now time.Time) []Attention { return attentionWith(t, c, nil, now) }
 
 // attentionWith is attention with what the cost adds: the subscriptions
@@ -46,7 +46,7 @@ func attentionWith(t Team, c Collector, cost *Cost, now time.Time) []Attention {
 			if ta, tb := when(a), when(b); !sameTime(ta, tb) {
 				return before(ta, tb)
 			}
-		case AttentionTight, AttentionOutside:
+		case AttentionTight, AttentionOutside, AttentionPoolRise:
 			// The fuller forecast, or the bigger rise, first.
 			if *a.Percent != *b.Percent {
 				return *a.Percent > *b.Percent
@@ -80,6 +80,12 @@ func quotaAttention(t Team, now time.Time) []Attention {
 				at := of
 				pts := a.Outside.Points
 				at.Kind, at.At, at.Percent = AttentionOutside, timePtr(a.Outside.Since), &pts
+				out = append(out, at)
+			}
+			if r := a.PoolRise; r != nil {
+				at := of
+				pts := r.Points
+				at.Kind, at.At, at.Percent, at.Devices = AttentionPoolRise, timePtr(r.Since), &pts, r.Devices
 				out = append(out, at)
 			}
 			// A reading that does not come says nothing new while the
@@ -142,13 +148,13 @@ func quotaAttention(t Team, now time.Time) []Attention {
 // idleSince is when a paid subscription that no team device has used for
 // IdleAfter, as its LastActiveAt says, was last used, or nil. It has a
 // reading, and nothing says that someone outside the team uses it: it has
-// no Outside, and its main window, read since it began after that last use,
+// no Outside or PoolRise, and its main window, read since it began after that last use,
 // is under 1%. The unknown account is no subscription to pay for, and a
 // free plan costs nothing.
 func idleSince(a TeamAccount, now time.Time) *time.Time {
 	last := a.LastActiveAt
 	switch {
-	case !a.Subscription, a.Label == collect.UnknownAccount, a.Quota == nil, a.Outside != nil,
+	case !a.Subscription, a.Label == collect.UnknownAccount, a.Quota == nil, a.Outside != nil, a.PoolRise != nil,
 		last == nil, now.Sub(*last) < IdleAfter, a.Plan != nil && strings.EqualFold(*a.Plan, "free"):
 		return nil
 	}

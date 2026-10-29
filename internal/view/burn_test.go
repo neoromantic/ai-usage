@@ -715,6 +715,48 @@ func TestOutside(t *testing.T) {
 	}
 }
 
+// A window that rose with no team tokens to match is not called outside
+// while a team device sends that provider's sessions through BB's Account
+// Pooler: the pool's sessions count for another account's login, so they
+// may have filled it. ATTENTION says so, muted, and it is not idle.
+func TestPoolRise(t *testing.T) {
+	reset := now.Add(48 * time.Hour)
+	h := func(n int) time.Time { return now.Add(time.Duration(n) * time.Hour) }
+	pt := func(at time.Time, pct float64, burn int64) collect.Point {
+		return collect.Point{At: at, Window: "7d", ResetsAt: &reset, Percent: pct, TeamBurn: burn}
+	}
+	f := newFixture(t, emptyState())
+	other := emptyState()
+	addAccount(other, "codex", "sam@mail.test", true, codexQuota(now.Add(-time.Hour), 45), 100)
+	d := otherDoc(t, f.key, "d-other-device", "otherbox", now, other)
+	d.Pooled = []string{"codex"}
+	f.in.Team = collect.TeamCache{PulledAt: now, Team: f.key.Fingerprint(), Docs: []snapshot.Doc{d},
+		History: map[string][]collect.Point{collect.HistoryKey("codex", "sam@mail.test"): {pt(h(-20), 30, 7), pt(h(-2), 45, 7)}}}
+	r := Build(f.in)
+	a := findTeamAccount(t, r, "codex", "sam@mail.test")
+	name := r.Team.Devices[1].Name
+	if a.Outside != nil || a.PoolRise == nil || a.PoolRise.Points != 15 || !slices.Equal(a.PoolRise.Devices, []string{name}) {
+		t.Fatalf("outside %+v, pool rise %+v", a.Outside, a.PoolRise)
+	}
+	var kinds []string
+	for _, at := range r.Attention {
+		kinds = append(kinds, at.Kind)
+		if at.Kind == AttentionPoolRise && at.Text != "+15 points in 20h with next to no team tokens: BB's Account Pooler on "+name+" may have spent it" {
+			t.Errorf("text %q", at.Text)
+		}
+	}
+	if !slices.Contains(kinds, AttentionPoolRise) || slices.Contains(kinds, AttentionOutside) {
+		t.Errorf("attention %q", kinds)
+	}
+	if idleSince(a, now.Add(10*24*time.Hour)) != nil {
+		t.Errorf("a pool rise is idle")
+	}
+	lines := strings.Join(pageSection(Render(r, Options{Width: 120, Loc: time.UTC}), "ATTENTION"), "\n")
+	if !strings.Contains(lines, "POOLED") || !strings.Contains(lines, "maybe BB's Account Pooler on "+name) {
+		t.Errorf("page:\n%s", lines)
+	}
+}
+
 // A teammate's last error says when it happened, from v0.4.0 on, and
 // ATTENTION and its note say how long ago.
 func TestTeamDeviceLastErrorAt(t *testing.T) {

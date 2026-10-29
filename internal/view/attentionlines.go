@@ -39,6 +39,8 @@ func (p *page) badgeOf(kind string) (string, color.Color) {
 		return "UNDER", t.Under
 	case AttentionIdle:
 		return "IDLE", t.Muted
+	case AttentionPoolRise:
+		return "POOLED", t.Muted
 	case AttentionCheck:
 		return "CHECK", t.Muted
 	case AttentionCost:
@@ -136,7 +138,7 @@ func (p *page) moreText(hidden []Attention) string {
 func (p *page) subject(a Attention) chunks {
 	switch a.Kind {
 	case AttentionOut, AttentionOver, AttentionTight, AttentionUnder, AttentionOutside, AttentionNoReading, AttentionIdle,
-		AttentionCheck, AttentionCost:
+		AttentionPoolRise, AttentionCheck, AttentionCost:
 		label := shortID(a.Account)
 		if acct := p.account(a.Provider, a.Account); acct != nil {
 			label = shownLabel(acct)
@@ -210,6 +212,8 @@ func (p *page) attentionText(a Attention, room int) []chunks {
 		return p.tightForms(a, old, short)
 	case AttentionOutside:
 		return p.outsideForms(a)
+	case AttentionPoolRise:
+		return p.poolRiseForms(a)
 	case AttentionUnder:
 		return p.underForms(a)
 	case AttentionIdle:
@@ -303,6 +307,27 @@ func (p *page) outsideForms(a Attention) []chunks {
 	}
 	const none = ", no team device spent"
 	return p.forms(in+none, s+none, in, s)
+}
+
+// poolRiseForms is a window that rose while the team counted next to
+// nothing on it, and that BB's Account Pooler on the devices named may have
+// filled: its sessions count for another account's login. Whose they were
+// is not known, so it says may.
+func (p *page) poolRiseForms(a Attention) []chunks {
+	s := "+" + strconv.Itoa(int(math.Round(*a.Percent))) + " points"
+	in := s
+	if a.At != nil {
+		in += " in " + age(p.now.Sub(*a.At))
+	}
+	on := ""
+	if len(a.Devices) > 0 {
+		on = " on " + p.txt(a.Devices[0])
+		if len(a.Devices) > 1 {
+			on += " +" + strconv.Itoa(len(a.Devices)-1)
+		}
+	}
+	return p.forms(in+" with next to no team tokens: BB's Account Pooler"+on+" may have spent it",
+		in+", maybe BB's Account Pooler"+on, in+", maybe BB's Account Pooler", in, s)
 }
 
 // noReadingForms is why a subscription in use has no reading. What to do

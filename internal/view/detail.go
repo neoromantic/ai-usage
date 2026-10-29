@@ -244,6 +244,9 @@ func (p *page) accountFacts(provider string, a *TeamAccount) []chunks {
 	if o := a.Outside; o != nil {
 		add("OUTSIDE", p.paint("+"+wholePercent(o.Points)+" points since "+p.clock(o.Since)+" while the team spent next to nothing", p.th.Tight, false, false))
 	}
+	if r := a.PoolRise; r != nil {
+		add("POOLED", p.muted("+"+wholePercent(r.Points)+" points since "+p.clock(r.Since)+" while the team counted next to nothing; BB's Account Pooler on "+p.txt(strings.Join(r.Devices, ", "))+" may have spent it"))
+	}
 	for _, l := range a.LinkedUsage {
 		s := p.txt(l.Provider)
 		if l.Label != "" {
