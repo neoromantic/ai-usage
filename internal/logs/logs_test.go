@@ -182,6 +182,35 @@ func TestHomesSharingLogsReadAlike(t *testing.T) {
 	}
 }
 
+// A Claude projects folder two homes share through a symlink is read once,
+// from the first home, which holds its sessions. Read again, a session that
+// grew between the two reads would go to the home read last.
+func TestSharedClaudeLogsAreReadOnce(t *testing.T) {
+	root := t.TempDir()
+	home := fullHomes(t, root)["claude"]
+	alias := filepath.Join(root, "alias")
+	if err := os.MkdirAll(alias, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(home, "projects"), filepath.Join(alias, "projects")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	before := claudeParsed.Load()
+	one := ReadHomes("claude", []string{home}, since)
+	once := claudeParsed.Load() - before
+	before = claudeParsed.Load()
+	both := ReadHomes("claude", []string{home, alias}, since)
+	if got := claudeParsed.Load() - before; once == 0 || got != once {
+		t.Errorf("parsed %d bytes, want %d", got, once)
+	}
+	if len(one.Sessions) == 0 || !reflect.DeepEqual(both.Sessions, one.Sessions) {
+		t.Errorf("sessions %+v, want the first home's %+v", both.Sessions, one.Sessions)
+	}
+	if hr, ok := both.Homes[alias]; !ok || !reflect.DeepEqual(hr, HomeRead{}) {
+		t.Errorf("alias read = %+v, %v", hr, ok)
+	}
+}
+
 // A session in one home whose sub-agent, fork, or resumed copy is in another
 // home is counted once when the homes are read together, and each session
 // names the home it grows in.
