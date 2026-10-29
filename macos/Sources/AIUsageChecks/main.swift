@@ -414,6 +414,10 @@ equal("this Mac's window", miraDetails?.thisWindow?.forms.first, "mira@mira-mbp 
 equal("last day's pace", miraDetails?.forecast, "113% at reset · the last day's pace")
 check("this Mac's fresh reading says nothing", miraDetails != nil && miraDetails?.reading == nil)
 equal("leo's reading", details(team, "claude", "leo@studio.dev")?.reading?.text, "11m old, from leo@leo-air")
+// A subscription not read says where it was read and used, with this Mac
+// as "this Mac": by its id where the report has one, else by its name.
+equal("device words", [team.deviceWords("mira@mira-mbp"), team.deviceWords("leo@leo-air"), team.deviceWords("mira@mira-mbp", id: "d-demo-leo"),
+                       solo.deviceWords("mira@mira-mbp", id: "d-demo-solo")], ["this Mac", "leo@leo-air", "mira@mira-mbp", "this Mac"])
 // Nobody spent on Grok this window: no line of who did, and no forecast.
 let grok = details(team, "grok", "7f3b9c21-4e8a-4d6b-a1c5-2e9f0b7d8a64")
 check("nobody spent the window", grok != nil && grok?.thisWindow == nil && grok?.forecast == nil && grok?.lastUsed == "9d ago")

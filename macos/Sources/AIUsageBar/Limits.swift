@@ -48,7 +48,7 @@ struct LimitsView: View {
                         LimitRow(provider: g.provider, account: r.account, line: r.line, report: report, now: now)
                     }
                     if !g.unread.isEmpty {
-                        NotRead(provider: g.provider, accounts: g.unread, solo: report.solo, now: now)
+                        NotRead(provider: g.provider, accounts: g.unread, report: report, now: now)
                     }
                 }
             }
@@ -64,8 +64,10 @@ struct LimitsView: View {
 private struct NotRead: View {
     let provider: String
     let accounts: [TeamAccount]
-    let solo: Bool
+    let report: Report
     let now: Date
+
+    private var solo: Bool { report.solo }
 
     var body: some View {
         DisclosureRow(key: "unread:\(provider)", spoken: spoken) {
@@ -97,21 +99,22 @@ private struct NotRead: View {
         return "\(Format.provider(provider)), not read: " + each.joined(separator: "; ")
     }
 
-    /// "bo, Max: No reading; used on bo-air, 15h ago".
+    /// "bo, Max: No reading; used on bo-air, 15h ago", with this Mac as
+    /// "this Mac".
     private func details(_ a: TeamAccount) -> String {
         let why: String
         if let reason = a.noReading {
             // The report knows why, and what to do.
             why = reason
         } else if let q = a.quota, let w = q.main {
-            let read = [q.device.map { "on \($0)" }, w.observedAt.map { Format.ago($0, now: now) }].compactMap { $0 }.joined(separator: " ")
+            let read = [q.device.map { "on \(report.deviceWords($0, id: q.deviceId))" }, w.observedAt.map { Format.ago($0, now: now) }].compactMap { $0 }.joined(separator: " ")
             why = (w.reset ? "Reset since the last reading" : w.unread == true ? "Not in the last reading" : "No reading")
                 + (read.isEmpty ? "" : ", read \(read)")
         } else {
             why = "No reading"
         }
         let used = a.lastActiveAt.map { t in
-            "used " + (solo ? "" : a.busiest.map { "on \(a.users > 1 ? "\($0) +\(a.users - 1)" : $0), " } ?? "") + Format.ago(t, now: now)
+            "used " + (solo ? "" : a.busiest.map { "on \(report.deviceWords($0))\(a.users > 1 ? " +\(a.users - 1)" : ""), " } ?? "") + Format.ago(t, now: now)
         }
         return a.label + (a.plan.map { ", \(Format.plan($0))" } ?? "") + ": " + [why, used].compactMap { $0 }.joined(separator: "; ")
     }
