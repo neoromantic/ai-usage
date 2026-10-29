@@ -317,9 +317,10 @@ func TestAskTellsWhenTheHomeWasLastUsed(t *testing.T) {
 }
 
 // Homes that share their logs through a symlink read the same sessions,
-// which go to one of them. Which login ran them is not known, so no home of
-// the pair is told it was used, and Claude Code is asked for neither.
-func TestHomesSharingClaudeLogsAreNotToldTheirUse(t *testing.T) {
+// which go to one of them. Which login ran them is not known, so each home
+// of the pair is told the folder's last use, and Claude Code is asked for
+// each, while a home with logs of its own keeps its own.
+func TestHomesSharingClaudeLogsAreToldTheirUse(t *testing.T) {
 	w, o := newWorld(t)
 	personal := w.home(t, "claude")
 	work := w.extraHome(t, "claude", "work-claude")
@@ -333,8 +334,8 @@ func TestHomesSharingClaudeLogsAreNotToldTheirUse(t *testing.T) {
 	w.sessions("claude", own, sess("s2", "/p", 100, t0.Add(-time.Hour)))
 	run(t, o)
 	for _, h := range []string{personal, work} {
-		if got, ok := w.lastUse[state.Key("claude", h)]; !ok || !got.IsZero() {
-			t.Errorf("%s: last use %v, asked %v", h, got, ok)
+		if got := w.lastUse[state.Key("claude", h)]; !got.Equal(t0.Add(-5 * time.Minute)) {
+			t.Errorf("%s: last use %v", h, got)
 		}
 	}
 	if got := w.lastUse[state.Key("claude", own)]; !got.Equal(t0.Add(-time.Hour)) {
