@@ -11,21 +11,25 @@ import (
 
 // PooledFor is how long a device counts as sending a provider's sessions
 // through BB's Account Pooler after a run last found it doing so. The pool
-// is set up once and kept, and a run sees it only in a Codex session's log
-// or when it runs in a session the pool routes, as in a BB thread; a
-// scheduled run, which BB does not start, sees no such environment.
+// is set up once and kept. A run sees it in a Codex session's log, when it
+// runs in a session the pool routes, as in a BB thread, or in what BB says
+// of its pool; a scheduled run, which BB does not start, sees no such
+// environment.
 const PooledFor = 7 * 24 * time.Hour
 
 // notePooled records in st when this run found sessions of provider p going
-// through BB's Account Pooler: env says the run itself is in one, or a
-// session read in the last PooledFor is one, as its log says. The pool's
-// hub picks one of several accounts for each request, and neither says
-// which, so the tokens stay with the home's login, and the device says it
-// cannot tell.
-func notePooled(st *state.State, p string, env bool, sessions []logs.Session, now time.Time) {
+// through BB's Account Pooler: env says the run itself is in one, a session
+// read in the last PooledFor is one, as its log says, or BB says its pool,
+// which routes p, last served p at bb. The pool's hub picks one of several
+// accounts for each request, and neither says which, so the tokens stay
+// with the home's login, and the device says it cannot tell.
+func notePooled(st *state.State, p string, env bool, sessions []logs.Session, bb, now time.Time) {
 	seen := time.Time{}
-	if env {
+	switch {
+	case env || bb.After(now):
 		seen = now
+	case now.Sub(bb) < PooledFor:
+		seen = bb
 	}
 	for _, s := range sessions {
 		if s.Pooled && now.Sub(s.Updated) < PooledFor && s.Updated.After(seen) {
