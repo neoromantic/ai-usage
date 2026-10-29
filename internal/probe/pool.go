@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -63,15 +64,19 @@ func (e Env) poolVars() []string {
 // PoolUse asks BB, with `bb pool status --json`, when its Account Pooler
 // last served each harness it routes: the newest last use of the pool's
 // enabled accounts of that harness, by harness. It is nil when no bb is
-// found or it does not answer. BB's command line is on PATH in BB's own
-// sessions, and in the folder BB writes it to, ~/.bb/bin, for the system
-// scheduler. The pool serves every machine of that BB, and its status does
-// not say which one a use was on, so a use may be another machine's. Only
-// the routes and the times are read: not the accounts' emails or quota.
+// found or it does not answer as BB does. BB writes its command line to
+// ~/.bb/bin, which comes first, since another tool on PATH can be named
+// bb too. The pool serves every machine of that BB, and its status says
+// which machine used it but not which one is asking, so a use may be
+// another machine's. Only the routes and the times are read: not the
+// accounts' emails or quota.
 func (e Env) PoolUse(ctx context.Context) map[string]time.Time {
-	bin, ok := e.find("bb")
-	if !ok {
-		return nil
+	bin := filepath.Join(e.HomeDir, ".bb", "bin", "bb")
+	if e.HomeDir == "" || !isExecutable(bin) {
+		var ok bool
+		if bin, ok = e.find("bb"); !ok {
+			return nil
+		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, e.timeout())
 	defer cancel()
@@ -87,7 +92,7 @@ func (e Env) PoolUse(ctx context.Context) map[string]time.Time {
 			LastUsedAt int64  `json:"lastUsedAt"`
 		} `json:"accounts"`
 	}
-	if json.Unmarshal(out, &st) != nil {
+	if json.Unmarshal(out, &st) != nil || st.Routing == nil {
 		return nil
 	}
 	use := map[string]time.Time{}

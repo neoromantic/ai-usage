@@ -751,6 +751,13 @@ func TestPoolRise(t *testing.T) {
 	if idleSince(a, now.Add(10*24*time.Hour)) != nil {
 		t.Errorf("a pool rise is idle")
 	}
+	// A silent device's pooled is of the week before it last reported.
+	silent := d
+	silent.CollectedAt = now.Add(-2 * 24 * time.Hour)
+	f.in.Team.Docs = []snapshot.Doc{silent}
+	if a := findTeamAccount(t, Build(f.in), "codex", "sam@mail.test"); a.Outside == nil || a.PoolRise != nil {
+		t.Errorf("silent pooled device: outside %+v, pool rise %+v", a.Outside, a.PoolRise)
+	}
 	lines := strings.Join(pageSection(Render(r, Options{Width: 120, Loc: time.UTC}), "ATTENTION"), "\n")
 	if !strings.Contains(lines, "POOLED") || !strings.Contains(lines, "maybe BB's Account Pooler on "+name) {
 		t.Errorf("page:\n%s", lines)

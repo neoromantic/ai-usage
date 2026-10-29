@@ -3,6 +3,7 @@ package probe
 import (
 	"context"
 	"maps"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -94,8 +95,27 @@ func TestPoolUse(t *testing.T) {
 	if got := env.PoolUse(context.Background()); got != nil {
 		t.Errorf("bb that fails: PoolUse = %v", got)
 	}
+	env, _ = fakeEnv(t, "bb-other")
+	if got := env.PoolUse(context.Background()); got != nil {
+		t.Errorf("another tool named bb: PoolUse = %v", got)
+	}
 	env.LookPath = func(string) (string, error) { return "", exec.ErrNotFound }
 	if got := env.PoolUse(context.Background()); got != nil {
 		t.Errorf("no bb: PoolUse = %v", got)
+	}
+	// The bb BB writes to ~/.bb/bin comes before one on PATH.
+	env, record = fakeEnv(t, "bb-pool")
+	shim := filepath.Join(env.HomeDir, ".bb", "bin", "bb")
+	if err := os.MkdirAll(filepath.Dir(shim), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(shim, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := env.PoolUse(context.Background()); !maps.Equal(got, want) {
+		t.Errorf("shim: PoolUse = %v", got)
+	}
+	if rec, _ := readRecord(t, record); rec.Path != shim {
+		t.Errorf("ran %s, want %s", rec.Path, shim)
 	}
 }

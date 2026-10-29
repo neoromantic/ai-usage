@@ -215,6 +215,9 @@ func fakeHarness(mode string, args []string) int {
 			`{"provider":"claude","email":"cy@acme.dev","enabled":false,"lastUsedAt":1790157600000},` +
 			`{"provider":"claude","email":"di@acme.dev","enabled":true,"lastUsedAt":null},` +
 			`{"provider":"codex","email":"ann@acme.dev","enabled":true,"lastUsedAt":1790154000000}]}`)
+	case "bb-other":
+		// Another tool named bb.
+		fmt.Println(`{"ok":true}`)
 	case "bb-fail":
 		fmt.Println(`{"ok":false,"error":{"code":"unavailable","message":"bb is not running"}}`)
 		return 1

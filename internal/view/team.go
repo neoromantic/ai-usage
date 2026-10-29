@@ -440,11 +440,12 @@ func (m *merger) hermesActivity() {
 }
 
 // pooledOn is the devices whose sessions of provider p go through BB's
-// Account Pooler, by name.
+// Account Pooler, by name. A silent device's pooled is of the week before
+// its last report, as is a reinstalled one's, so it says nothing of now.
 func (m *merger) pooledOn(p string) []string {
 	var out []string
 	for _, dv := range m.devs {
-		if slices.Contains(dv.dev.Pooled, p) {
+		if !dv.dev.Silent && slices.Contains(dv.dev.Pooled, p) {
 			out = append(out, dv.name)
 		}
 	}
