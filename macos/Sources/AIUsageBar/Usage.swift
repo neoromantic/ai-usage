@@ -217,9 +217,11 @@ private struct DeviceRow: View {
     }
 
     /// What is wrong with the device, in a line under it, in the words of
-    /// the report's NOTE where it has them.
+    /// the report's NOTE where it has them; with nothing wrong, the NOTE of
+    /// a device whose sessions go through BB's Account Pooler, muted.
     private var note: (text: String, color: Color, help: String)? {
-        guard let d = device, let line = problem(d) else { return nil }
+        guard let d = device else { return nil }
+        guard let line = problem(d) else { return d.pooledNote.map { ($0, .secondary, $0) } }
         guard let n = d.note, !n.isEmpty else { return line }
         return (n, line.color, line.help)
     }

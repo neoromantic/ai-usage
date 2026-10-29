@@ -9,6 +9,7 @@ package logs
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/meter"
@@ -169,7 +170,19 @@ func (r Reader) ReadHomes(provider string, homes []string, since time.Time) Resu
 		cache := loadClaudeCache(r.CacheDir)
 		var files []*claudeFile
 		failed := false
+		// Homes that share one projects folder, through a symlink, read it
+		// once, from the first of them, which holds its sessions, and each
+		// read as that one did. Read again, a session growing meanwhile would
+		// go to the home read last.
+		readBy := map[string]string{}
 		for _, h := range homes {
+			if root, err := resolveDir(filepath.Join(h, "projects")); err == nil {
+				if first, ok := readBy[root]; ok {
+					res.Homes[h] = res.Homes[first]
+					continue
+				}
+				readBy[root] = h
+			}
 			fs, hr := claudeFiles(h, since, cache)
 			files = append(files, fs...)
 			res.Homes[h] = hr

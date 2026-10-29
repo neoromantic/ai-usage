@@ -36,23 +36,25 @@ func askHarness(env probe.Env, homeEnv map[string]map[string]string) func(ctx co
 }
 
 // sharedClaudeLogs is the Claude homes whose projects folder is another
-// home's too, through a symlink.
-func sharedClaudeLogs(p string, homes []string) map[string]bool {
-	shared := map[string]bool{}
+// home's too, through a symlink, in groups of the homes that share one.
+func sharedClaudeLogs(p string, homes []string) [][]string {
 	if p != "claude" {
-		return shared
+		return nil
 	}
 	by := map[string][]string{}
+	var dirs []string
 	for _, h := range homes {
 		if dir, err := filepath.EvalSymlinks(filepath.Join(h, "projects")); err == nil {
+			if by[dir] == nil {
+				dirs = append(dirs, dir)
+			}
 			by[dir] = append(by[dir], h)
 		}
 	}
-	for _, hs := range by {
-		if len(hs) > 1 {
-			for _, h := range hs {
-				shared[h] = true
-			}
+	var shared [][]string
+	for _, dir := range dirs {
+		if len(by[dir]) > 1 {
+			shared = append(shared, by[dir])
 		}
 	}
 	return shared
@@ -190,10 +192,22 @@ func lastUses(p string, homes []string, res logs.Result) (used map[string]bool, 
 			}
 		}
 	}
-	// Claude homes that share their logs go unused: the logs give their
-	// sessions to one of them, and cannot say which login ran them.
-	for h := range sharedClaudeLogs(p, homes) {
-		delete(lastUse, h)
+	// Claude homes that share their logs share their use: the logs give
+	// their sessions to the first of them, and cannot say which login ran
+	// them, as when BB's Account Pooler serves them from several accounts.
+	for _, hs := range sharedClaudeLogs(p, homes) {
+		var last time.Time
+		for _, h := range hs {
+			if lastUse[h].After(last) {
+				last = lastUse[h]
+			}
+		}
+		if last.IsZero() {
+			continue
+		}
+		for _, h := range hs {
+			lastUse[h] = last
+		}
 	}
 	return used, lastUse
 }

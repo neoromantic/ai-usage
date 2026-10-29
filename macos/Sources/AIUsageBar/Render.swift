@@ -135,7 +135,7 @@ enum Renderer {
                         let options = TeamOptions()
                         setUp(options)
                         try writeWindow(TeamView().environmentObject(store).environmentObject(options), title: "Team",
-                                        size: teamSize(report), appearance, to: png(name))
+                                        size: teamSize(report, cost: options.segment == .cost), appearance, to: png(name))
                     }
                 }
                 for pane in SettingsWindow.panes {
@@ -306,10 +306,11 @@ enum Renderer {
     }
 
     /// The Team window as tall as its rows, and the controls, header, and
-    /// estimate line around them.
-    private static func teamSize(_ r: Report) -> NSSize {
-        let rows = CGFloat(r.team.matrix.rows.count + 1)
-        return NSSize(width: 1000, height: 72 + TeamTable.headerHeight + rows * TeamTable.rowHeight + (r.team.estimated ? 28 : 0))
+    /// estimate line around them. Cost has Unused and the prices under its
+    /// devices, and no estimate line.
+    private static func teamSize(_ r: Report, cost: Bool = false) -> NSSize {
+        let rows = CGFloat(r.team.matrix.rows.count + (cost ? 2 : 1))
+        return NSSize(width: 1000, height: 72 + TeamTable.headerHeight + rows * TeamTable.rowHeight + (r.team.estimated && !cost ? 28 : 0))
     }
 
     /// Draws a view as a window of the app shows it, with its title bar.

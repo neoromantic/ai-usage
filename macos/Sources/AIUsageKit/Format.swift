@@ -178,6 +178,15 @@ extension Report {
         team.devices.first { $0.name == name } ?? team.devices.first { $0.name.isEmpty && $0.label == name }
     }
 
+    /// A device the report names, as a sentence says it: "this Mac" for
+    /// this one, told by its id where the report has it, else by its name
+    /// when no other device has it.
+    public func deviceWords(_ name: String, id: String? = nil) -> String {
+        let named = team.devices.filter { $0.name == name || $0.name.isEmpty && $0.label == name }
+        let here = id.map { $0 == thisDevice?.device } ?? (named.count == 1 && named[0].thisDevice)
+        return here ? "this Mac" : name
+    }
+
     /// The window an attention entry is about: the one it names, else its
     /// account's main one.
     public func window(of a: Attention) -> Quota.Window? {
