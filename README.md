@@ -128,7 +128,7 @@ SUBSCRIPTIONS  7 · 2 out · 1 over · 3 no reading
 COST  $1,000/mo +1 without a price · used ~$787 (79%) over the last 4 weeks · next: Fri 25 Sep, $200
 
   CLAUDE            PLAN             $/MO   USED       NEXT
-● ann@acme.dev      Max 20x          $200   $182  91%  Fri 25 Sep
+● ann@acme.dev      Ultra            $200   $182  91%  Fri 25 Sep
   kim@corp.test     max                 ?      ?  64%  ·
   old@acme.dev      Pro               $20     $0   0%  ·           still paid?
 
@@ -228,7 +228,7 @@ COST, after SUBSCRIPTIONS, is what the team's Claude, Codex, and Grok subscripti
 - **NEXT**, the next charge, once a person said when it charges: the same day each month, the last day of a shorter month, or the same date each year.
 - What is wrong, when something is: `idle 9d`, a paid subscription no team machine used for a week; `still paid?`, when nobody can say, because its plan was last confirmed by a reading of its quota over 35 days ago, or no machine has had it logged in for 14 days, and nobody confirmed it in the last 35 days; and `ended`, when a reading found a free plan or a person cancelled it. An ended subscription counts in no total and goes after 30 days. A subscription stays in COST after the last machine that had it is gone, until it ends, so one nobody uses cannot drop out of the cost.
 
-ATTENTION gives IDLE its price, "idle 9d, $25/mo paid and unused"; asks CHECK of a subscription nobody can say is still paid, "still paid? last confirmed 21 Aug · no device since 21 Aug: ai-usage cost confirm claude:jun@studio.dev or cancel"; and for 3 days says COST when a subscription is new, its plan changed, as "plan Max 5x → Max 20x, +$81/mo", or the list price of its plan changed. Hermes borrows a Claude, Codex, or Grok login, so what it spends counts as that login's use, and it costs nothing of its own.
+ATTENTION gives IDLE its price, "idle 9d, $25/mo paid and unused"; asks CHECK of a subscription nobody can say is still paid, "still paid? last confirmed 21 Aug · no device since 21 Aug: ai-usage cost confirm claude:jun@studio.dev or cancel"; and for 3 days says COST when a subscription is new, its plan changed, as "plan Max → Ultra, +$81/mo", or the list price of its plan changed. Hermes borrows a Claude, Codex, or Grok login, so what it spends counts as that login's use, and it costs nothing of its own.
 
 In the interactive view, `$` shows DEVICES × SUBSCRIPTIONS in dollars over the last 4 weeks: a cell is what the machine used of the subscription, its part of the subscription's weighted tokens times the dollars used; `unused` is what nobody used, and the TOTAL row is each subscription's price, so every column adds up to it, and the TOTAL column to the row; a line under it says what COST counts that no machine has, and the subscriptions without a price. `%` goes from dollars to shares. A subscription's detail adds its price and where it comes from, used and unused, the next charge, its state, who bills it, its price for a million weighted tokens, its plans, and what each machine used of it; a machine's detail adds what it used of each subscription, and in all.
 

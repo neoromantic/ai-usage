@@ -51,12 +51,12 @@ func TestReadersRefuseOtherPages(t *testing.T) {
 			t.Errorf("readAppStore(%s) = %v, want an error", name, offers)
 		}
 	}
-	other := []byte(`<html><body><h3>Pro</h3><p>$20 a month</p><h3>Max</h3><p>Max 5x is $100</p></body></html>`)
+	other := []byte(`<html><body><h3>Pro</h3><p>$20 a month</p><h3>Max</h3><p>Max 5x: $100 per month</p></body></html>`)
 	if offers, err := readClaudePricing(other); err == nil {
 		t.Errorf("readClaudePricing = %v, want an error", offers)
 	}
-	if offers, err := readClaudeMax(other); err == nil {
-		t.Errorf("readClaudeMax = %v, want an error", offers)
+	if offers, err := readClaudePlan(other); err == nil {
+		t.Errorf("readClaudePlan = %v, want an error", offers)
 	}
 }
 
@@ -73,26 +73,34 @@ func TestReadClaudePricing(t *testing.T) {
 	}
 }
 
-func TestReadClaudeMax(t *testing.T) {
-	got, err := readClaudeMax(fixture(t, "claude-max.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []offer{{Name: "Max 5x", USD: 100, Period: monthly}, {Name: "Max 20x", USD: 200, Period: monthly}}
-	if !slices.Equal(got, want) {
-		t.Errorf("offers = %v, want %v", got, want)
+// Claude's support articles on the Max and Ultra plans each give their
+// plan's price a month, as "The Max plan is available for $100 per month",
+// and not a plan they only name, as Ultra on Max's page.
+func TestReadClaudePlan(t *testing.T) {
+	for page, want := range map[string]offer{
+		"claude-max.html":   {Name: "Max", USD: 100, Period: monthly},
+		"claude-ultra.html": {Name: "Ultra", USD: 200, Period: monthly},
+	} {
+		got, err := readClaudePlan(fixture(t, page))
+		if err != nil {
+			t.Fatal(page, err)
+		}
+		if !slices.Equal(got, []offer{want}) {
+			t.Errorf("%s: offers = %v, want %v", page, got, want)
+		}
 	}
 }
 
 func TestReaderFor(t *testing.T) {
 	for u, ok := range map[string]bool{
-		"https://apps.apple.com/us/app/example/id123":                          true,
-		"https://claude.com/pricing":                                           true,
-		"https://support.claude.com/en/articles/11049741-what-is-the-max-plan": true,
-		"https://support.claude.com/en/articles/123-something-else":            false,
-		"http://apps.apple.com/us/app/example/id123":                           false,
-		"https://news.example.com/x-premium-price":                             false,
-		"https://claude.com/pricing/team":                                      false,
+		"https://apps.apple.com/us/app/example/id123":                            true,
+		"https://claude.com/pricing":                                             true,
+		"https://support.claude.com/en/articles/11049741-what-is-the-max-plan":   true,
+		"https://support.claude.com/en/articles/17728952-what-is-the-ultra-plan": true,
+		"https://support.claude.com/en/articles/123-something-else":              false,
+		"http://apps.apple.com/us/app/example/id123":                             false,
+		"https://news.example.com/x-premium-price":                               false,
+		"https://claude.com/pricing/team":                                        false,
 	} {
 		if got := readerFor(u) != nil; got != ok {
 			t.Errorf("readerFor(%s) = %v, want %v", u, got, ok)

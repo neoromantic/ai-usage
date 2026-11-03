@@ -797,7 +797,7 @@ private struct CostRow: View {
         .opacity(s.ended ? 0.6 : 1)
     }
 
-    /// "Max 20x · via App Store · used 91% · next Fri 25 Sep · idle 23d".
+    /// "Ultra · via App Store · used 91% · next Fri 25 Sep · idle 23d".
     private var details: String {
         let s = subscription
         let next = s.renewsAt.map { "next " + Format.day($0) }

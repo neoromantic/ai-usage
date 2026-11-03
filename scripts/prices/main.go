@@ -207,8 +207,8 @@ func readerFor(u string) reader {
 		return readAppStore
 	case pu.Host == "claude.com" && pu.Path == "/pricing":
 		return readClaudePricing
-	case pu.Host == "support.claude.com" && maxArticleRe.MatchString(pu.Path):
-		return readClaudeMax
+	case pu.Host == "support.claude.com" && planArticleRe.MatchString(pu.Path):
+		return readClaudePlan
 	}
 	return nil
 }

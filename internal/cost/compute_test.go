@@ -238,7 +238,7 @@ func TestCompute(t *testing.T) {
 	}
 	t.Run("used over four weeks, split by tokens", func(t *testing.T) {
 		r := Compute(in(sub60("claude", "mira@studio.dev", "max 20x"), weekly(91, 100, 76, 97), consumers(map[string]int64{"mira@mira-mbp": 10, "leo@studio-1": 30})))
-		if r.State != StateActive || r.PlanName != "Max 20x" || !near(r.Price.USD, 200) || r.Price.Source != PriceList {
+		if r.State != StateActive || r.PlanName != "Ultra" || !near(r.Price.USD, 200) || r.Price.Source != PriceList {
 			t.Fatalf("%+v", r)
 		}
 		if !near(r.UsedPct, 91) || !near(r.UsedUSD, 182) || !near(r.UnusedUSD, 18) || r.UsedEstimated {
@@ -337,7 +337,7 @@ func TestCompute(t *testing.T) {
 		i := in(sub, nil, nil)
 		r := Compute(i)
 		evs := Events(i, r, t0.Add(-90*day))
-		if r.State != StateEnded || r.Plan != "max 20x" || r.PlanName != "Max 20x" || !near(r.Price.USD, 200) ||
+		if r.State != StateEnded || r.Plan != "max 20x" || r.PlanName != "Ultra" || !near(r.Price.USD, 200) ||
 			len(evs) != 1 || evs[0].From != "max 20x" || !near(evs[0].FromUSD, 200) {
 			t.Fatalf("%+v, events %+v", r, evs)
 		}

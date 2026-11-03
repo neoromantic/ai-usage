@@ -52,7 +52,7 @@ COST's.
 - `cost cancel` on a subscription: does it leave every total and show `ended`, muted?
 - `cost skip ACCOUNT renewal`, then a new plan: is the charge day asked again?
 - A relay before v0.10.0 (404 on `/v1/prices`): does the run stay quiet and use the built-in list?
-- A Claude Max read without its tier, as from an older release: does the price question offer Max 5x and Max 20x?
+- A Claude Max read without its tier, as from an older release: does the price question offer Max and Ultra?
 - A plan billed yearly: is the cadence asked before the day, with the next anniversary offered, and a day of the month refused?
 - Cancelled from the app: does the app keep quiet about the ended event it caused?
 

@@ -174,7 +174,7 @@
     {
       "kind": "cost",
       "subject": "claude mira@studio.dev",
-      "text": "plan Max 5x → Max 20x, +$81/mo",
+      "text": "plan Max → Ultra, +$81/mo",
       "provider": "claude",
       "account": "mira@studio.dev",
       "name": "mira",
@@ -2244,6 +2244,7 @@
             "burn_estimated": false,
             "no_reading": null,
             "outside": null,
+            "pool_rise": null,
             "utilization": [
               {
                 "window": "7d",
@@ -2543,6 +2544,7 @@
             "burn_estimated": true,
             "no_reading": null,
             "outside": null,
+            "pool_rise": null,
             "utilization": []
           },
           {
@@ -2611,6 +2613,7 @@
             "burn_estimated": false,
             "no_reading": "not logged in on root@build-01 (~/triage/.claude): run claude and log in",
             "outside": null,
+            "pool_rise": null,
             "utilization": []
           }
         ]
@@ -2724,6 +2727,7 @@
             "burn_estimated": true,
             "no_reading": null,
             "outside": null,
+            "pool_rise": null,
             "utilization": []
           },
           {
@@ -3096,6 +3100,7 @@
             "burn_estimated": false,
             "no_reading": null,
             "outside": null,
+            "pool_rise": null,
             "utilization": []
           },
           {
@@ -3210,6 +3215,7 @@
             "burn_estimated": false,
             "no_reading": null,
             "outside": null,
+            "pool_rise": null,
             "utilization": [
               {
                 "window": "7d",
@@ -3495,6 +3501,7 @@
             "burn_estimated": false,
             "no_reading": null,
             "outside": null,
+            "pool_rise": null,
             "utilization": [
               {
                 "window": "7d",
@@ -3952,6 +3959,7 @@
             "burn_estimated": false,
             "no_reading": null,
             "outside": null,
+            "pool_rise": null,
             "utilization": []
           }
         ]
@@ -6864,7 +6872,7 @@
       "usd": 200
     },
     "prices": {
-      "updated": "2026-10-22",
+      "updated": "2026-11-03",
       "source": "built in"
     },
     "subscriptions": [
@@ -6875,7 +6883,7 @@
         "alias": null,
         "current": true,
         "plan": "max 20x",
-        "plan_name": "Max 20x",
+        "plan_name": "Ultra",
         "price_usd": 200,
         "price_source": "stale",
         "typed_for": "max 5x",
@@ -7341,7 +7349,7 @@
         "kind": "renewal",
         "provider": "claude",
         "account": "mira@studio.dev",
-        "text": "When does claude mira@studio.dev (Max 20x at $200/mo) charge next? Its tool suggests Sun 11 Oct.",
+        "text": "When does claude mira@studio.dev (Ultra at $200/mo) charge next? Its tool suggests Sun 11 Oct.",
         "suggestion": "2026-10-11",
         "suggestion_yearly": null,
         "choices": []
@@ -7385,7 +7393,7 @@
         "from_usd": 119,
         "to_usd": 200,
         "delta_usd": 81,
-        "text": "claude mira@studio.dev changed plan: Max 5x to Max 20x, +$81/mo"
+        "text": "claude mira@studio.dev changed plan: Max to Ultra, +$81/mo"
       },
       {
         "id": "charges_soon-da55e626f27b",

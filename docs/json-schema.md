@@ -429,7 +429,7 @@ A subscription:
 | `name`, `alias` | | as on its team account; one no device has any more goes by its short name |
 | `current` | bool | it is logged in on this device |
 | `plan` | string | its plan as its tool reports it, the newest any device read: Claude's with its tier, as `max 20x`. One that ended on a free plan has the last plan it was paid for |
-| `plan_name` | string | its plan as the price list calls it, as `Max 20x`, else as its tool reports it |
+| `plan_name` | string | its plan as the price list calls it, as `Ultra`, else as its tool reports it |
 | `price_usd` | number | its price a month: a person's typed for its plan, a year's over 12 when it is billed yearly, else the list price of its plan, at the cadence a person gave when the list prices it yearly too; `0` on a free plan; `null` when unknown |
 | `price_source` | string | `typed`; `list`; `stale`, the list price, as a person typed one for another plan, `typed_for`; or `unknown` |
 | `typed_for` | string | the plan a stale typed price was typed for; `null` otherwise |
@@ -461,7 +461,7 @@ A question is asked of a person only: in the interactive view, on the first run 
 | `text` | string | the question in words, as `When does codex ann@acme.dev (Pro 200 at $200/mo) charge next?` |
 | `suggestion` | string | the answer offered: for a `renewal`, the next date, `YYYY-MM-DD`, on the day its tool says it began, the next one of the month, or of the year when a person said it is billed yearly; `null` when there is none |
 | `suggestion_yearly` | string | for a `renewal` with `choices`, the next anniversary of the day its tool says it began, `YYYY-MM-DD`, to offer when a person chooses `yearly`; `null` otherwise. Ask the cadence first, then the date with the suggestion of that cadence; `ai-usage cost set --renews` takes a day of the month only for a monthly subscription |
-| `choices` | list of strings | `monthly` and `yearly`, for a `renewal` of a plan the list prices yearly too, as the answer's cadence; for a `price` of a plan read without its tier, as Claude's `max` from a release that does not read it, the list's tiers of it, each its name and price a month, as `Max 5x $100`, whose dollars are the answer's price; `[]` otherwise |
+| `choices` | list of strings | `monthly` and `yearly`, for a `renewal` of a plan the list prices yearly too, as the answer's cadence; for a `price` of a plan read without its tier, as Claude's `max` from a release that does not read it, the list's tiers of it, each its name and price a month, as `Max $100`, whose dollars are the answer's price; `[]` otherwise |
 
 An event:
 

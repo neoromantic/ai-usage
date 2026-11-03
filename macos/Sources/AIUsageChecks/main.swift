@@ -887,7 +887,7 @@ equal("cost notices", macCost.map { "\($0.kind) \($0.id)" },
       ["change plan_changed-3c4d5e6f7a8b", "chargesSoon charges_soon-4d5e6f7a8b9c", "change new-5e6f7a8b9c0d", "renewal renewal-1a2b3c4d5e6f",
        "stillPaid " + costTeam.cost!.questions.first { $0.kind == "still_paid" }!.id])
 equal("cost notice words", [macCost[0].title, macCost[0].body],
-      ["Claude ann · changed plan", "Claude ann@acme.dev changed plan: Max 5x to Max 20x, +$100/mo"])
+      ["Claude ann · changed plan", "Claude ann@acme.dev changed plan: Max to Ultra, +$100/mo"])
 equal("question notice", [macCost[3].title, macCost[3].target, macCost[3].suggestion, macCost[3].questionKind],
       ["Grok a4c2e917 · when does it charge next?", "grok:a4c2e917-6b3d-4f81-9c2a-5e7d1b8f0a36", "2026-10-04", "renewal"])
 let teamCost = CostNotice.notices(costTeam, NoticeSettings(scope: .team), now: costNow)

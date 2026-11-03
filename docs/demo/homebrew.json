@@ -1556,6 +1556,7 @@
             "burn_estimated": false,
             "no_reading": null,
             "outside": null,
+            "pool_rise": null,
             "utilization": [
               {
                 "window": "7d",
@@ -1860,6 +1861,7 @@
             "burn_estimated": false,
             "no_reading": null,
             "outside": null,
+            "pool_rise": null,
             "utilization": [
               {
                 "window": "7d",
@@ -2145,6 +2147,7 @@
             "burn_estimated": false,
             "no_reading": null,
             "outside": null,
+            "pool_rise": null,
             "utilization": [
               {
                 "window": "7d",
@@ -2456,7 +2459,7 @@
       "usd": 200
     },
     "prices": {
-      "updated": "2026-10-22",
+      "updated": "2026-11-03",
       "source": "built in"
     },
     "subscriptions": [
@@ -2467,7 +2470,7 @@
         "alias": null,
         "current": true,
         "plan": "max 20x",
-        "plan_name": "Max 20x",
+        "plan_name": "Ultra",
         "price_usd": 200,
         "price_source": "list",
         "typed_for": null,
