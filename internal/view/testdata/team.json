@@ -161,7 +161,7 @@
     {
       "kind": "cost",
       "subject": "claude ann@acme.dev",
-      "text": "plan Max 5x → Max 20x, +$100/mo",
+      "text": "plan Max → Ultra, +$100/mo",
       "provider": "claude",
       "account": "ann@acme.dev",
       "name": "ann",
@@ -7196,7 +7196,7 @@
         "alias": null,
         "current": true,
         "plan": "max 20x",
-        "plan_name": "Max 20x",
+        "plan_name": "Ultra",
         "price_usd": 200,
         "price_source": "list",
         "typed_for": null,
@@ -7666,7 +7666,7 @@
         "from_usd": 100,
         "to_usd": 200,
         "delta_usd": 100,
-        "text": "claude ann@acme.dev changed plan: Max 5x to Max 20x, +$100/mo"
+        "text": "claude ann@acme.dev changed plan: Max to Ultra, +$100/mo"
       },
       {
         "id": "charges_soon-4d5e6f7a8b9c",

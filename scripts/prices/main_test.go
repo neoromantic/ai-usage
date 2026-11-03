@@ -51,7 +51,7 @@ func TestReadersRefuseOtherPages(t *testing.T) {
 			t.Errorf("readAppStore(%s) = %v, want an error", name, offers)
 		}
 	}
-	other := []byte(`<html><body><h3>Pro</h3><p>$20 a month</p><h3>Max</h3><p>Max 5x is $100</p></body></html>`)
+	other := []byte(`<html><body><h3>Pro</h3><p>$20 a month</p><h3>Max</h3><p>Max 5x: $100 per month</p></body></html>`)
 	if offers, err := readClaudePricing(other); err == nil {
 		t.Errorf("readClaudePricing = %v, want an error", offers)
 	}

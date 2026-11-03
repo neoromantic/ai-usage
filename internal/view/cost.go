@@ -543,7 +543,7 @@ func (c *Cost) subjectOf(provider, label string) string {
 }
 
 // planWords is a subscription's plan, as the list calls it, and its price
-// a month when known: "Max 20x at $200/mo".
+// a month when known: "Ultra at $200/mo".
 func planWords(s *CostSubscription) string {
 	if s == nil {
 		return ""

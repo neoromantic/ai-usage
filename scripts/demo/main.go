@@ -253,7 +253,7 @@ func teamReport() view.Report {
 // studioCost is what mira's collector recorded of the studio's
 // subscriptions since its cost store began, and what she typed. She types
 // prices with VAT, as the studio pays them: the bots' Codex Pro, and her
-// Claude Max 5x, which she moved to Max 20x two days ago, so that price no
+// Claude Max, which she moved to Ultra two days ago, so that price no
 // longer applies and the list's does. She said when her Codex charges, and
 // that she pays SuperGrok yearly; when her Claude charges, the report asks,
 // with the day its tool says it began. Leo's Claude has no tier, as his

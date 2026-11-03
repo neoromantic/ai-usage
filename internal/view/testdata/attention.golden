@@ -14,7 +14,7 @@ ATTENTION
  CHECK       claude gone@mail.test       still paid? last confirmed 13 Jul
  IDLE        claude max@mail.test        idle 11d, $100/mo paid and unused
  COST        claude bob@mail.test        new subscription: Pro at $20/mo
- COST        claude ann@acme.dev         plan Max 5x → Max 20x, +$100/mo
+ COST        claude ann@acme.dev         plan Max → Ultra, +$100/mo
  COST        claude kim@corp.test        list price $17 → $20/mo
 
 ATTENTION
@@ -33,6 +33,6 @@ ATTENTION
  CHECK       claude gone@mail.test           still paid? last confirmed 13 Jul · no device since 12 Aug
  IDLE        claude max@mail.test            idle 11d, $100/mo paid and unused
  COST        claude bob@mail.test            new subscription: Pro at $20/mo
- COST        claude ann@acme.dev             plan Max 5x → Max 20x, +$100/mo
+ COST        claude ann@acme.dev             plan Max → Ultra, +$100/mo
  COST        claude kim@corp.test            list price $17 → $20/mo; cost set keeps $17
 

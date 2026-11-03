@@ -177,7 +177,7 @@ func TestCostStates(t *testing.T) {
 	for _, e := range c.Events {
 		kinds[e.Kind] = e
 	}
-	if e := kinds[EventPlanChanged]; e.DeltaUSD == nil || !strings.Contains(e.Text, "Max 5x to Max 20x") {
+	if e := kinds[EventPlanChanged]; e.DeltaUSD == nil || !strings.Contains(e.Text, "Max to Ultra") {
 		t.Fatalf("plan change = %+v", e)
 	}
 	if e := kinds[EventChargesSoon]; !strings.Contains(e.Text, "claude ann@acme.dev charges $180 on ") {
@@ -194,7 +194,7 @@ func TestCostStates(t *testing.T) {
 	}
 	for _, want := range []string{
 		"check old@acme.dev: still paid? last confirmed 3 Jul · no device since 2 Aug: ai-usage cost confirm claude:old@acme.dev or cancel",
-		"cost ann@acme.dev: plan Max 5x → Max 20x, +$80/mo",
+		"cost ann@acme.dev: plan Max → Ultra, +$80/mo",
 		"idle g-1: idle 10d, $30/mo paid and unused",
 	} {
 		if !slices.Contains(att, want) {

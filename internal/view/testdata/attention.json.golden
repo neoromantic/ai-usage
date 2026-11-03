@@ -150,7 +150,7 @@
   {
     "kind": "cost",
     "subject": "claude ann@acme.dev",
-    "text": "plan Max 5x → Max 20x, +$100/mo",
+    "text": "plan Max → Ultra, +$100/mo",
     "provider": "claude",
     "account": "ann@acme.dev",
     "name": "ann",

@@ -46,7 +46,7 @@ func TestCostCommands(t *testing.T) {
 	for _, q := range c.Questions {
 		kinds[q.Kind] = true
 		// Max without its tier is asked as one of its tiers.
-		if q.Kind == view.AskPrice && (!slices.Equal(q.Choices, []string{"Max 5x $100", "Max 20x $200"}) || !strings.HasSuffix(q.Text, "Its tool did not say its tier: Max 5x $100 or Max 20x $200.")) {
+		if q.Kind == view.AskPrice && (!slices.Equal(q.Choices, []string{"Max $100", "Ultra $200"}) || !strings.HasSuffix(q.Text, "Its tool did not say its tier: Max $100 or Ultra $200.")) {
 			t.Fatalf("price question %+v", q)
 		}
 	}

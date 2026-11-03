@@ -98,7 +98,7 @@ public struct CostSubscription: Decodable, Sendable {
     /// Logged in on this Mac.
     public let current: Bool
     public let plan: String?
-    /// The plan as the price list calls it, as `Max 20x`.
+    /// The plan as the price list calls it, as `Ultra`.
     public let planName: String?
     /// Its price a month; nil when unknown.
     public let priceUsd: Double?
@@ -416,7 +416,7 @@ public enum CostCommand {
     /// in a notification's field: a day, "2026-10-04" or "4", or dollars,
     /// "$20" or "1,200", and "monthly" or "yearly" among the words. A price
     /// is the first word that is dollars, so a choice of a price question,
-    /// "Max 20x $200", answers it too. Nil when it says nothing the
+    /// "Ultra $200", answers it too. Nil when it says nothing the
     /// question asks; ai-usage checks the rest.
     public static func answer(kind: String, target: String, text: String) -> [String]? {
         var cadence: String?, value: String?, price: String?
