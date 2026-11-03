@@ -123,8 +123,8 @@ var (
 
 // readClaudePricing reads Pro's prices off claude.com/pricing: the card from
 // a heading "Pro" to the next "Max", which says "$N if billed monthly" and
-// "$N billed up front" for a year. Max's card gives only its lowest price,
-// so Max is read from the support article that gives each tier's.
+// "$N billed up front" for a year. Max and Ultra are read from their
+// support articles.
 func readClaudePricing(b []byte) ([]offer, error) {
 	text := pageText(b)
 	for _, loc := range proRe.FindAllStringIndex(text, -1) {
@@ -149,22 +149,23 @@ func readClaudePricing(b []byte) ([]offer, error) {
 }
 
 var (
-	maxArticleRe = regexp.MustCompile(`/articles/\d+-what-is-the-max-plan$`)
-	maxTierRe    = regexp.MustCompile(`(?i)\b(Max \d+x)\s*:\s*\$(\d+(?:\.\d{2})?)\s*(?:per|a|/)\s*month`)
+	planArticleRe = regexp.MustCompile(`/articles/\d+-what-is-the-(?:max|ultra)-plan$`)
+	planPriceRe   = regexp.MustCompile(`\bThe (\w+(?: \w+)?) plan is available for \$(\d+(?:\.\d{2})?) (?:per|a) month`)
 )
 
-// readClaudeMax reads the Max tiers off Claude's support article on the Max
-// plan, which lists them as "Max 5x: $100 per month".
-func readClaudeMax(b []byte) ([]offer, error) {
+// readClaudePlan reads a plan's price off Claude's support article on it,
+// which says "The Max plan is available for $100 per month". The Max and
+// Ultra plans each have one.
+func readClaudePlan(b []byte) ([]offer, error) {
 	var out []offer
-	for _, m := range maxTierRe.FindAllStringSubmatch(pageText(b), -1) {
+	for _, m := range planPriceRe.FindAllStringSubmatch(pageText(b), -1) {
 		o := offer{Name: m[1], USD: atof(m[2]), Period: monthly}
 		if !slices.Contains(out, o) {
 			out = append(out, o)
 		}
 	}
 	if len(out) == 0 {
-		return nil, errors.New(`no "Max Nx: $N per month" on the page`)
+		return nil, errors.New(`no "The <plan> plan is available for $N per month" on the page`)
 	}
 	return out, nil
 }
