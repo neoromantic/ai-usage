@@ -75,17 +75,17 @@ v ci@ci-runner-eu-w...        18        .        .        .         .       ~18
   TOTAL                     1572      863      427      269       456     ~3586
 
 PROJECTS  ann@annbook . by 7d . M weighted tokens . claude since Sep 2
-  PROJECT                                   7D   90D  SESS  VIA            LAST
-  ~/src/acme/app                           975  3465    14  codex, claude    1h
-  ~/notes                                  194   585    18  codex            3h
-  ~/src/ai-usage                            98    98     1  claude, grok     7m
-  ~/src/site                                82   279     2  codex            2d
-  ~/src/acme/os                             36   105     1  claude, grok    11h
-  ~/dotfiles                                17    41     1  codex, claude    4d
-  ~/scratch                                 17    36     1  claude           5d
-  ~/src/acme/relay                          14    41     1  codex            1d
-  ~/Library/Mobile Documents/.../2026        7    24     1  claude           6d
-  ~/src/acme/landing                         4    32     1  codex            6d
+  PROJECT                             7D   90D  TEAM  SESS  VIA            LAST
+  ~/src/acme/app                     975  3465   550    14  codex, claude    1h
+  ~/notes                            194   585     .    18  codex            3h
+  ~/src/ai-usage                      98    98     .     1  claude, grok     7m
+  ~/src/site                          82   279     .     2  codex            2d
+  ~/src/acme/os                       36   105     .     1  claude, grok    11h
+  ~/dotfiles                          17    41     .     1  codex, claude    4d
+  ~/scratch                           17    36     .     1  claude           5d
+  ~/src/acme/relay                    14    41    21     1  codex            1d
+  ~/Library/.../Notes/Projects/2026    7    24     .     1  claude           6d
+  ~/src/acme/landing                   4    32     .     1  codex            6d
   + 4 more
 
 = used  - left  |+ even use  . no reading  * typed  ? unknown

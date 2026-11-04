@@ -72,7 +72,8 @@ func aboutDevice(a Attention, d TeamDevice) bool {
 // Detail is the page of what k opens, under the page's header: an account's
 // windows, its history, the devices that spent it, and this device's
 // projects on it; or a device's collector, the accounts it spent, and, for
-// this device, its projects. Each starts with its own ATTENTION lines. It
+// this device, its projects, or for another, the projects of this device it
+// works in too. Each starts with its own ATTENTION lines. It
 // is false when the report no longer has what k names.
 func Detail(r Report, o Options, k Pick) (Page, bool) {
 	p := newPage(&r, o)
@@ -140,6 +141,8 @@ func (p *page) deviceDetail(d *TeamDevice) [][]chunks {
 	out := [][]chunks{p.deviceFacts(d), p.attentionOf(about), p.deviceAccounts(d), p.deviceCost(d)}
 	if d.This {
 		out = append(out, p.projects())
+	} else {
+		out = append(out, p.sharedProjects(d))
 	}
 	return out
 }

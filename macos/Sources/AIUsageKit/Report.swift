@@ -492,6 +492,28 @@ public struct Project: Decodable, Sendable {
     @Absent public var activeSessions: Counts?
     public let providers: [String]?
     public let lastActiveAt: Date?
+    /// The team's other devices that work in the same repository, by its
+    /// origin, the most weighted tokens in 7 days first; empty when none
+    /// does, or from an ai-usage before v0.14.0.
+    @Absent public var team: [ProjectDevice]
+    /// What the devices in `team` burned in the project together, as the
+    /// console's TEAM shows it; nil without `team`.
+    @Absent public var teamBurn: Usage?
+}
+
+/// Another device's use of a project this Mac works in too, over the
+/// device's accounts, in UTC days as the device sent them.
+public struct ProjectDevice: Decodable, Sendable {
+    public let device: String
+    /// What the report calls the device, as `leo@leo-air`.
+    public let name: String
+    /// The providers of the device's accounts that used the project.
+    public let providers: [String]
+    /// Its sessions with tokens in 90 days.
+    public let sessions: Int
+    /// Weighted tokens in the device's UTC days.
+    public let burn: Usage
+    public let lastActiveAt: Date?
 }
 
 /// A count in each of the report's periods.

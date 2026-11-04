@@ -556,9 +556,12 @@ func TestStatusVia(t *testing.T) {
 			t.Errorf("ascii %v: legend %q", c.ascii, p.Legend)
 		}
 	}
-	// At 80 VIA goes, and its marks with it. UTILIZATION and COST, which
-	// have a · of their own, are left out.
+	// At 80 VIA goes, and its marks with it. UTILIZATION, COST, and
+	// PROJECTS' TEAM, which have a · of their own, are left out.
 	r.Cost = nil
+	for i := range r.Projects {
+		r.Projects[i].Team = nil
+	}
 	for i := range r.Team.Providers {
 		for j := range r.Team.Providers[i].Accounts {
 			r.Team.Providers[i].Accounts[j].Utilization = nil

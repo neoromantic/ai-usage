@@ -25,7 +25,7 @@ const (
 	MaxBytes          = 64 << 10
 	MaxAccounts       = 24
 	MaxWindows        = 8
-	MaxProjects       = 12
+	MaxProjects       = 128
 	MaxLinked         = 4
 	MaxSources        = 12
 	MaxDays           = 90
@@ -42,6 +42,11 @@ const (
 	// lastErrorSkew is how far last_error_at may be past collected_at.
 	lastErrorSkew = 5 * time.Minute
 )
+
+// LegacyProjects is the most projects an account had before v0.14.0: a
+// collector before it drops a document with more as undecodable, and a
+// relay before it refuses one.
+const LegacyProjects = 12
 
 // Providers the collector knows, in display order. The relay rejects any
 // other name.
@@ -115,6 +120,13 @@ func (d Doc) HasCosts() bool { return len(d.Costs) > 0 }
 // d as undecodable.
 func (d Doc) HasPooled() bool { return len(d.Pooled) > 0 }
 
+// HasManyProjects reports whether an account of d has more projects than
+// LegacyProjects, which a collector before v0.14.0 does not accept, and so
+// would drop d as undecodable.
+func (d Doc) HasManyProjects() bool {
+	return slices.ContainsFunc(d.Accounts, func(a Account) bool { return len(a.Projects) > LegacyProjects })
+}
+
 // Legacy is d without the fields a collector before v0.4.0 does not know:
 // the body such a collector decodes. It shares no slice with d, so either
 // can be changed without the other.
@@ -166,11 +178,22 @@ func (d Doc) WithoutCosts() Doc {
 }
 
 // WithoutPooled is d without the pooled a collector before v0.11.0 does
-// not know: the body a collector from v0.10.0 on, and before v0.11.0,
+// not know, and with as many projects as a collector before v0.14.0
+// accepts: the body a collector from v0.10.0 on, and before v0.11.0,
 // decodes. It shares no slice with d, so either can be changed without the
 // other.
 func (d Doc) WithoutPooled() Doc {
+	d = d.WithoutManyProjects()
 	d.Pooled = nil
+	return d
+}
+
+// WithoutManyProjects is d with at most LegacyProjects projects an account,
+// the largest, as a collector before v0.14.0 accepts: the body a collector
+// from v0.11.0 on, and before v0.14.0, decodes. It shares no slice with d,
+// so either can be changed without the other.
+func (d Doc) WithoutManyProjects() Doc {
+	d.Pooled = slices.Clone(d.Pooled)
 	d.Costs = slices.Clone(d.Costs)
 	d.Sources = slices.Clone(d.Sources)
 	d.Aliases = slices.Clone(d.Aliases)
@@ -180,7 +203,7 @@ func (d Doc) WithoutPooled() Doc {
 		a.Hours, a.BurnHours = slices.Clone(a.Hours), slices.Clone(a.BurnHours)
 		a.Cycles = slices.Clone(a.Cycles)
 		a.Windows = slices.Clone(a.Windows)
-		a.Projects = slices.Clone(a.Projects)
+		a.Projects = slices.Clone(a.Projects[:min(len(a.Projects), LegacyProjects)])
 		a.Linked = slices.Clone(a.Linked)
 		a.Days = slices.Clone(a.Days)
 		a.BurnDays = slices.Clone(a.BurnDays)
@@ -367,6 +390,27 @@ type Project struct {
 	Sessions int    `json:"sessions"`
 	Tokens   Tokens `json:"tokens"`
 }
+
+// ProjectUsage is what a project's path holds from v0.14.0 on: the
+// account's use of a repository on the device, as JSON, sealed with the
+// repository's key (team.Key.Project), so that only the team's devices
+// working in the same repository open it. Its sessions and tokens are 0.
+type ProjectUsage struct {
+	// Days are the weighted tokens by UTC day, newest first, from the UTC
+	// day of collected_at, for up to 7 days, trailing zeros left out.
+	Days []int64 `json:"d,omitempty"`
+	// Month and Quarter are the weighted tokens in the 30 and 90 UTC days
+	// to the day of collected_at.
+	Month   int64 `json:"m,omitempty"`
+	Quarter int64 `json:"q,omitempty"`
+	// Sessions counts the sessions with tokens in those 90 days.
+	Sessions int `json:"s,omitempty"`
+	// LastActive is when the project was last active, in Unix seconds.
+	LastActive int64 `json:"a,omitempty"`
+}
+
+// ProjectDays is how many days a ProjectUsage carries.
+const ProjectDays = 7
 
 // Source is the health of one provider reader on this device.
 type Source struct {

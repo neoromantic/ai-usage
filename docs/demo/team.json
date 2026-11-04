@@ -1181,7 +1181,30 @@
         "claude",
         "codex"
       ],
-      "last_active_at": "2026-09-24T13:20:00Z"
+      "last_active_at": "2026-09-24T13:20:00Z",
+      "team": [
+        {
+          "device": "d-demo-build",
+          "name": "root@build-01",
+          "providers": [
+            "codex"
+          ],
+          "sessions": 85,
+          "burn": {
+            "today": 10900305,
+            "7d": 101760684,
+            "30d": 521216466,
+            "90d": 1601562845
+          },
+          "last_active_at": "2026-09-24T13:20:00Z"
+        }
+      ],
+      "team_burn": {
+        "today": 10900305,
+        "7d": 101760684,
+        "30d": 521216466,
+        "90d": 1601562845
+      }
     },
     {
       "path": "/Users/mira/src/orbit/api",
@@ -1220,7 +1243,30 @@
       "providers": [
         "claude"
       ],
-      "last_active_at": "2026-09-24T13:20:00Z"
+      "last_active_at": "2026-09-24T13:20:00Z",
+      "team": [
+        {
+          "device": "d-demo-build",
+          "name": "root@build-01",
+          "providers": [
+            "claude"
+          ],
+          "sessions": 55,
+          "burn": {
+            "today": 3415969,
+            "7d": 23885084,
+            "30d": 104811218,
+            "90d": 210359271
+          },
+          "last_active_at": "2026-09-24T13:20:00Z"
+        }
+      ],
+      "team_burn": {
+        "today": 3415969,
+        "7d": 23885084,
+        "30d": 104811218,
+        "90d": 210359271
+      }
     },
     {
       "path": "/Users/mira/src/orbit/infra",

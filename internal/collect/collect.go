@@ -68,6 +68,9 @@ type Result struct {
 	Key    *team.Key
 	Doc    snapshot.Doc
 	Team   TeamCache
+	// Repos are where the working folders count and the repository of each
+	// project, as the snapshot took them.
+	Repos Repos
 	// Waited is set when the result is the one the run waited for.
 	Waited bool
 }
@@ -162,9 +165,9 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	// Record this run's problems before the snapshot is built, so the team
 	// sees them now rather than one run late.
 	noteProblems(st, s.problems(saving, ""), now)
-	res := &Result{Config: cfg, State: st, Key: key}
+	res := &Result{Config: cfg, State: st, Key: key, Repos: FindRepos(st, FindProjects(o.Dir, st))}
 	costs := loadCosts(o.Dir)
-	res.Doc = BuildDoc(st, cycles, key, cfg, o.Hostname, o.OSUser, o.Version, now)
+	res.Doc = BuildDoc(st, cycles, key, cfg, res.Repos, o.Hostname, o.OSUser, o.Version, now)
 	withCosts(&res.Doc, costs, key)
 	res.Team, _ = LoadTeamCache(o.Dir)
 	relayErr := s.publish(ctx, key, cfg.Device, res)
@@ -183,7 +186,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	}
 	if offline {
 		// The snapshot no one could be sent is this device's own row.
-		res.Doc = BuildDoc(st, cycles, key, cfg, o.Hostname, o.OSUser, o.Version, now)
+		res.Doc = BuildDoc(st, cycles, key, cfg, res.Repos, o.Hostname, o.OSUser, o.Version, now)
 		withCosts(&res.Doc, costs, key)
 	}
 	// A stopped run leaves its housekeeping to the next one.
@@ -223,8 +226,9 @@ func reuseWaited(o Options, cfg state.Config, key *team.Key, st *state.State, in
 	}
 	// Samples that do not read leave the cycles out, as the run's did.
 	cycles, _ := LoadCycles(o.Dir, st.LastRunAt)
-	doc := BuildDoc(st, cycles, key, cfg, o.Hostname, o.OSUser, o.Version, st.LastRunAt)
-	return &Result{Config: cfg, State: st, Key: key, Doc: doc, Team: cache, Waited: true}
+	repos := FindRepos(st, FindProjects(o.Dir, st))
+	doc := BuildDoc(st, cycles, key, cfg, repos, o.Hostname, o.OSUser, o.Version, st.LastRunAt)
+	return &Result{Config: cfg, State: st, Key: key, Doc: doc, Team: cache, Repos: repos, Waited: true}
 }
 
 // sampleOf is the run's sample: the accounts that grew this run or whose

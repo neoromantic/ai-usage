@@ -253,8 +253,21 @@ Links are resolved, so a folder reached through one is the same folder. On macOS
 | `active_sessions` | object | the sessions last active in each local period, `today`, `7d`, `30d`, and `90d`, by the hours they spent in; `sessions` counts those with tokens in the last 90 days |
 | `providers` | list of strings | the tools that used the project, most weighted tokens first; only in the report's `projects` |
 | `last_active_at` | time | the newest session activity in the project |
+| `team` | list | the team's other devices that work in the same repository, most `burn` in `7d` first; only in the report's `projects`, and left out when there are none. See below |
+| `team_burn` | object | what the devices in `team` burned in the project together, in each period, as the console's TEAM shows it; left out with `team` |
 
 The report's list is sorted by `burn` in `7d`, in whole millions as the console shows it, then by `burn` in `90d`, then by path.
+
+A project's `team` lists the other devices whose snapshot holds the project's repository: the same `origin`, as the README's [Shared projects](../README.md#shared-projects) says. Each counts the device's accounts together, in UTC days as the device sent them, as team objects do; `today` is the device's UTC day, even while `today_local` is `true`.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `device` | string | the device's id |
+| `name` | string | the device's `name`, as the team's `devices` has it |
+| `providers` | list of strings | the providers of the device's accounts that used the project |
+| `sessions` | number | the device's sessions in the project with tokens in the last 90 days |
+| `burn` | object | the device's weighted tokens in the project in each period |
+| `last_active_at` | time or null | the device's newest activity in the project |
 
 ### team
 
@@ -504,6 +517,8 @@ An event:
 - `pooled` on a team device, in v0.11.0: the providers whose sessions on the device go through BB's Account Pooler, so a reader does not take its accounts as exact; the device's `note` says so too. And `install` in `status --json`, which before any run creates nothing and has `collector` `null` and `sources` `[]`. A report from an earlier release has no `pooled`: read it as `[]`, as `ai-usage report --from` fills it in. No field changed meaning, so the version stays 4.
 
 - Cost, in v0.10.0: `cost`, with what each subscription costs a month, what the team used of it over the last 4 weeks and who used it, its next charge, its state, and the questions this device asks and the events of the last 30 days; the `check` and `cost` kinds in `attention`, with `event` on a `cost` entry; and an `idle` entry's `text` says its price a month. A report from an earlier release has no `cost`: read it as `null`, as `ai-usage report --from` leaves it. No field changed meaning, so the version stays 4.
+
+- `team` and `team_burn` on a project of the report's `projects`, in v0.14.0: the team's other devices that work in the same repository, with their burn in it, and their burn together. A report from an earlier release has neither: read a missing `team` as `[]`. No field changed meaning, so the version stays 4.
 
 ## Example
 

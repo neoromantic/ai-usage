@@ -51,11 +51,14 @@ func lastError(st *state.State, version string) string {
 	return s
 }
 
-// BuildDoc makes this device's snapshot with every name and path sealed,
-// each account's quota cycles, and its hours. It has the fields ExtSince,
-// CyclesSince, and HoursSince added; Legacy, WithoutCycles, and
-// WithoutHours are the bodies releases before them read.
-func BuildDoc(st *state.State, cycles Cycles, key *team.Key, cfg state.Config, hostname, osUser, version string, now time.Time) snapshot.Doc {
+// BuildDoc makes this device's snapshot with every name sealed, each
+// account's quota cycles, and its hours. Of its projects it has those whose
+// repository has an origin in repos, each sealed with its repository's key
+// so that only a device of the team working in it opens it, and no path.
+// It has the fields ExtSince, CyclesSince, HoursSince, and ProjectsSince
+// added; Legacy, WithoutCycles, WithoutHours, and WithoutManyProjects are
+// the bodies releases before them read.
+func BuildDoc(st *state.State, cycles Cycles, key *team.Key, cfg state.Config, repos Repos, hostname, osUser, version string, now time.Time) snapshot.Doc {
 	seal := func(s string) string { return key.Seal(clip(s, maxSealedPlain)) }
 	doc := snapshot.Doc{
 		V:                snapshot.Version,
@@ -88,9 +91,8 @@ func BuildDoc(st *state.State, cycles Cycles, key *team.Key, cfg state.Config, h
 		doc.Sources = append(doc.Sources, snapshot.Source{Provider: p, Status: src.Status, Error: seal(src.Error)})
 	}
 	doc.Pooled = Pooled(st, now)
-	// The snapshot keeps each working folder's usage, as the relay protocol
-	// has it: no view reads another device's projects.
-	for _, a := range Totals(st, nil) {
+	keys := map[string]*team.Project{}
+	for _, a := range Totals(st, repos.Folders) {
 		if len(doc.Accounts) == snapshot.MaxAccounts {
 			break
 		}
@@ -124,7 +126,18 @@ func BuildDoc(st *state.State, cycles Cycles, key *team.Key, cfg state.Config, h
 			if len(sa.Projects) == snapshot.MaxProjects {
 				break
 			}
-			sa.Projects = append(sa.Projects, snapshot.Project{Path: seal(p.Path), Sessions: p.Sessions, Tokens: p.Tokens})
+			id := repos.IDs[p.Path]
+			if id == "" {
+				continue
+			}
+			if keys[id] == nil {
+				pk, err := key.Project(id)
+				if err != nil {
+					continue
+				}
+				keys[id] = pk
+			}
+			sa.Projects = append(sa.Projects, snapshot.Project{Path: keys[id].Seal(projectUsage(p, now))})
 		}
 		// Only Hermes bills through another harness's login, by one route
 		// per harness.
@@ -136,6 +149,26 @@ func BuildDoc(st *state.State, cycles Cycles, key *team.Key, cfg state.Config, h
 	doc.Aliases = aliases(cfg.Aliases, seal)
 	fitDoc(&doc)
 	return doc
+}
+
+// projectUsage is what a project's entry seals: its weighted tokens by UTC
+// day for a week, in 30 and 90 days, its sessions, and its last activity.
+func projectUsage(p ProjectTotals, now time.Time) []byte {
+	days := DaysOf(p.Burn, now)
+	sum := func(n int) int64 {
+		var t int64
+		for i := 0; i < n && i < len(days); i++ {
+			t += days[i]
+		}
+		return t
+	}
+	u := snapshot.ProjectUsage{Month: sum(30), Quarter: sum(90), Sessions: p.Sessions}
+	u.Days = trimDays(slices.Clone(days), snapshot.ProjectDays)
+	if !p.LastActive.IsZero() {
+		u.LastActive = p.LastActive.Unix()
+	}
+	b, _ := json.Marshal(u)
+	return b
 }
 
 // aliases are the short names this device gave accounts, newest first, as
@@ -166,12 +199,48 @@ func aliases(set map[string]state.Alias, seal func(string) string) []snapshot.Al
 }
 
 // fitDoc fits the document under the relay's size limit. The body a
+// release before ProjectsSince reads is fitted first, as such a release
+// fits its own: fitHours. The projects past snapshot.LegacyProjects of the
+// accounts that kept all of theirs then go back, and while the whole is too
+// big, the account with the most loses its smallest.
+func fitDoc(doc *snapshot.Doc) {
+	full := *doc
+	*doc = full.WithoutManyProjects()
+	fitHours(doc)
+	accts := doc.Accounts
+	for i := range accts {
+		// Accounts go from the end, so the kept ones are a prefix.
+		if from := full.Accounts[i].Projects; len(accts[i].Projects) == snapshot.LegacyProjects && len(from) > len(accts[i].Projects) {
+			accts[i].Projects = slices.Clone(from)
+		}
+	}
+	for {
+		b, err := json.Marshal(doc)
+		if err != nil || len(b) <= snapshot.MaxBytes {
+			return
+		}
+		// Marshal once for as many projects as the excess takes.
+		for over := len(b) - snapshot.MaxBytes; over > 0; {
+			i := longest(accts, func(a snapshot.Account) int { return len(a.Projects) }, snapshot.LegacyProjects)
+			if i < 0 {
+				return
+			}
+			ps := accts[i].Projects
+			last, _ := json.Marshal(ps[len(ps)-1])
+			over -= len(last) + 1
+			accts[i].Projects = ps[:len(ps)-1]
+		}
+	}
+}
+
+// fitHours fits the document under the relay's size limit as a release
+// from PoolSince on, and before ProjectsSince, fits its own. The body a
 // release before HoursSince reads is fitted first, as such a release fits
 // its own: fitCycles. Pooled and the hours of the accounts it kept then go
 // back, and while the whole is too big, the account with the most hours
 // goes without them, both kinds: a reader counts an account's day from its
 // hours only when they are whole, and from its days otherwise.
-func fitDoc(doc *snapshot.Doc) {
+func fitHours(doc *snapshot.Doc) {
 	full := *doc
 	*doc = full.WithoutHours()
 	fitCycles(doc)
@@ -308,8 +377,8 @@ func trimDays(days []int64, n int) []int64 {
 
 // fitLegacy drops the smallest projects, then the oldest days, then the
 // smallest accounts, until the document is under the relay's size limit.
-// The report shows no other device's projects, and the device matrix needs
-// the days. It is how v0.3.4 fits a document.
+// The device matrix needs the days more than the team needs the projects.
+// It is how v0.3.4 fits a document.
 func fitLegacy(doc *snapshot.Doc) {
 	for {
 		b, err := json.Marshal(doc)

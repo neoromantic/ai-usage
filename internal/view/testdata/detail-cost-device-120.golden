@@ -19,3 +19,8 @@
   claude ann@acme.dev   $18    10%
   codex ann@acme.dev     $9     6%
   TOTAL                 $66      ·
+
+[1mSHARED PROJECTS[m  root@srv1 · by 7d UTC · M weighted tokens
+  PROJECT            7D   90D  VIA    LAST
+  ~/src/acme/app    138  1512  codex   16h
+  ~/src/acme/relay   21    64  codex    2d

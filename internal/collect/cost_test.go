@@ -132,7 +132,7 @@ func TestRunNotesTheTeamsCosts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc := BuildDoc(ledger(), nil, key, state.Config{Device: "d-sambook-0002"}, "otherbox", "kim", "v0.10.0", t0)
+	doc := BuildDoc(ledger(), nil, key, state.Config{Device: "d-sambook-0002"}, Repos{}, "otherbox", "kim", "v0.10.0", t0)
 	withCosts(&doc, store, key)
 	body, _ := json.Marshal(doc)
 	c := &relay.Client{BaseURL: r.srv.URL, HTTP: r.srv.Client(), Key: key, Now: func() time.Time { return w.now }}

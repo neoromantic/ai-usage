@@ -262,7 +262,7 @@ func TestDeviceNamesOfOneServer(t *testing.T) {
 		st := emptyState()
 		addAccount(st, "codex", "bots@a.io", true, nil, 0)
 		spend(st, "codex", "bots@a.io", "/w", 1_000_000, now.Add(-time.Hour))
-		return collect.BuildDoc(st, nil, f.key, state.Config{Device: device}, "build-01", user, "v1.2.3", now)
+		return collect.BuildDoc(st, nil, f.key, state.Config{Device: device}, collect.Repos{}, "build-01", user, "v1.2.3", now)
 	}
 	r := withTeam(t, f, bot("d-root-device", "root"), bot("d-ci-device", "ci"))
 	var rows []string

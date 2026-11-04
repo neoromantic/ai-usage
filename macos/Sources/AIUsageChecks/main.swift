@@ -90,6 +90,63 @@ check("older report limits nothing", older.team.providers.allSatisfy { $0.accoun
 equal("folders", team.projects.map(\.folders), [5, 1, 1, 1, 1, 1])
 equal("older report's folders", older.projects.map(\.folders), [0, 0, 0, 0, 0, 0])
 
+// A project that other devices of the team work in too, by its
+// repository's origin, has them as the report orders them, the most in 7
+// days first; a project no other device works in has none. The fixtures
+// are inline, so the checks hold whatever the demo's projects share.
+func teamOf(_ json: String) throws -> Any { try JSONSerialization.jsonObject(with: Data(json.utf8)) }
+let webTeam = try teamOf("""
+    [{"device": "d-demo-leo", "name": "leo@leo-air", "providers": ["claude"], "sessions": 12,
+      "burn": {"today": 0, "7d": 41000000, "30d": 90000000, "90d": 120000000}, "last_active_at": "2026-09-24T12:10:00Z"},
+     {"device": "d-demo-build", "name": "root@build-01", "providers": ["codex", "claude"], "sessions": 4,
+      "burn": {"today": 1200000, "7d": 3200000, "30d": 9000000, "90d": 22000000}, "last_active_at": null},
+     {"device": "d-demo-bot-scout", "name": "hermes@scout", "providers": [], "sessions": 1,
+      "burn": {"today": 0, "7d": 400000, "30d": 400000, "90d": 400000}, "last_active_at": "2026-09-22T11:00:00Z"}]
+    """)
+let apiTeam = try teamOf("""
+    [{"device": "d-demo-leo", "name": "leo@leo-air", "providers": ["claude"], "sessions": 7,
+      "burn": {"today": 0, "7d": 18000000, "30d": 50000000, "90d": 61000000}, "last_active_at": "2026-09-24T10:00:00Z"}]
+    """)
+let webBurn = try teamOf(#"{"today": 1200000, "7d": 44600000, "30d": 99400000, "90d": 142400000}"#)
+let apiBurn = try teamOf(#"{"today": 0, "7d": 18000000, "30d": 50000000, "90d": 61000000}"#)
+let shared = try edited("team.json") { json in
+    var o = json as! [String: Any]
+    o["projects"] = (o["projects"] as! [[String: Any]]).enumerated().map { i, p in
+        var p = p
+        p["team"] = i < 2 ? [webTeam, apiTeam][i] : nil
+        p["team_burn"] = i < 2 ? [webBurn, apiBurn][i] : nil
+        return p
+    }
+    return o
+}
+equal("project team", shared.projects[0].team.map { "\($0.name) \($0.device) \($0.providers) \($0.sessions) \($0.burn.week)" },
+      ["leo@leo-air d-demo-leo [\"claude\"] 12 41000000", "root@build-01 d-demo-build [\"codex\", \"claude\"] 4 3200000",
+       "hermes@scout d-demo-bot-scout [] 1 400000"])
+equal("project team last active", shared.projects[0].team.map(\.lastActiveAt), [time("2026-09-24T12:10:00Z"), nil, time("2026-09-22T11:00:00Z")])
+equal("project teams", shared.projects.map(\.team.count), [3, 1, 0, 0, 0, 0])
+// The row has the devices' tokens in the period together, the report's
+// team_burn, which the console's TEAM column shows; the details each device's, busiest in the period
+// first, in forms that drop the second device, then name the rest as a
+// count. A device with none in the period goes by its name alone, and a
+// project no other device works in has neither.
+let webWeek = ProjectTeam(shared.projects[0], period: .week)
+equal("project team tokens", webWeek?.tokens, 44_600_000)
+equal("project team badge", webWeek?.badge, "45M")
+equal("project team summary", webWeek?.summary, "Other devices in this repository: 45M in 7 Days")
+equal("project team forms", webWeek?.forms, ["leo@leo-air 41M, root@build-01 3M, +1 more", "leo@leo-air 41M, +2 more"])
+equal("project team help", webWeek?.help.components(separatedBy: "\n"),
+      ["Other devices in this repository, weighted tokens in 7 Days:", "leo@leo-air 41M · Claude", "root@build-01 3M · Codex, Claude",
+       "hermes@scout <1M"])
+equal("project team spoken", webWeek?.spoken, "other devices 45 million")
+let webToday = ProjectTeam(shared.projects[0], period: .today)
+equal("project team today", [webToday?.badge, webToday?.forms.first, webToday?.forms.last], ["1M", "root@build-01 1M, leo@leo-air, +1 more", "root@build-01 1M, +2 more"])
+equal("project team today help", webToday?.help.components(separatedBy: "\n").dropFirst().first, "root@build-01 1M · Codex, Claude")
+let apiToday = ProjectTeam(shared.projects[1], period: .today)
+equal("project team none today", [apiToday?.badge, apiToday?.summary, apiToday?.forms.joined(separator: " / "), apiToday?.spoken],
+      [nil, "Other devices in this repository: none in Today", "leo@leo-air", "other devices none"])
+equal("project team of one", ProjectTeam(shared.projects[1], period: .quarter)?.forms, ["leo@leo-air 61M"])
+check("no project team", ProjectTeam(shared.projects[2], period: .week) == nil)
+
 // How ai-usage updates, as the report says: never from its path. One that
 // does not say updates itself.
 let homebrew = try Report.decode(Data(contentsOf: demo.appendingPathComponent("homebrew.json")))
@@ -454,8 +511,10 @@ let added: Set<String> = ["burn", "fresh", "burn_days", "burn_share", "window_bu
                           "no_reading", "outside", "basis", "pace", "window_start"]
 // A reading's device_id is new too.
 // A device's name is new too: such a report calls a device by its label.
+// So is a project's team.
 let stripped = { (json: Any) in objects(json) { o in o.filter {
     !added.contains($0.key) && !($0.key == "device_id" && o["windows"] != nil) && !($0.key == "name" && o["os_user"] != nil)
+        && !(["team", "team_burn"].contains($0.key) && o["path"] != nil)
 } } }
 let v034 = try edited("team.json", stripped)
 let v034Solo = try edited("solo.json", stripped)
@@ -468,7 +527,7 @@ check("v0.3.4 share falls back", row034.shownShare.value == row034.share && row0
 check("v0.3.4 window falls back", v034.team.matrix.columns.allSatisfy { $0.shownWindow.value == $0.windowTokens && $0.shown.value == $0.usage })
 check("v0.3.4 cells fall back", row034.cells.allSatisfy { $0.shown.value == $0.usage && $0.shownWindow.value == $0.windowTokens })
 check("v0.3.4 days fall back", v034Solo.providers[0].accounts[0].shownDays.value == v034Solo.providers[0].accounts[0].days)
-check("v0.3.4 projects fall back", v034.projects.allSatisfy { $0.shown.value == $0.usage && $0.activeSessions == nil })
+check("v0.3.4 projects fall back", v034.projects.allSatisfy { $0.shown.value == $0.usage && $0.activeSessions == nil && $0.team.isEmpty })
 check("v0.3.4 devices fall back", v034.team.devices.allSatisfy { $0.shown.value == $0.usage && !$0.burnEstimated && $0.limitations.isEmpty })
 check("v0.3.4 accounts fall back", v034.team.providers.allSatisfy { $0.accounts.allSatisfy { a in
     a.shown.value == a.usage && a.noReading == nil && a.outside == nil && a.perDevice.allSatisfy { $0.shown.value == $0.usage }

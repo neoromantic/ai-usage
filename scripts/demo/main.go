@@ -132,6 +132,7 @@ func soloDevice(at time.Time) *device {
 		window("7d", 9, week, 1*24*time.Hour+22*time.Hour))
 	miraHistory(d)
 	d.webWorktrees()
+	d.orbit("web", "api", "infra")
 	d.work("claude", "mira@studio.dev", "/Users/mira/src/orbit/web", 16, 90)
 	d.work("claude", "mira@studio.dev", "/Users/mira/src/orbit/api", 9, 60)
 	d.work("codex", "mira@studio.dev", "/Users/mira/src/orbit/web", 11, 90)
@@ -180,6 +181,8 @@ func teamReport() view.Report {
 		window("7d", 0, week, 5*24*time.Hour+2*time.Hour))
 	miraHistory(mira)
 	mira.webWorktrees()
+	mira.orbit("web", "api", "infra")
+	mira.clone("/Users/mira/src/ml-playground", "https://github.com/mira/ml-playground")
 	mira.work("claude", "mira@studio.dev", "/Users/mira/src/orbit/web", 17, 90)
 	mira.work("claude", "mira@studio.dev", "/Users/mira/src/orbit/api", 8, 60)
 	mira.work("codex", "mira@studio.dev", "/Users/mira/src/orbit/web", 10, 90)
@@ -190,7 +193,8 @@ func teamReport() view.Report {
 
 	// leo runs a release from before weighted tokens, so his snapshot has
 	// only input plus output and the team estimates his burn from them. His
-	// Codex app fails to answer.
+	// Codex app fails to answer. His release shares no project by its
+	// repository, so mira's orbit/api shows none of his tokens.
 	leo := newDevice(rng, "d-demo-leo", "leo-air", "leo", "/Users/leo", "v0.3.4", now.Add(-11*time.Minute), "claude", "codex")
 	leo.account("claude", "leo@studio.dev", "max", true, now.Add(-11*time.Minute),
 		window("5h", 18, 5*time.Hour, 3*time.Hour+50*time.Minute),
@@ -215,6 +219,10 @@ func teamReport() view.Report {
 		window("7d", 83, week, 3*24*time.Hour+11*time.Hour))
 	srv.work("codex", "bots@studio.dev", "/srv/orbit/nightly", 24, 90)
 	srv.work("claude", "mira@studio.dev", "/srv/orbit/review", 5, 60)
+	// Its nightly job builds orbit/web, and its review job reads orbit/api
+	// pull requests: those projects of mira's show the server's tokens.
+	srv.clone("/srv/orbit/nightly", "https://github.com/studio/orbit-web")
+	srv.clone("/srv/orbit/review", "https://github.com/studio/orbit-api.git")
 	srv.hermes("bots@studio.dev", 6, 60)
 
 	// leo's release reads none of the cycles, so no device sends them: the
@@ -357,9 +365,12 @@ type device struct {
 	at             time.Time
 	st             *state.State
 	folders        collect.Folders
-	spread         map[string][]string
-	samples, past  []state.Sample
-	brew           bool
+	// repos are the repositories of its projects that have an origin, by
+	// project.
+	repos         map[string]string
+	spread        map[string][]string
+	samples, past []state.Sample
+	brew          bool
 	// cost is the device's cost store, nil for none.
 	cost *cost.Store
 }
@@ -377,7 +388,22 @@ func newDevice(rng *rand.Rand, id, host, user, home, version string, at time.Tim
 	st.Update.CheckedAt, st.Update.Latest = at.Add(-2*time.Hour), version
 	st.Schedule.Registered = true
 	return &device{rng: rng, id: id, host: host, user: user, home: home, version: version, at: at, st: st,
-		folders: collect.Folders{}, spread: map[string][]string{}}
+		folders: collect.Folders{}, repos: map[string]string{}, spread: map[string][]string{}}
+}
+
+// repoSet is where the device's folders count, and its projects'
+// repositories.
+func (d *device) repoSet() collect.Repos { return collect.Repos{Folders: d.folders, IDs: d.repos} }
+
+// clone says the device's project is a clone of the repository at url.
+func (d *device) clone(project, url string) { d.repos[project] = collect.RepoID(url) }
+
+// orbit has the device's folders under src/orbit cloned from the studio's
+// repositories of the same names.
+func (d *device) orbit(names ...string) {
+	for _, n := range names {
+		d.clone(d.home+"/src/orbit/"+n, "git@github.com:studio/orbit-"+n+".git")
+	}
 }
 
 // worktrees spreads the days of provider's sessions in project over the
@@ -580,7 +606,7 @@ func (d *device) cycles() collect.Cycles {
 
 // doc is the device's snapshot as another device pulls it.
 func (d *device) doc(key *team.Key) snapshot.Doc {
-	body, err := json.Marshal(collect.BuildDoc(d.st, d.cycles(), key, state.Config{Device: d.id}, d.host, d.user, d.version, d.at))
+	body, err := json.Marshal(collect.BuildDoc(d.st, d.cycles(), key, state.Config{Device: d.id}, d.repoSet(), d.host, d.user, d.version, d.at))
 	if err != nil {
 		panic(err)
 	}
@@ -597,8 +623,8 @@ func (d *device) report(tc *collect.TeamCache) view.Report {
 	cfg := state.Config{Device: d.id}
 	in := view.Input{
 		Version: d.version, RelayURL: relay, Config: cfg, State: d.st, Key: key,
-		Doc:      collect.BuildDoc(d.st, d.cycles(), key, cfg, d.host, d.user, d.version, d.at),
-		Hostname: d.host, OSUser: d.user, Now: now, Folders: d.folders, Samples: d.samples, Loc: berlin,
+		Doc:      collect.BuildDoc(d.st, d.cycles(), key, cfg, d.repoSet(), d.host, d.user, d.version, d.at),
+		Hostname: d.host, OSUser: d.user, Now: now, Folders: d.folders, Repos: d.repos, Samples: d.samples, Loc: berlin,
 		Cost: d.cost,
 	}
 	if d.brew {

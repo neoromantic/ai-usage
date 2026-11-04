@@ -70,7 +70,8 @@ func encodeDecode(t *testing.T, doc snapshot.Doc) (snapshot.Doc, []byte) {
 
 func TestBuildDocDecodesAndOpens(t *testing.T) {
 	key := mustKey(t)
-	doc, body := encodeDecode(t, BuildDoc(ledger(), nil, key, state.Config{Device: "d-0123456789"}, "workbox", "sam", "v1.2.3", t0))
+	repos := Repos{IDs: map[string]string{"/work/web": "github.com/acme/web"}}
+	doc, body := encodeDecode(t, BuildDoc(ledger(), nil, key, state.Config{Device: "d-0123456789"}, repos, "workbox", "sam", "v1.2.3", t0))
 	open := func(s string) string {
 		t.Helper()
 		v, err := key.Open(s)
@@ -85,7 +86,7 @@ func TestBuildDocDecodesAndOpens(t *testing.T) {
 	if open(doc.DeviceLabel) != "workbox" || open(doc.OSUser) != "sam" || !strings.Contains(open(doc.LastError), "permission denied") {
 		t.Fatal("sealed header fields do not open")
 	}
-	for _, plain := range []string{"workbox", "ann@example.com", "/work/api", "анна", "permission"} {
+	for _, plain := range []string{"workbox", "ann@example.com", "/work/api", "/work/web", "acme", "анна", "permission"} {
 		if strings.Contains(string(body), plain) {
 			t.Fatalf("%q is in the published body in plain text", plain)
 		}
@@ -113,8 +114,23 @@ func TestBuildDocDecodesAndOpens(t *testing.T) {
 	if ann.Sessions != 3 || ann.Tokens != tok(405) || ann.LastActiveAt == nil {
 		t.Fatalf("ann usage = %+v", ann)
 	}
-	if len(ann.Projects) != 2 || open(ann.Projects[0].Path) != "/work/web" || ann.Projects[0].Tokens != tok(300) {
+	// Only the project with an origin goes, sealed with its repository's
+	// key, which the team key alone does not open, and with no counts in
+	// plain text.
+	if len(ann.Projects) != 1 || ann.Projects[0].Sessions != 0 || !ann.Projects[0].Tokens.Zero() {
 		t.Fatalf("ann projects = %+v", ann.Projects)
+	}
+	if _, err := key.Open(ann.Projects[0].Path); err == nil {
+		t.Fatal("the team key opens a project")
+	}
+	web, _ := key.Project("github.com/acme/web")
+	plain, ok := web.Open(ann.Projects[0].Path)
+	var u snapshot.ProjectUsage
+	if !ok || json.Unmarshal(plain, &u) != nil || u.Sessions != 1 || u.LastActive == 0 {
+		t.Fatalf("web = %s, %v", plain, ok)
+	}
+	if api, _ := key.Project("github.com/acme/api"); func() bool { _, ok := api.Open(ann.Projects[0].Path); return ok }() {
+		t.Fatal("another repository's key opens web")
 	}
 	if old := doc.Accounts[1]; old.QuotaAt != nil || len(old.Windows) != 0 || old.Current {
 		t.Fatalf("old = %+v", old)
@@ -123,7 +139,7 @@ func TestBuildDocDecodesAndOpens(t *testing.T) {
 
 func TestBuildDocWithEmptyState(t *testing.T) {
 	st := state.NewState()
-	doc, _ := encodeDecode(t, BuildDoc(st, nil, mustKey(t), state.Config{Device: "d-0123456789"}, "", "", "", t0))
+	doc, _ := encodeDecode(t, BuildDoc(st, nil, mustKey(t), state.Config{Device: "d-0123456789"}, Repos{}, "", "", "", t0))
 	if doc.CollectorVersion != "unknown" || doc.LastError != "" {
 		t.Fatalf("doc = %+v", doc)
 	}
@@ -136,7 +152,7 @@ func TestLastErrorCarriesTheUpdateError(t *testing.T) {
 	key := mustKey(t)
 	lastError := func(st *state.State) (run, update string, found bool) {
 		t.Helper()
-		doc, _ := encodeDecode(t, BuildDoc(st, nil, key, state.Config{Device: "d-0123456789"}, "workbox", "sam", "v1.2.3", t0))
+		doc, _ := encodeDecode(t, BuildDoc(st, nil, key, state.Config{Device: "d-0123456789"}, Repos{}, "workbox", "sam", "v1.2.3", t0))
 		if len(doc.LastError) > snapshot.MaxSealed {
 			t.Fatalf("last_error is %d bytes sealed", len(doc.LastError))
 		}
@@ -194,7 +210,7 @@ func TestBuildDocFitsTheSizeLimit(t *testing.T) {
 			}
 		}
 	}
-	doc, body := encodeDecode(t, BuildDoc(st, nil, key, state.Config{Device: "d-0123456789"}, "workbox", "sam", "v1", t0))
+	doc, body := encodeDecode(t, BuildDoc(st, nil, key, state.Config{Device: "d-0123456789"}, Repos{}, "workbox", "sam", "v1", t0))
 	if len(body) > snapshot.MaxBytes {
 		t.Fatalf("doc is %d bytes", len(body))
 	}
@@ -274,7 +290,7 @@ func TestDocCarriesDaysRecentAndAliases(t *testing.T) {
 		state.Key("codex", "ann@example.com"): {Name: "ann", At: t0},
 		state.Key("claude", "bo@example.com"): {At: t0.Add(-time.Hour)},
 	}}
-	doc, _ := encodeDecode(t, BuildDoc(st, nil, key, cfg, "box", "ann", "v1", t0))
+	doc, _ := encodeDecode(t, BuildDoc(st, nil, key, cfg, Repos{}, "box", "ann", "v1", t0))
 	a := doc.Accounts[0]
 	if want := []int64{60, 0, 0, 0, 0, 0, 0, 40}; !reflect.DeepEqual(a.Days, want) {
 		t.Errorf("days = %v, want %v", a.Days, want)
@@ -321,7 +337,7 @@ func extendedLedger(errAt time.Time) *state.State {
 func TestBuildDocExtended(t *testing.T) {
 	key := mustKey(t)
 	at := t0.Add(-20 * time.Minute).In(time.FixedZone("east", 3*3600))
-	doc, body := encodeDecode(t, BuildDoc(extendedLedger(at), nil, key, state.Config{Device: "d-0123456789"}, "annbook", "ann", "v0.4.0", t0))
+	doc, body := encodeDecode(t, BuildDoc(extendedLedger(at), nil, key, state.Config{Device: "d-0123456789"}, Repos{}, "annbook", "ann", "v0.4.0", t0))
 	a := doc.Accounts[0]
 	// Codex weighs output 8 and cache reads 0.1: 28+96+10 and 42+144+100.
 	if want := []int64{286, 0, 0, 0, 0, 0, 0, 134}; !reflect.DeepEqual(a.BurnDays, want) {
@@ -360,7 +376,7 @@ func TestBuildDocLastErrorAt(t *testing.T) {
 	key := mustKey(t)
 	build := func(st *state.State) snapshot.Doc {
 		t.Helper()
-		doc, _ := encodeDecode(t, BuildDoc(st, nil, key, state.Config{Device: "d-0123456789"}, "annbook", "ann", "v0.4.0", t0))
+		doc, _ := encodeDecode(t, BuildDoc(st, nil, key, state.Config{Device: "d-0123456789"}, Repos{}, "annbook", "ann", "v0.4.0", t0))
 		return doc
 	}
 	if doc := build(ledger()); doc.LastError == "" || doc.LastErrorAt != nil {

@@ -185,10 +185,11 @@ func TestDetailContent(t *testing.T) {
 			t.Errorf("device detail lacks %q:\n%s", want, dev)
 		}
 	}
-	// Another device's detail has no PROJECTS: the report holds only this
-	// device's.
-	if strings.Contains(dev, "PROJECTS") {
-		t.Errorf("another device's detail has projects:\n%s", dev)
+	// Another device's detail has no PROJECTS of its own, which the report
+	// does not hold, but SHARED PROJECTS: this device's projects it works
+	// in too.
+	if strings.Contains(strings.ReplaceAll(dev, "SHARED PROJECTS", ""), "PROJECTS") || !strings.Contains(dev, "SHARED PROJECTS") {
+		t.Errorf("another device's detail has projects of its own, or no shared ones:\n%s", dev)
 	}
 	// The chosen period orders the tables and titles them.
 	month := o

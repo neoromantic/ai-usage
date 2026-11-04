@@ -37,7 +37,7 @@ ai-usage is one small binary for macOS, Linux, and Windows. The system scheduler
 - **What the subscriptions cost,** a month, from a price list or the price you typed: how much of it the team used over the last 4 weeks, which machine used it, in dollars, when each one charges next, and which ones nobody uses or can say are still paid. See [Cost](#cost).
 - **ATTENTION, only when something is wrong.** A full window, one that will run out before its reset, a machine whose tool fails or that stopped reporting, an old release, a subscription nobody uses.
 - **The whole team.** Laptops, servers, and bots in containers, every machine against every subscription, with each one's share. A colleague joins with one command. See [Teams](#teams).
-- **Private by design.** The relay sees tools, plans, and numbers. Names, emails, and project paths are encrypted with the team key, and every snapshot is signed. ai-usage also sends its author [usage stats](#usage-stats), never your accounts, projects, or numbers; `ai-usage telemetry off` stops them. See [Privacy](#privacy).
+- **Private by design.** The relay sees tools, plans, and numbers. Names and emails are encrypted with the team key, a project reaches only the machines that work in the same repository, and every snapshot is signed. ai-usage also sends its author [usage stats](#usage-stats), never your accounts, projects, or numbers; `ai-usage telemetry off` stops them. See [Privacy](#privacy).
 - **Nothing to run or look after.** No daemon, no account, no config file. It installs with one line or with Homebrew, and schedules itself. A script install updates itself; a Homebrew one updates with `brew upgrade` or `ai-usage update`.
 - **Spends none of your quota.** It asks the tools you already have instead of calling Anthropic, OpenAI, or xAI, and never reads your credentials. Asking Claude Code for its usage spends no tokens. See [Other data folders](#other-data-folders).
 - **A menu bar app on macOS.** A ring in the menu bar shows what is left; a click says what is out or runs out, and when, and a notification says it once as it happens. See [Menu bar app](#menu-bar-app).
@@ -175,18 +175,19 @@ DEVICES × SUBSCRIPTIONS  15 · 7d UTC · M weighted tokens              ‹usag
   TOTAL                     1572      863      427      269       256      125        17        59     ~3586
 
 PROJECTS  ann@annbook · by 7d · M weighted tokens · claude since Sep 2
-  PROJECT                                            7D   90D  SESS  VIA            LAST
-  ~/src/acme/app                                    975  3465    14  codex, claude    1h
-  ~/notes                                           194   585    18  codex            3h
-  ~/src/ai-usage                                     98    98     1  claude, grok     7m
-  ~/src/site                                         82   279     2  codex            2d
-  ~/src/acme/os                                      36   105     1  claude, grok    11h
-  ~/dotfiles                                         17    41     1  codex, claude    4d
-  ~/scratch                                          17    36     1  claude           5d
-  ~/src/acme/relay                                   14    41     1  codex            1d
-  ~/Library/Mobile Documents/…/Notes/Projects/2026    7    24     1  claude           6d
-  ~/src/acme/landing                                  4    32     1  codex            6d
+  PROJECT                                            7D   90D  TEAM  SESS  VIA            LAST
+  ~/src/acme/app                                    975  3465   550    14  codex, claude    1h
+  ~/notes                                           194   585     ·    18  codex            3h
+  ~/src/ai-usage                                     98    98     ·     1  claude, grok     7m
+  ~/src/site                                         82   279     ·     2  codex            2d
+  ~/src/acme/os                                      36   105     ·     1  claude, grok    11h
+  ~/dotfiles                                         17    41     ·     1  codex, claude    4d
+  ~/scratch                                          17    36     ·     1  claude           5d
+  ~/src/acme/relay                                   14    41    21     1  codex            1d
+  ~/Library/Mobile Documents/…/Notes/Projects/2026    7    24     ·     1  claude           6d
+  ~/src/acme/landing                                  4    32     ·     1  codex            6d
   + 4 more
+
 
 ━ used  ─ left  ┃╋ even use  ┈ no reading  * typed  ? unknown  — no forecast  ● here  × error  ↓ old  · none  ‹› chosen
 ~ stale/estimated: ci@ci-runner-eu-west-build-pool-node-0042ab runs v0.3.4: it should update within 15 minutes
@@ -204,13 +205,13 @@ UTILIZATION is how full each subscription's windows got before each reset over t
 
 ![One developer's subscriptions: at this week's pace Claude runs out on Saturday, 12 hours before its reset, and its model window tonight; Codex has 78% left, and SuperGrok will leave most of its week unused](docs/demo/social/solo-forecast.png)
 
-DEVICES × SUBSCRIPTIONS is every machine against every subscription, in millions of weighted tokens over the last 7 UTC days. A weighted token weighs each kind of token by what the provider's API charges for it against input: Claude's output 5, a cache read 0.1, and a cache write 1.25, or 2 when it is kept an hour; Codex's output 8 and a cache read 0.1; Grok's output 5 and a cache read 0.25. So a session that rereads a large cache shows more than its input and output, and less than every token counted alike. It is a proxy for how much quota a session uses, not the provider's formula. NO QUOTA holds the tokens no subscription covers, such as Hermes on an API key. Columns that do not fit fold into REST, so each row's cells add up to its TOTAL. A machine on a release before v0.4.0 sends no weighted tokens, so its are estimated from its input and output: `~` marks its TOTAL and the team's, and the legend says why and what to do. The section has a second view, status: a row per machine with its release, how long ago it reported, the tools it reads, its tokens today and over 7, 30, and 90 days, and a note of what is wrong with it, such as an error, an update to install, or why it does not update itself. `--devices` prints that view. With only this machine, the section is USAGE instead: a row per subscription, with today, 7 days, 30 days, and 90 days. PROJECTS lists this machine's top projects over every account; `--projects` lists all of them. A project is a git repository, with its subfolders and worktrees, those Claude Code and Codex make included; a folder outside any repository counts under the nearest folder above it that the tools worked in, and is a project of its own when there is none, never reaching up to the home folder, Downloads and folders like it, or a temporary folder. USAGE and PROJECTS count this machine's local days, and 7, 30, and 90 days as rolling hours, while the team's tables count UTC days, as machines send them, so this machine's own row there can differ. Today is the exception once every machine runs v0.7.0 or later: each sends its tokens by hour for the last two days, so the team's today counts from your own midnight, wherever each teammate is, and the title says `today` without `UTC`. Where the ledger holds less than 90 days of a tool, as when Claude Code deleted older transcripts, the PROJECTS title says since when. A dim legend at the bottom explains only the marks on screen.
+DEVICES × SUBSCRIPTIONS is every machine against every subscription, in millions of weighted tokens over the last 7 UTC days. A weighted token weighs each kind of token by what the provider's API charges for it against input: Claude's output 5, a cache read 0.1, and a cache write 1.25, or 2 when it is kept an hour; Codex's output 8 and a cache read 0.1; Grok's output 5 and a cache read 0.25. So a session that rereads a large cache shows more than its input and output, and less than every token counted alike. It is a proxy for how much quota a session uses, not the provider's formula. NO QUOTA holds the tokens no subscription covers, such as Hermes on an API key. Columns that do not fit fold into REST, so each row's cells add up to its TOTAL. A machine on a release before v0.4.0 sends no weighted tokens, so its are estimated from its input and output: `~` marks its TOTAL and the team's, and the legend says why and what to do. The section has a second view, status: a row per machine with its release, how long ago it reported, the tools it reads, its tokens today and over 7, 30, and 90 days, and a note of what is wrong with it, such as an error, an update to install, or why it does not update itself. `--devices` prints that view. With only this machine, the section is USAGE instead: a row per subscription, with today, 7 days, 30 days, and 90 days. PROJECTS lists this machine's top projects over every account; `--projects` lists all of them. TEAM is what the team's other machines burned in the same repositories in the period, in UTC days as they send them, when any of them works in one; see [Shared projects](#shared-projects). A project is a git repository, with its subfolders and worktrees, those Claude Code and Codex make included; a folder outside any repository counts under the nearest folder above it that the tools worked in, and is a project of its own when there is none, never reaching up to the home folder, Downloads and folders like it, or a temporary folder. USAGE and PROJECTS count this machine's local days, and 7, 30, and 90 days as rolling hours, while the team's tables count UTC days, as machines send them, so this machine's own row there can differ. Today is the exception once every machine runs v0.7.0 or later: each sends its tokens by hour for the last two days, so the team's today counts from your own midnight, wherever each teammate is, and the title says `today` without `UTC`. Where the ledger holds less than 90 days of a tool, as when Claude Code deleted older transcripts, the PROJECTS title says since when. A dim legend at the bottom explains only the marks on screen.
 
 ![The status view of DEVICES: each machine's release, when it last reported, the tools it reads, its tokens, and what is wrong with it](docs/demo/social/devices-status.png)
 
 The matrix shows accounts by short names: the part of an email before the `@`, or the first 8 characters of an id. `ai-usage alias` gives an account a name for the whole team; see [Teams](#teams).
 
-When standard input and output are both terminals, `ai-usage` opens the same page as an interactive view. It scrolls, with the head of DEVICES kept at the top while its rows go by, and the matrix scrolls sideways; `s` switches DEVICES between the matrix and the status view, `p` picks the period (today, 7, 30, or 90 days), `%` shows each machine's percent of each subscription's tokens in the period, and in TOTAL of all the team's, `$` what each machine used of each subscription in dollars, as [Cost](#cost) says, `r` collects now, `?` lists every key, and `q` quits. `Enter` picks a row, an account or a machine, a bot's container included, and `↑` `↓` move the pick; `Enter` again, or a click on the picked row, opens its detail in the page's place, and `Esc` or `Backspace` goes back. An account's detail has its ATTENTION lines, the reading and where it came from, each window with its bar, reset, forecast, pace, and when it runs out at that pace, how full each window got before its last resets, every machine that spent it, in its current window and over each period, with its share of the account, and this machine's projects on it. A machine's detail, under its name such as `hermes@scout`, has its ATTENTION lines, its release, last report, the tools it reads and each error in full, every account it spent with its share of each, its share of the team's tokens, and, for this machine, its projects. Piped output, `--json`, `--plain`, and `TERM=dumb` print the page instead, and so does the installer's first run. The page is at its best at 120 to 160 columns; narrower, it drops columns in a fixed order, down to 80.
+When standard input and output are both terminals, `ai-usage` opens the same page as an interactive view. It scrolls, with the head of DEVICES kept at the top while its rows go by, and the matrix scrolls sideways; `s` switches DEVICES between the matrix and the status view, `p` picks the period (today, 7, 30, or 90 days), `%` shows each machine's percent of each subscription's tokens in the period, and in TOTAL of all the team's, `$` what each machine used of each subscription in dollars, as [Cost](#cost) says, `r` collects now, `?` lists every key, and `q` quits. `Enter` picks a row, an account or a machine, a bot's container included, and `↑` `↓` move the pick; `Enter` again, or a click on the picked row, opens its detail in the page's place, and `Esc` or `Backspace` goes back. An account's detail has its ATTENTION lines, the reading and where it came from, each window with its bar, reset, forecast, pace, and when it runs out at that pace, how full each window got before its last resets, every machine that spent it, in its current window and over each period, with its share of the account, and this machine's projects on it. A machine's detail, under its name such as `hermes@scout`, has its ATTENTION lines, its release, last report, the tools it reads and each error in full, every account it spent with its share of each, its share of the team's tokens, and its projects: for this machine all of them, and for another machine SHARED PROJECTS, those of this machine's projects it works in too, with its tokens in each. Piped output, `--json`, `--plain`, and `TERM=dumb` print the page instead, and so does the installer's first run. The page is at its best at 120 to 160 columns; narrower, it drops columns in a fixed order, down to 80.
 
 ![An account's detail in the interactive view: the Codex login a server and nine bots share, each window with its reset, forecast, pace, and when it runs out, and every machine that spent it with its share](docs/demo/social/team-detail.png)
 
@@ -282,9 +283,9 @@ On macOS 14 and later, the installer also puts AI Usage, a menu bar app, in `~/A
 
 - **Limits:** a row per account: a bar of what is left, with the forecast's part faint, the percent left, and the time until the reset. A row that runs out counts down to when it does instead, "↘17h 19m" in orange, or says "↘ ran out" when an old reading has and the team spent on it since, and names the window and its reset under it. When nobody has, the row counts down to its reset, and the line under it says the window "would run out ~Tue 05:18". When another window stops the account, such as a 5-hour window that is out, the row says so under it.
 - **Usage:** the tokens of each device or each subscription, today or over 7, 30, or 90 days, in whole millions. A device with nothing wrong whose sessions go through BB's Account Pooler says so under its row, since its tokens may count for another account than the one that served them.
-- **Projects:** this Mac's repositories, their worktrees counted in, grouped by the folder they share.
+- **Projects:** this Mac's repositories, their worktrees counted in, grouped by the folder they share; a repository another machine of the team works in too has their tokens beside it, after a dim people mark.
 
-A click on a row opens its details: each window with its forecast, and the forecast of the one that runs out with the pace it takes, or where it was headed when nobody spent on it since; who spent the window since it began, "root@build-01 84M, hermes@scout 35M, +8 more · since 21 Sep 02:40", the busiest first and the rest as a count; when the subscription was last used; how old its reading is and which device took it, when the reading is old or another device's; and why the report calls it idle or could not read it, which a click on the line of the subscriptions not read also gives whole; its cost, "$238/mo typed · used ?" when no week of its Used is known, or "$200/mo · used 46% · next charge Sun 27 Sep", with `idle 9d`, `still paid?`, or `ended` when it is so; a device's release, tools, and errors, in the words of the report's NOTE; a project's sessions. Color means a problem only: red is out, orange runs out before the reset, yellow is tight. `⌘1` to `⌘3` switch the tabs and `⌘R` collects now.
+A click on a row opens its details: each window with its forecast, and the forecast of the one that runs out with the pace it takes, or where it was headed when nobody spent on it since; who spent the window since it began, "root@build-01 84M, hermes@scout 35M, +8 more · since 21 Sep 02:40", the busiest first and the rest as a count; when the subscription was last used; how old its reading is and which device took it, when the reading is old or another device's; and why the report calls it idle or could not read it, which a click on the line of the subscriptions not read also gives whole; its cost, "$238/mo typed · used ?" when no week of its Used is known, or "$200/mo · used 46% · next charge Sun 27 Sep", with `idle 9d`, `still paid?`, or `ended` when it is so; a device's release, tools, and errors, in the words of the report's NOTE; a project's sessions, and the other machines that work in it with their tokens, "root@build-01 102M". Color means a problem only: red is out, orange runs out before the reset, yellow is tight. `⌘1` to `⌘3` switch the tabs and `⌘R` collects now.
 
 <table>
 <tr>
@@ -580,11 +581,21 @@ ai-usage alias ann --clear                      # go back to the default name
 
 The account is its label, its current name, or `PROVIDER:LABEL`; an email matches in any case. The same label on several tools is one person, so a name without a provider goes to each of them. A name is at most 12 columns wide, with no spaces. It travels sealed in this machine's snapshot, so the team sees it after this machine's next run, and the newest name any machine set for an account wins.
 
+### Shared projects
+
+A machine sees another's projects only where both work in the same repository: PROJECTS then has TEAM, what the other machines burned in it, and the other machine's detail has SHARED PROJECTS. A project only you work in stays on your machine: no other machine sees its name or its tokens.
+
+A repository is its `origin`: the address in `.git/config`, without the user, the port, the case, or a trailing `.git`, so `git@github.com:acme/api.git` and `https://github.com/acme/api` are the same repository. Worktrees and subfolders count with their repository. A fork has an `origin` of its own, so it is another repository, and so is an address an SSH host alias in `~/.ssh/config` names, such as `github-work:acme/api`. A project with no `origin`, a folder outside any repository, and on macOS a repository in a folder the system asks you about before an app reads it, such as Documents or Desktop, go to nobody. Two machines of one person, such as a laptop and a server, share projects as two people's do.
+
+Each snapshot carries an account's projects with an `origin`, up to 128 of them, the largest first, each with its tokens over 7, 30, and 90 UTC days, its sessions, and when it was last used, sealed with a key made of the team key and the repository's address. A machine tries the keys of its own repositories on every project in the team's snapshots, and shows what opens. What does not open, it cannot read. A snapshot is at most 64 KB, so when an account has many projects and the rest of the snapshot is large, its smallest projects go first.
+
+This started in v0.14.0. A release before it sealed each of the 12 largest project paths an account has with the team key, which every machine of the team could open, though no report showed another machine's projects; v0.14.0 neither sends nor reads them. While a machine of the team runs a release before v0.14.0, the others send at most 12 projects an account, since such a release drops a snapshot with more; the gate is the same as for the fields earlier releases added, above. Snapshots a machine sent before it updated stay on the relay until its next run replaces them.
+
 ## Relay
 
 The relay is a small HTTP API that keeps one snapshot per machine. It is needed only for the team view; without one, ai-usage reports on this machine alone.
 
-![How a team's numbers travel: each machine sends a signed snapshot with names, emails, and paths sealed; the relay sees tools, plans, percentages, and token counts; every machine reads the whole team back and opens it with the team key](docs/demo/social/architecture.png)
+![How a team's numbers travel: each machine sends a signed snapshot with names and emails sealed with the team key, and projects with their repository's; the relay sees tools, plans, percentages, and token counts; every machine reads the whole team back and opens it with the team key](docs/demo/social/architecture.png)
 
 ```sh
 ai-usage relay show                          # the relay in use, or "no relay configured"
@@ -715,7 +726,8 @@ providers[] claude, codex, grok, hermes: status (ok, partial, error, skipped), e
                         limits, stale, reset, state, forecast with basis and pace), link, sessions,
                         tokens, usage (today, 7d, 30d, 90d), burn, fresh, days[], burn_days[],
                         linked_usage[], last_active_at, projects[]
-projects[]  this machine's projects over every account, with usage, burn, active_sessions, and providers
+projects[]  this machine's projects over every account, with usage, burn, active_sessions, providers, and
+            team[]: the other machines in the same repository, with their burn
 team        pulled_at, latest_version, estimated, held_back_by, estimated_reason,
             devices[] (error, silent, old, usage, burn, gap, replaced_by, note, limitations), providers[]
             with accounts summed across devices (name, alias, state, quota, usage, burn, users,
@@ -737,7 +749,6 @@ Sealed with the team key, so only the team can read them:
 
 - the machine's name (its host name, unless `ai-usage name set` gave it another) and OS user name
 - account labels, such as an email address
-- project folder paths
 - error messages
 - the names `ai-usage alias` gave accounts
 - what people typed with `ai-usage cost`: prices, cadences, charge days, and that a subscription is still paid or was cancelled, each with the label of its account
@@ -751,11 +762,13 @@ In plain text, so the relay can check the shape:
 - session and token counts, tokens and weighted tokens per day and since each quota window began, and timestamps
 - each tool's status: ok, partial, error, or skipped
 
+A project goes to the team only when its repository has an `origin`, and then without its path: its tokens and sessions are sealed with a key made of the team key and the repository's address, so only a machine of the team that works in the same repository can read them, and the others cannot tell which repository it is. See [Shared projects](#shared-projects). A colleague with the team key who guesses the address of one of your repositories, such as a public one, can read your use of it.
+
 So the relay's operator can see how many machines a team has, which tools and plans they use, and so roughly what they pay at list prices, how much, and when, but not who, on which machine, or in which project, nor the prices the team typed. The operator also sees the IP addresses that connect, which the relay keeps in rate-limit counters for up to a day.
 
 Once a day each collector also asks the relay for its price list, `GET /v1/prices`, which needs no key and carries nothing of the team. Who bills a Claude subscription, such as the App Store, and when it began, as Claude Code says, stay on the machine.
 
-![What the relay keeps for one machine, trimmed: the machine, user, account, and project paths sealed, the provider, plan, quota windows, and session count in plain text](docs/demo/social/relay-view.png)
+![What the relay keeps for one machine, trimmed: the machine, user, and account sealed, each project sealed with its repository's key, the provider, plan, quota windows, and session count in plain text](docs/demo/social/relay-view.png)
 
 Every snapshot is signed with the team key, and each machine checks the signatures of what it reads. The relay cannot forge or change a snapshot without being noticed. It can withhold one, delete one, or keep serving an older one.
 

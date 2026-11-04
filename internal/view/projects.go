@@ -13,22 +13,47 @@ import (
 // account, in weighted tokens in the local periods, the most in the period
 // first, the top ones unless every one is asked for. Where the ledger holds
 // less than 90 days of a provider, the title says since when, and the 90D
-// of the projects it worked on is dim.
-func (p *page) projects() []chunks {
-	if len(p.r.Projects) == 0 {
+// of the projects it worked on is dim. TEAM is what the team's other
+// devices burned in the same repositories, when any did.
+func (p *page) projects() []chunks { return p.projectTable(p.r.Projects, nil) }
+
+// sharedProjects is SHARED PROJECTS of another device, d: this device's
+// projects that d works in too, by their repository's origin, with what d
+// burned in each, in UTC days as d sent them.
+func (p *page) sharedProjects(d *TeamDevice) []chunks {
+	var ps []Project
+	for _, pr := range p.r.Projects {
+		for _, pd := range pr.Team {
+			if pd.Device == d.Device {
+				ps = append(ps, Project{Path: pr.Path, Sessions: pd.Sessions, Burn: pd.Burn, Providers: pd.Providers,
+					LastActiveAt: pd.LastActiveAt})
+			}
+		}
+	}
+	return p.projectTable(ps, d)
+}
+
+// projectTable is PROJECTS of ps: this device's, or of another device, of,
+// whose projects show no sessions by period nor coverage of this device's
+// ledger.
+func (p *page) projectTable(ps []Project, of *TeamDevice) []chunks {
+	if len(ps) == 0 {
 		return nil
 	}
 	g := p.g
 	per := p.o.Period
-	ps := append([]Project(nil), p.r.Projects...)
+	ps = slices.Clone(ps)
 	sortProjects(ps, per)
 	more := 0
 	if !p.o.AllProjects && len(ps) > topProjects {
 		ps, more = ps[:topProjects], len(ps)-topProjects
 	}
 
-	short := p.shortCoverage(ps)
-	cols, via := p.projectCols(ps, per, short)
+	var short []string
+	if of == nil {
+		short = p.shortCoverage(ps)
+	}
+	cols, via := p.projectCols(ps, per, short, of != nil)
 	if !slices.ContainsFunc(via.cells, func(s string) bool { return s != "" }) {
 		// One account's projects name no provider.
 		cols = slices.DeleteFunc(cols, func(c *projCol) bool { return c == via })
@@ -57,6 +82,9 @@ func (p *page) projects() []chunks {
 	}
 
 	title := p.projectsTitle(per, short)
+	if of != nil {
+		title = p.sharedTitle(per, p.deviceName(of))
+	}
 	head := chunks{p.space(2)}
 	head = append(head, p.left(p.muted("PROJECT"), pathW)...)
 	// Every header is dim, the period the table is sorted by too: the title
@@ -107,6 +135,18 @@ func (p *page) projectsTitle(per Period, short []string) chunks {
 	return append(lead, p.muted(unit))
 }
 
+// sharedTitle is the title of SHARED PROJECTS of the device named name in
+// the period per. The team's days are UTC days.
+func (p *page) sharedTitle(per Period, name string) chunks {
+	g := p.g
+	unit := "by " + per.String() + " UTC" + g.sep + "M weighted tokens"
+	lead := chunks{p.bold("SHARED PROJECTS"), p.plain("  ")}
+	if line := append(lead, p.muted(p.txt(name)+g.sep+unit)); line.width() <= p.w {
+		return line
+	}
+	return append(lead, p.muted(unit))
+}
+
 // coverageFull is how far back the ledger must hold a provider's hours for
 // PROJECTS to take its 90 days as whole. A ledger begun a few days short
 // changes no number much.
@@ -153,8 +193,10 @@ type projCol struct {
 // for each of ps in the period per, each as wide as its heading and its
 // widest cell. via is VIA, which goes first where the page is narrow. The
 // 90D of a project a provider of short worked on is dim: it counts only
-// the days the ledger holds.
-func (p *page) projectCols(ps []Project, per Period, short []string) (cols []*projCol, via *projCol) {
+// the days the ledger holds. TEAM comes after 90D when the team's other
+// devices burned in any of ps. Another device's projects, remote, have no
+// SESS: it sends no sessions by period.
+func (p *page) projectCols(ps []Project, per Period, short []string, remote bool) (cols []*projCol, via *projCol) {
 	g := p.g
 	tokens := func(s string, _, _ int) chunk { return p.cell(s) }
 	quarter := func(s string, i, _ int) chunk {
@@ -169,6 +211,11 @@ func (p *page) projectCols(ps []Project, per Period, short []string) (cols []*pr
 	} else {
 		cols[0].ink = quarter
 	}
+	var team *projCol
+	if slices.ContainsFunc(ps, func(pr Project) bool { return len(pr.Team) > 0 }) {
+		team = &projCol{head: "TEAM", right: true, ink: tokens}
+		cols = append(cols, team)
+	}
 	sess := &projCol{head: "SESS", right: true, ink: tokens}
 	via = &projCol{head: "VIA", ink: func(s string, _, w int) chunk { return p.muted(truncEnd(s, w, g.ell)) }}
 	last := &projCol{head: "LAST", right: true, ink: func(s string, _, _ int) chunk {
@@ -177,11 +224,23 @@ func (p *page) projectCols(ps []Project, per Period, short []string) (cols []*pr
 		}
 		return p.muted(s)
 	}}
-	cols = append(cols, sess, via, last)
+	if !remote {
+		cols = append(cols, sess)
+	}
+	cols = append(cols, via, last)
 	for _, pr := range ps {
 		cols[0].cells = append(cols[0].cells, p.millions(per.Of(pr.Burn)))
 		if per != Quarter {
 			cols[1].cells = append(cols[1].cells, p.millions(pr.Burn.Quarter))
+		}
+		if team != nil {
+			t := g.none
+			if pr.TeamBurn != nil {
+				t = p.millions(per.Of(*pr.TeamBurn))
+			} else if len(pr.Team) > 0 {
+				t = p.millions(per.Of(pr.teamBurn()))
+			}
+			team.cells = append(team.cells, t)
 		}
 		n := strconv.Itoa(*per.count(&pr.Active))
 		if n == "0" {

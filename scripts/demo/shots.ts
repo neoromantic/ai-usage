@@ -292,7 +292,7 @@ function cutText(text: string, cut: [string, string]): string {
 }
 
 async function browser(...args: string[]) {
-  const r = await $`agent-browser --engine chrome --session ${session} ${args}`.quiet().nothrow();
+  const r = await $`agent-browser --engine chrome --headed false --session ${session} ${args}`.quiet().nothrow();
   if (r.exitCode !== 0) throw new Error(`agent-browser ${args.join(" ")}: ${r.stderr.toString() || r.stdout.toString()}`);
   return r.stdout.toString();
 }
