@@ -37,6 +37,7 @@ audit=
 cleanup() {
 	rm -rf "$work"
 	if [ -n "$audit" ]; then
+		brew untrust --tap "$audit" >/dev/null 2>&1 || true
 		brew untap "$audit" >/dev/null 2>&1 || true
 	fi
 }
@@ -90,6 +91,11 @@ fi
 export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_ANALYTICS=1
 audit=ci/aiu
 brew tap-new --no-git "$audit" >/dev/null
+# Homebrew 7 loads a formula of a tap it does not trust only after brew
+# trust; an older one has no such command. The trust goes with the tap.
+if brew trust --help >/dev/null 2>&1; then
+	brew trust --tap "$audit" >/dev/null
+fi
 cp "$work/ai-usage.rb" "$(brew --repo "$audit")/Formula/ai-usage.rb"
 brew audit --strict --online --formula "$audit/ai-usage"
 
