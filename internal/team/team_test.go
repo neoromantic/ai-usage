@@ -270,3 +270,54 @@ func validDocWith(k *Key, sealed string) snapshot.Doc {
 		Sources:          []snapshot.Source{},
 	}
 }
+
+// Sealed with the fixed key for the repository github.com/acme/api, the
+// test vector of relay-protocol.md: a device of the team that works in it
+// must keep opening what a device sealed for it before.
+const (
+	fixedProjectID     = "github.com/acme/api"
+	fixedProjectSealed = "5CmolWZv9ACFLD32VGschkRY26zb8Oqy_6FQCJBCwtmNCoBw5vdiexprU0KPs6bk6kq8Oxf21qEV2_YDxWKxIUr4HHPvtFlX5wucFZpQyb7ggQTGKbtXRudCUfivYS7Ordo"
+	fixedProjectPlain  = `{"d":[1200000,0,800000],"m":5000000,"q":9000000,"s":14,"a":1760000000}`
+)
+
+// A repository's key opens what it sealed, and nothing another
+// repository's key, another team's, or the team key itself sealed; the team
+// key does not open what it sealed.
+func TestProjectSealOpen(t *testing.T) {
+	k, err := Import(fixedExport)
+	if err != nil {
+		t.Fatal(err)
+	}
+	api, _ := k.Project(fixedProjectID)
+	if got, ok := api.Open(fixedProjectSealed); !ok || string(got) != fixedProjectPlain {
+		t.Fatalf("the fixed project does not open: %q, %v", got, ok)
+	}
+	// relay-protocol.md §13's vector, sealed with a fixed nonce.
+	const vector = "AAECAwQFBgcICQoLWEDiztaLC1JVcJpcolATaPDRj8YNFytJ-bUUtFJhOe_QS3e_3XwuEB-rgGsUx1Nxyw"
+	if got, ok := api.Open(vector); !ok || string(got) != `{"d":[1200000],"q":1200000,"s":1}` {
+		t.Fatalf("the protocol's vector does not open: %q, %v", got, ok)
+	}
+	sealed := api.Seal([]byte(fixedProjectPlain))
+	if again := api.Seal([]byte(fixedProjectPlain)); again == sealed {
+		t.Fatal("two seals are equal; the nonce is not random")
+	}
+	if err := validDocWith(k, sealed).Validate(); err != nil {
+		t.Fatalf("snapshot rejects a sealed project: %v", err)
+	}
+	web, _ := k.Project("github.com/acme/web")
+	other, _ := mustGenerate(t).Project(fixedProjectID)
+	for name, s := range map[string]string{
+		"another repository's": web.Seal([]byte(fixedProjectPlain)),
+		"another team's":       other.Seal([]byte(fixedProjectPlain)),
+		"the team key's":       k.Seal(fixedProjectPlain),
+		"not base64":           "not base64!",
+		"too short":            "AAAA",
+	} {
+		if got, ok := api.Open(s); ok {
+			t.Errorf("%s opens: %q", name, got)
+		}
+	}
+	if _, err := k.Open(sealed); err == nil {
+		t.Error("the team key opens a project")
+	}
+}

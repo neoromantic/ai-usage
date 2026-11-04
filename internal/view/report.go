@@ -419,6 +419,26 @@ type Project struct {
 	// Providers are the harnesses that used it, most tokens first.
 	Providers    []string   `json:"providers,omitempty"`
 	LastActiveAt *time.Time `json:"last_active_at"`
+	// Team is the other devices of the team that work in the same
+	// repository, by its origin, the most burn in 7 days first. Only this
+	// device's list has it, and only for such a repository.
+	Team []ProjectDevice `json:"team,omitempty"`
+	// TeamBurn is what the devices in Team burned in it together, as TEAM
+	// shows it; nil when Team is empty.
+	TeamBurn *Usage `json:"team_burn,omitempty"`
+}
+
+// ProjectDevice is another device's use of a project this device works in
+// too, over the device's accounts, in UTC days as the device sent them.
+type ProjectDevice struct {
+	Device string `json:"device"`
+	Name   string `json:"name"`
+	// Providers are the providers of the device's accounts that used it.
+	Providers []string `json:"providers"`
+	// Sessions counts its sessions with tokens in 90 days.
+	Sessions     int        `json:"sessions"`
+	Burn         Usage      `json:"burn"`
+	LastActiveAt *time.Time `json:"last_active_at"`
 }
 
 // Counts are how many of something fall in each of the report's periods.
@@ -741,8 +761,10 @@ type Input struct {
 	OSUser   string
 	Now      time.Time
 	// Folders are the projects of the working folders in State; a folder
-	// missing from it is its own.
+	// missing from it is its own. Repos are the repository ids of the
+	// projects whose repository has an origin, by project folder.
 	Folders collect.Folders
+	Repos   map[string]string
 	// Samples are this device's runs of the last 2 days, oldest first, for
 	// the pace of each window.
 	Samples []state.Sample

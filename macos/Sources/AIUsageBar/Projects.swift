@@ -6,7 +6,8 @@ import SwiftUI
 /// next to each other in the same folder show under its name, as a group;
 /// a project on its own names its folder after its name, dim. Each has the
 /// tokens of the period against the busiest, and how long ago it was last
-/// active.
+/// active; one that other devices of the team work in too has their tokens
+/// after its name, dim, by the team's symbol.
 struct ProjectsView: View {
     @EnvironmentObject private var store: Store
     let report: Report
@@ -71,11 +72,13 @@ private struct ProjectRow: View {
         let p = project
         let parts = Format.pathParts(p.path, home: home)
         let period = store.period
+        let team = ProjectTeam(p, period: period)
         DisclosureRow(key: "proj:\(p.path)", spoken: spoken) {
             HStack(spacing: 0) {
                 Color.clear.frame(width: Metrics.slot, height: 1)
-                // The folder shows whole or not at all; the details have
-                // the path in full.
+                // The folder shows whole or not at all, and is the first to
+                // go; the team's tokens go next, and leave the team's symbol.
+                // The details have the path and each device in full.
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 6) {
                         Text(parts.name)
@@ -84,9 +87,23 @@ private struct ProjectRow: View {
                                 .font(.callout)
                                 .foregroundStyle(.tertiary)
                         }
+                        team.map { TeamMark(team: $0) }
                     }
                     .fixedSize()
-                    Text(parts.name).lineLimit(1).truncationMode(.middle)
+                    HStack(spacing: 6) {
+                        Text(parts.name)
+                        team.map { TeamMark(team: $0) }
+                    }
+                    .fixedSize()
+                    HStack(spacing: 6) {
+                        Text(parts.name)
+                        team.map { TeamMark(team: $0, tokens: false) }
+                    }
+                    .fixedSize()
+                    HStack(spacing: 6) {
+                        Text(parts.name).lineLimit(1).truncationMode(.middle)
+                        team.map { TeamMark(team: $0, tokens: false) }
+                    }
                 }
                 .frame(width: Metrics.name, alignment: .leading)
                 TokenBar(value: p.shown.value[period], top: top)
@@ -113,6 +130,9 @@ private struct ProjectRow: View {
                 let sessions = p.activeSessions.map { "\($0[period]) in \(period.title.lowercased())" } ?? "\(p.sessions)"
                 DetailLine("Sessions", sessions + (via.isEmpty ? "" : " · \(via)"), help: "\(p.sessions) with tokens in 90 days")
                 PeriodsLine(tokens: p.shown)
+                if let team {
+                    DetailLine("Team", forms: team.forms, help: team.help)
+                }
             }
         }
     }
@@ -129,7 +149,30 @@ private struct ProjectRow: View {
         let parts = Format.pathParts(p.path, home: home)
         var s = parts.name + (parts.folder.isEmpty ? "" : " in \(parts.folder)")
         s += ", \(Format.spokenMillions(p.shown.value[store.period])) \(p.shown.label) in \(store.period.title.lowercased())"
+        if let team = ProjectTeam(p, period: store.period) { s += ", " + team.spoken }
         if let t = p.lastActiveAt { s += ", active \(Format.ago(t, now: now))" }
         return s
+    }
+}
+
+/// The mark of a project that other devices of the team work in too: the
+/// team's symbol and their tokens in the period, dim, or the symbol alone
+/// where they have none or the row has no room. The tooltip says what it is.
+private struct TeamMark: View {
+    let team: ProjectTeam
+    var tokens = true
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "person.2.fill")
+                .font(.system(size: 9))
+            if tokens, let badge = team.badge {
+                Text(badge).monospacedDigit()
+            }
+        }
+        .font(.callout)
+        .foregroundStyle(.tertiary)
+        .fixedSize()
+        .help(team.summary)
     }
 }

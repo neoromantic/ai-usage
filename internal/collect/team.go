@@ -213,16 +213,18 @@ func (s *sampler) publish(ctx context.Context, key *team.Key, device string, res
 
 // rejectedFor is how long the fields ExtSince added, the cycles
 // CyclesSince added, the hours HoursSince added, the costs CostSince added,
-// or the pooled PoolSince added, go unsent after the relay refused them.
+// the pooled PoolSince added, or the projects past
+// snapshot.LegacyProjects, go unsent after the relay refused them.
 const rejectedFor = 24 * time.Hour
 
 // syncTeam publishes this device and reads the team back. The snapshot holds
 // running totals, so publishing the newest one also covers any runs that
-// could not reach the relay. It has the pooled PoolSince added, the costs
-// CostSince added, the hours HoursSince added, the cycles CyclesSince
-// added, and the fields ExtSince added, each only while its gate is open,
-// and goes without them for rejectedFor when the relay refuses them: a
-// relay that refuses the costs is sent the rest.
+// could not reach the relay. It has the projects past
+// snapshot.LegacyProjects ProjectsSince accepts, the pooled PoolSince
+// added, the costs CostSince added, the hours HoursSince added, the cycles
+// CyclesSince added, and the fields ExtSince added, each only while its
+// gate is open, and goes without them for rejectedFor when the relay
+// refuses them: a relay that refuses the costs is sent the rest.
 func syncTeam(ctx context.Context, o Options, st *state.State, device string, doc *snapshot.Doc, cache *TeamCache, now time.Time) {
 	fail := func(err error) {
 		st.Relay.LastError = shortErr(err)
@@ -245,8 +247,11 @@ func syncTeam(ctx context.Context, o Options, st *state.State, device string, do
 	}
 	var tries []try
 	fp := o.Relay.Key.Fingerprint()
-	if doc.HasPooled() && PoolWire(*cache, fp, device, NoPoolUntil(st.Relay), now).Open {
-		tries = append(tries, try{*doc, &st.Relay.NoPoolUntil})
+	if doc.HasManyProjects() && ProjectsWire(*cache, fp, device, NoProjectsUntil(st.Relay), now).Open {
+		tries = append(tries, try{*doc, &st.Relay.NoProjectsUntil})
+	}
+	if few := doc.WithoutManyProjects(); few.HasPooled() && PoolWire(*cache, fp, device, NoPoolUntil(st.Relay), now).Open {
+		tries = append(tries, try{few, &st.Relay.NoPoolUntil})
 	}
 	if without := doc.WithoutPooled(); without.HasCosts() && CostWire(*cache, fp, device, NoCostUntil(st.Relay), now).Open {
 		tries = append(tries, try{without, &st.Relay.NoCostUntil})

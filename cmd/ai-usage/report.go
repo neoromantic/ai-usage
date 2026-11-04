@@ -33,8 +33,9 @@ func loadResult(d state.Dir) (*collect.Result, error) {
 	cache, _ := collect.LoadTeamCache(d)
 	// Samples that do not read leave the cycles out, as the run's did.
 	cycles, _ := collect.LoadCycles(d, st.LastRunAt)
-	doc := collect.BuildDoc(st, cycles, key, cfg, deviceName(cfg), osUser(), version, st.LastRunAt)
-	return &collect.Result{Config: cfg, State: st, Key: key, Doc: doc, Team: cache}, nil
+	repos := collect.FindRepos(st, collect.FindProjects(d, st))
+	doc := collect.BuildDoc(st, cycles, key, cfg, repos, deviceName(cfg), osUser(), version, st.LastRunAt)
+	return &collect.Result{Config: cfg, State: st, Key: key, Doc: doc, Team: cache, Repos: repos}, nil
 }
 
 // reportAt is the report of a run result as of now.
@@ -65,7 +66,8 @@ func reportInput(d state.Dir, res *collect.Result, now time.Time) view.Input {
 		Hostname:    deviceName(res.Config),
 		OSUser:      osUser(),
 		Now:         now,
-		Folders:     collect.FindProjects(d, res.State),
+		Folders:     res.Repos.Folders,
+		Repos:       res.Repos.IDs,
 		Samples:     samples,
 		Loc:         time.Local,
 		Homebrew:    brewPrefix() != "",

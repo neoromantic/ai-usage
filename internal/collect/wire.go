@@ -37,6 +37,12 @@ const CostSince = "v0.10.0"
 // sends it only while the whole team reads it.
 const PoolSince = "v0.11.0"
 
+// ProjectsSince is the first release that accepts more than
+// snapshot.LegacyProjects projects an account. An older one drops a
+// document that has them as undecodable, so a device sends them only while
+// the whole team reads them.
+const ProjectsSince = "v0.14.0"
+
 // legacyDev is the version a build from source of a release before ExtSince
 // reports. One from ExtSince on reports "devel", which does not parse as a
 // release either.
@@ -69,6 +75,10 @@ func BeforeCost(version string) bool { return before(version, CostSince) }
 // or is a build from source of one, as BeforeHours tells.
 func BeforePool(version string) bool { return before(version, PoolSince) }
 
+// BeforeProjects says a collector of version runs a release before
+// ProjectsSince, or is a build from source of one, as BeforeHours tells.
+func BeforeProjects(version string) bool { return before(version, ProjectsSince) }
+
 // before says a collector of version runs a release before since, or is a
 // build from source of one.
 func before(version, since string) bool {
@@ -96,8 +106,8 @@ const StuckAfter = 3 * 24 * time.Hour
 
 // Gate says whether this device may send the snapshot fields a release
 // added: those ExtSince added, the cycles CyclesSince added, the hours
-// HoursSince added, the costs CostSince added, or the pooled PoolSince
-// added.
+// HoursSince added, the costs CostSince added, the pooled PoolSince added,
+// or the projects past snapshot.LegacyProjects ProjectsSince accepts.
 type Gate struct {
 	Open bool
 	// HeldBack is the other devices of the team on a release before the
@@ -156,6 +166,21 @@ func CostWire(c TeamCache, fingerprint, self string, noCostUntil, now time.Time)
 // noPoolUntil was set.
 func PoolWire(c TeamCache, fingerprint, self string, noPoolUntil, now time.Time) Gate {
 	return wireGate(c, fingerprint, self, noPoolUntil, now, BeforePool)
+}
+
+// ProjectsWire is the gate for more than snapshot.LegacyProjects projects
+// an account, as ExtendedWire is for the fields ExtSince added: every other
+// device must run ProjectsSince or later, as BeforeProjects tells, and the
+// relay must not have refused them since noProjectsUntil was set.
+func ProjectsWire(c TeamCache, fingerprint, self string, noProjectsUntil, now time.Time) Gate {
+	return wireGate(c, fingerprint, self, noProjectsUntil, now, BeforeProjects)
+}
+
+// NoProjectsUntil is when the relay's refusal of the projects past
+// snapshot.LegacyProjects, or of what an older release added, which a relay
+// that refuses refuses them with, ends.
+func NoProjectsUntil(r state.Relay) time.Time {
+	return latest(r.NoProjectsUntil, NoPoolUntil(r))
 }
 
 // NoPoolUntil is when the relay's refusal of pooled, or of what an older

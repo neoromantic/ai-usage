@@ -19,3 +19,7 @@
   ACCOUNT               USED  SHARE
   claude kim@corp.test     ?   100%
   TOTAL                    ?      ·
+
+[1mSHARED PROJECTS[m  kim@Mac.localdomain · by 7d UTC · M weighted tokens
+  PROJECT          7D   90D  VIA     LAST
+  ~/src/acme/app  412  1830  claude   36m

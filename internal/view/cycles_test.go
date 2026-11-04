@@ -22,7 +22,7 @@ func period(window string, reset time.Time, pct float64, last time.Time) snapsho
 // quota cycles cs when version sends them.
 func cyclesDoc(t *testing.T, key *team.Key, device, version string, at time.Time, st *state.State, cs collect.Cycles) snapshot.Doc {
 	t.Helper()
-	doc := collect.BuildDoc(st, cs, key, state.Config{Device: device}, "otherbox", "kim", version, at)
+	doc := collect.BuildDoc(st, cs, key, state.Config{Device: device}, collect.Repos{}, "otherbox", "kim", version, at)
 	if collect.BeforeCycles(version) {
 		doc = doc.WithoutCycles()
 	}

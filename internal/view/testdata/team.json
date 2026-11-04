@@ -797,7 +797,39 @@
         "codex",
         "claude"
       ],
-      "last_active_at": "2026-09-23T13:38:00Z"
+      "last_active_at": "2026-09-23T13:38:00Z",
+      "team": [
+        {
+          "device": "d-9b1d3f5a7c9e1b3d5f7a9c1e",
+          "name": "kim@Mac.localdomain",
+          "providers": [
+            "claude"
+          ],
+          "sessions": 41,
+          "burn": {
+            "today": 52000000,
+            "7d": 412000000,
+            "30d": 1290000000,
+            "90d": 1830000000
+          },
+          "last_active_at": "2026-09-23T14:02:00Z"
+        },
+        {
+          "device": "d-2f8a6c4e0b9d7f1a3c5e7b9d",
+          "name": "root@srv1",
+          "providers": [
+            "codex"
+          ],
+          "sessions": 96,
+          "burn": {
+            "today": 0,
+            "7d": 138000000,
+            "30d": 604000000,
+            "90d": 1512000000
+          },
+          "last_active_at": "2026-09-22T22:10:00Z"
+        }
+      ]
     },
     {
       "path": "/Users/ann/notes",
@@ -994,7 +1026,24 @@
       "providers": [
         "codex"
       ],
-      "last_active_at": "2026-09-22T09:38:00Z"
+      "last_active_at": "2026-09-22T09:38:00Z",
+      "team": [
+        {
+          "device": "d-2f8a6c4e0b9d7f1a3c5e7b9d",
+          "name": "root@srv1",
+          "providers": [
+            "codex"
+          ],
+          "sessions": 12,
+          "burn": {
+            "today": 0,
+            "7d": 21000000,
+            "30d": 64000000,
+            "90d": 64000000
+          },
+          "last_active_at": "2026-09-21T03:40:00Z"
+        }
+      ]
     },
     {
       "path": "/Users/ann/dotfiles",

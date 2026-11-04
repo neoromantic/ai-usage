@@ -96,7 +96,7 @@ func newFixture(t *testing.T, st *state.State) *fixture {
 // seal makes f's snapshot of this device from its state and config, as a
 // run at at would.
 func (f *fixture) seal(at time.Time) {
-	f.in.Doc = collect.BuildDoc(f.in.State, f.cycles, f.key, f.in.Config, "thisbox", "sam", "v1.2.3", at)
+	f.in.Doc = collect.BuildDoc(f.in.State, f.cycles, f.key, f.in.Config, collect.Repos{}, "thisbox", "sam", "v1.2.3", at)
 }
 
 func findAccount(t *testing.T, r Report, provider, label string) Account {
@@ -118,7 +118,7 @@ func findAccount(t *testing.T, r Report, provider, label string) Account {
 // docWith is another device's snapshot built with its own config.
 func docWith(t *testing.T, key *team.Key, cfg state.Config, host string, at time.Time, st *state.State) snapshot.Doc {
 	t.Helper()
-	body, err := json.Marshal(collect.BuildDoc(st, nil, key, cfg, host, "kim", "v1.2.0", at))
+	body, err := json.Marshal(collect.BuildDoc(st, nil, key, cfg, collect.Repos{}, host, "kim", "v1.2.0", at))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,7 +9,7 @@ Contents:
 1. [Roles](#1-roles)
 2. [Encodings](#2-encodings)
 3. [Team key](#3-team-key)
-4. [Sealed strings](#4-sealed-strings)
+4. [Sealed strings](#4-sealed-strings), and [projects](#41-projects)
 5. [Signatures](#5-signatures)
 6. [HTTP API](#6-http-api)
 7. [Snapshot document](#7-snapshot-document)
@@ -105,6 +105,27 @@ A sealed string for an `n`-byte plaintext is `ceil(4 × (28 + n) / 3)` character
 To open a sealed string, decode it, take the first 12 bytes as the nonce, and decrypt the rest with the same additional data. A reader that cannot open a string SHOULD show a placeholder rather than drop the document; the reference reader shows `(unreadable)`.
 
 The relay cannot tell a sealed string from any other base64url text. It checks only the characters and the length.
+
+### 4.1 Projects
+
+From v0.14.0 a project's usage (§7.4) is sealed with a key of its repository's, so that only the team's devices that work in the same repository can open it:
+
+```
+project_key = HKDF-SHA256(IKM = seed, salt = none, info = "ai-usage project v1\n" || repository id, L = 32)
+```
+
+The info string is ASCII `ai-usage project v1`, a line feed (0x0A), and the repository id in UTF-8. A project is sealed as a sealed string is, with `project_key` in place of `seal_key` and the same additional data, the team fingerprint. A project whose repository has no id is not sent.
+
+The repository id is made from the url of the repository's remote `origin`, as git's config names it:
+
+1. A url `scheme://[user@]host[:port]/path` gives its host and path; one of the scheme `file` gives none.
+2. A url without `://` is `[user@]host:path`, as scp writes it, when it has a colon, no `/` or `\` before it, and a host of 2 characters or more; any other is a local folder's, and gives none.
+3. The host is lowercase, without a trailing dot, and an IPv6 address without its brackets. The path is lowercase, without a query or a fragment, without the slashes it starts and ends with, and without a trailing `.git` and the slashes before it.
+4. The id is the host, `/`, and the path; a url with no host or no path gives none.
+
+So `git@github.com:acme/api.git`, `https://github.com/acme/api`, and `ssh://git@github.com:22/Acme/API` are the id `github.com/acme/api`.
+
+A reader opens each project of another device's snapshot with the key of each repository it works in itself. A project that opens with none of them, another repository's or one a release before v0.14.0 sealed with the team key, it MUST leave unread, and MUST NOT show it, nor a placeholder for it.
 
 ## 5. Signatures
 
@@ -303,7 +324,7 @@ Every integer the document allows fits exactly in an IEEE 754 double, so readers
 | `costs` | array of Cost | omitted when empty | at most 24: what people typed on this device of what the team's subscriptions cost, newest first. Added in v0.10.0; see §11 |
 | `pooled` | array of provider | omitted when empty | providers, each named once: the device's sessions of each go through BB's Account Pooler, which serves each request from one of several accounts, so the device cannot say which account spent its tokens. Added in v0.11.0; see §11 |
 
-The body as a whole MUST be at most 65536 bytes. The reference collector fits the document as the release before each member did, oldest first. Without `cycles`, the hours, and `costs`, it drops projects, then the oldest `days` down to 7 per account, then accounts until it fits. It then puts back the `cycles` of the accounts it kept, and drops them one at a time until the document fits: the oldest of the window with the most in the account with the most. It then puts back the hours, and drops both hour arrays of the account with the most hours while the document is too big. Last it puts back `costs`, and while the document is too big drops projects, then the oldest entries: no account goes for them. `pooled` goes back with the hours, and is never dropped.
+The body as a whole MUST be at most 65536 bytes. The reference collector fits the document as the release before each member did, oldest first. Without `cycles`, the hours, `costs`, and any account's projects past its 12 largest, it drops projects, then the oldest `days` down to 7 per account, then accounts until it fits. It then puts back the `cycles` of the accounts it kept, and drops them one at a time until the document fits: the oldest of the window with the most in the account with the most. It then puts back the hours, and drops both hour arrays of the account with the most hours while the document is too big. It then puts back the projects past the 12th of each account that kept 12, and drops the smallest of the account with the most while the document is too big. Last it puts back `costs`, and while the document is too big drops projects, then the oldest entries: no account goes for them. `pooled` goes back with the hours, and is never dropped.
 
 ### 7.4 Nested objects
 
@@ -321,7 +342,7 @@ The body as a whole MUST be at most 65536 bytes. The reference collector fits th
 | `sessions` | session count | required | sessions in the collector's ledger, which keeps 90 days in the reference collector |
 | `tokens` | Tokens | required | tokens of those sessions |
 | `last_active_at` | time | omitted when empty | the account's last activity on this device |
-| `projects` | array of Project | required | at most 12, the largest first |
+| `projects` | array of Project | required | at most 128, the largest first; at most 12 before v0.14.0, and from a collector before v0.14.0 (§11). From v0.14.0 only the projects whose repository has an id (§4.1) |
 | `linked` | array of Linked | omitted when empty | at most 4 |
 | `days` | array of token count | omitted when empty | at most 90: the account's input plus output tokens on this device per UTC day, cache left out, newest first. The first entry is the UTC day of `collected_at`, the next the day before, and so on. Trailing zeros are left out; zeros between days are written as `0` |
 | `burn_days` | array of token count | omitted when empty | at most 90: the account's weighted tokens on this device per UTC day, laid out as `days` is. A weighted token weighs each kind of token by what the provider's API charges for it against input, as [json-schema.md](json-schema.md) lists. Added in v0.4.0; see §11 |
@@ -339,13 +360,23 @@ The body as a whole MUST be at most 65536 bytes. The reference collector fits th
 | `resets_at` | time | omitted when empty | when the window resets |
 | `minutes` | integer | omitted when 0 | the window's length, at most 89280 (62 days) |
 
-**Project**: usage in one working directory.
+**Project**: usage in one project. From v0.14.0 a project is a repository, its usage is in `path`, sealed with the repository's key (§4.1), and `sessions` and `tokens` are 0. Before, it was a working directory, its path sealed with the team key, with its counts in plain text.
 
 | Member | Type | Presence | Rule and meaning |
 | --- | --- | --- | --- |
-| `path` | sealed | required | the directory |
-| `sessions` | session count | required | |
-| `tokens` | Tokens | required | |
+| `path` | sealed | required | from v0.14.0 a ProjectUsage as JSON, sealed with the repository's key; before, the directory |
+| `sessions` | session count | required | 0 from v0.14.0 |
+| `tokens` | Tokens | required | all 0 from v0.14.0 |
+
+**ProjectUsage**: the account's use of the project on the device, the JSON that a project's `path` seals from v0.14.0, with short member names to keep it small. Members are omitted when 0 or empty. A reader ignores a member it does not know.
+
+| Member | Type | Meaning |
+| --- | --- | --- |
+| `d` | array of token count | at most 7: the weighted tokens per UTC day, laid out as `burn_days` is |
+| `m` | token count | the weighted tokens in the 30 UTC days up to the day of `collected_at` |
+| `q` | token count | the weighted tokens in the 90 UTC days up to the day of `collected_at` |
+| `s` | session count | the sessions with tokens in those 90 days |
+| `a` | integer | when the project was last active, in Unix seconds |
 
 **Linked**: what an account of another provider on this device spent through this account, and is assumed to have billed to it, such as Hermes on this Codex login. It is counted in the other account's tokens, not in this account's.
 
@@ -431,7 +462,7 @@ The relay does not check that providers or accounts are unique, or that the coun
 
 ### 7.5 Example
 
-A snapshot signed with the test key of §13. Its sealed strings use the fixed nonces 12 × `01`, 12 × `02`, 12 × `03`, and 12 × `04`, in document order, so that the example can be reproduced. A real collector MUST use random nonces. Indented for reading:
+A snapshot signed with the test key of §13, as a release before v0.14.0 sends it: its project is a directory sealed with the team key. Its sealed strings use the fixed nonces 12 × `01`, 12 × `02`, 12 × `03`, and 12 × `04`, in document order, so that the example can be reproduced. A real collector MUST use random nonces. Indented for reading:
 
 ```json
 {
@@ -594,6 +625,8 @@ The members v0.4.0 added, `last_error_at`, `burn_days`, and Recent's `burn`, are
 
 `costs`, added in v0.10.0, takes the same gate, with v0.10.0 in place of v0.7.0: the reference collector sends it only when every other device it found, or still remembers, runs v0.10.0 or later. Otherwise it sends the document without `costs`, and what people typed on a device counts on that device alone until the gate opens. When its relay answers `422` to a document with them, it sends the document without them, with the hours and older members when their gates are open, in the same run, and does not send `costs` again for 24 hours. A relay before v0.10.0 answers so; the reference relay accepts `costs` from v0.10.0, so it is deployed before collectors on v0.10.0.
 
+More than 12 projects an account, accepted from v0.14.0, take the same gate, with v0.14.0 in place of v0.11.0: the reference collector sends them only when every other device it found, or still remembers, runs v0.14.0 or later. Otherwise it sends each account's 12 largest. When its relay answers `422` to a document with more, it sends the document with 12, with `pooled` and older members when their gates are open, in the same run, and does not send more again for 24 hours. A relay before v0.14.0 answers so; the reference relay accepts up to 128 from v0.14.0, so it is deployed before collectors on v0.14.0. Projects sealed with their repository's key (§4.1) need no gate: a reader before v0.14.0 shows no other device's projects.
+
 `pooled`, added in v0.11.0, takes the same gate, with v0.11.0 in place of v0.10.0. Otherwise the reference collector sends the document without it, and only its own report says the device goes through the pool. When its relay answers `422` to a document with it, it sends the document without it, with `costs` and older members when their gates are open, in the same run, and does not send `pooled` again for 24 hours. The reference relay accepts it from v0.11.0, so it is deployed before collectors on v0.11.0.
 
 One case remains: a device the team has never seen, installed with a release before v0.4.0, can read documents with the new members on its first run. It drops them, as any older reader drops a document it cannot decode, until it updates itself, within its next run, or the others' next team read closes the gate, within about half an hour. The same holds for a new device on a release before v0.5.0 and `cycles`, on one before v0.7.0 and the hours, on one before v0.10.0 and `costs`, and on one before v0.11.0 and `pooled`. The installer always installs the newest release.
@@ -605,6 +638,7 @@ One case remains: a device the team has never seen, installed with a release bef
 - A captured `GET` or `DELETE` stays valid for 300 seconds either side of its time, for the same team and device. A replayed `DELETE` removes the device until its next write.
 - The additional data of a sealed string binds it to the team, not to a field. Any member of the team can move a sealed string between fields; the relay cannot, since documents are signed.
 - Nonces are 96 random bits, taken fresh for every sealed string.
+- A project's key (§4.1) needs the team key and the repository's address. A member of the team who guesses the address of a repository another device works in, such as a public one, opens that device's use of it. The relay's operator, without the team key, opens none, but sees how many projects each account sends and how long each sealed string is.
 - `costs` hold the prices, cadences, and charge days people typed, sealed. The plain `plan` names the plan, and with it the price list's price, as it already does for Codex and Grok, and for Claude from v0.10.0, which writes its tier, as `max 20x`.
 
 ## 13. Test vectors
@@ -659,5 +693,15 @@ with the signature:
 ```
 HfmtjWSA5WBJTx3wSB0uYgTpxOBASmFC-gYwqO1mo51nmZf2jCgz7DMlbkbRdtT4vqu11NRsfpG29WCqMuPRCQ
 ```
+
+Sealing the ProjectUsage `{"d":[1200000],"q":1200000,"s":1}` for the repository id `github.com/acme/api` with the nonce `000102030405060708090a0b`:
+
+| Item | Value |
+| --- | --- |
+| project key (hex) | `d5fd4904f7ea19a81c4a9a31b7559818c43e6b5580861458eb9ddaee1f4dfc82` |
+| nonce, ciphertext, tag (hex) | `000102030405060708090a0b` `5840e2ced68b0b5255709a5ca2501368f0d18fc60d172b49f9b514b4526139efd0` `4b77bfdd7c2e101fab806b14c75371cb` |
+| sealed string | `AAECAwQFBgcICQoLWEDiztaLC1JVcJpcolATaPDRj8YNFytJ-bUUtFJhOe_QS3e_3XwuEB-rgGsUx1Nxyw` |
+
+Opening that string with the seal key, or with the key of any other repository id, fails.
 
 The snapshot in §7.5 and its signature complete the set. A relay whose clock reads 1760000000 accepts that snapshot with `200`, and then answers the team read above with it.

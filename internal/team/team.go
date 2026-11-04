@@ -148,3 +148,51 @@ func (k *Key) Open(sealed string) (string, error) {
 	}
 	return string(plain), nil
 }
+
+// Project is the key of one repository's usage in this team: the team key
+// with the repository's id mixed in, so only a device of the team that
+// works in the same repository opens what it seals.
+type Project struct {
+	seal cipher.AEAD
+	fp   string
+}
+
+// Project is the key of the repository with id, as collect.RepoID makes
+// it.
+func (k *Key) Project(id string) (*Project, error) {
+	sk, err := hkdf.Key(sha256.New, k.priv.Seed(), nil, "ai-usage project v1\n"+id, 32)
+	if err != nil {
+		return nil, err
+	}
+	block, err := aes.NewCipher(sk)
+	if err != nil {
+		return nil, err
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	return &Project{seal: aead, fp: k.fp}, nil
+}
+
+// Seal encrypts plain as Key.Seal does, with the project's key.
+func (p *Project) Seal(plain []byte) string {
+	nonce := make([]byte, p.seal.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		panic(err)
+	}
+	return base64.RawURLEncoding.EncodeToString(p.seal.Seal(nonce, nonce, plain, []byte(p.fp)))
+}
+
+// Open decrypts a string made by Seal with the same project's key. It
+// reports false for any other string: another repository's, or one the
+// team key sealed.
+func (p *Project) Open(sealed string) ([]byte, bool) {
+	raw, err := base64.RawURLEncoding.DecodeString(sealed)
+	n := p.seal.NonceSize()
+	if err != nil || len(raw) < n+p.seal.Overhead() {
+		return nil, false
+	}
+	plain, err := p.seal.Open(nil, raw[:n], raw[n:], []byte(p.fp))
+	return plain, err == nil
+}

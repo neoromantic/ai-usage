@@ -218,6 +218,10 @@ type Relay struct {
 	// NoPoolUntil is when the relay last refused a snapshot with pooled,
 	// plus a day: until then pooled is not sent.
 	NoPoolUntil time.Time `json:"no_pool_until,omitzero"`
+	// NoProjectsUntil is when the relay last refused a snapshot with more
+	// than snapshot.LegacyProjects projects an account, plus a day: until
+	// then no account sends more.
+	NoProjectsUntil time.Time `json:"no_projects_until,omitzero"`
 }
 
 // Update is the self-update bookkeeping.
@@ -389,6 +393,7 @@ func mergeOlder(s, last *State) {
 	s.Relay.NoHoursUntil = last.Relay.NoHoursUntil
 	s.Relay.NoCostUntil = last.Relay.NoCostUntil
 	s.Relay.NoPoolUntil = last.Relay.NoPoolUntil
+	s.Relay.NoProjectsUntil = last.Relay.NoProjectsUntil
 	from := hourOf(last.LastRunAt) - 1
 	for k, sess := range s.Sessions {
 		if sess == nil {

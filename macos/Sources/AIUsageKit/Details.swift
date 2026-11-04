@@ -113,3 +113,50 @@ public struct SubscriptionDetails: Sendable {
         return Reading(age: "\(Format.duration(now.timeIntervalSince(q.observedAt))) old", source: source, stale: q.stale)
     }
 }
+
+/// What a project's row and details in Projects say of the team's other
+/// devices that work in the same repository, in a period, as the report
+/// has them: their weighted tokens together, the report's `team_burn` that
+/// the console's TEAM column shows, and each device's, busiest first. It only words what the
+/// report sent, in UTC days as each device sent them.
+public struct ProjectTeam: Equatable, Sendable {
+    /// The devices' tokens in the period together.
+    public let tokens: Int
+    /// What the row shows of them: "44M"; nil when none in the period.
+    public let badge: String?
+    /// The row's tooltip: "Other devices in this repository: 44M in 7
+    /// Days".
+    public let summary: String
+    /// Each device with its tokens, busiest first, in forms that drop what
+    /// a narrow line has no room for, the longest first: "leo@leo-air 41M,
+    /// root@build-01 3M, +2 more". A device with none in the period goes
+    /// by its name alone.
+    public let forms: [String]
+    /// The details' tooltip: every device, with its tokens and providers.
+    public let help: String
+    /// The row's part for VoiceOver: "other devices 44 million".
+    public let spoken: String
+
+    /// Nil for a project no other device works in.
+    public init?(_ project: Project, period: Period) {
+        guard !project.team.isEmpty else { return nil }
+        let busiest = project.team.enumerated().sorted { a, b in
+            let (x, y) = (a.element.burn[period], b.element.burn[period])
+            return x != y ? x > y : a.offset < b.offset
+        }.map(\.element)
+        tokens = project.teamBurn?[period] ?? 0
+        badge = tokens > 0 ? Format.tokensM(tokens) : nil
+        let during = " in " + period.title
+        summary = "Other devices in this repository: " + (badge ?? "none") + during
+        let items = busiest.map { d in d.burn[period] > 0 ? "\(d.name) \(Format.tokensM(d.burn[period]))" : d.name }
+        // The two busiest, then the busiest alone, with the rest as a count.
+        let list = { (n: Int) in (items.prefix(n) + (items.count > n ? ["+\(items.count - n) more"] : [])).joined(separator: ", ") }
+        forms = items.count > 1 ? [list(2), list(1)] : [list(1)]
+        let each = busiest.map { d in
+            "\(d.name) " + (d.burn[period] > 0 ? Format.tokensM(d.burn[period]) : "none")
+                + (d.providers.isEmpty ? "" : " · " + d.providers.map(Format.provider).joined(separator: ", "))
+        }
+        help = (["Other devices in this repository, \(TokenLabel.weighted)\(during):"] + each).joined(separator: "\n")
+        spoken = "other devices " + Format.spokenMillions(tokens)
+    }
+}

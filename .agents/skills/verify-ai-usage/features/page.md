@@ -8,7 +8,7 @@
 - SUBSCRIPTIONS: each account's windows, bar, left, reset, forecast at reset, devices
 - DEVICES × SUBSCRIPTIONS, the matrix, and DEVICES as status (`--devices`)
 - UTILIZATION, how full each window got before its reset over 90 days
-- PROJECTS (`--projects` for all) and USAGE; the first run's HOW IT WORKS guide
+- PROJECTS (`--projects` for all), with TEAM for repositories another device works in, and USAGE; the first run's HOW IT WORKS guide
 - Display: `--width 80..160`, `--ascii`, `--color`, `NO_COLOR`
 
 ## How to get to it (user POV)

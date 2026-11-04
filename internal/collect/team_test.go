@@ -55,7 +55,7 @@ func publishOther(t *testing.T, r *testRelay, w *world, key *team.Key, device st
 // publishRelease stores a snapshot for another device on a release.
 func publishRelease(t *testing.T, r *testRelay, w *world, key *team.Key, device, version string, st *state.State, at time.Time) {
 	t.Helper()
-	doc := BuildDoc(st, nil, key, state.Config{Device: device}, "otherbox", "kim", version, at)
+	doc := BuildDoc(st, nil, key, state.Config{Device: device}, Repos{}, "otherbox", "kim", version, at)
 	if selfupdate.Newer(ExtSince, version) {
 		// A release before v0.4.0 sends none of the fields it added.
 		doc = doc.Legacy()
@@ -321,7 +321,7 @@ func TestStoppedExchange(t *testing.T) {
 	w, o := newWorld(t)
 	r := newRelay(t, w)
 	key, _ := LoadKey(o.Dir)
-	body, _ := json.Marshal(BuildDoc(ledger(), nil, key, state.Config{Device: "d-forged-device"}, "x", "y", "v1", t0))
+	body, _ := json.Marshal(BuildDoc(ledger(), nil, key, state.Config{Device: "d-forged-device"}, Repos{}, "x", "y", "v1", t0))
 	_ = r.store.Put(context.Background(), key.Fingerprint(), "d-forged-device", relay.Record{Body: body, Sig: []byte("not a signature")}, time.Hour)
 	o.Relay = r.client(w)
 	run(t, o)
@@ -389,7 +389,7 @@ func TestRelayDocsThatDoNotVerifyAreReported(t *testing.T) {
 	w, o := newWorld(t)
 	r := newRelay(t, w)
 	key, _ := LoadKey(o.Dir)
-	body, _ := json.Marshal(BuildDoc(ledger(), nil, key, state.Config{Device: "d-forged-device"}, "x", "y", "v1", t0))
+	body, _ := json.Marshal(BuildDoc(ledger(), nil, key, state.Config{Device: "d-forged-device"}, Repos{}, "x", "y", "v1", t0))
 	_ = r.store.Put(context.Background(), key.Fingerprint(), "d-forged-device", relay.Record{Body: body, Sig: []byte("not a signature")}, time.Hour)
 
 	o.Relay = r.client(w)
@@ -421,7 +421,7 @@ func TestRelayDocsFromANewerReleaseAreReported(t *testing.T) {
 	w, o := newWorld(t)
 	r := newRelay(t, w)
 	key, _ := LoadKey(o.Dir)
-	body, _ := json.Marshal(BuildDoc(ledger(), nil, key, state.Config{Device: "d-newer-device"}, "x", "y", "v9.0.0", t0))
+	body, _ := json.Marshal(BuildDoc(ledger(), nil, key, state.Config{Device: "d-newer-device"}, Repos{}, "x", "y", "v9.0.0", t0))
 	body = bytes.Replace(body, []byte(`{"v":1,`), []byte(`{"v":1,"pace":[2],`), 1)
 	_ = r.store.Put(context.Background(), key.Fingerprint(), "d-newer-device", relay.Record{Body: body, Sig: key.Sign(relay.SnapshotMessage(body))}, time.Hour)
 
@@ -516,7 +516,7 @@ func TestLoadTeamCache(t *testing.T) {
 	}
 
 	key := mustKey(t)
-	good, _ := json.Marshal(BuildDoc(ledger(), nil, key, state.Config{Device: "d-0123456789"}, "a", "b", "v1", t0))
+	good, _ := json.Marshal(BuildDoc(ledger(), nil, key, state.Config{Device: "d-0123456789"}, Repos{}, "a", "b", "v1", t0))
 	want := TeamCache{PulledAt: t0, Team: key.Fingerprint(), Bodies: [][]byte{good, []byte(`{"v":99}`)}}
 	if err := saveTeamCache(d, want); err != nil {
 		t.Fatal(err)
@@ -545,16 +545,19 @@ func TestLoadTeamCache(t *testing.T) {
 // and those with cycles, as one before v0.5.0 does, while rejectCycles is,
 // and those with hours, as one before v0.7.0 does, while rejectHours is,
 // and those with costs, as one before v0.10.0 does, while rejectCosts is,
-// and those with pooled, as one before v0.11.0 does, while rejectPooled is.
+// and those with pooled, as one before v0.11.0 does, while rejectPooled is,
+// and those with more than 12 projects an account, as one before v0.14.0
+// does, while rejectProjects is.
 type putRecorder struct {
-	next         http.Handler
-	reject       bool
-	rejectCycles bool
-	rejectHours  bool
-	rejectCosts  bool
-	rejectPooled bool
-	mu           sync.Mutex
-	puts         []snapshot.Doc
+	next           http.Handler
+	reject         bool
+	rejectCycles   bool
+	rejectHours    bool
+	rejectCosts    bool
+	rejectPooled   bool
+	rejectProjects bool
+	mu             sync.Mutex
+	puts           []snapshot.Doc
 }
 
 func (p *putRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -564,7 +567,8 @@ func (p *putRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		doc, err := snapshot.Decode(body)
 		p.mu.Lock()
 		p.puts = append(p.puts, doc)
-		reject := p.reject && doc.Extended() || p.rejectCycles && doc.HasCycles() || p.rejectHours && doc.HasHours() || p.rejectCosts && doc.HasCosts() || p.rejectPooled && doc.HasPooled()
+		reject := p.reject && doc.Extended() || p.rejectCycles && doc.HasCycles() || p.rejectHours && doc.HasHours() || p.rejectCosts && doc.HasCosts() || p.rejectPooled && doc.HasPooled() ||
+			p.rejectProjects && doc.HasManyProjects()
 		p.mu.Unlock()
 		if err == nil && reject {
 			http.Error(w, "snapshot: unknown field", http.StatusUnprocessableEntity)
@@ -593,9 +597,9 @@ func (p *putRecorder) sent(device string, from int) []bool {
 	return out
 }
 
-// wire is what each snapshot device put since from had: "pooled", "costs",
-// "hours", "cycles", the fields v0.4.0 added ("extended"), or none
-// ("legacy").
+// wire is what each snapshot device put since from had: more than 12
+// projects an account ("projects"), "pooled", "costs", "hours", "cycles",
+// the fields v0.4.0 added ("extended"), or none ("legacy").
 func (p *putRecorder) wire(device string, from int) []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -603,6 +607,8 @@ func (p *putRecorder) wire(device string, from int) []string {
 	for _, d := range p.puts[from:] {
 		switch {
 		case d.Device != device:
+		case d.HasManyProjects():
+			out = append(out, "projects")
 		case d.HasPooled():
 			out = append(out, "pooled")
 		case d.HasCosts():

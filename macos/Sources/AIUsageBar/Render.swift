@@ -74,7 +74,9 @@ enum Renderer {
                     }))
                 }
             }
-            if let p = report.projects.first {
+            // The details of the first project other devices work in too,
+            // else of the first.
+            if let p = report.projects.first(where: { !$0.team.isEmpty }) ?? report.projects.first {
                 states.append(("projects-expanded", { $0.tab = .projects }, { $0.expanded = "proj:\(p.path)" }))
             }
             let calm = try calmStore(data)

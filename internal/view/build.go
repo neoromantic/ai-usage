@@ -79,6 +79,7 @@ func Build(in Input) Report {
 	sortProjects(r.Projects, Week)
 	var seen []cost.Seen
 	r.Team, seen = buildTeam(in, totals, now)
+	shareProjects(in, &r, now)
 	r.Cost = buildCost(in, r.Team, seen, now, loc)
 	listDefaults(&r)
 	for i := range r.Providers {
