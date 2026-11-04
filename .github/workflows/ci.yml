@@ -147,6 +147,9 @@ jobs:
         run: |
           export HOMEBREW_FORCE_LIBC_FORMULA=1 HOMEBREW_FORCE_COMPILER_FORMULA=1
           brew tap-new --no-git ci/aiu
+          # Homebrew 7 loads a formula of a tap it does not trust only after
+          # brew trust; an older one has no such command.
+          if brew trust --help >/dev/null 2>&1; then brew trust --tap ci/aiu; fi
           f="$(brew --repo ci/aiu)/Formula/ai-usage.rb"
           sh .github/scripts/formula.sh v9.9.9 "$RUNNER_TEMP/dist/checksums.txt" "file://$RUNNER_TEMP/dist" >"$f"
           cat "$f"
