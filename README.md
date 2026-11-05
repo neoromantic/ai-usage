@@ -8,6 +8,7 @@
 <a href="https://github.com/neoromantic/ai-usage/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/neoromantic/ai-usage/actions/workflows/ci.yml/badge.svg"></a>
 <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/neoromantic/ai-usage?color=87d75f"></a>
 <a href="https://t.me/usualguy"><img alt="Telegram: @usualguy" src="https://img.shields.io/badge/Telegram-@usualguy-26A5E4?logo=telegram&logoColor=white"></a>
+<a href="https://www.sergeybaus.com/usage/ai-usage"><img alt="Usage stats" src="https://img.shields.io/badge/usage-stats-595b54"></a>
 
 <p>
 <a href="https://au.sergeybaus.com"><b>Website</b></a> ·
@@ -914,3 +915,5 @@ How releases are built and published: [docs/releasing.md](docs/releasing.md).
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+Made by [Sergey Baus](https://www.sergeybaus.com).
