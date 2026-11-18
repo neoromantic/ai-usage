@@ -241,11 +241,16 @@ describe("phases", () => {
 describe("jobs", () => {
   test("one job a machine, joined by a request for the same one", async () => {
     const events: string[] = [];
+    const ended = new Map<string, () => void>();
+    const end = (id: string) => new Promise<void>((resolve) => ended.set(id, resolve));
     const jobs = new Jobs({
-      changed: (j) => events.push(`${j.kind}:${j.status}`),
+      changed: (j) => {
+        events.push(`${j.kind}:${j.status}`);
+        if (j.status !== "running") ended.get(j.id)?.();
+      },
       line: (_j, l) => events.push(l),
     });
-    let finish = (_: string) => {};
+    let finish: (message: string) => void = () => {};
     const a = jobs.start("h", "collect", (_job, log) => {
       log("reading");
       return new Promise<string>((done) => (finish = done));
@@ -253,15 +258,16 @@ describe("jobs", () => {
     expect(jobs.start("h", "collect", async () => "x").id).toBe(a.id);
     expect(() => jobs.start("h", "update", async () => "x")).toThrow(BusyError);
     expect(jobs.start("other", "update", async () => "x").hostId).toBe("other");
+    const collected = end(a.id);
     finish("collected");
-    await Bun.sleep(0);
+    await collected;
     expect(jobs.get(a.id)?.status).toBe("done");
     expect(jobs.get(a.id)?.message).toBe("collected");
     expect(jobs.get(a.id)?.log).toEqual(["reading"]);
     const b = jobs.start("h", "update", async () => {
       throw new Error("no network");
     });
-    await Bun.sleep(0);
+    await end(b.id);
     expect(jobs.latest("h")?.id).toBe(b.id);
     expect(jobs.get(b.id)?.status).toBe("failed");
     expect(jobs.get(b.id)?.message).toBe("no network");
