@@ -28,11 +28,11 @@ import {
 
 const DEMO_ZONE = "Europe/Berlin";
 
-function machine(view: HostView): string {
+function machine(view: HostView) {
   return view.hostName ?? "this machine";
 }
 
-function message(cause: unknown): string {
+function message(cause: unknown) {
   return cause instanceof Error ? cause.message : String(cause);
 }
 

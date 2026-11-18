@@ -31,7 +31,7 @@ export const COMPACT_SHEET_CONTENT_STYLE: React.CSSProperties = {
 const DRAWER_KEYBOARD_INSET_PROPERTY = "--bb-drawer-keyboard-inset";
 const DRAWER_KEYBOARD_MIN_OVERLAP_PX = 80;
 
-function resetDrawerKeyboardStyles(drawerElement: HTMLElement | null): void {
+function resetDrawerKeyboardStyles(drawerElement: HTMLElement | null) {
   if (drawerElement === null) return;
 
   drawerElement.style.height = "";
@@ -47,17 +47,14 @@ export function measureDrawerKeyboardOverlap({
   layoutViewportHeight: number;
   visualViewportHeight: number;
   visualViewportOffsetTop: number;
-}): number {
+}) {
   const overlap = Math.round(
     layoutViewportHeight - (visualViewportHeight + visualViewportOffsetTop),
   );
   return overlap >= DRAWER_KEYBOARD_MIN_OVERLAP_PX ? overlap : 0;
 }
 
-function useDrawerKeyboardInset(
-  panelRef: React.RefObject<HTMLElement | null>,
-  open: boolean,
-): void {
+function useDrawerKeyboardInset(panelRef: React.RefObject<HTMLElement | null>, open: boolean) {
   React.useEffect(() => {
     const panel = panelRef.current;
     const visualViewport = window.visualViewport;
@@ -119,7 +116,7 @@ export function useResponsiveRoot(
   controlledOpen: boolean | undefined,
   controlledOnChange: ((open: boolean) => void) | undefined,
   defaultOpen: boolean = false,
-): ResponsiveOverlayContextValue {
+) {
   const { presentation } = useResponsiveOverlayBehavior();
   const isCompactViewport = presentation === "drawer";
   const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
@@ -229,9 +226,7 @@ type RadixContentPropName = (typeof RADIX_CONTENT_PROP_NAMES)[number];
 
 const RADIX_CONTENT_KEYS: ReadonlySet<string> = new Set(RADIX_CONTENT_PROP_NAMES);
 
-export function stripRadixContentProps<T extends Record<string, unknown>>(
-  props: T,
-): Omit<T, RadixContentPropName> {
+export function stripRadixContentProps<T extends Record<string, unknown>>(props: T) {
   const result = {} as Record<string, unknown>;
   for (const key of Object.keys(props)) {
     if (!RADIX_CONTENT_KEYS.has(key)) {
@@ -270,7 +265,7 @@ export function useResponsiveDrawerRealization({
 }: {
   open: boolean;
   enabled?: boolean;
-}): { isContentRealized: boolean; realizeContent: () => void } {
+}) {
   const [isContentRealized, setIsContentRealized] = React.useState(false);
   const realizeContent = React.useCallback(() => setIsContentRealized(true), []);
 
@@ -401,26 +396,23 @@ function isPersistentDrawerStack(value: unknown): value is PersistentDrawerStack
   );
 }
 
-function readPersistentDrawerStack(ownerDocument: Document): PersistentDrawerStack | undefined {
+function readPersistentDrawerStack(ownerDocument: Document) {
   const stack: unknown = Reflect.get(ownerDocument, PERSISTENT_DRAWER_STACK_KEY);
   return isPersistentDrawerStack(stack) ? stack : undefined;
 }
 
-function getDrawerFocusableElements(panel: HTMLElement): HTMLElement[] {
+function getDrawerFocusableElements(panel: HTMLElement) {
   return Array.from(
     panel.querySelectorAll<HTMLElement>(PERSISTENT_DRAWER_FOCUSABLE_SELECTOR),
   ).filter((element) => element.closest('[aria-hidden="true"], [inert]') === null);
 }
 
-function activeElementIsInAnotherOverlay(
-  activeElement: Element | null,
-  panel: HTMLElement,
-): boolean {
+function activeElementIsInAnotherOverlay(activeElement: Element | null, panel: HTMLElement) {
   const overlay = activeElement?.closest<HTMLElement>("[data-bb-portaled-overlay]");
   return overlay !== null && overlay !== undefined && overlay !== panel;
 }
 
-function handleDrawerTab(event: KeyboardEvent, panel: HTMLElement): void {
+function handleDrawerTab(event: KeyboardEvent, panel: HTMLElement) {
   const activeElement = panel.ownerDocument.activeElement;
   if (!panel.contains(activeElement) && activeElementIsInAnotherOverlay(activeElement, panel)) {
     return;
@@ -455,10 +447,7 @@ function handleDrawerTab(event: KeyboardEvent, panel: HTMLElement): void {
   });
 }
 
-function registerOpenDrawer(
-  ownerDocument: Document,
-  entry: PersistentDrawerStackEntry,
-): () => void {
+function registerOpenDrawer(ownerDocument: Document, entry: PersistentDrawerStackEntry) {
   let stack = readPersistentDrawerStack(ownerDocument);
   if (stack === undefined) {
     const entries: PersistentDrawerStackEntry[] = [];
@@ -516,7 +505,7 @@ export function usePersistentOverlayFocus({
   open,
   panelRef,
   requestClose,
-}: UsePersistentOverlayFocusArgs): void {
+}: UsePersistentOverlayFocusArgs) {
   const returnFocusRef = React.useRef<HTMLElement | null>(null);
   const onEscapeKeyDownRef = React.useRef(onEscapeKeyDown);
   React.useLayoutEffect(() => {

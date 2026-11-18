@@ -1,11 +1,11 @@
-function quote(s: string): string {
+function quote(s: string) {
   return `'${s.replaceAll("'", `'\\''`)}'`;
 }
 
 export function inviteMessage(
   key: string,
   relay: { configured: string | null; builtIn: string | null },
-): string {
+) {
   const custom =
     relay.configured !== null && relay.configured !== relay.builtIn ? relay.configured : null;
   const env = [

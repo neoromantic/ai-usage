@@ -23,12 +23,12 @@ export class Jobs {
     private readonly now: () => number = Date.now,
   ) {}
 
-  get(id: string): JobView | null {
+  get(id: string) {
     return this.jobs.get(id) ?? null;
   }
 
   /** The machine's running job, else its newest. */
-  latest(hostId: string): JobView | null {
+  latest(hostId: string) {
     let newest: JobView | null = null;
     for (const job of this.jobs.values()) {
       if (job.hostId !== hostId) continue;
@@ -38,7 +38,7 @@ export class Jobs {
     return newest;
   }
 
-  running(hostId: string): JobView | null {
+  running(hostId: string) {
     for (const job of this.jobs.values())
       if (job.hostId === hostId && job.status === "running") return job;
     return null;
@@ -52,7 +52,7 @@ export class Jobs {
     hostId: string,
     kind: JobKind,
     work: (job: JobView, log: (line: string) => void) => Promise<string>,
-  ): JobView {
+  ) {
     const busy = this.running(hostId);
     if (busy !== null) {
       if (busy.kind === kind) return busy;
@@ -80,7 +80,7 @@ export class Jobs {
     return job;
   }
 
-  append(id: string, line: string): void {
+  append(id: string, line: string) {
     const job = this.jobs.get(id);
     if (job === undefined || job.status !== "running") return;
     job.log.push(line);
@@ -88,7 +88,7 @@ export class Jobs {
     this.events.line(job, line);
   }
 
-  private finish(id: string, status: "done" | "failed", message: string): void {
+  private finish(id: string, status: "done" | "failed", message: string) {
     const job = this.jobs.get(id);
     if (job === undefined) return;
     job.status = status;
@@ -97,7 +97,7 @@ export class Jobs {
     this.events.changed(job);
   }
 
-  private prune(): void {
+  private prune() {
     if (this.jobs.size <= KEEP) return;
     const done = [...this.jobs.values()]
       .filter((j) => j.status !== "running")

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /** The color a report state takes, as the console's: out and over red, tight yellow, ok green. */
-export function stateTone(state: string | null | undefined): string {
+export function stateTone(state: string | null | undefined) {
   switch (state) {
     case "out":
     case "over":

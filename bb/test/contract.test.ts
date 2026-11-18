@@ -38,7 +38,7 @@ const ADDED = new Set([
   "estimated_reason",
   "no_reading",
 ]);
-function strip(v: unknown): unknown {
+const strip: (v: unknown) => unknown = (v) => {
   if (Array.isArray(v)) return v.map(strip);
   if (v === null || typeof v !== "object") return v;
   return Object.fromEntries(
@@ -46,7 +46,7 @@ function strip(v: unknown): unknown {
       .filter(([k]) => !ADDED.has(k))
       .map(([k, x]) => [k, strip(x)]),
   );
-}
+};
 
 describe.each(["team.json", "solo.json", "homebrew.json"])("%s", (name) => {
   const raw = demo(name);

@@ -83,7 +83,7 @@ export function useAiUsage(hostId: string | null = null) {
 export const EXAMPLE = "example";
 export const PANEL_PATH = "usage";
 
-export function useExample(): { show: () => void; leave: () => void } {
+export function useExample() {
   const navigate = useBbNavigate();
   return {
     show: () => navigate.toPluginPanel(PANEL_PATH, { subPath: EXAMPLE }),
@@ -91,7 +91,7 @@ export function useExample(): { show: () => void; leave: () => void } {
   };
 }
 
-export function useDemoReport(on: boolean): Report | null {
+export function useDemoReport(on: boolean) {
   const rpc = useRpc<typeof rpcContract>();
   const [report, setReport] = useState<Report | null>(null);
   useEffect(() => {
@@ -102,7 +102,7 @@ export function useDemoReport(on: boolean): Report | null {
 }
 
 /** "now" that moves on every half minute, for ages and countdowns. */
-export function useNow(): number {
+export function useNow() {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30_000);

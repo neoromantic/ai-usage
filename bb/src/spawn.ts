@@ -21,8 +21,8 @@ export interface SpawnOptions {
 
 const MAX_STDERR = 256 * 1024;
 
-export function run(command: string, args: string[], options: SpawnOptions): Promise<Spawned> {
-  return new Promise((resolve) => {
+export function run(command: string, args: string[], options: SpawnOptions) {
+  return new Promise<Spawned>((resolve) => {
     let child: ReturnType<typeof spawn>;
     try {
       child = spawn(command, args, {

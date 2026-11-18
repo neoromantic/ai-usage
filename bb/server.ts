@@ -5,7 +5,7 @@ import demoTeam from "./demo/team.json" with { type: "json" };
 import { allowed } from "./src/args.js";
 import { hostContract, hostSignals, type Probe, type RunOutput } from "./src/contract.js";
 import { inviteMessage } from "./src/invite.js";
-import { teamSource, type TeamSource } from "./src/team-source.js";
+import { teamSource } from "./src/team-source.js";
 import { BusyError, Jobs } from "./src/jobs.js";
 import {
   autoInstallable,
@@ -94,7 +94,7 @@ export default async function plugin(bb: BbPluginApi) {
     jobs.append(payload.jobId, payload.line),
   );
 
-  const cache = (hostId: string): Cache => {
+  const cache = (hostId: string) => {
     let c = caches.get(hostId);
     if (c === undefined) {
       c = {
@@ -125,16 +125,14 @@ export default async function plugin(bb: BbPluginApi) {
     return hostList;
   }
 
-  async function resolve(
-    hostId: string | null,
-  ): Promise<{ record: HostRecord | null; id: string | null; bbPlatform: string | null }> {
+  async function resolve(hostId: string | null) {
     const h = await hosts();
     const id = hostId ?? h.primaryId;
     const record = h.hosts.find((x) => x.id === id) ?? null;
     return { record, id, bbPlatform: id === h.primaryId ? h.primaryPlatform : null };
   }
 
-  function probeHost(hostId: string, force = false): Promise<Probe | null> {
+  function probeHost(hostId: string, force = false) {
     const c = cache(hostId);
     if (!force && c.probe !== null && Date.now() - c.probedAt < PROBE_TTL)
       return Promise.resolve(c.probe);
@@ -165,7 +163,7 @@ export default async function plugin(bb: BbPluginApi) {
     args: string[],
     timeoutMs: number,
     opts: { stdin?: string; json?: boolean } = {},
-  ): Promise<RunOutput> {
+  ) {
     if (probe.bin === null) throw new Error("ai-usage is not installed on this machine");
     return host.call(
       "run",
@@ -181,7 +179,7 @@ export default async function plugin(bb: BbPluginApi) {
     );
   }
 
-  function take(hostId: string, out: RunOutput): void {
+  function take(hostId: string, out: RunOutput) {
     const c = cache(hostId);
     c.reportCheckedAt = Date.now();
     if (out.code === 0 && out.json !== null) {
@@ -213,7 +211,7 @@ export default async function plugin(bb: BbPluginApi) {
     bb.realtime.publish("changed", { hostId });
   }
 
-  function refresh(hostId: string): Promise<void> {
+  function refresh(hostId: string) {
     const c = cache(hostId);
     if (c.refreshing !== null) return c.refreshing;
     c.refreshing = (async () => {
@@ -234,9 +232,7 @@ export default async function plugin(bb: BbPluginApi) {
     return c.refreshing;
   }
 
-  async function facts(
-    hostId: string | null,
-  ): Promise<{ id: string | null; record: HostRecord | null; f: HostFacts }> {
+  async function facts(hostId: string | null) {
     const { record, id, bbPlatform } = await resolve(hostId);
     const c = id === null ? null : cache(id);
     return {
@@ -252,7 +248,7 @@ export default async function plugin(bb: BbPluginApi) {
     };
   }
 
-  async function view(hostId: string | null): Promise<HostView> {
+  async function view(hostId: string | null) {
     const { id, record, f } = await facts(hostId);
     const p = f.probe;
     const status = p?.status as
@@ -280,7 +276,7 @@ export default async function plugin(bb: BbPluginApi) {
         auto?.outcome === "installed" ||
         auto?.outcome === "failed",
       error: f.report?.error ?? p?.error ?? null,
-    };
+    } satisfies HostView;
   }
 
   function guard(context: ExperimentalPluginRpcHandlerContext) {
@@ -289,7 +285,7 @@ export default async function plugin(bb: BbPluginApi) {
       throw new Error("AI Usage answers its own windows only");
   }
 
-  async function target(hostId: string | null): Promise<{ id: string; probe: Probe }> {
+  async function target(hostId: string | null) {
     const { id, record } = await resolve(hostId);
     if (id === null || record === null) throw new Error("BB has no such machine");
     const probe = await probeHost(id);
@@ -301,7 +297,7 @@ export default async function plugin(bb: BbPluginApi) {
     hostId: string,
     kind: JobKind,
     work: (job: JobView, log: (line: string) => void) => Promise<string>,
-  ): string {
+  ) {
     try {
       return jobs.start(hostId, kind, work).id;
     } catch (error) {
@@ -310,16 +306,12 @@ export default async function plugin(bb: BbPluginApi) {
     }
   }
 
-  function check(out: RunOutput): string {
+  function check(out: RunOutput) {
     if (out.code !== 0) throw new Error(out.message || "ai-usage failed");
     return out.stdout.trim();
   }
 
-  async function collect(
-    hostId: string,
-    probe: Probe,
-    log: (line: string) => void,
-  ): Promise<string> {
+  async function collect(hostId: string, probe: Probe, log: (line: string) => void) {
     log(
       "collecting: reading the tools' logs, asking each tool for its quota, and reading the team",
     );
@@ -334,12 +326,7 @@ export default async function plugin(bb: BbPluginApi) {
     await bb.storage.kv.set(`auto:${hostId}`, { at: Date.now(), outcome } satisfies AutoRecord);
   }
 
-  function install(
-    hostId: string,
-    teamKey: string | null,
-    relay: string | null,
-    auto: boolean,
-  ): string {
+  function install(hostId: string, teamKey: string | null, relay: string | null, auto: boolean) {
     return startJob(hostId, "install", async (job, log) => {
       if (auto) await record(hostId, "installing");
       try {
@@ -363,7 +350,7 @@ export default async function plugin(bb: BbPluginApi) {
     });
   }
 
-  async function sourceTeam(except: string): Promise<TeamSource | null> {
+  async function sourceTeam(except: string) {
     const h = await hosts();
     const connected = new Set(h.hosts.filter((x) => x.status === "connected").map((x) => x.id));
     const order = [...new Set([h.primaryId, ...h.hosts.map((x) => x.id)])].filter(
@@ -388,7 +375,7 @@ export default async function plugin(bb: BbPluginApi) {
     });
   }
 
-  async function autoInstall(signal: AbortSignal): Promise<boolean> {
+  async function autoInstall(signal: AbortSignal) {
     const h = await hosts(true);
     if (h.primaryId === null) return false;
     const id = h.primaryId;

@@ -28,7 +28,7 @@ esac
   chmodSync(file, 0o755);
 }
 
-function machine(over: Partial<Machine> = {}): Machine {
+function machine(over: Partial<Machine> = {}) {
   return {
     env: { PATH: `${path.join(home, "fakebin")}:/usr/bin:/bin`, HOME: home },
     home,
@@ -40,7 +40,7 @@ function machine(over: Partial<Machine> = {}): Machine {
     tempDir: path.join(home, "tmp"),
     fetch,
     ...over,
-  };
+  } satisfies Machine;
 }
 
 beforeAll(() => {

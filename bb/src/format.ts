@@ -14,21 +14,21 @@ import type {
 export const NONE = "–";
 
 /** Tokens in whole millions: 603, "<1" under a million, the none mark for none. */
-export function millions(n: number): string {
+export function millions(n: number) {
   if (n <= 0) return NONE;
   if (n < 1_000_000) return "<1";
   return String(Math.round(n / 1e6));
 }
 
 /** Tokens in millions with their unit: "167M", "1,975M", "<1M". */
-export function tokensM(n: number): string {
+export function tokensM(n: number) {
   if (n <= 0) return NONE;
   if (n < 1_000_000) return "<1M";
   return `${Math.round(n / 1e6).toLocaleString("en-US")}M`;
 }
 
 /** A share in whole percents: "<1" under one, ">99" short of all of it. */
-export function share(v: number | null | undefined): string {
+export function share(v: number | null | undefined) {
   if (v === null || v === undefined || v <= 0) return NONE;
   if (v < 1) return "<1";
   if (v > 99 && v < 100) return ">99";
@@ -36,7 +36,7 @@ export function share(v: number | null | undefined): string {
 }
 
 /** A duration in at most two units: 34m, 7h 5m, 1d 23h, 12d. */
-export function duration(seconds: number): string {
+export function duration(seconds: number) {
   if (seconds < 60) return "<1m";
   const m = Math.floor(seconds / 60);
   const [days, hours, mins] = [Math.floor(m / 1440), Math.floor(m / 60) % 24, m % 60];
@@ -46,7 +46,7 @@ export function duration(seconds: number): string {
 }
 
 /** How long ago: "just now", "7m ago". */
-export function ago(at: string | null | undefined, now: number): string | null {
+export function ago(at: string | null | undefined, now: number) {
   if (at === null || at === undefined || at === "") return null;
   const d = (now - Date.parse(at)) / 1000;
   if (!Number.isFinite(d)) return null;
@@ -54,7 +54,7 @@ export function ago(at: string | null | undefined, now: number): string | null {
 }
 
 /** A time within six days as a weekday and a 24-hour clock, "Sun 01:00"; else "2 Oct 15:04". */
-export function clock(at: string, now: number, timeZone?: string): string {
+export function clock(at: string, now: number, timeZone?: string) {
   const t = Date.parse(at);
   const near = Math.abs(t - now) < 6 * 86400_000;
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -72,50 +72,50 @@ export function clock(at: string, now: number, timeZone?: string): string {
 }
 
 /** "Claude", "Codex". */
-export function provider(id: string): string {
+export function provider(id: string) {
   return id.slice(0, 1).toUpperCase() + id.slice(1);
 }
 
 /** "Max", "SuperGrok". */
-export function plan(p: string): string {
+export function plan(p: string) {
   return p.slice(0, 1).toUpperCase() + p.slice(1);
 }
 
-export function usd(v: number): string {
+export function usd(v: number) {
   return `$${Math.round(v).toLocaleString("en-US")}`;
 }
 
 /** Weighted tokens where the report sent them, else input plus output. */
-export function shown(x: { burn: Usage | null; usage: Usage }): Usage {
+export function shown(x: { burn: Usage | null; usage: Usage }) {
   return x.burn ?? x.usage;
 }
-export function shownShare(x: { burn_share: Share | null; share: Share }): Share {
+export function shownShare(x: { burn_share: Share | null; share: Share }) {
   return x.burn_share ?? x.share;
 }
 
 /** The words for the tokens the lists show, from the first matrix row, as the app's tokenLabel. */
-export function tokenLabel(r: Report): string {
+export function tokenLabel(r: Report) {
   const first = r.team.matrix.rows[0];
   return first === undefined || first.burn !== null ? "weighted tokens" : "tokens in+out";
 }
 
 /** How full the window is now is known: it has not reset since it was read, and the reading covers it. */
-export function known(w: Window): boolean {
+export function known(w: Window) {
   return !w.reset && w.unread !== true;
 }
 
-export function percentLeft(w: Window): number {
+export function percentLeft(w: Window) {
   return Math.max(100 - Math.floor(w.percent), 0);
 }
 
 /** What is left of a window: "42%", "~42%" for a stale reading, "?" when not known. */
-export function left(w: Window | undefined): string {
+export function left(w: Window | undefined) {
   if (w === undefined || !known(w)) return "?";
   return `${w.stale ? "~" : ""}${percentLeft(w)}%`;
 }
 
 /** A window's name beside the main one: "7d Fable" is "Fable" when the main window is "7d". */
-export function shortName(a: TeamAccount, name: string): string {
+export function shortName(a: TeamAccount, name: string) {
   const main = a.quota?.windows.find((w) => w.main)?.name;
   return main !== undefined && name.startsWith(`${main} `) ? name.slice(main.length + 1) : name;
 }
@@ -125,7 +125,7 @@ export function shortName(a: TeamAccount, name: string): string {
  * main one, or the one that limits it when the main one has no reading, then
  * the others the report marks with `limits`, the one with the least left first.
  */
-export function limitingWindows(a: TeamAccount): Window[] {
+export function limitingWindows(a: TeamAccount) {
   const windows = a.quota?.windows ?? [];
   const main = windows.find((w) => w.main);
   let tightest: Window | undefined;
@@ -148,14 +148,14 @@ export function limitingWindows(a: TeamAccount): Window[] {
 }
 
 /** The pace a window's forecast takes, as the report names it. */
-export function pace(w: Window): string {
+export function pace(w: Window) {
   const length = w.minutes !== null && w.minutes > 0 ? w.minutes : windowMinutes(w.name);
   if (w.forecast?.basis === "recent")
     return (length ?? 10080) < 1440 ? "the recent pace" : "the last day's pace";
   return (length ?? 10080) === 10080 ? "this week's pace" : "this window's pace";
 }
 
-function windowMinutes(name: string): number | null {
+function windowMinutes(name: string) {
   const m = /^(\d+)([mhd])$/.exec(name);
   if (m === null) return null;
   const n = Number(m[1]);
@@ -163,7 +163,7 @@ function windowMinutes(name: string): number | null {
 }
 
 /** "113% at reset · this week's pace"; "would reach 108% at reset" for a stopped forecast. */
-export function forecastLine(w: Window): string | null {
+export function forecastLine(w: Window) {
   const f = w.forecast;
   if (f === null) return null;
   return `${f.stopped ? "would reach " : ""}${Math.round(f.percent)}% at reset · ${pace(w)}`;
@@ -174,25 +174,25 @@ export function forecastLine(w: Window): string | null {
  * An entry from an ai-usage that does not word its entries is about its
  * devices, and says its message.
  */
-export function attentionWords(a: Attention): { subject: string; text: string } {
+export function attentionWords(a: Attention) {
   const subject = a.subject !== "" ? a.subject : (a.devices ?? []).join(", ");
   return { subject, text: a.text !== "" ? a.text : (a.message ?? "") };
 }
 
 /** The tone of an attention entry's mark: out and over red, the warnings yellow, the rest quiet. */
-export function attentionTone(kind: string): "out" | "tight" | "quiet" {
+export function attentionTone(kind: string) {
   if (kind === "out" || kind === "over") return "out";
   if (["tight", "outside", "error", "no_reading", "silent", "check"].includes(kind)) return "tight";
   return "quiet";
 }
 
 /** A step of the heat map from 1 to 5 against the largest cell, as the console shades it; 0 for none. */
-export function heatStep(v: number, top: number): number {
+export function heatStep(v: number, top: number) {
   if (v <= 0 || top <= 0) return 0;
   return Math.min(Math.max(5 - Math.floor(Math.log10(top / v) * 2), 1), 5);
 }
 
-function estimated(text: string, on: boolean): string {
+function estimated(text: string, on: boolean) {
   return on && text !== NONE ? `~${text}` : text;
 }
 
@@ -231,6 +231,6 @@ export function matrixView(r: Report, p: "today" | "7d" | "30d" | "90d") {
 }
 
 /** The device the report calls this one, as its rows do: by name, or by label before v0.9.0. */
-export function deviceName(d: TeamDevice): string {
+export function deviceName(d: TeamDevice) {
   return d.name !== "" ? d.name : d.label;
 }

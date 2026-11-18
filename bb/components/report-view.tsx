@@ -80,7 +80,7 @@ function AttentionList({ report }: ReportProps) {
   );
 }
 
-function accountTitle(p: string, a: TeamAccount): string {
+function accountTitle(p: string, a: TeamAccount) {
   return `${provider(p)} ${a.alias ?? a.name}`;
 }
 

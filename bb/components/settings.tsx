@@ -15,7 +15,7 @@ import type { HostView, JobView, Phase, rpcContract } from "../src/rpc";
 import { Banner, Spinner } from "./bits";
 import { useAiUsage, useExample } from "./use-ai-usage";
 
-function message(cause: unknown): string {
+function message(cause: unknown) {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
@@ -42,7 +42,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function macosMajor(v: string | null): number {
+function macosMajor(v: string | null) {
   return Number((v ?? "0").split(".")[0]);
 }
 

@@ -5,7 +5,7 @@ export type Env = Record<string, string>;
 type Sanitize = (args: { env: NodeJS.ProcessEnv }) => NodeJS.ProcessEnv;
 
 /** The folders the installer and package managers put ai-usage in. */
-export function standardDirs(home: string): string[] {
+export function standardDirs(home: string) {
   return [
     path.join(home, ".local/bin"),
     path.join(home, "bin"),
@@ -16,7 +16,7 @@ export function standardDirs(home: string): string[] {
 }
 
 /** A PATH entry that is BB's own: the folder of BB's CLI, or its host daemon's. */
-export function isBbDir(dir: string, bbCli: string | undefined): boolean {
+export function isBbDir(dir: string, bbCli: string | undefined) {
   if (bbCli !== undefined && bbCli !== "" && dir === path.dirname(bbCli)) return true;
   return dir.replaceAll("\\", "/").includes("bb-app/host-daemon");
 }
@@ -26,7 +26,7 @@ export function isBbDir(dir: string, bbCli: string | undefined): boolean {
  * PATH. Pool variables stay: ai-usage drops them from its quota probes
  * itself and reads them to mark the device as pooled.
  */
-export function cleanEnv(env: NodeJS.ProcessEnv, sanitize: Sanitize): Env {
+export function cleanEnv(env: NodeJS.ProcessEnv, sanitize: Sanitize) {
   const bbCli = env.BB_CLI;
   const out: Env = {};
   for (const [key, value] of Object.entries(sanitize({ env }))) {
@@ -46,7 +46,7 @@ export function cleanEnv(env: NodeJS.ProcessEnv, sanitize: Sanitize): Env {
 }
 
 /** Where to look for ai-usage, in order: PATH, then the standard folders. */
-export function candidates(env: Env, dirs: string[], exe = "ai-usage"): string[] {
+export function candidates(env: Env, dirs: string[], exe = "ai-usage") {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const dir of [...(env.PATH ?? "").split(path.delimiter), ...dirs]) {

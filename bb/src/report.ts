@@ -223,23 +223,21 @@ export class SchemaError extends Error {
 }
 
 type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj =>
+const obj = (v: unknown) =>
   v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : {};
-const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
-const str = (v: unknown, absent = ""): string => (typeof v === "string" ? v : absent);
-const ostr = (v: unknown): string | null => (typeof v === "string" ? v : null);
-const num = (v: unknown, absent = 0): number =>
-  typeof v === "number" && Number.isFinite(v) ? v : absent;
-const onum = (v: unknown): number | null =>
-  typeof v === "number" && Number.isFinite(v) ? v : null;
-const bool = (v: unknown): boolean => v === true;
+const arr: (v: unknown) => unknown[] = (v) => (Array.isArray(v) ? v : []);
+const str = (v: unknown, absent = "") => (typeof v === "string" ? v : absent);
+const ostr = (v: unknown) => (typeof v === "string" ? v : null);
+const num = (v: unknown, absent = 0) => (typeof v === "number" && Number.isFinite(v) ? v : absent);
+const onum = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+const bool = (v: unknown) => v === true;
 
-function usage(v: unknown): Usage {
+function usage(v: unknown) {
   const o = obj(v);
   return { today: num(o.today), "7d": num(o["7d"]), "30d": num(o["30d"]), "90d": num(o["90d"]) };
 }
-const ousage = (v: unknown): Usage | null => (v === null || v === undefined ? null : usage(v));
-function share(v: unknown): Share {
+const ousage = (v: unknown) => (v === null || v === undefined ? null : usage(v));
+function share(v: unknown) {
   const o = obj(v);
   return {
     today: onum(o.today),
@@ -248,9 +246,9 @@ function share(v: unknown): Share {
     "90d": onum(o["90d"]),
   };
 }
-const oshare = (v: unknown): Share | null => (v === null || v === undefined ? null : share(v));
+const oshare = (v: unknown) => (v === null || v === undefined ? null : share(v));
 
-function window(v: unknown): Window {
+function window(v: unknown) {
   const o = obj(v);
   const f = o.forecast === null || o.forecast === undefined ? null : obj(o.forecast);
   return {
@@ -282,7 +280,7 @@ function window(v: unknown): Window {
  * Reads a report, or throws a SchemaError when its schema is not the one
  * this plugin reads, as the app refuses one.
  */
-export function readReport(raw: unknown): Report {
+export function readReport(raw: unknown) {
   const r = obj(raw);
   if (r.schema_version !== SCHEMA_VERSION) throw new SchemaError(r.schema_version);
   const c = obj(r.collector);
@@ -504,5 +502,5 @@ export function readReport(raw: unknown): Report {
               };
             }),
           },
-  };
+  } satisfies Report;
 }

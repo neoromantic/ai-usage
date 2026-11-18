@@ -19,7 +19,7 @@ export class NoTeamError extends Error {}
  * runs ai-usage, so the install starts a team of its own. A machine that
  * runs ai-usage but gives no key is an error, never a new team in silence.
  */
-export async function teamSource(order: string[], m: SourceMachine): Promise<TeamSource | null> {
+export async function teamSource(order: string[], m: SourceMachine) {
   let found = false;
   let why = "";
   for (const id of order) {
@@ -40,7 +40,7 @@ export async function teamSource(order: string[], m: SourceMachine): Promise<Tea
         key,
         relay:
           relay.configured !== null && relay.configured !== relay.builtIn ? relay.configured : null,
-      };
+      } satisfies TeamSource;
     } catch (error) {
       why = error instanceof Error ? error.message : String(error);
     }

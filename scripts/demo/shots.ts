@@ -224,7 +224,7 @@ const palette = {
   },
 };
 
-function xterm256(n: number, theme: Theme): string {
+function xterm256(n: number, theme: Theme) {
   if (n < 16) return palette[theme].ansi[n];
   if (n >= 232) {
     const v = 8 + (n - 232) * 10;
@@ -248,7 +248,7 @@ type Style = {
   reverse?: boolean;
 };
 
-function sgr(codes: number[], s: Style, theme: Theme): Style {
+function sgr(codes: number[], s: Style, theme: Theme) {
   s = { ...s };
   if (codes.length === 0) codes = [0];
   for (let i = 0; i < codes.length; i++) {
@@ -287,7 +287,7 @@ function sgr(codes: number[], s: Style, theme: Theme): Style {
 
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-function html(text: string, theme: Theme): string {
+function html(text: string, theme: Theme) {
   const p = palette[theme];
   text = text
     .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, "")
@@ -323,7 +323,7 @@ function html(text: string, theme: Theme): string {
   return lines.map((l) => `<div class="l">${l}</div>`).join("");
 }
 
-function page(body: string, cols: number, theme: Theme, title: string): string {
+function page(body: string, cols: number, theme: Theme, title: string) {
   const p = palette[theme];
   return `<!doctype html><meta charset="utf-8">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -349,13 +349,7 @@ const tmux = (...args: string[]) =>
   $`tmux -L ${tmuxSocket} -f /dev/null ${args}`.env(env).quiet().nothrow();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function view(
-  from: string,
-  cols: number,
-  rows: number,
-  theme: Theme,
-  keys: string[],
-): Promise<string> {
+async function view(from: string, cols: number, rows: number, theme: Theme, keys: string[]) {
   await tmux("kill-server");
   const fgbg = theme === "dark" ? "15;0" : "0;15";
   const cmd = `${bin} report --from ${join(out, from)}; sleep 600`;
@@ -389,7 +383,7 @@ async function view(
   return screen;
 }
 
-async function printed(s: Shot, theme: Theme): Promise<string> {
+async function printed(s: Shot, theme: Theme) {
   const fgbg = theme === "dark" ? "15;0" : "0;15";
   const e = { ...env, COLORFGBG: fgbg, AI_USAGE: bin };
   let text: string;
@@ -409,7 +403,7 @@ async function printed(s: Shot, theme: Theme): Promise<string> {
   return s.cut ? cutText(text, s.cut) : text;
 }
 
-function cutText(text: string, cut: [string, string]): string {
+function cutText(text: string, cut: [string, string]) {
   const lines = text.split("\n");
   const plain = lines.map((l) => l.replace(/\x1b\[[0-9;]*m/g, ""));
   const first = plain.findIndex((l) => l.startsWith(cut[0]));

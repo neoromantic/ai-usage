@@ -1,5 +1,5 @@
 import type { Probe } from "./contract.js";
-import type { JobView, Phase } from "./rpc.js";
+import type { JobView } from "./rpc.js";
 
 export interface HostFacts {
   /** BB's record of the machine; null when BB has no such machine. */
@@ -18,12 +18,12 @@ export interface HostFacts {
 
 export const NOTHING_COLLECTED = "nothing collected yet";
 
-function collected(probe: Probe): boolean | null {
+function collected(probe: Probe) {
   const install = (probe.status as { install?: { collected?: unknown } } | null)?.install;
   return typeof install?.collected === "boolean" ? install.collected : null;
 }
 
-export function phaseOf(f: HostFacts): Phase {
+export function phaseOf(f: HostFacts) {
   if (f.host === null) return "no-host";
   if (f.job?.kind === "install" && f.job.status === "running") return "installing";
   if (f.host.status === "disconnected") return "offline";
@@ -44,7 +44,7 @@ export function phaseOf(f: HostFacts): Phase {
  * person, not root, with no ai-usage and no schedule of one, that has not
  * been set up from this plugin before.
  */
-export function autoInstallable(f: HostFacts, recorded: boolean): boolean {
+export function autoInstallable(f: HostFacts, recorded: boolean) {
   const p = f.probe;
   return (
     !recorded &&
@@ -65,7 +65,7 @@ export function autoInstallable(f: HostFacts, recorded: boolean): boolean {
  * Why ai-usage must not be installed on a machine now, or null when it may:
  * a second copy would take turns with the first in the scheduler.
  */
-export function installRefusal(p: Probe): string | null {
+export function installRefusal(p: Probe) {
   if (p.bin !== null) return "ai-usage is already installed on this machine";
   if (p.scheduleEntry) {
     return "The scheduler on this machine already runs an ai-usage this plugin cannot find. Put that copy on PATH or in ~/.local/bin, or remove its schedule (ai-usage uninstall), then try again.";

@@ -7,7 +7,7 @@ import { hostContract, hostSignals } from "./src/contract.js";
 import { cleanEnv, standardDirs } from "./src/env.js";
 import { install, probe, relays, runCommand, type Machine } from "./src/host-impl.js";
 
-function machine(tempDir: string): Machine {
+function machine(tempDir: string) {
   const info = os.userInfo();
   return {
     env: cleanEnv(process.env, experimental_sanitizeInheritedChildProcessEnv),
@@ -19,7 +19,7 @@ function machine(tempDir: string): Machine {
     user: info.username,
     tempDir,
     fetch,
-  };
+  } satisfies Machine;
 }
 
 export default experimental_defineHostEntry({

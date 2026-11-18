@@ -127,31 +127,33 @@ describe("messages", () => {
   });
 });
 
-const probe = (over: Partial<Probe> = {}): Probe => ({
-  platform: "darwin",
-  arch: "arm64",
-  uid: 501,
-  user: "ann",
-  macos: "15.1",
-  bin: "/opt/homebrew/bin/ai-usage",
-  aiHome: null,
-  version: "v0.11.0",
-  status: null,
-  canUninstall: true,
-  scheduleEntry: false,
-  app: false,
-  error: null,
-  ...over,
-});
+const probe = (over: Partial<Probe> = {}) =>
+  ({
+    platform: "darwin",
+    arch: "arm64",
+    uid: 501,
+    user: "ann",
+    macos: "15.1",
+    bin: "/opt/homebrew/bin/ai-usage",
+    aiHome: null,
+    version: "v0.11.0",
+    status: null,
+    canUninstall: true,
+    scheduleEntry: false,
+    app: false,
+    error: null,
+    ...over,
+  }) satisfies Probe;
 
-const facts = (over: Partial<HostFacts> = {}): HostFacts => ({
-  host: { status: "connected", type: "persistent" },
-  bbPlatform: "darwin",
-  probe: probe(),
-  job: null,
-  report: { ok: true, schemaMismatch: false, nothingCollected: false, error: null },
-  ...over,
-});
+const facts = (over: Partial<HostFacts> = {}) =>
+  ({
+    host: { status: "connected", type: "persistent" },
+    bbPlatform: "darwin",
+    probe: probe(),
+    job: null,
+    report: { ok: true, schemaMismatch: false, nothingCollected: false, error: null },
+    ...over,
+  }) satisfies HostFacts;
 
 describe("phases", () => {
   const job = (status: "running" | "failed") => ({
@@ -283,18 +285,19 @@ describe("the team an install from Settings joins", () => {
       string,
       { bin: boolean; collected?: boolean; key?: string; relay?: string | null; fails?: boolean }
     >,
-  ): SourceMachine => ({
-    hasAiUsage: async (id) => m[id]?.bin === true,
-    collected: async (id) => m[id]?.collected === true,
-    key: async (id) => {
-      if (m[id]?.fails) throw new Error("did not answer");
-      return `${m[id]?.key ?? ""}\n`;
-    },
-    relay: async (id) => ({
-      configured: m[id]?.relay ?? "https://built-in.example",
-      builtIn: "https://built-in.example",
-    }),
-  });
+  ) =>
+    ({
+      hasAiUsage: async (id) => m[id]?.bin === true,
+      collected: async (id) => m[id]?.collected === true,
+      key: async (id) => {
+        if (m[id]?.fails) throw new Error("did not answer");
+        return `${m[id]?.key ?? ""}\n`;
+      },
+      relay: async (id) => ({
+        configured: m[id]?.relay ?? "https://built-in.example",
+        builtIn: "https://built-in.example",
+      }),
+    }) satisfies SourceMachine;
 
   test("no machine runs ai-usage: a team of its own", async () => {
     expect(await teamSource(["a", "b"], machines({ a: { bin: false } }))).toBeNull();

@@ -2,7 +2,7 @@ const COST_TARGET = /^(claude|codex|grok):[^\s]{1,320}$/;
 const DAY = /^(\d{4}-\d{2}-\d{2}|\d{1,2})$/;
 const PRICE = /^\d{1,6}(\.\d{1,2})?$/;
 
-function costSet(rest: string[]): boolean {
+function costSet(rest: string[]) {
   let i = 0;
   while (i < rest.length) {
     const flag = rest[i];
@@ -19,7 +19,7 @@ function costSet(rest: string[]): boolean {
   return rest.length > 0;
 }
 
-export function allowed(args: readonly string[]): boolean {
+export function allowed(args: readonly string[]) {
   const [a, b, c, ...rest] = args;
   const exact = (...want: string[]) =>
     args.length === want.length && want.every((w, i) => args[i] === w);
