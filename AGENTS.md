@@ -145,7 +145,7 @@ sh macos/build.sh v9.9.9-local /tmp/ai-usage-app.zip
 
 After a change to a shell script, CI runs `sh -n` and `shellcheck -s sh` on it.
 
-After a change in `bb/` or to `scripts/demo/*.ts`, run `bun run format` and then `bun run check` in `bb/`. oxfmt formats that TypeScript and every other file of `bb/` it knows, and oxlint lints the TypeScript with devkit's shared rules, the landmines rules among them, which need Node 22.18 or later; this repo's exceptions to them go in `bb/.oxlintrc.json`. oxfmt formats nothing outside `bb/` and `scripts/demo/*.ts`: the Go code keeps gofmt, and the docs keep their own layout.
+After a change in `bb/` or to `scripts/demo/*.ts`, run `bun run format` and then `bun run check` in `bb/`. oxfmt formats that TypeScript and every other file of `bb/` it knows, and oxlint lints the TypeScript with devkit's shared rules, the landmines rules among them, which need Node 22.18 or later; this repo's exceptions to them go in `bb/.oxlintrc.json`. Knip runs last and fails on a file of `bb/` that no entry reaches, a package in `bb/package.json` that nothing uses, and a package imported but not declared there; its entries, in `bb/knip.json`, are the plugin's `server`, `app` and `host`, and it finds the scripts and tests by itself. oxfmt formats nothing outside `bb/` and `scripts/demo/*.ts`: the Go code keeps gofmt, and the docs keep their own layout.
 
 After a change to a workflow, CI's hygiene job runs actionlint and zizmor on it; run `actionlint` and `uvx zizmor@1.31.1 --offline .` first. Pin each action to a full commit with its version in a comment, as in `actions/checkout@<sha> # v7.0.1`, and give a checkout `persist-credentials: false`.
 

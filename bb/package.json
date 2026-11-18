@@ -44,7 +44,8 @@
     "format": "oxfmt . \"$(cd ../scripts/demo && pwd)\"/*.ts",
     "format:check": "oxfmt --check . \"$(cd ../scripts/demo && pwd)\"/*.ts",
     "lint": "oxlint --deny-warnings . \"$(cd ../scripts/demo && pwd)\"/*.ts",
-    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test && bun run build"
+    "check:knip": "knip",
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test && bun run build && bun run check:knip"
   },
   "dependencies": {
     "@get-bb/plugin-sdk": "0.6.49",
@@ -63,6 +64,7 @@
     "bb-app": "0.46.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "knip": "6.45.1",
     "msw": "2.15.0",
     "oxfmt": "0.79.0",
     "oxlint": "1.94.0",

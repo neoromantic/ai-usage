@@ -206,10 +206,11 @@ jobs:
           brew untap ci/aiu
 
   # The BB plugin in bb/: oxfmt and oxlint on it and on scripts/demo's
-  # TypeScript, its types, its tests, which read docs/demo, and its build
-  # with BB's own bb plugin build, from the bb-app package. It runs when bb/,
-  # the report's JSON, the demo, or scripts/demo's TypeScript changes, and on
-  # main. oxlint's landmines rules need Node 22.18 or later.
+  # TypeScript, its types, its tests, which read docs/demo, its build with
+  # BB's own bb plugin build, from the bb-app package, and Knip, with
+  # bb/knip.json. It runs when bb/, the report's JSON, the demo, or
+  # scripts/demo's TypeScript changes, and on main. oxlint's landmines rules
+  # need Node 22.18 or later.
   plugin:
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
