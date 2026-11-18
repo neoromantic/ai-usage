@@ -134,6 +134,7 @@ func TestStatusTitle(t *testing.T) {
 // periods but the chosen one and 90d, in that order; a wider one never shows
 // less; and no line is wider than the page before it is cut.
 func TestStatusColumns(t *testing.T) {
+	t.Parallel()
 	r := loadReport(t, "team")
 	for _, c := range []struct {
 		width int

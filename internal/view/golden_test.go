@@ -182,6 +182,7 @@ var sgr = regexp.MustCompile(`\x1b\[[0-9;:]*m`)
 // each tier and checks the line contract: nothing wider than T-1, no
 // trailing spaces, only ASCII in ASCII mode, and no color without color.
 func TestWidths(t *testing.T) {
+	t.Parallel()
 	reports := map[string]Report{"team": loadReport(t, "team"), "single": loadReport(t, "single")}
 	for name, r := range reports {
 		for _, w := range []int{80, 81, 99, 100, 119, 120, 159, 160} {
@@ -257,6 +258,7 @@ func checkLines(t *testing.T, name string, o Options, out string) {
 // width, in both views of DEVICES, both modes of the matrix, and every
 // period.
 func TestPageFits(t *testing.T) {
+	t.Parallel()
 	reports := map[string]Report{"team": loadReport(t, "team"), "single": loadReport(t, "single")}
 	for name, r := range reports {
 		for w := 80; w <= 160; w++ {
