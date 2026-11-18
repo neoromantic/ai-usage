@@ -1,8 +1,3 @@
-// The report `ai-usage report --json` prints, schema version 4, as
-// docs/json-schema.md describes it and the menu bar app reads it
-// (macos/Sources/AIUsageKit/Report.swift). Only the fields the plugin shows
-// are typed here. A field an earlier release leaves out reads as the app
-// reads it: empty, false, 0, or null.
 import { SCHEMA_VERSION } from "./version.js";
 
 export type Period = "today" | "7d" | "30d" | "90d";

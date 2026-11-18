@@ -1,6 +1,4 @@
-// The environment every ai-usage run from BB gets. A launch agent or a
-// crontab line keeps the PATH of the run that registered it, for good, so
-// no run may carry BB's own folders: they would outlive BB in the schedule.
+// WARNING: a schedule keeps the PATH of the run that registers it: keep BB's folders off PATH.
 import path from "node:path";
 
 export type Env = Record<string, string>;

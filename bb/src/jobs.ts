@@ -1,6 +1,3 @@
-// Long operations run as jobs on the server: an RPC starts one and returns
-// its id at once, and windows follow it over realtime. One job runs on a
-// machine at a time, since each of them writes its ai-usage state.
 import { randomUUID } from "node:crypto";
 import type { JobKind, JobView } from "./rpc.js";
 

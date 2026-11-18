@@ -1,5 +1,3 @@
-// The host entry on a made-up machine: a temporary home with fake ai-usage
-// binaries that write down how they were called.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -49,7 +47,6 @@ beforeAll(() => {
   home = mkdtempSync(path.join(os.tmpdir(), "aiu-plugin-"));
   calls = path.join(home, "calls.log");
   mkdirSync(path.join(home, "tmp"));
-  // A crontab with someone else's line that only looks like ours.
   mkdirSync(path.join(home, "fakebin"));
   writeFileSync(
     path.join(home, "fakebin/crontab"),
@@ -134,7 +131,6 @@ describe("probe", () => {
     expect(p.bin).toBe(scheduled);
     expect(p.aiHome).toBe(state);
     expect(p.version).toBe("v0.11.1");
-    // Marked as BB's, so the runs record no usage stats.
     expect(readFileSync(calls, "utf8")).toContain(
       `${scheduled} status --json AI_USAGE_HOME=${state} CALLER=bb`,
     );

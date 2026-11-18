@@ -1,6 +1,3 @@
-// The contract between the server entry and the host entry, which runs on
-// each BB machine. The host runs ai-usage and its installer; it has no
-// generic exec: every argv it accepts is checked against src/args.ts.
 import { defineRpcContract, type ExperimentalHostSignals } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 

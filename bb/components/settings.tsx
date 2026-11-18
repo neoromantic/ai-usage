@@ -1,5 +1,3 @@
-// Settings → AI Usage: this machine's ai-usage and what to do with it, and
-// the other machines BB has, each with its own Install.
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";

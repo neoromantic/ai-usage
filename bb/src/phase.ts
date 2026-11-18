@@ -1,4 +1,3 @@
-// What the panel shows for a machine, from what the server knows of it.
 import type { Probe } from "./contract.js";
 import type { JobView, Phase } from "./rpc.js";
 

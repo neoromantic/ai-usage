@@ -1,5 +1,3 @@
-// The host entry: runs on each BB machine as the person BB runs as, and
-// does only what src/contract.ts lists.
 import os from "node:os";
 import {
   experimental_defineHostEntry,
@@ -34,8 +32,6 @@ export default experimental_defineHostEntry({
     relay: async (input, context) =>
       relays(machine(context.experimental_paths.tempDir), input.bin, input.aiHome),
     install: async (input, context) => {
-      // The call itself keeps the worker; the lease covers the few seconds
-      // between the script's end and the reply.
       const lease = context.experimental_retainWorker();
       try {
         return await install(machine(context.experimental_paths.tempDir), {

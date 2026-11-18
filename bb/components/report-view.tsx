@@ -1,5 +1,3 @@
-// The team report, drawn from the JSON as ai-usage worded it. Nothing here
-// is worked out: the words, states, forecasts, and totals are the report's.
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";

@@ -1,4 +1,3 @@
-// The RPC the plugin's windows call. app.tsx imports only its type.
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 

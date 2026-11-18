@@ -1,7 +1,4 @@
-// The server entry: one view of ai-usage per BB machine, shared by every
-// window. It asks the host entry for the machine's ai-usage and its report,
-// keeps the last report in memory, and runs the long operations as jobs.
-// It never logs the team key or what a report says.
+// WARNING: never log the team key or what a report says.
 import { createHash } from "node:crypto";
 import type { BbPluginApi, ExperimentalPluginRpcHandlerContext } from "@get-bb/plugin-sdk";
 import demoTeam from "./demo/team.json" with { type: "json" };
@@ -184,7 +181,6 @@ export default async function plugin(bb: BbPluginApi) {
     );
   }
 
-  /** Takes a report: from report --json, collect --json, or nothing when the command failed. */
   function take(hostId: string, out: RunOutput): void {
     const c = cache(hostId);
     c.reportCheckedAt = Date.now();
@@ -217,7 +213,6 @@ export default async function plugin(bb: BbPluginApi) {
     bb.realtime.publish("changed", { hostId });
   }
 
-  /** Reads the machine's report again, once at a time; every window shares the answer. */
   function refresh(hostId: string): Promise<void> {
     const c = cache(hostId);
     if (c.refreshing !== null) return c.refreshing;
@@ -288,7 +283,6 @@ export default async function plugin(bb: BbPluginApi) {
     };
   }
 
-  /** Throws for another plugin: these methods hand out the key and what the team uses. */
   function guard(context: ExperimentalPluginRpcHandlerContext) {
     const caller = context.experimental_caller;
     if (caller.kind === "plugin" && caller.pluginId !== bb.pluginId)
@@ -316,7 +310,6 @@ export default async function plugin(bb: BbPluginApi) {
     }
   }
 
-  /** A run's answer, or its error thrown. */
   function check(out: RunOutput): string {
     if (out.code !== 0) throw new Error(out.message || "ai-usage failed");
     return out.stdout.trim();
@@ -370,7 +363,6 @@ export default async function plugin(bb: BbPluginApi) {
     });
   }
 
-  /** The team key and relay of the first machine that runs ai-usage, read into memory only. */
   async function sourceTeam(except: string): Promise<TeamSource | null> {
     const h = await hosts();
     const connected = new Set(h.hosts.filter((x) => x.status === "connected").map((x) => x.id));
@@ -396,9 +388,6 @@ export default async function plugin(bb: BbPluginApi) {
     });
   }
 
-  // Installs ai-usage on the primary machine when the plugin starts and the
-  // machine has none, once per machine. A machine that already has it is
-  // recorded too, so removing ai-usage from it later does not bring it back.
   async function autoInstall(signal: AbortSignal): Promise<boolean> {
     const h = await hosts(true);
     if (h.primaryId === null) return false;
@@ -427,7 +416,6 @@ export default async function plugin(bb: BbPluginApi) {
 
   bb.background.service("auto-install", {
     async start(signal) {
-      // The primary machine may connect after the server starts.
       for (let attempt = 0; attempt < 30 && !signal.aborted; attempt++) {
         try {
           if (await autoInstall(signal)) return;
@@ -549,7 +537,7 @@ export default async function plugin(bb: BbPluginApi) {
       guard(context);
       const t = await target(hostId);
       if (t.probe.bin === null) throw new Error("ai-usage is not installed on this machine");
-      // team key on a machine that never collected makes a new team, so ask only once it has.
+      // WARNING: `team key` on a machine that never collected makes a new team.
       if (cache(t.id).reportState?.ok !== true)
         throw new Error("Invite works once this machine has collected");
       const key = check(await run(t.id, t.probe, ["team", "key"], TIMEOUT.short));

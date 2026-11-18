@@ -1,7 +1,3 @@
-// The team a machine joins when it is installed from another machine's
-// Settings: the key and relay of the first machine that runs ai-usage and
-// has collected, read into memory only.
-
 export interface TeamSource {
   key: string;
   relay: string | null;

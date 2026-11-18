@@ -1,5 +1,3 @@
-// What the host entry does on a BB machine, with the machine passed in so
-// tests can give it a made-up one.
 import { access, constants, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -61,7 +59,6 @@ export async function findBinary(m: Machine): Promise<string | null> {
   return null;
 }
 
-/** A launch agent or a crontab line of ai-usage is there. */
 async function scheduleEntry(m: Machine): Promise<boolean> {
   if (m.platform === "darwin")
     return existsSync(path.join(m.home, "Library/LaunchAgents", `${AGENT}.plist`));
@@ -70,7 +67,6 @@ async function scheduleEntry(m: Machine): Promise<boolean> {
   return r.code === 0 && r.stdout.split("\n").some((line) => line.trimEnd().endsWith("# ai-usage"));
 }
 
-/** The program the launch agent runs, read by plutil, when it is an ai-usage binary there. */
 async function agentProgram(m: Machine): Promise<string | null> {
   if (m.platform !== "darwin") return null;
   const plist = path.join(m.home, "Library/LaunchAgents", `${AGENT}.plist`);
@@ -137,7 +133,6 @@ export async function runCommand(
   };
 }
 
-/** `team key` is the one command whose output is the key, on purpose. */
 function redactUnlessKey(args: string[], text: string): string {
   return args[0] === "team" && args[1] === "key" ? text : redact(text);
 }
@@ -166,8 +161,6 @@ export async function probe(m: Machine): Promise<Probe> {
   let bin = await findBinary(m);
   if (bin === null) {
     out.scheduleEntry = await scheduleEntry(m);
-    // A launch agent names the binary it runs, wherever that is: take it,
-    // and status --json then says the rest.
     bin = out.scheduleEntry ? await agentProgram(m) : null;
     if (bin === null) return out;
   }
@@ -176,15 +169,12 @@ export async function probe(m: Machine): Promise<Probe> {
   const version = await ask(bin, null, ["version"]);
   out.version = version.code === 0 ? (version.stdout.trim().split(/\s+/)[0] ?? null) : null;
   if (version.code !== 0) out.error = version.message;
-  // Before v0.11.0, status --json made a team key and a device id on a
-  // machine that had not collected; report --json never did.
   if (atLeast(out.version, STATUS_SAFE)) {
     const status = await ask(bin, null, ["status", "--json"], true);
     out.status = status.json;
     const install = (status.json as { install?: StatusInstall } | null)?.install;
     const program = install?.schedule?.program ?? null;
     out.aiHome = install?.schedule?.home ?? null;
-    // The copy the scheduler runs is the one that collects.
     if (
       program !== null &&
       program !== bin &&
@@ -222,7 +212,6 @@ export async function relays(
     const url = r.stdout.trim();
     return r.code === 0 && /^https?:\/\//.test(url) ? url : null;
   };
-  // A state folder of its own holds no relay of its own, so its relay is the built-in one.
   const empty = path.join(m.tempDir, "empty-home");
   await mkdir(empty, { recursive: true });
   return { configured: await read(aiHome), builtIn: await read(empty) };
@@ -285,8 +274,6 @@ export async function install(m: Machine, req: InstallRequest): Promise<InstallO
     stdin: null,
     timeoutMs: 29 * 60 * 1000,
     signal: req.signal,
-    // The installer says what it does on standard error; standard output is
-    // the first run's report, which stays out of the log.
     onLine: (raw, stream) => {
       if (stream === "out") return;
       // eslint-disable-next-line no-control-regex

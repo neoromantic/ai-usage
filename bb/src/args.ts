@@ -1,6 +1,3 @@
-// The ai-usage commands the plugin runs, and nothing else. The host checks
-// every argv here before it starts the binary.
-
 const COST_TARGET = /^(claude|codex|grok):[^\s]{1,320}$/;
 const DAY = /^(\d{4}-\d{2}-\d{2}|\d{1,2})$/;
 const PRICE = /^\d{1,6}(\.\d{1,2})?$/;

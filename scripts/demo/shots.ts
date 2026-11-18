@@ -1,14 +1,3 @@
-// Screenshots of the demo reports, for the README and for posts.
-//
-//   bun scripts/demo/shots.ts            # every shot
-//   bun scripts/demo/shots.ts team solo  # shots whose name starts so
-//
-// It regenerates docs/demo/*.json with `go run ./scripts/demo`, builds
-// ai-usage, and shows each report the way a person would see it: printed,
-// or in the interactive view inside a tmux of its own. The terminal's text
-// and colors become an HTML page, and agent-browser photographs it.
-// Needs go, tmux, agent-browser, and ffmpeg for the tour video.
-
 import { $ } from "bun";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,7 +8,6 @@ const out = join(root, "docs/demo");
 const tmp = mkdtempSync(join(tmpdir(), "ai-usage-shots-"));
 const bin = join(tmp, "ai-usage");
 const session = "ai-usage-shots";
-// The release the demo's devices run, as latest in scripts/demo/main.go.
 const release = "v0.5.0";
 const tmuxSocket = "ai-usage-shots";
 
@@ -27,25 +15,16 @@ type Theme = "dark" | "light";
 
 type Shot = {
   name: string;
-  // The report under docs/demo, or any saved --json.
   from: string;
   cols: number;
-  // What the prompt shows was typed; the report is printed below it.
   typed?: string;
   args?: string[];
-  // Keys pressed in the interactive view before the picture, rather than
-  // printing. rows is the terminal's height then.
   keys?: string[];
   rows?: number;
-  // Only lines [first, last) of the printed report.
   lines?: [number, number];
-  // Only the section from the line that starts with the first text to the
-  // line before the one that starts with the second, printed or on screen.
   cut?: [string, string];
-  // A shell line run instead of ai-usage, with $AI_USAGE as the binary.
   shell?: string;
   theme?: Theme;
-  // Also a picture on a backdrop, sized for a post.
   social?: boolean;
 };
 
@@ -85,8 +64,6 @@ const shots: Shot[] = [
     cut: ["COST", "UTILIZATION"],
     social: true,
   },
-  // The matrix in dollars, framed as team-matrix frames it in tokens: on a
-  // screen tall enough for the whole page.
   {
     name: "team-dollars",
     from: "team.json",
@@ -107,7 +84,6 @@ const shots: Shot[] = [
     social: true,
   },
   { name: "team-help", from: "team.json", cols: 124, keys: ["?"], rows: 40 },
-  // Enter picks ATTENTION's first line, j j the bots' Codex, Enter opens it.
   {
     name: "team-detail",
     from: "team.json",
@@ -165,7 +141,6 @@ const shots: Shot[] = [
   },
 ];
 
-// The tour is the interactive view, key after key, as a video.
 const tour = {
   from: "team.json",
   cols: 124,
@@ -312,7 +287,6 @@ function sgr(codes: number[], s: Style, theme: Theme): Style {
 
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-// html is the terminal's text as lines of styled spans.
 function html(text: string, theme: Theme): string {
   const p = palette[theme];
   text = text
@@ -375,8 +349,6 @@ const tmux = (...args: string[]) =>
   $`tmux -L ${tmuxSocket} -f /dev/null ${args}`.env(env).quiet().nothrow();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// view runs the interactive view in a terminal cols by rows, presses keys,
-// and returns the screen.
 async function view(
   from: string,
   cols: number,
@@ -437,8 +409,6 @@ async function printed(s: Shot, theme: Theme): Promise<string> {
   return s.cut ? cutText(text, s.cut) : text;
 }
 
-// cutText is the section of text from the line that starts with cut[0] to
-// the line before the one that starts with cut[1].
 function cutText(text: string, cut: [string, string]): string {
   const lines = text.split("\n");
   const plain = lines.map((l) => l.replace(/\x1b\[[0-9;]*m/g, ""));
@@ -467,8 +437,6 @@ async function photograph(file: string, pngs: { selector: string; path: string }
   }
 }
 
-// shrink redraws a picture in 256 colors, which a terminal's needs, at
-// about half the size; the backdrop's gradient is dithered.
 async function shrink(path: string) {
   const dither = path.includes("/social/") ? "sierra2_4a" : "none";
   const tmpPng = path + ".tmp.png";
@@ -519,12 +487,6 @@ async function shootTour() {
   console.log([mp4, gif].map((p) => p.replace(root + "/", "")).join("\n"));
 }
 
-// app draws the macOS menu bar app with its own renderer: its item in the
-// menu bar over the popover, the popover's tabs, its alerts list, the
-// details of a subscription that runs out, the menu bar's looks, its menu,
-// the Team window's Usage, Status, and Cost, and Settings' General and Cost
-// panes, each dark and light, and for posts the three tabs side by side on
-// the backdrop. Only on macOS, with Xcode or the Command Line Tools.
 async function app() {
   if (process.platform !== "darwin") return;
   const macos = join(root, "macos");
@@ -578,7 +540,6 @@ img{width:400px;border-radius:12px;box-shadow:0 24px 64px rgba(0,0,0,.45)}
   );
 }
 
-// diagram photographs scripts/demo/diagram.html, the architecture.
 async function diagram() {
   const path = join(out, "social", "architecture.png");
   await photograph(join(import.meta.dir, "diagram.html"), [{ selector: ".frame", path }]);

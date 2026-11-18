@@ -1,7 +1,3 @@
-// The message Invite copies: how a colleague joins, in BB or in a terminal,
-// with the key. The key holds no relay, so a team on a relay other than the
-// one built into the binary says which.
-
 function quote(s: string): string {
   return `'${s.replaceAll("'", `'\\''`)}'`;
 }

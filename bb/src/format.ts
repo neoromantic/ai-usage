@@ -1,6 +1,3 @@
-// How the panel prints the report's numbers and times, the way the menu bar
-// app does (macos/Sources/AIUsageKit/Format.swift, Glance.swift). It picks
-// among what the report decided and works out nothing of its own.
 import type {
   Attention,
   MatrixCell,
@@ -195,7 +192,6 @@ export function heatStep(v: number, top: number): number {
   return Math.min(Math.max(5 - Math.floor(Math.log10(top / v) * 2), 1), 5);
 }
 
-/** "~" before a number that is an estimate, never before the none mark. */
 function estimated(text: string, on: boolean): string {
   return on && text !== NONE ? `~${text}` : text;
 }
@@ -227,7 +223,6 @@ export function matrixView(r: Report, p: "today" | "7d" | "30d" | "90d") {
       cells: columns.map((_, i) => cell(row.cells[i])),
       total: estimated(millions(shown(row)[p]), row.burn_estimated),
     })),
-    // The team's total is an estimate when a row in it is, as the app's.
     total: estimated(
       millions(rows.reduce((sum, row) => sum + shown(row)[p], 0)),
       rows.some((row) => row.burn_estimated),

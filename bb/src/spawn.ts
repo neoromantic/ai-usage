@@ -1,5 +1,3 @@
-// Runs a child process with a deadline, reading both pipes while it runs,
-// since a report is larger than a pipe holds.
 import { spawn } from "node:child_process";
 import type { Env } from "./env.js";
 
@@ -94,7 +92,6 @@ export function run(command: string, args: string[], options: SpawnOptions): Pro
     });
     child.on("close", (code) => finish(code));
     if (options.stdin != null && child.stdin !== null) {
-      // A child that exits without reading closes the pipe; that is its answer.
       child.stdin.on("error", () => {});
       child.stdin.end(options.stdin);
     }

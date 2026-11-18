@@ -1,5 +1,3 @@
-// The AI Usage page: the team report of the machine BB runs on, or what it
-// takes to get one there.
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { experimental_copyToClipboard, useRpc } from "@get-bb/plugin-sdk/app";

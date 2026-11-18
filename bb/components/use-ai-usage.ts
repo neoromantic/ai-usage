@@ -1,6 +1,3 @@
-// The machine's view and report, kept current: from the server's cache at
-// once, again when the server says something changed, and every minute
-// while a surface is open. The report comes only when it changed.
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   useBbNavigate,
@@ -83,7 +80,6 @@ export function useAiUsage(hostId: string | null = null) {
   return { rpc, state, error, reload: load };
 }
 
-// The example team lives at the page's "example" path, so a link can open it.
 export const EXAMPLE = "example";
 export const PANEL_PATH = "usage";
 

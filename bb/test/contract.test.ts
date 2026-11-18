@@ -1,6 +1,3 @@
-// The plugin reads every report the repository's demo tooling makes, a
-// report as an earlier release printed it, and a kind of attention it does
-// not know, as the menu bar app's checks do.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -17,7 +14,6 @@ import { readReport, SchemaError } from "../src/report";
 const demo = (name: string) =>
   JSON.parse(readFileSync(path.join(import.meta.dir, "../../docs/demo", name), "utf8"));
 
-/** Removes the fields ai-usage added within schema 4, as a report of v0.3.4 has none of them. */
 const ADDED = new Set([
   "health",
   "method",
@@ -114,11 +110,9 @@ test("a report of an earlier release reads its missing fields as the app does", 
   expect(tokenLabel(r)).toBe("tokens in+out");
   const row = r.team.matrix.rows[0]!;
   expect(shown(row)).toEqual(row.usage);
-  // Without `limits`, only the main window limits an account.
   for (const p of r.team.providers)
     for (const a of p.accounts)
       for (const w of limitingWindows(a)) expect(w.main || !w.limits).toBe(true);
-  // An entry that is not worded says its devices and its message.
   const old = r.attention.find((a) => a.kind === "old")!;
   expect(attentionWords(old).subject).toBe((old.devices ?? []).join(", "));
 });

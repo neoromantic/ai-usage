@@ -1,5 +1,3 @@
-// The sidebar footer's Team usage: what needs attention and one bar for
-// each team subscription. It loads only while it is open.
 import { useBbNavigate } from "@get-bb/plugin-sdk/app";
 import { Button } from "@/components/ui/button";
 import { attentionTone, attentionWords, left, limitingWindows, provider } from "../src/format";
