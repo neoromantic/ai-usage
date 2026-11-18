@@ -13,6 +13,24 @@
     "correctness": "error",
   },
   "rules": {
+    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "no-fallthrough": "error",
+    "array-callback-return": "error",
+    "no-self-compare": "error",
+    "no-case-declarations": "error",
+    "no-prototype-builtins": "error",
+    "no-constructor-return": "error",
+    "typescript/ban-ts-comment": "error",
+    "no-unused-vars": [
+      "error",
+      {
+        "ignoreRestSiblings": true,
+        "varsIgnorePattern": "^_",
+        "argsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_",
+        "destructuredArrayIgnorePattern": "^_",
+      },
+    ],
     "landmines-testing/no-fixed-sleep": "error",
     "landmines-testing/no-flake-masking": "error",
     "landmines-testing/no-test-doubles": "error",
@@ -23,5 +41,25 @@
     "landmines-structure/package-exports": "error",
     "landmines-structure/test-file-names": "error",
     "landmines-types/no-explicit-return-types": "error",
+    "no-restricted-properties": [
+      "error",
+      {
+        "object": "mock",
+        "property": "module",
+        "message": "mock.module replaces a module for the whole test process, and mock.restore() does not undo it. Use the real module, a local substitute or MSW (docs/standards/testing.md).",
+      },
+    ],
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "bun:test",
+            "importNames": ["setDefaultTimeout"],
+            "message": "Do not raise the default test timeout. Split slow sweeps with test.each, or run slow shared setup once in beforeAll.",
+          },
+        ],
+      },
+    ],
   },
 }
