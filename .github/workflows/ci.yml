@@ -254,9 +254,21 @@ jobs:
     needs: [lint, test, install, brew, plugin, hygiene]
     if: always() && github.event.pull_request.draft != true
     runs-on: ${{ fromJSON('{"true":"oss-linux","false":"ubuntu-latest"}')[format('{0}', vars.CI_SELF_HOSTED == 'true' && github.ref == 'refs/heads/main')] }}
+    permissions:
+      actions: read
     steps:
       # always(), because a step's if without a status function gets an
       # implicit success(), which is false once a needed job failed or was
       # cancelled: the step would be skipped and ci would pass.
       - if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
         run: exit 1
+      # A matrix leg that no runner picked up ends cancelled, yet
+      # needs.<job>.result does not show it. The jobs API of this run attempt does.
+      - name: No job was cancelled
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cancelled=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" |
+            jq -r '.jobs[] | select(.conclusion == "cancelled") | .name')
+          if [ -n "$cancelled" ]; then echo "::error::Cancelled jobs: ${cancelled//$'\n'/, }"; exit 1; fi
