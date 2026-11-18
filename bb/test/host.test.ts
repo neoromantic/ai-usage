@@ -1,4 +1,6 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { http, HttpResponse } from "msw";
+import { setupServer } from "msw/node";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -188,6 +190,28 @@ describe("run", () => {
 });
 
 describe("install", () => {
+  const latest = "https://github.com/neoromantic/ai-usage/releases/latest";
+  const installSh = "https://raw.githubusercontent.com/neoromantic/ai-usage/v0.11.0/install.sh";
+  const github = setupServer(
+    http.get(
+      latest,
+      () =>
+        new HttpResponse(null, {
+          status: 302,
+          headers: { location: "https://github.com/neoromantic/ai-usage/releases/tag/v0.11.0" },
+        }),
+    ),
+  );
+  const seen: string[] = [];
+  github.events.on("request:start", ({ request }) => seen.push(request.url));
+  const serve = (script: string) => github.use(http.get(installSh, () => new HttpResponse(script)));
+  beforeAll(() => github.listen({ onUnhandledRequest: "error" }));
+  afterEach(() => {
+    github.resetHandlers();
+    seen.length = 0;
+  });
+  afterAll(() => github.close());
+
   test("runs install.sh of the latest release, pinned to it, without the app or shell profiles, with the key only in its environment", async () => {
     const script = `#!/bin/sh
 echo "ai-usage install: url=$AI_USAGE_DOWNLOAD_URL app=$AI_USAGE_NO_APP path=$AI_USAGE_NO_MODIFY_PATH relay=$AI_USAGE_RELAY caller=$AI_USAGE_CALLER" >&2
@@ -195,18 +219,9 @@ echo "ai-usage install: key=$AI_USAGE_TEAM_KEY" >&2
 echo "ai-usage install: PATH=$PATH" >&2
 echo "REPORT that stays out of the log"
 `;
-    const seen: string[] = [];
-    const fetchFake = (async (url: string | URL | Request) => {
-      seen.push(String(url));
-      if (String(url).endsWith("/releases/latest"))
-        return new Response(null, {
-          status: 302,
-          headers: { location: "https://github.com/neoromantic/ai-usage/releases/tag/v0.11.0" },
-        });
-      return new Response(script, { status: 200 });
-    }) as typeof fetch;
+    serve(script);
     const lines: string[] = [];
-    const out = await install(machine({ ...linux, fetch: fetchFake }), {
+    const out = await install(machine(linux), {
       teamKey: "aiu-team-1:made-up-key-for-tests",
       relay: "https://relay.example.com",
       onLine: (l) => lines.push(l),
@@ -226,16 +241,8 @@ echo "REPORT that stays out of the log"
   });
 
   test("a failed install says the installer's error", async () => {
-    const fetchFake = (async (url: string | URL | Request) =>
-      String(url).endsWith("/latest")
-        ? new Response(null, {
-            status: 302,
-            headers: { location: "https://github.com/neoromantic/ai-usage/releases/tag/v0.11.0" },
-          })
-        : new Response(
-            '#!/bin/sh\necho "ai-usage install: ai-usage is installed with Homebrew" >&2\nexit 1\n',
-          )) as typeof fetch;
-    const out = await install(machine({ ...linux, fetch: fetchFake }), {
+    serve('#!/bin/sh\necho "ai-usage install: ai-usage is installed with Homebrew" >&2\nexit 1\n');
+    const out = await install(machine(linux), {
       teamKey: null,
       relay: null,
       onLine: () => {},

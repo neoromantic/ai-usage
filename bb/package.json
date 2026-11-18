@@ -63,6 +63,7 @@
     "bb-app": "0.46.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "msw": "2.15.0",
     "oxfmt": "0.79.0",
     "oxlint": "1.94.0",
     "sonner": "^1.7.4",
