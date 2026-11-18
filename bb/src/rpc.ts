@@ -1,4 +1,3 @@
-// The RPC the plugin's windows call. app.tsx imports only its type.
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 
@@ -17,7 +16,16 @@ export const PHASES = [
 ] as const;
 export type Phase = (typeof PHASES)[number];
 
-export const JOB_KINDS = ["install", "collect", "join", "update", "schedule-on", "schedule-off", "app", "uninstall"] as const;
+export const JOB_KINDS = [
+  "install",
+  "collect",
+  "join",
+  "update",
+  "schedule-on",
+  "schedule-off",
+  "app",
+  "uninstall",
+] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 export const jobSchema = z.object({
@@ -58,7 +66,12 @@ const hostInput = z.object({ hostId: z.string().min(1).max(200).nullable() }).st
 
 export const rpcContract = defineRpcContract({
   state: {
-    input: z.object({ hostId: z.string().min(1).max(200).nullable(), hash: z.string().max(80).nullable() }).strict(),
+    input: z
+      .object({
+        hostId: z.string().min(1).max(200).nullable(),
+        hash: z.string().max(80).nullable(),
+      })
+      .strict(),
     output: z.object({
       view: viewSchema,
       job: jobSchema.nullable(),
@@ -91,7 +104,10 @@ export const rpcContract = defineRpcContract({
     }),
   },
   demo: { input: z.null(), output: z.object({ report: z.unknown() }) },
-  job: { input: z.object({ id: z.string().max(64) }).strict(), output: z.object({ job: jobSchema.nullable() }) },
+  job: {
+    input: z.object({ id: z.string().max(64) }).strict(),
+    output: z.object({ job: jobSchema.nullable() }),
+  },
   collect: { input: hostInput, output: z.object({ jobId: z.string() }) },
   install: {
     input: z
@@ -107,7 +123,11 @@ export const rpcContract = defineRpcContract({
   },
   join: {
     input: z
-      .object({ hostId: z.string().min(1).max(200).nullable(), key: z.string().min(1).max(4096), relay: z.string().max(2048).nullable() })
+      .object({
+        hostId: z.string().min(1).max(200).nullable(),
+        key: z.string().min(1).max(4096),
+        relay: z.string().max(2048).nullable(),
+      })
       .strict(),
     output: z.object({ jobId: z.string() }),
   },
@@ -119,11 +139,22 @@ export const rpcContract = defineRpcContract({
   },
   appInstall: { input: hostInput, output: z.object({ jobId: z.string() }) },
   uninstall: {
-    input: z.object({ hostId: z.string().min(1).max(200).nullable(), forget: z.boolean(), purge: z.boolean() }).strict(),
+    input: z
+      .object({
+        hostId: z.string().min(1).max(200).nullable(),
+        forget: z.boolean(),
+        purge: z.boolean(),
+      })
+      .strict(),
     output: z.object({ jobId: z.string() }),
   },
   cost: {
-    input: z.object({ hostId: z.string().min(1).max(200).nullable(), args: z.array(z.string().max(400)).min(3).max(8) }).strict(),
+    input: z
+      .object({
+        hostId: z.string().min(1).max(200).nullable(),
+        args: z.array(z.string().max(400)).min(3).max(8),
+      })
+      .strict(),
     output: z.object({ ok: z.boolean(), message: z.string() }),
   },
 });

@@ -1,6 +1,3 @@
-// The frontend: the AI Usage page, its settings section, the sidebar
-// footer's Team usage, and two palette commands. Everything it shows comes
-// from `ai-usage report --json` through the server.
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { definePluginApp, useBbNavigate, useRpc } from "@get-bb/plugin-sdk/app";
@@ -10,8 +7,6 @@ import { PanelHeader, PanelPage } from "./components/panel";
 import { SettingsSection } from "./components/settings";
 import { PANEL_PATH } from "./components/use-ai-usage";
 
-// Palette commands run outside React; this window's overlay lends them the
-// navigation and RPC client its hooks give.
 const bridge: { open?: () => void; refresh?: () => void } = {};
 
 function CommandBridge() {
@@ -57,5 +52,9 @@ export default definePluginApp((app) => {
   });
   app.slots.experimental_appOverlay({ id: "commands", component: CommandBridge });
   app.commands.register({ id: "open", title: "AI Usage: Open", run: () => bridge.open?.() });
-  app.commands.register({ id: "refresh", title: "AI Usage: Refresh", run: () => bridge.refresh?.() });
+  app.commands.register({
+    id: "refresh",
+    title: "AI Usage: Refresh",
+    run: () => bridge.refresh?.(),
+  });
 });

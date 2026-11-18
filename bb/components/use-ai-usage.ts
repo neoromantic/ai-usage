@@ -1,8 +1,10 @@
-// The machine's view and report, kept current: from the server's cache at
-// once, again when the server says something changed, and every minute
-// while a surface is open. The report comes only when it changed.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useBbNavigate, useRealtime, useRealtimeConnectionState, useRpc } from "@get-bb/plugin-sdk/app";
+import {
+  useBbNavigate,
+  useRealtime,
+  useRealtimeConnectionState,
+  useRpc,
+} from "@get-bb/plugin-sdk/app";
 import type { Report } from "../src/report";
 import type { HostView, JobView, rpcContract } from "../src/rpc";
 
@@ -29,7 +31,13 @@ export function useAiUsage(hostId: string | null = null) {
       else if (r.hash === null) report.current = null;
       hash.current = r.hash;
       viewHost.current = r.view.hostId;
-      setState({ view: r.view, job: r.job, report: report.current, reportAt: r.reportAt, refreshing: r.refreshing });
+      setState({
+        view: r.view,
+        job: r.job,
+        report: report.current,
+        reportAt: r.reportAt,
+        refreshing: r.refreshing,
+      });
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -72,11 +80,10 @@ export function useAiUsage(hostId: string | null = null) {
   return { rpc, state, error, reload: load };
 }
 
-// The example team lives at the page's "example" path, so a link can open it.
 export const EXAMPLE = "example";
 export const PANEL_PATH = "usage";
 
-export function useExample(): { show: () => void; leave: () => void } {
+export function useExample() {
   const navigate = useBbNavigate();
   return {
     show: () => navigate.toPluginPanel(PANEL_PATH, { subPath: EXAMPLE }),
@@ -84,7 +91,7 @@ export function useExample(): { show: () => void; leave: () => void } {
   };
 }
 
-export function useDemoReport(on: boolean): Report | null {
+export function useDemoReport(on: boolean) {
   const rpc = useRpc<typeof rpcContract>();
   const [report, setReport] = useState<Report | null>(null);
   useEffect(() => {
@@ -95,7 +102,7 @@ export function useDemoReport(on: boolean): Report | null {
 }
 
 /** "now" that moves on every half minute, for ages and countdowns. */
-export function useNow(): number {
+export function useNow() {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30_000);

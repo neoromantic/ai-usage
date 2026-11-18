@@ -1,6 +1,3 @@
-// Long operations run as jobs on the server: an RPC starts one and returns
-// its id at once, and windows follow it over realtime. One job runs on a
-// machine at a time, since each of them writes its ai-usage state.
 import { randomUUID } from "node:crypto";
 import type { JobKind, JobView } from "./rpc.js";
 
@@ -21,14 +18,17 @@ export interface JobEvents {
 export class Jobs {
   private readonly jobs = new Map<string, JobView>();
 
-  constructor(private readonly events: JobEvents, private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly events: JobEvents,
+    private readonly now: () => number = Date.now,
+  ) {}
 
-  get(id: string): JobView | null {
+  get(id: string) {
     return this.jobs.get(id) ?? null;
   }
 
   /** The machine's running job, else its newest. */
-  latest(hostId: string): JobView | null {
+  latest(hostId: string) {
     let newest: JobView | null = null;
     for (const job of this.jobs.values()) {
       if (job.hostId !== hostId) continue;
@@ -38,8 +38,9 @@ export class Jobs {
     return newest;
   }
 
-  running(hostId: string): JobView | null {
-    for (const job of this.jobs.values()) if (job.hostId === hostId && job.status === "running") return job;
+  running(hostId: string) {
+    for (const job of this.jobs.values())
+      if (job.hostId === hostId && job.status === "running") return job;
     return null;
   }
 
@@ -47,25 +48,39 @@ export class Jobs {
    * Starts work as a job on a machine. A request for the job that already
    * runs there joins it; another kind of job waits for its end.
    */
-  start(hostId: string, kind: JobKind, work: (job: JobView, log: (line: string) => void) => Promise<string>): JobView {
+  start(
+    hostId: string,
+    kind: JobKind,
+    work: (job: JobView, log: (line: string) => void) => Promise<string>,
+  ) {
     const busy = this.running(hostId);
     if (busy !== null) {
       if (busy.kind === kind) return busy;
       throw new BusyError(busy);
     }
-    const job: JobView = { id: randomUUID(), hostId, kind, status: "running", startedAt: this.now(), endedAt: null, message: "", log: [] };
+    const job: JobView = {
+      id: randomUUID(),
+      hostId,
+      kind,
+      status: "running",
+      startedAt: this.now(),
+      endedAt: null,
+      message: "",
+      log: [],
+    };
     this.jobs.set(job.id, job);
     this.prune();
     this.events.changed(job);
     const log = (line: string) => this.append(job.id, line);
     void work(job, log).then(
       (message) => this.finish(job.id, "done", message),
-      (error: unknown) => this.finish(job.id, "failed", error instanceof Error ? error.message : String(error)),
+      (error: unknown) =>
+        this.finish(job.id, "failed", error instanceof Error ? error.message : String(error)),
     );
     return job;
   }
 
-  append(id: string, line: string): void {
+  append(id: string, line: string) {
     const job = this.jobs.get(id);
     if (job === undefined || job.status !== "running") return;
     job.log.push(line);
@@ -73,7 +88,7 @@ export class Jobs {
     this.events.line(job, line);
   }
 
-  private finish(id: string, status: "done" | "failed", message: string): void {
+  private finish(id: string, status: "done" | "failed", message: string) {
     const job = this.jobs.get(id);
     if (job === undefined) return;
     job.status = status;
@@ -82,9 +97,11 @@ export class Jobs {
     this.events.changed(job);
   }
 
-  private prune(): void {
+  private prune() {
     if (this.jobs.size <= KEEP) return;
-    const done = [...this.jobs.values()].filter((j) => j.status !== "running").sort((a, b) => a.startedAt - b.startedAt);
+    const done = [...this.jobs.values()]
+      .filter((j) => j.status !== "running")
+      .sort((a, b) => a.startedAt - b.startedAt);
     for (const job of done.slice(0, this.jobs.size - KEEP)) this.jobs.delete(job.id);
   }
 }

@@ -1,9 +1,4 @@
-import {
-  createContext,
-  createElement,
-  useContext,
-  type ReactNode,
-} from "react";
+import { createContext, createElement, useContext, type ReactNode } from "react";
 
 import { useMediaQuery } from "./use-media-query.js";
 
@@ -27,7 +22,7 @@ export function CompactViewportOverrideProvider({
   );
 }
 
-export function useIsCompactViewport(): boolean {
+export function useIsCompactViewport() {
   const override = useContext(CompactViewportOverrideContext);
   const isCompactViewport = useMediaQuery(COMPACT_VIEWPORT_QUERY);
   if (override !== null) {

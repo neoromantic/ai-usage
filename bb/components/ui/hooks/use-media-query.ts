@@ -10,7 +10,7 @@ type MediaQueryRef = {
 
 const mediaQueryCache = new Map<string, MediaQueryRef>();
 
-function createMediaQueryRef(query: string): MediaQueryRef | null {
+function createMediaQueryRef(query: string) {
   if (typeof window === "undefined" || !window.matchMedia) return null;
 
   let ref = mediaQueryCache.get(query);
@@ -43,21 +43,16 @@ function createMediaQueryRef(query: string): MediaQueryRef | null {
   return ref;
 }
 
-export function subscribeMediaQuery(
-  query: string,
-  notify: () => void,
-): () => void {
+export function subscribeMediaQuery(query: string, notify: () => void) {
   return createMediaQueryRef(query)?.subscribe(notify) ?? (() => {});
 }
 
-export function getMediaQuerySnapshot(query: string): boolean {
+export function getMediaQuerySnapshot(query: string) {
   if (typeof window === "undefined" || !window.matchMedia) return false;
-  return (
-    mediaQueryCache.get(query)?.mql.matches ?? window.matchMedia(query).matches
-  );
+  return mediaQueryCache.get(query)?.mql.matches ?? window.matchMedia(query).matches;
 }
 
-export function useMediaQuery(query: string): boolean {
+export function useMediaQuery(query: string) {
   return useSyncExternalStore(
     (notify) => subscribeMediaQuery(query, notify),
     () => getMediaQuerySnapshot(query),
@@ -65,6 +60,6 @@ export function useMediaQuery(query: string): boolean {
   );
 }
 
-export function usePrefersReducedMotion(): boolean {
+export function usePrefersReducedMotion() {
   return useMediaQuery(REDUCED_MOTION_QUERY);
 }

@@ -14,10 +14,12 @@ Install AI Usage in BB; its icon in the navigation rail opens the page.
 
 ## Driving it
 
-`scripts/verify.sh plugin` runs `bun run check` in `bb/`: the types, the
-tests (`bb/test/`, which read every `docs/demo/*.json`, an older report,
-and an unknown kind of attention, and drive the host entry on a made-up
-machine with fake binaries and a fake install.sh), and `bb plugin build`.
+`scripts/verify.sh plugin` runs `bun run check` in `bb/`: the format check
+and the lint (oxfmt and oxlint, on `bb/` and on `scripts/demo/*.ts`), the
+types, the tests (`bb/test/`, which read every `docs/demo/*.json`, an
+older report, and an unknown kind of attention, and drive the host entry
+on a made-up machine with fake binaries and a fake install.sh), and
+`bb plugin build`.
 
 By hand, in a BB of your own: `cd bb && bun run build`, then
 `bb plugin install "$PWD" --yes`, and open the page; the example team

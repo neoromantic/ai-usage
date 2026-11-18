@@ -1,16 +1,19 @@
-// The server entry: one view of ai-usage per BB machine, shared by every
-// window. It asks the host entry for the machine's ai-usage and its report,
-// keeps the last report in memory, and runs the long operations as jobs.
-// It never logs the team key or what a report says.
+// WARNING: never log the team key or what a report says.
 import { createHash } from "node:crypto";
 import type { BbPluginApi, ExperimentalPluginRpcHandlerContext } from "@get-bb/plugin-sdk";
 import demoTeam from "./demo/team.json" with { type: "json" };
 import { allowed } from "./src/args.js";
 import { hostContract, hostSignals, type Probe, type RunOutput } from "./src/contract.js";
 import { inviteMessage } from "./src/invite.js";
-import { teamSource, type TeamSource } from "./src/team-source.js";
+import { teamSource } from "./src/team-source.js";
 import { BusyError, Jobs } from "./src/jobs.js";
-import { autoInstallable, installRefusal, NOTHING_COLLECTED, phaseOf, type HostFacts } from "./src/phase.js";
+import {
+  autoInstallable,
+  installRefusal,
+  NOTHING_COLLECTED,
+  phaseOf,
+  type HostFacts,
+} from "./src/phase.js";
 import { readReport, SchemaError, type Report } from "./src/report.js";
 import { rpcContract, type HostView, type JobKind, type JobView } from "./src/rpc.js";
 
@@ -55,24 +58,56 @@ interface AutoRecord {
 }
 
 export default async function plugin(bb: BbPluginApi) {
-  const host = bb.hosts.experimental_client({ contract: hostContract, experimental_signals: hostSignals });
+  const host = bb.hosts.experimental_client({
+    contract: hostContract,
+    experimental_signals: hostSignals,
+  });
   const caches = new Map<string, Cache>();
-  let hostList: { at: number; hosts: HostRecord[]; primaryId: string | null; primaryPlatform: string | null } | null = null;
+  let hostList: {
+    at: number;
+    hosts: HostRecord[];
+    primaryId: string | null;
+    primaryPlatform: string | null;
+  } | null = null;
 
   const jobs = new Jobs({
     changed: (job) => {
-      bb.realtime.publish("job", { id: job.id, hostId: job.hostId, kind: job.kind, status: job.status });
+      bb.realtime.publish("job", {
+        id: job.id,
+        hostId: job.hostId,
+        kind: job.kind,
+        status: job.status,
+      });
       bb.realtime.publish("changed", { hostId: job.hostId });
     },
-    line: (job, line) => bb.realtime.publish("job", { id: job.id, hostId: job.hostId, kind: job.kind, status: job.status, line }),
+    line: (job, line) =>
+      bb.realtime.publish("job", {
+        id: job.id,
+        hostId: job.hostId,
+        kind: job.kind,
+        status: job.status,
+        line,
+      }),
   });
 
-  host.experimental_onSignal("installLog", ({ payload }) => jobs.append(payload.jobId, payload.line));
+  host.experimental_onSignal("installLog", ({ payload }) =>
+    jobs.append(payload.jobId, payload.line),
+  );
 
-  const cache = (hostId: string): Cache => {
+  const cache = (hostId: string) => {
     let c = caches.get(hostId);
     if (c === undefined) {
-      c = { probe: null, probedAt: 0, probing: null, report: null, hash: null, reportAt: null, reportCheckedAt: 0, reportState: null, refreshing: null };
+      c = {
+        probe: null,
+        probedAt: 0,
+        probing: null,
+        report: null,
+        hash: null,
+        reportAt: null,
+        reportCheckedAt: 0,
+        reportState: null,
+        refreshing: null,
+      };
       caches.set(hostId, c);
     }
     return c;
@@ -90,16 +125,17 @@ export default async function plugin(bb: BbPluginApi) {
     return hostList;
   }
 
-  async function resolve(hostId: string | null): Promise<{ record: HostRecord | null; id: string | null; bbPlatform: string | null }> {
+  async function resolve(hostId: string | null) {
     const h = await hosts();
     const id = hostId ?? h.primaryId;
     const record = h.hosts.find((x) => x.id === id) ?? null;
     return { record, id, bbPlatform: id === h.primaryId ? h.primaryPlatform : null };
   }
 
-  function probeHost(hostId: string, force = false): Promise<Probe | null> {
+  function probeHost(hostId: string, force = false) {
     const c = cache(hostId);
-    if (!force && c.probe !== null && Date.now() - c.probedAt < PROBE_TTL) return Promise.resolve(c.probe);
+    if (!force && c.probe !== null && Date.now() - c.probedAt < PROBE_TTL)
+      return Promise.resolve(c.probe);
     if (c.probing !== null) return c.probing;
     c.probing = host
       .call("probe", {}, { hostId, timeoutMs: TIMEOUT.probe })
@@ -109,7 +145,9 @@ export default async function plugin(bb: BbPluginApi) {
         return p;
       })
       .catch((error: unknown) => {
-        bb.log.warn(`probe of ${hostId} failed: ${error instanceof Error ? error.message : String(error)}`);
+        bb.log.warn(
+          `probe of ${hostId} failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         return c.probe;
       })
       .finally(() => {
@@ -119,17 +157,29 @@ export default async function plugin(bb: BbPluginApi) {
     return c.probing;
   }
 
-  function run(hostId: string, probe: Probe, args: string[], timeoutMs: number, opts: { stdin?: string; json?: boolean } = {}): Promise<RunOutput> {
+  function run(
+    hostId: string,
+    probe: Probe,
+    args: string[],
+    timeoutMs: number,
+    opts: { stdin?: string; json?: boolean } = {},
+  ) {
     if (probe.bin === null) throw new Error("ai-usage is not installed on this machine");
     return host.call(
       "run",
-      { bin: probe.bin, aiHome: probe.aiHome, args, stdin: opts.stdin ?? null, json: opts.json ?? false, timeoutMs },
+      {
+        bin: probe.bin,
+        aiHome: probe.aiHome,
+        args,
+        stdin: opts.stdin ?? null,
+        json: opts.json ?? false,
+        timeoutMs,
+      },
       { hostId, timeoutMs: timeoutMs + 15_000 },
     );
   }
 
-  /** Takes a report: from report --json, collect --json, or nothing when the command failed. */
-  function take(hostId: string, out: RunOutput): void {
+  function take(hostId: string, out: RunOutput) {
     const c = cache(hostId);
     c.reportCheckedAt = Date.now();
     if (out.code === 0 && out.json !== null) {
@@ -161,8 +211,7 @@ export default async function plugin(bb: BbPluginApi) {
     bb.realtime.publish("changed", { hostId });
   }
 
-  /** Reads the machine's report again, once at a time; every window shares the answer. */
-  function refresh(hostId: string): Promise<void> {
+  function refresh(hostId: string) {
     const c = cache(hostId);
     if (c.refreshing !== null) return c.refreshing;
     c.refreshing = (async () => {
@@ -172,7 +221,9 @@ export default async function plugin(bb: BbPluginApi) {
     })()
       .catch((error: unknown) => {
         c.reportCheckedAt = Date.now();
-        bb.log.warn(`report of ${hostId} failed: ${error instanceof Error ? error.message : String(error)}`);
+        bb.log.warn(
+          `report of ${hostId} failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
       })
       .finally(() => {
         c.refreshing = null;
@@ -181,7 +232,7 @@ export default async function plugin(bb: BbPluginApi) {
     return c.refreshing;
   }
 
-  async function facts(hostId: string | null): Promise<{ id: string | null; record: HostRecord | null; f: HostFacts }> {
+  async function facts(hostId: string | null) {
     const { record, id, bbPlatform } = await resolve(hostId);
     const c = id === null ? null : cache(id);
     return {
@@ -197,10 +248,13 @@ export default async function plugin(bb: BbPluginApi) {
     };
   }
 
-  async function view(hostId: string | null): Promise<HostView> {
+  async function view(hostId: string | null) {
     const { id, record, f } = await facts(hostId);
     const p = f.probe;
-    const status = p?.status as { install?: { method?: string; schedule?: { state?: string } } } | null | undefined;
+    const status = p?.status as
+      | { install?: { method?: string; schedule?: { state?: string } } }
+      | null
+      | undefined;
     const report = id === null ? null : cache(id).report;
     const auto = id === null ? null : await bb.storage.kv.get<AutoRecord>(`auto:${id}`);
     return {
@@ -217,18 +271,21 @@ export default async function plugin(bb: BbPluginApi) {
       canUninstall: p?.canUninstall ?? false,
       app: p?.app ?? false,
       scheduleEntry: p?.scheduleEntry ?? false,
-      auto: auto?.outcome === "installing" || auto?.outcome === "installed" || auto?.outcome === "failed",
+      auto:
+        auto?.outcome === "installing" ||
+        auto?.outcome === "installed" ||
+        auto?.outcome === "failed",
       error: f.report?.error ?? p?.error ?? null,
-    };
+    } satisfies HostView;
   }
 
-  /** Throws for another plugin: these methods hand out the key and what the team uses. */
   function guard(context: ExperimentalPluginRpcHandlerContext) {
     const caller = context.experimental_caller;
-    if (caller.kind === "plugin" && caller.pluginId !== bb.pluginId) throw new Error("AI Usage answers its own windows only");
+    if (caller.kind === "plugin" && caller.pluginId !== bb.pluginId)
+      throw new Error("AI Usage answers its own windows only");
   }
 
-  async function target(hostId: string | null): Promise<{ id: string; probe: Probe }> {
+  async function target(hostId: string | null) {
     const { id, record } = await resolve(hostId);
     if (id === null || record === null) throw new Error("BB has no such machine");
     const probe = await probeHost(id);
@@ -236,7 +293,11 @@ export default async function plugin(bb: BbPluginApi) {
     return { id, probe };
   }
 
-  function startJob(hostId: string, kind: JobKind, work: (job: JobView, log: (line: string) => void) => Promise<string>): string {
+  function startJob(
+    hostId: string,
+    kind: JobKind,
+    work: (job: JobView, log: (line: string) => void) => Promise<string>,
+  ) {
     try {
       return jobs.start(hostId, kind, work).id;
     } catch (error) {
@@ -245,14 +306,15 @@ export default async function plugin(bb: BbPluginApi) {
     }
   }
 
-  /** A run's answer, or its error thrown. */
-  function check(out: RunOutput): string {
+  function check(out: RunOutput) {
     if (out.code !== 0) throw new Error(out.message || "ai-usage failed");
     return out.stdout.trim();
   }
 
-  async function collect(hostId: string, probe: Probe, log: (line: string) => void): Promise<string> {
-    log("collecting: reading the tools' logs, asking each tool for its quota, and reading the team");
+  async function collect(hostId: string, probe: Probe, log: (line: string) => void) {
+    log(
+      "collecting: reading the tools' logs, asking each tool for its quota, and reading the team",
+    );
     const out = await run(hostId, probe, ["collect", "--json"], TIMEOUT.collect, { json: true });
     if (out.code !== 0) throw new Error(out.message || "the run failed");
     take(hostId, out);
@@ -264,11 +326,15 @@ export default async function plugin(bb: BbPluginApi) {
     await bb.storage.kv.set(`auto:${hostId}`, { at: Date.now(), outcome } satisfies AutoRecord);
   }
 
-  function install(hostId: string, teamKey: string | null, relay: string | null, auto: boolean): string {
+  function install(hostId: string, teamKey: string | null, relay: string | null, auto: boolean) {
     return startJob(hostId, "install", async (job, log) => {
       if (auto) await record(hostId, "installing");
       try {
-        const out = await host.call("install", { jobId: job.id, teamKey, relay }, { hostId, timeoutMs: TIMEOUT.install });
+        const out = await host.call(
+          "install",
+          { jobId: job.id, teamKey, relay },
+          { hostId, timeoutMs: TIMEOUT.install },
+        );
         if (!out.ok) throw new Error(out.message);
         await record(hostId, "installed");
         bb.log.info(`installed ai-usage ${out.tag ?? ""} on ${hostId}`);
@@ -284,29 +350,32 @@ export default async function plugin(bb: BbPluginApi) {
     });
   }
 
-  /** The team key and relay of the first machine that runs ai-usage, read into memory only. */
-  async function sourceTeam(except: string): Promise<TeamSource | null> {
+  async function sourceTeam(except: string) {
     const h = await hosts();
     const connected = new Set(h.hosts.filter((x) => x.status === "connected").map((x) => x.id));
-    const order = [...new Set([h.primaryId, ...h.hosts.map((x) => x.id)])].filter((x): x is string => x !== null && x !== except && connected.has(x));
+    const order = [...new Set([h.primaryId, ...h.hosts.map((x) => x.id)])].filter(
+      (x): x is string => x !== null && x !== except && connected.has(x),
+    );
     return teamSource(order, {
       hasAiUsage: async (id) => (await probeHost(id))?.bin != null,
       collected: async (id) => {
         if (cache(id).reportState?.ok !== true) await refresh(id);
         return cache(id).reportState?.ok === true;
       },
-      key: async (id) => check(await run(id, (await probeHost(id))!, ["team", "key"], TIMEOUT.short)),
+      key: async (id) =>
+        check(await run(id, (await probeHost(id))!, ["team", "key"], TIMEOUT.short)),
       relay: async (id) => {
         const p = (await probeHost(id))!;
-        return host.call("relay", { bin: p.bin!, aiHome: p.aiHome }, { hostId: id, timeoutMs: TIMEOUT.short });
+        return host.call(
+          "relay",
+          { bin: p.bin!, aiHome: p.aiHome },
+          { hostId: id, timeoutMs: TIMEOUT.short },
+        );
       },
     });
   }
 
-  // Installs ai-usage on the primary machine when the plugin starts and the
-  // machine has none, once per machine. A machine that already has it is
-  // recorded too, so removing ai-usage from it later does not bring it back.
-  async function autoInstall(signal: AbortSignal): Promise<boolean> {
+  async function autoInstall(signal: AbortSignal) {
     const h = await hosts(true);
     if (h.primaryId === null) return false;
     const id = h.primaryId;
@@ -334,19 +403,24 @@ export default async function plugin(bb: BbPluginApi) {
 
   bb.background.service("auto-install", {
     async start(signal) {
-      // The primary machine may connect after the server starts.
       for (let attempt = 0; attempt < 30 && !signal.aborted; attempt++) {
         try {
           if (await autoInstall(signal)) return;
         } catch (error) {
-          bb.log.warn(`auto-install check failed: ${error instanceof Error ? error.message : String(error)}`);
+          bb.log.warn(
+            `auto-install check failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
         await new Promise<void>((done) => {
           const timer = setTimeout(done, 2 * MINUTE);
-          signal.addEventListener("abort", () => {
-            clearTimeout(timer);
-            done();
-          }, { once: true });
+          signal.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(timer);
+              done();
+            },
+            { once: true },
+          );
         });
       }
     },
@@ -377,7 +451,9 @@ export default async function plugin(bb: BbPluginApi) {
       guard(context);
       const h = await hosts(true);
       const persistent = h.hosts.filter((x) => x.type === "persistent");
-      await Promise.all(persistent.filter((x) => x.status === "connected").map((x) => probeHost(x.id)));
+      await Promise.all(
+        persistent.filter((x) => x.status === "connected").map((x) => probeHost(x.id)),
+      );
       const machines = [];
       for (const x of persistent) {
         const v = await view(x.id);
@@ -433,10 +509,14 @@ export default async function plugin(bb: BbPluginApi) {
             check(await run(t.id, t.probe, ["relay", "set", relay.trim()], TIMEOUT.short));
             log("relay set");
           }
-          const said = check(await run(t.id, t.probe, ["team", "join"], TIMEOUT.join, { stdin: `${key.trim()}\n` }));
+          const said = check(
+            await run(t.id, t.probe, ["team", "join"], TIMEOUT.join, { stdin: `${key.trim()}\n` }),
+          );
           log(said.split("\n")[0] ?? "joined");
           await collect(t.id, t.probe, log);
-          return said.startsWith("already in team") ? "This machine is already in that team." : "Joined the team.";
+          return said.startsWith("already in team")
+            ? "This machine is already in that team."
+            : "Joined the team.";
         }),
       };
     },
@@ -444,10 +524,15 @@ export default async function plugin(bb: BbPluginApi) {
       guard(context);
       const t = await target(hostId);
       if (t.probe.bin === null) throw new Error("ai-usage is not installed on this machine");
-      // team key on a machine that never collected makes a new team, so ask only once it has.
-      if (cache(t.id).reportState?.ok !== true) throw new Error("Invite works once this machine has collected");
+      // WARNING: `team key` on a machine that never collected makes a new team.
+      if (cache(t.id).reportState?.ok !== true)
+        throw new Error("Invite works once this machine has collected");
       const key = check(await run(t.id, t.probe, ["team", "key"], TIMEOUT.short));
-      const relay = await host.call("relay", { bin: t.probe.bin, aiHome: t.probe.aiHome }, { hostId: t.id, timeoutMs: TIMEOUT.short });
+      const relay = await host.call(
+        "relay",
+        { bin: t.probe.bin, aiHome: t.probe.aiHome },
+        { hostId: t.id, timeoutMs: TIMEOUT.short },
+      );
       return { message: inviteMessage(key, relay) };
     },
     update: async ({ hostId }, context) => {
@@ -458,7 +543,8 @@ export default async function plugin(bb: BbPluginApi) {
           log("ai-usage update");
           const said = check(await run(t.id, t.probe, ["update"], TIMEOUT.update));
           const p = await probeHost(t.id, true);
-          if (p !== null) take(t.id, await run(t.id, p, ["report", "--json"], TIMEOUT.report, { json: true }));
+          if (p !== null)
+            take(t.id, await run(t.id, p, ["report", "--json"], TIMEOUT.report, { json: true }));
           return said.split("\n").at(-1) ?? "updated";
         }),
       };
@@ -468,7 +554,9 @@ export default async function plugin(bb: BbPluginApi) {
       const t = await target(hostId);
       return {
         jobId: startJob(t.id, on ? "schedule-on" : "schedule-off", async () => {
-          const said = check(await run(t.id, t.probe, ["schedule", on ? "install" : "remove"], TIMEOUT.short));
+          const said = check(
+            await run(t.id, t.probe, ["schedule", on ? "install" : "remove"], TIMEOUT.short),
+          );
           await probeHost(t.id, true);
           void refresh(t.id);
           return said.split("\n")[0] ?? "";

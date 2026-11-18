@@ -6,13 +6,13 @@ export const STATUS_SAFE = "v0.11.0";
 export const SCHEMA_VERSION = 4;
 
 /** A release as numbers, "v0.10.2" as [0, 10, 2]; null for a build from source. */
-export function parseRelease(v: string | null | undefined): number[] | null {
+export function parseRelease(v: string | null | undefined) {
   const m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec((v ?? "").trim());
   return m === null ? null : [Number(m[1]), Number(m[2]), Number(m[3])];
 }
 
 /** At least `min`. A build from source, `devel` or `dev`, is newer than any release. */
-export function atLeast(v: string | null | undefined, min: string): boolean {
+export function atLeast(v: string | null | undefined, min: string) {
   if (v === null || v === undefined || v === "") return false;
   const have = parseRelease(v);
   const want = parseRelease(min);

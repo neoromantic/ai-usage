@@ -1,8 +1,3 @@
-// The report `ai-usage report --json` prints, schema version 4, as
-// docs/json-schema.md describes it and the menu bar app reads it
-// (macos/Sources/AIUsageKit/Report.swift). Only the fields the plugin shows
-// are typed here. A field an earlier release leaves out reads as the app
-// reads it: empty, false, 0, or null.
 import { SCHEMA_VERSION } from "./version.js";
 
 export type Period = "today" | "7d" | "30d" | "90d";
@@ -34,9 +29,22 @@ export interface Collector {
   last_run_at: string | null;
   last_success_at: string | null;
   last_error: string | null;
-  relay: { url: string | null; last_push_at: string | null; last_pull_at: string | null; pending: boolean; last_error: string | null };
+  relay: {
+    url: string | null;
+    last_push_at: string | null;
+    last_pull_at: string | null;
+    pending: boolean;
+    last_error: string | null;
+  };
   schedule: { registered: boolean; foreground: boolean; error: string | null };
-  update: { checked_at: string | null; latest: string | null; staged: string | null; error: string | null; method: string; command: string | null };
+  update: {
+    checked_at: string | null;
+    latest: string | null;
+    staged: string | null;
+    error: string | null;
+    method: string;
+    command: string | null;
+  };
   health: Health[];
 }
 
@@ -208,31 +216,39 @@ export interface Report {
 
 export class SchemaError extends Error {
   constructor(readonly version: unknown) {
-    super(`This plugin reads report schema ${SCHEMA_VERSION}; ai-usage printed ${String(version)}. Update the AI Usage plugin and ai-usage to the same release.`);
+    super(
+      `This plugin reads report schema ${SCHEMA_VERSION}; ai-usage printed ${String(version)}. Update the AI Usage plugin and ai-usage to the same release.`,
+    );
   }
 }
 
 type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj => (v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : {});
-const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
-const str = (v: unknown, absent = ""): string => (typeof v === "string" ? v : absent);
-const ostr = (v: unknown): string | null => (typeof v === "string" ? v : null);
-const num = (v: unknown, absent = 0): number => (typeof v === "number" && Number.isFinite(v) ? v : absent);
-const onum = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
-const bool = (v: unknown): boolean => v === true;
+const obj = (v: unknown) =>
+  v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : {};
+const arr: (v: unknown) => unknown[] = (v) => (Array.isArray(v) ? v : []);
+const str = (v: unknown, absent = "") => (typeof v === "string" ? v : absent);
+const ostr = (v: unknown) => (typeof v === "string" ? v : null);
+const num = (v: unknown, absent = 0) => (typeof v === "number" && Number.isFinite(v) ? v : absent);
+const onum = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+const bool = (v: unknown) => v === true;
 
-function usage(v: unknown): Usage {
+function usage(v: unknown) {
   const o = obj(v);
   return { today: num(o.today), "7d": num(o["7d"]), "30d": num(o["30d"]), "90d": num(o["90d"]) };
 }
-const ousage = (v: unknown): Usage | null => (v === null || v === undefined ? null : usage(v));
-function share(v: unknown): Share {
+const ousage = (v: unknown) => (v === null || v === undefined ? null : usage(v));
+function share(v: unknown) {
   const o = obj(v);
-  return { today: onum(o.today), "7d": onum(o["7d"]), "30d": onum(o["30d"]), "90d": onum(o["90d"]) };
+  return {
+    today: onum(o.today),
+    "7d": onum(o["7d"]),
+    "30d": onum(o["30d"]),
+    "90d": onum(o["90d"]),
+  };
 }
-const oshare = (v: unknown): Share | null => (v === null || v === undefined ? null : share(v));
+const oshare = (v: unknown) => (v === null || v === undefined ? null : share(v));
 
-function window(v: unknown): Window {
+function window(v: unknown) {
   const o = obj(v);
   const f = o.forecast === null || o.forecast === undefined ? null : obj(o.forecast);
   return {
@@ -249,7 +265,14 @@ function window(v: unknown): Window {
     forecast:
       f === null
         ? null
-        : { percent: num(f.percent), elapsed: num(f.elapsed), runs_out_at: ostr(f.runs_out_at), basis: ostr(f.basis), pace: onum(f.pace), stopped: bool(f.stopped) },
+        : {
+            percent: num(f.percent),
+            elapsed: num(f.elapsed),
+            runs_out_at: ostr(f.runs_out_at),
+            basis: ostr(f.basis),
+            pace: onum(f.pace),
+            stopped: bool(f.stopped),
+          },
   };
 }
 
@@ -257,7 +280,7 @@ function window(v: unknown): Window {
  * Reads a report, or throws a SchemaError when its schema is not the one
  * this plugin reads, as the app refuses one.
  */
-export function readReport(raw: unknown): Report {
+export function readReport(raw: unknown) {
   const r = obj(raw);
   if (r.schema_version !== SCHEMA_VERSION) throw new SchemaError(r.schema_version);
   const c = obj(r.collector);
@@ -280,8 +303,18 @@ export function readReport(raw: unknown): Report {
       last_run_at: ostr(c.last_run_at),
       last_success_at: ostr(c.last_success_at),
       last_error: ostr(c.last_error),
-      relay: { url: ostr(relay.url), last_push_at: ostr(relay.last_push_at), last_pull_at: ostr(relay.last_pull_at), pending: bool(relay.pending), last_error: ostr(relay.last_error) },
-      schedule: { registered: bool(schedule.registered), foreground: bool(schedule.foreground), error: ostr(schedule.error) },
+      relay: {
+        url: ostr(relay.url),
+        last_push_at: ostr(relay.last_push_at),
+        last_pull_at: ostr(relay.last_pull_at),
+        pending: bool(relay.pending),
+        last_error: ostr(relay.last_error),
+      },
+      schedule: {
+        registered: bool(schedule.registered),
+        foreground: bool(schedule.foreground),
+        error: ostr(schedule.error),
+      },
       update: {
         checked_at: ostr(update.checked_at),
         latest: ostr(update.latest),
@@ -292,7 +325,13 @@ export function readReport(raw: unknown): Report {
       },
       health: arr(c.health).map((h) => {
         const o = obj(h);
-        return { item: str(o.item), status: str(o.status), state: str(o.state), at: ostr(o.at), release: ostr(o.release) };
+        return {
+          item: str(o.item),
+          status: str(o.status),
+          state: str(o.state),
+          at: ostr(o.at),
+          release: ostr(o.release),
+        };
       }),
     },
     attention: arr(r.attention).map((a) => {
@@ -334,7 +373,9 @@ export function readReport(raw: unknown): Report {
           usage: usage(o.usage),
           burn: ousage(o.burn),
           note: ostr(o.note),
-          pooled: arr(o.pooled).map((p) => str(p)).filter((p) => p !== ""),
+          pooled: arr(o.pooled)
+            .map((p) => str(p))
+            .filter((p) => p !== ""),
         };
       }),
       providers: arr(team.providers).map((p) => {
@@ -356,7 +397,13 @@ export function readReport(raw: unknown): Report {
               quota:
                 q === null
                   ? null
-                  : { observed_at: str(q.observed_at), age_seconds: num(q.age_seconds), stale: bool(q.stale), device: ostr(q.device), windows: arr(q.windows).map(window) },
+                  : {
+                      observed_at: str(q.observed_at),
+                      age_seconds: num(q.age_seconds),
+                      stale: bool(q.stale),
+                      device: ostr(q.device),
+                      windows: arr(q.windows).map(window),
+                    },
               sessions: num(x.sessions),
               usage: usage(x.usage),
               burn: ousage(x.burn),
@@ -389,7 +436,12 @@ export function readReport(raw: unknown): Report {
             device_id: str(o.device_id),
             cells: arr(o.cells).map((cell) => {
               const x = obj(cell);
-              return { usage: usage(x.usage), burn: ousage(x.burn), share: share(x.share), burn_share: oshare(x.burn_share) };
+              return {
+                usage: usage(x.usage),
+                burn: ousage(x.burn),
+                share: share(x.share),
+                burn_share: oshare(x.burn_share),
+              };
             }),
             usage: usage(o.usage),
             burn: ousage(o.burn),
@@ -416,7 +468,12 @@ export function readReport(raw: unknown): Report {
                 ? null
                 : (() => {
                     const n = obj(cost.next_charge);
-                    return { provider: str(n.provider), account: str(n.account), at: str(n.at), usd: onum(n.usd) };
+                    return {
+                      provider: str(n.provider),
+                      account: str(n.account),
+                      at: str(n.at),
+                      usd: onum(n.usd),
+                    };
                   })(),
             subscriptions: arr(cost.subscriptions).map((s) => {
               const o = obj(s);
@@ -445,5 +502,5 @@ export function readReport(raw: unknown): Report {
               };
             }),
           },
-  };
+  } satisfies Report;
 }

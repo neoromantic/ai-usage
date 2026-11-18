@@ -1,0 +1,5 @@
+// managed by devkit v1: edit in https://github.com/neoromantic/devkit/blob/main/templates/.oxfmtrc.jsonc
+// The shared format standard: oxfmt defaults. This repo's exceptions go in .prettierignore.
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+}

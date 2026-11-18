@@ -1,5 +1,5 @@
-export function useBrowserDimmingModal(_active: boolean): void {}
+export function useBrowserDimmingModal(_active: boolean) {}
 
-export function useIsBrowserDimmingModalOpen(): boolean {
+export function useIsBrowserDimmingModalOpen() {
   return false;
 }

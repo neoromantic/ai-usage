@@ -2,6 +2,7 @@
 
 <!-- devkit:agents v1 -->
 <!-- managed by devkit v1: edit in https://github.com/neoromantic/devkit/blob/main/agents/AGENTS.shared.md -->
+
 ## Shared rules (devkit)
 
 These rules apply to people and coding agents in every repo that uses
@@ -20,6 +21,7 @@ Where they conflict, the project section wins.
 Use the project section's native commands for checks, offline tests and builds:
 
 - Bun: `bun run <script>` (`check`, or `lint` and `typecheck`; `test`, `test:e2e`, `build`).
+  `bun run format` formats; `check` fails on unformatted code and on lint errors.
 - Python: the documented `uv run` / `uvx` commands, such as pytest, unittest and ruff.
 - Go: the documented `go` commands from `go.mod`. Do not add Bun wrappers for Python or Go.
 - Use Bun, uv or Go modules for installs. Use npm only for `npm publish` and `npm view`.
@@ -30,6 +32,9 @@ Use the project section's native commands for checks, offline tests and builds:
 - README, docs and affected demos change with the behaviour they describe; follow the
   [product content standard](https://github.com/neoromantic/devkit/blob/main/docs/standards/product-content.md).
 - No new warnings, no commented-out code, no stray debug output.
+- JS and TS follow the [lint and format standard](https://github.com/neoromantic/devkit/blob/main/docs/standards/lint-format.md):
+  no prose comments (rationale goes in the PR), tests beside their code, no mocks of the code
+  under test, no fixed sleeps or retries. Fix the code; exceptions go in `.oxlintrc.json`.
 
 ### Commits and releases
 
@@ -46,8 +51,10 @@ Use the project section's native commands for checks, offline tests and builds:
 - Don't add agent hooks that rewrite tracked files.
 - `AGENTS.md` is the canonical instruction file. `CLAUDE.md` contains only `@AGENTS.md`.
 - Files marked "managed by devkit" (this block, `SECURITY.md`, `CONTRIBUTING.md`, the PR
-  template, `.gitleaks.toml`, `.github/zizmor.yml`, `renovate.json`, `lefthook.yml` and the
-  CI stub) are synced from devkit. Change them there, not here.
+  template, `.gitleaks.toml`, `.github/zizmor.yml`, `renovate.json`, `lefthook.yml`, the
+  CI stub, `.oxfmtrc.jsonc` and `.oxlintrc.devkit.jsonc`) are synced from devkit. Change them
+  there, not here.
+
 <!-- /devkit:agents -->
 
 ## Project
@@ -89,6 +96,17 @@ Before every push, read the diff and the commit messages for real data. Push onl
 
 The app runs `ai-usage report --json` and shows what it says. It never works out a report, a forecast, an alert, or a total of its own. When it needs something the report does not have, add the field to the Go JSON: describe it in [docs/json-schema.md](docs/json-schema.md), test it in Go, and check the app's use of it in `AIUsageChecks`.
 
+### The BB plugin shows the Go report too
+
+`bb/` draws the report the same way: `src/report.ts` types the fields it shows of schema 4, and reads a field an earlier release leaves out as the app does, `src/format.ts` prints numbers and times as the app's `Format.swift` and `Glance.swift` do, and `src/message.ts` reads what went wrong as its `CLI.swift` does. Its rules:
+
+- The host entry, on each BB machine, runs only ai-usage and its installer, with every argv checked against `src/args.ts`; `team key` is the one command whose output is the key.
+- Every run gets `src/env.ts`'s environment, without BB's own folders on PATH: a launch agent or crontab line keeps the PATH of the run that registered it, so those folders would outlive BB in the schedule.
+- `src/spawn.ts` reads both pipes while a child runs, since a report is larger than a pipe holds.
+- The server keeps each machine's last report in memory and never logs the team key or what a report says. It runs the long operations as jobs, one per machine at a time, since each writes that machine's ai-usage state.
+- It installs ai-usage on the primary machine when the plugin starts, once per machine, and records a machine that already has it too, so removing ai-usage there later does not bring it back.
+- It asks for the team key only of a machine that has collected: `team key` on one that never did makes a new team. Before v0.11.0, `status --json` did the same, so the host asks an older binary only for its version.
+
 ### Checks before a push
 
 `scripts/verify.sh` runs the checks the branch's changes need and keeps what they showed in `.verify/latest/`; `scripts/verify.sh --push` runs them at the depth CI does. Run that before a branch's first push. After a rebase, run `scripts/verify.sh` only when you resolved a conflict, for what the resolution touched; CI runs the rest. The skill [verify-ai-usage](.agents/skills/verify-ai-usage/SKILL.md) says what each step proves, how to read its evidence, and how to drive the report, a team, and the app by hand without touching this machine's own ai-usage.
@@ -126,6 +144,8 @@ sh macos/build.sh v9.9.9-local /tmp/ai-usage-app.zip
 ```
 
 After a change to a shell script, CI runs `sh -n` and `shellcheck -s sh` on it.
+
+After a change in `bb/` or to `scripts/demo/*.ts`, run `bun run format` and then `bun run check` in `bb/`. oxfmt formats that TypeScript and every other file of `bb/` it knows, and oxlint lints the TypeScript with devkit's shared rules, the landmines rules among them, which need Node 22.18 or later; this repo's exceptions to them go in `bb/.oxlintrc.json`. oxfmt formats nothing outside `bb/` and `scripts/demo/*.ts`: the Go code keeps gofmt, and the docs keep their own layout.
 
 After a change to a workflow, CI's hygiene job runs actionlint and zizmor on it; run `actionlint` and `uvx zizmor@1.31.1 --offline .` first. Pin each action to a full commit with its version in a comment, as in `actions/checkout@<sha> # v7.0.1`, and give a checkout `persist-credentials: false`.
 

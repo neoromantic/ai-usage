@@ -1,7 +1,3 @@
-// The team a machine joins when it is installed from another machine's
-// Settings: the key and relay of the first machine that runs ai-usage and
-// has collected, read into memory only.
-
 export interface TeamSource {
   key: string;
   relay: string | null;
@@ -23,7 +19,7 @@ export class NoTeamError extends Error {}
  * runs ai-usage, so the install starts a team of its own. A machine that
  * runs ai-usage but gives no key is an error, never a new team in silence.
  */
-export async function teamSource(order: string[], m: SourceMachine): Promise<TeamSource | null> {
+export async function teamSource(order: string[], m: SourceMachine) {
   let found = false;
   let why = "";
   for (const id of order) {
@@ -40,11 +36,18 @@ export async function teamSource(order: string[], m: SourceMachine): Promise<Tea
         continue;
       }
       const relay = await m.relay(id);
-      return { key, relay: relay.configured !== null && relay.configured !== relay.builtIn ? relay.configured : null };
+      return {
+        key,
+        relay:
+          relay.configured !== null && relay.configured !== relay.builtIn ? relay.configured : null,
+      } satisfies TeamSource;
     } catch (error) {
       why = error instanceof Error ? error.message : String(error);
     }
   }
-  if (found) throw new NoTeamError(`Could not read the team of a machine that runs ai-usage (${why}); install with its team key from the AI Usage page instead.`);
+  if (found)
+    throw new NoTeamError(
+      `Could not read the team of a machine that runs ai-usage (${why}); install with its team key from the AI Usage page instead.`,
+    );
   return null;
 }

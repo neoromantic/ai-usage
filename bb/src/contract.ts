@@ -1,10 +1,4 @@
-// The contract between the server entry and the host entry, which runs on
-// each BB machine. The host runs ai-usage and its installer; it has no
-// generic exec: every argv it accepts is checked against src/args.ts.
-import {
-  defineRpcContract,
-  type ExperimentalHostSignals,
-} from "@get-bb/plugin-sdk";
+import { defineRpcContract, type ExperimentalHostSignals } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 
 export const probeOutput = z
@@ -42,7 +36,11 @@ export const runInput = z
     stdin: z.string().max(4096).nullable(),
     /** Parse standard output as JSON and return it as `json`. */
     json: z.boolean(),
-    timeoutMs: z.number().int().min(1000).max(30 * 60 * 1000),
+    timeoutMs: z
+      .number()
+      .int()
+      .min(1000)
+      .max(30 * 60 * 1000),
   })
   .strict();
 export type RunInput = z.infer<typeof runInput>;
@@ -78,7 +76,9 @@ export const installOutput = z
   .strict();
 export type InstallOutput = z.infer<typeof installOutput>;
 
-export const relayInput = z.object({ bin: z.string().min(1), aiHome: z.string().nullable() }).strict();
+export const relayInput = z
+  .object({ bin: z.string().min(1), aiHome: z.string().nullable() })
+  .strict();
 export const relayOutput = z
   .object({ configured: z.string().nullable(), builtIn: z.string().nullable() })
   .strict();
@@ -92,8 +92,6 @@ export const hostContract = defineRpcContract({
 
 export const hostSignals = {
   installLog: {
-    payload: z
-      .object({ jobId: z.string(), line: z.string().max(4096) })
-      .strict(),
+    payload: z.object({ jobId: z.string(), line: z.string().max(4096) }).strict(),
   },
 } satisfies ExperimentalHostSignals;

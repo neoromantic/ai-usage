@@ -1,4 +1,5 @@
 <!-- managed by devkit v1: edit in https://github.com/neoromantic/devkit/blob/main/templates/SECURITY.md -->
+
 # Security policy
 
 ## Reporting a vulnerability

@@ -1,16 +1,21 @@
-// Settings → AI Usage: this machine's ai-usage and what to do with it, and
-// the other machines BB has, each with its own Install.
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { HostView, JobView, Phase, rpcContract } from "../src/rpc";
 import { Banner, Spinner } from "./bits";
 import { useAiUsage, useExample } from "./use-ai-usage";
 
-function message(cause: unknown): string {
+function message(cause: unknown) {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
@@ -37,7 +42,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function macosMajor(v: string | null): number {
+function macosMajor(v: string | null) {
   return Number((v ?? "0").split(".")[0]);
 }
 
@@ -57,50 +62,95 @@ export function SettingsSection() {
   }
   const has = view.version !== null;
   const running = job?.status === "running";
-  const paused = report?.collector.health.find((h) => h.item === "collection")?.status === "unscheduled" || view.schedule === "absent" || view.schedule === "disabled";
+  const paused =
+    report?.collector.health.find((h) => h.item === "collection")?.status === "unscheduled" ||
+    view.schedule === "absent" ||
+    view.schedule === "disabled";
   const start = (method: "update" | "appInstall", label: string) =>
     rpc
       .call(method, { hostId: view.hostId })
       .then(() => toast(label))
       .catch((e: unknown) => toast.error(message(e)));
-  const canApp = view.platform === "darwin" && !view.root && !view.app && macosMajor(view.macos) >= 14;
+  const canApp =
+    view.platform === "darwin" && !view.root && !view.app && macosMajor(view.macos) >= 14;
   return (
     <div className="space-y-6">
       <div>
         <div className="divide-y divide-border">
           <Row label="Machine">
             {view.hostName ?? "–"}
-            {view.user !== null ? <span className="text-muted-foreground"> · {view.root ? "root" : view.user}</span> : null}
+            {view.user !== null ? (
+              <span className="text-muted-foreground"> · {view.root ? "root" : view.user}</span>
+            ) : null}
           </Row>
-          <Row label="ai-usage">{has ? `${view.version} · ${view.method === "homebrew" ? "Homebrew" : "updates itself"}` : PHASE_WORDS[view.phase]}</Row>
-          {has ? <Row label="Collecting">{paused ? "paused" : view.phase === "ready" ? "every 15 minutes" : PHASE_WORDS[view.phase]}</Row> : null}
-          {report?.collector.relay.url != null ? <Row label="Relay">{report.collector.relay.url}</Row> : null}
-          {view.platform === "darwin" ? <Row label="Menu bar app">{view.app ? "installed" : "not installed"}</Row> : null}
+          <Row label="ai-usage">
+            {has
+              ? `${view.version} · ${view.method === "homebrew" ? "Homebrew" : "updates itself"}`
+              : PHASE_WORDS[view.phase]}
+          </Row>
+          {has ? (
+            <Row label="Collecting">
+              {paused
+                ? "paused"
+                : view.phase === "ready"
+                  ? "every 15 minutes"
+                  : PHASE_WORDS[view.phase]}
+            </Row>
+          ) : null}
+          {report?.collector.relay.url != null ? (
+            <Row label="Relay">{report.collector.relay.url}</Row>
+          ) : null}
+          {view.platform === "darwin" ? (
+            <Row label="Menu bar app">{view.app ? "installed" : "not installed"}</Row>
+          ) : null}
         </div>
       </div>
-      {job !== null && job.status !== "running" && job.kind !== "collect" && Date.now() - (job.endedAt ?? 0) < 10 * 60_000 ? (
+      {job !== null &&
+      job.status !== "running" &&
+      job.kind !== "collect" &&
+      Date.now() - (job.endedAt ?? 0) < 10 * 60_000 ? (
         <Banner tone={job.status === "failed" ? "out" : "quiet"}>{job.message}</Banner>
       ) : null}
       {has ? (
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" disabled={running} onClick={() => void start("update", "Updating ai-usage…")}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={running}
+            onClick={() => void start("update", "Updating ai-usage…")}
+          >
             Update ai-usage
           </Button>
           <Button
             size="sm"
             variant="outline"
             disabled={running}
-            onClick={() => rpc.call("schedule", { hostId: view.hostId, on: paused }).catch((e: unknown) => toast.error(message(e)))}
+            onClick={() =>
+              rpc
+                .call("schedule", { hostId: view.hostId, on: paused })
+                .catch((e: unknown) => toast.error(message(e)))
+            }
           >
             {paused ? "Resume collecting" : "Pause collecting"}
           </Button>
           {canApp ? (
-            <Button size="sm" variant="outline" disabled={running} onClick={() => void start("appInstall", "Installing the menu bar app…")}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={running}
+              onClick={() => void start("appInstall", "Installing the menu bar app…")}
+            >
               Install menu bar app
             </Button>
           ) : null}
           {view.canUninstall ? (
-            <Button size="sm" variant="ghost" className="text-destructive-text" disabled={running} onClick={() => setRemoving(true)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-destructive-text"
+              disabled={running}
+              onClick={() => setRemoving(true)}
+            >
               Remove ai-usage…
             </Button>
           ) : null}
@@ -117,15 +167,24 @@ export function SettingsSection() {
       )}
       <Machines />
       <p className="text-xs text-muted-foreground">
-        Removing this plugin leaves ai-usage collecting on every machine it is on. Anything that runs in this BB as you, agents included, can read the team report through
-        this plugin and ask it for the team key.
+        Removing this plugin leaves ai-usage collecting on every machine it is on. Anything that
+        runs in this BB as you, agents included, can read the team report through this plugin and
+        ask it for the team key.
       </p>
       <RemoveDialog open={removing} onOpenChange={setRemoving} view={view} />
     </div>
   );
 }
 
-function RemoveDialog({ open, onOpenChange, view }: { open: boolean; onOpenChange: (open: boolean) => void; view: HostView }) {
+function RemoveDialog({
+  open,
+  onOpenChange,
+  view,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  view: HostView;
+}) {
   const rpc = useRpc<typeof rpcContract>();
   const [forget, setForget] = useState(true);
   const [purge, setPurge] = useState(false);
@@ -135,14 +194,20 @@ function RemoveDialog({ open, onOpenChange, view }: { open: boolean; onOpenChang
         <DialogHeader>
           <DialogTitle>Remove ai-usage from {view.hostName ?? "this machine"}</DialogTitle>
           <DialogDescription>
-            Stops collecting and removes the schedule{view.method === "homebrew" ? "; Homebrew's copy stays, and the result says how to remove it" : ", the menu bar app, and the binary"}.
+            Stops collecting and removes the schedule
+            {view.method === "homebrew"
+              ? "; Homebrew's copy stays, and the result says how to remove it"
+              : ", the menu bar app, and the binary"}
+            .
           </DialogDescription>
         </DialogHeader>
         <label className="flex items-center gap-2 text-sm">
-          <Checkbox checked={forget} onCheckedChange={(v) => setForget(v === true)} /> Drop this machine from the team
+          <Checkbox checked={forget} onCheckedChange={(v) => setForget(v === true)} /> Drop this
+          machine from the team
         </label>
         <label className="flex items-center gap-2 text-sm">
-          <Checkbox checked={purge} onCheckedChange={(v) => setPurge(v === true)} /> Also delete its history and the team key
+          <Checkbox checked={purge} onCheckedChange={(v) => setPurge(v === true)} /> Also delete its
+          history and the team key
         </label>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
@@ -186,7 +251,10 @@ function Machines() {
   const rpc = useRpc<typeof rpcContract>();
   const [machines, setMachines] = useState<MachineLine[] | null>(null);
   const load = useCallback(() => {
-    rpc.call("machines").then((r) => setMachines(r.machines), () => setMachines([]));
+    rpc.call("machines").then(
+      (r) => setMachines(r.machines),
+      () => setMachines([]),
+    );
   }, [rpc]);
   useEffect(() => load(), [load]);
   useRealtime("job", (p) => {
@@ -197,7 +265,10 @@ function Machines() {
   return (
     <div>
       <h3 className="text-sm font-medium">BB machines</h3>
-      <p className="mt-0.5 text-xs text-muted-foreground">Install puts ai-usage on another machine, in this machine's team. Each machine is a device of the team.</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        Install puts ai-usage on another machine, in this machine's team. Each machine is a device
+        of the team.
+      </p>
       <ul className="mt-2 divide-y divide-border">
         {machines.map((m) => (
           <li key={m.id} className="flex items-center justify-between gap-3 py-2 text-sm">
@@ -205,10 +276,14 @@ function Machines() {
               <span className="font-medium">{m.name}</span>
               {m.primary ? <span className="text-muted-foreground"> · runs BB</span> : null}
               <div className="text-xs text-muted-foreground">
-                {[m.platform, m.root ? "root" : m.user, m.version ?? PHASE_WORDS[m.phase]].filter((x) => x !== null).join(" · ")}
+                {[m.platform, m.root ? "root" : m.user, m.version ?? PHASE_WORDS[m.phase]]
+                  .filter((x) => x !== null)
+                  .join(" · ")}
               </div>
             </div>
-            {(m.phase === "absent" || m.phase === "install-failed") && m.connected && !m.scheduleEntry ? (
+            {(m.phase === "absent" || m.phase === "install-failed") &&
+            m.connected &&
+            !m.scheduleEntry ? (
               <Button
                 size="sm"
                 variant="outline"
@@ -227,7 +302,9 @@ function Machines() {
             ) : m.phase === "installing" ? (
               <Spinner />
             ) : (
-              <span className="text-xs text-muted-foreground">{m.phase === "loading" && m.version !== null ? "installed" : PHASE_WORDS[m.phase]}</span>
+              <span className="text-xs text-muted-foreground">
+                {m.phase === "loading" && m.version !== null ? "installed" : PHASE_WORDS[m.phase]}
+              </span>
             )}
           </li>
         ))}

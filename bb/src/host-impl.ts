@@ -1,5 +1,3 @@
-// What the host entry does on a BB machine, with the machine passed in so
-// tests can give it a made-up one.
 import { access, constants, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -32,7 +30,7 @@ export interface Machine {
  * AI_USAGE_CALLER marks the runs as BB's, so the reports it reads every minute record no usage
  * stats.
  */
-export function childEnv(m: Machine, aiHome: string | null): Env {
+export function childEnv(m: Machine, aiHome: string | null) {
   const dirs = (m.env.PATH ?? "").split(path.delimiter).filter((d) => d !== "");
   for (const d of m.dirs) if (!dirs.includes(d) && existsSync(d)) dirs.push(d);
   const env: Env = { ...m.env, PATH: dirs.join(path.delimiter), AI_USAGE_CALLER: "bb" };
@@ -40,7 +38,7 @@ export function childEnv(m: Machine, aiHome: string | null): Env {
   return env;
 }
 
-async function executable(file: string): Promise<boolean> {
+async function executable(file: string) {
   try {
     await access(file, constants.X_OK);
     return true;
@@ -50,48 +48,58 @@ async function executable(file: string): Promise<boolean> {
 }
 
 /** The first ai-usage on PATH or in the standard folders. */
-export async function findBinary(m: Machine): Promise<string | null> {
-  for (const file of candidates(m.env, m.dirs, m.platform === "win32" ? "ai-usage.exe" : "ai-usage")) {
+export async function findBinary(m: Machine) {
+  for (const file of candidates(
+    m.env,
+    m.dirs,
+    m.platform === "win32" ? "ai-usage.exe" : "ai-usage",
+  )) {
     if (await executable(file)) return file;
   }
   return null;
 }
 
-/** A launch agent or a crontab line of ai-usage is there. */
-async function scheduleEntry(m: Machine): Promise<boolean> {
-  if (m.platform === "darwin") return existsSync(path.join(m.home, "Library/LaunchAgents", `${AGENT}.plist`));
+async function scheduleEntry(m: Machine) {
+  if (m.platform === "darwin")
+    return existsSync(path.join(m.home, "Library/LaunchAgents", `${AGENT}.plist`));
   if (m.platform !== "linux") return false;
   const r = await run("crontab", ["-l"], { env: m.env, timeoutMs: 10_000 });
   return r.code === 0 && r.stdout.split("\n").some((line) => line.trimEnd().endsWith("# ai-usage"));
 }
 
-/** The program the launch agent runs, read by plutil, when it is an ai-usage binary there. */
-async function agentProgram(m: Machine): Promise<string | null> {
+async function agentProgram(m: Machine) {
   if (m.platform !== "darwin") return null;
   const plist = path.join(m.home, "Library/LaunchAgents", `${AGENT}.plist`);
-  const r = await run("plutil", ["-extract", "ProgramArguments.0", "raw", "-o", "-", plist], { env: m.env, timeoutMs: 10_000 });
+  const r = await run("plutil", ["-extract", "ProgramArguments.0", "raw", "-o", "-", plist], {
+    env: m.env,
+    timeoutMs: 10_000,
+  });
   const program = r.stdout.trim();
-  if (r.code !== 0 || !path.isAbsolute(program) || path.basename(program) !== "ai-usage") return null;
+  if (r.code !== 0 || !path.isAbsolute(program) || path.basename(program) !== "ai-usage")
+    return null;
   return (await executable(program)) ? program : null;
 }
 
-function appInstalled(m: Machine): boolean {
+function appInstalled(m: Machine) {
   if (m.platform !== "darwin") return false;
-  return [path.join(m.home, "Applications/AI Usage.app"), "/Applications/AI Usage.app"].some((p) => existsSync(p));
+  return [path.join(m.home, "Applications/AI Usage.app"), "/Applications/AI Usage.app"].some((p) =>
+    existsSync(p),
+  );
 }
 
-async function macosVersion(m: Machine): Promise<string | null> {
+async function macosVersion(m: Machine) {
   if (m.platform !== "darwin") return null;
   const r = await run("sw_vers", ["-productVersion"], { env: m.env, timeoutMs: 10_000 });
   return r.code === 0 ? r.stdout.trim() : null;
 }
 
-export async function runCommand(m: Machine, input: RunInput, signal?: AbortSignal): Promise<RunOutput> {
+export async function runCommand(m: Machine, input: RunInput, signal?: AbortSignal) {
   const base = path.basename(input.bin);
   if (!path.isAbsolute(input.bin) || (base !== "ai-usage" && base !== "ai-usage.exe")) {
     throw new Error("not an ai-usage binary");
   }
-  if (!allowed(input.args)) throw new Error(`ai-usage ${input.args[0] ?? ""} is not a command this plugin runs`);
+  if (!allowed(input.args))
+    throw new Error(`ai-usage ${input.args[0] ?? ""} is not a command this plugin runs`);
   const r = await run(input.bin, input.args, {
     env: childEnv(m, input.aiHome),
     cwd: m.home,
@@ -118,11 +126,10 @@ export async function runCommand(m: Machine, input: RunInput, signal?: AbortSign
     stdout: input.json ? "" : redactUnlessKey(input.args, r.stdout),
     json,
     message: redact(message),
-  };
+  } satisfies RunOutput;
 }
 
-/** `team key` is the one command whose output is the key, on purpose. */
-function redactUnlessKey(args: string[], text: string): string {
+function redactUnlessKey(args: string[], text: string) {
   return args[0] === "team" && args[1] === "key" ? text : redact(text);
 }
 
@@ -131,7 +138,7 @@ interface StatusInstall {
   home?: string;
 }
 
-export async function probe(m: Machine): Promise<Probe> {
+export async function probe(m: Machine) {
   const out: Probe = {
     platform: m.platform,
     arch: m.arch,
@@ -150,29 +157,29 @@ export async function probe(m: Machine): Promise<Probe> {
   let bin = await findBinary(m);
   if (bin === null) {
     out.scheduleEntry = await scheduleEntry(m);
-    // A launch agent names the binary it runs, wherever that is: take it,
-    // and status --json then says the rest.
     bin = out.scheduleEntry ? await agentProgram(m) : null;
     if (bin === null) return out;
   }
   const ask = (file: string, aiHome: string | null, args: string[], json = false) =>
     runCommand(m, { bin: file, aiHome, args, stdin: null, json, timeoutMs: 30_000 });
   const version = await ask(bin, null, ["version"]);
-  out.version = version.code === 0 ? version.stdout.trim().split(/\s+/)[0] ?? null : null;
+  out.version = version.code === 0 ? (version.stdout.trim().split(/\s+/)[0] ?? null) : null;
   if (version.code !== 0) out.error = version.message;
-  // Before v0.11.0, status --json made a team key and a device id on a
-  // machine that had not collected; report --json never did.
   if (atLeast(out.version, STATUS_SAFE)) {
     const status = await ask(bin, null, ["status", "--json"], true);
     out.status = status.json;
     const install = (status.json as { install?: StatusInstall } | null)?.install;
     const program = install?.schedule?.program ?? null;
     out.aiHome = install?.schedule?.home ?? null;
-    // The copy the scheduler runs is the one that collects.
-    if (program !== null && program !== bin && path.isAbsolute(program) && (await executable(program))) {
+    if (
+      program !== null &&
+      program !== bin &&
+      path.isAbsolute(program) &&
+      (await executable(program))
+    ) {
       bin = program;
       const v = await ask(bin, out.aiHome, ["version"]);
-      out.version = v.code === 0 ? v.stdout.trim().split(/\s+/)[0] ?? out.version : out.version;
+      out.version = v.code === 0 ? (v.stdout.trim().split(/\s+/)[0] ?? out.version) : out.version;
       const again = await ask(bin, out.aiHome, ["status", "--json"], true);
       if (again.json !== null) out.status = again.json;
     }
@@ -184,24 +191,31 @@ export async function probe(m: Machine): Promise<Probe> {
 }
 
 /** The relay this machine's ai-usage uses, and the one its binary has built in. */
-export async function relays(m: Machine, bin: string, aiHome: string | null): Promise<{ configured: string | null; builtIn: string | null }> {
+export async function relays(m: Machine, bin: string, aiHome: string | null) {
   const read = async (home: string | null) => {
-    const r = await runCommand(m, { bin, aiHome: home, args: ["relay", "show"], stdin: null, json: false, timeoutMs: 30_000 });
+    const r = await runCommand(m, {
+      bin,
+      aiHome: home,
+      args: ["relay", "show"],
+      stdin: null,
+      json: false,
+      timeoutMs: 30_000,
+    });
     const url = r.stdout.trim();
     return r.code === 0 && /^https?:\/\//.test(url) ? url : null;
   };
-  // A state folder of its own holds no relay of its own, so its relay is the built-in one.
   const empty = path.join(m.tempDir, "empty-home");
   await mkdir(empty, { recursive: true });
   return { configured: await read(aiHome), builtIn: await read(empty) };
 }
 
 /** The tag of the latest release, from the releases/latest redirect, without GitHub's rate-limited API. */
-export async function latestTag(m: Machine): Promise<string> {
+export async function latestTag(m: Machine) {
   const r = await m.fetch(`https://github.com/${REPO}/releases/latest`, { redirect: "manual" });
   const location = r.headers.get("location") ?? "";
   const tag = /\/releases\/tag\/(v\d+\.\d+\.\d+)$/.exec(location)?.[1];
-  if (tag === undefined) throw new Error(`could not tell the latest ai-usage release (HTTP ${r.status})`);
+  if (tag === undefined)
+    throw new Error(`could not tell the latest ai-usage release (HTTP ${r.status})`);
   return tag;
 }
 
@@ -220,14 +234,20 @@ export interface InstallRequest {
  * binary and the script come from the same release. The menu bar app stays
  * out (the panel offers it later) and so do shell profiles.
  */
-export async function install(m: Machine, req: InstallRequest): Promise<InstallOutput> {
+export async function install(m: Machine, req: InstallRequest) {
   if (m.platform !== "darwin" && m.platform !== "linux") {
-    return { ok: false, code: null, tag: null, message: "ai-usage installs from BB on macOS and Linux only" };
+    return {
+      ok: false,
+      code: null,
+      tag: null,
+      message: "ai-usage installs from BB on macOS and Linux only",
+    } satisfies InstallOutput;
   }
   const tag = await latestTag(m);
   req.onLine(`installing ai-usage ${tag}`);
   const script = await m.fetch(`https://raw.githubusercontent.com/${REPO}/${tag}/install.sh`);
-  if (!script.ok) throw new Error(`could not download install.sh of ${tag} (HTTP ${script.status})`);
+  if (!script.ok)
+    throw new Error(`could not download install.sh of ${tag} (HTTP ${script.status})`);
   const file = path.join(m.tempDir, `install-${tag}.sh`);
   await writeFile(file, await script.text(), { mode: 0o600 });
   const env: Env = {
@@ -246,8 +266,6 @@ export async function install(m: Machine, req: InstallRequest): Promise<InstallO
     stdin: null,
     timeoutMs: 29 * 60 * 1000,
     signal: req.signal,
-    // The installer says what it does on standard error; standard output is
-    // the first run's report, which stays out of the log.
     onLine: (raw, stream) => {
       if (stream === "out") return;
       // eslint-disable-next-line no-control-regex
@@ -262,6 +280,7 @@ export async function install(m: Machine, req: InstallRequest): Promise<InstallO
     ? `installed ai-usage ${tag}`
     : r.timedOut
       ? "the installer did not finish in 29 minutes"
-      : errorMessage(r.stderr.replace(/^ai-usage install: /gm, "ai-usage: "), "") || (tail.at(-1) ?? "the installer failed");
-  return { ok, code: r.code, tag, message: redact(message) };
+      : errorMessage(r.stderr.replace(/^ai-usage install: /gm, "ai-usage: "), "") ||
+        (tail.at(-1) ?? "the installer failed");
+  return { ok, code: r.code, tag, message: redact(message) } satisfies InstallOutput;
 }

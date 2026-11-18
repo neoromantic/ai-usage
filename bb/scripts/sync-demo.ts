@@ -1,6 +1,3 @@
-// Copies the made-up team report the repository's demo tooling writes into
-// the plugin, which bundles it as its example team: BB builds only files
-// inside the plugin's folder.
 import { copyFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 

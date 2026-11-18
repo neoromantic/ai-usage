@@ -1,0 +1,27 @@
+// managed by devkit v1: edit in https://github.com/neoromantic/devkit/blob/main/templates/.oxlintrc.devkit.jsonc
+// The shared lint standard (docs/standards/lint-format.md). This repo's exceptions go in .oxlintrc.json.
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
+  "jsPlugins": [
+    { "name": "landmines-testing", "specifier": "@interfere/landmines/testing" },
+    { "name": "landmines-style", "specifier": "@interfere/landmines/style" },
+    { "name": "landmines-structure", "specifier": "@interfere/landmines/structure" },
+    { "name": "landmines-types", "specifier": "@interfere/landmines/types" },
+  ],
+  "categories": {
+    "correctness": "error",
+  },
+  "rules": {
+    "landmines-testing/no-fixed-sleep": "error",
+    "landmines-testing/no-flake-masking": "error",
+    "landmines-testing/no-test-doubles": "error",
+    "landmines-testing/no-unsignaled-poll": "error",
+    "landmines-testing/strict-msw": "error",
+    "landmines-style/no-comments": "error",
+    "landmines-structure/colocated-tests": "error",
+    "landmines-structure/package-exports": "error",
+    "landmines-structure/test-file-names": "error",
+    "landmines-types/no-explicit-return-types": "error",
+  },
+}

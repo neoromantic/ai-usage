@@ -1,5 +1,3 @@
-// Runs a child process with a deadline, reading both pipes while it runs,
-// since a report is larger than a pipe holds.
 import { spawn } from "node:child_process";
 import type { Env } from "./env.js";
 
@@ -23,8 +21,8 @@ export interface SpawnOptions {
 
 const MAX_STDERR = 256 * 1024;
 
-export function run(command: string, args: string[], options: SpawnOptions): Promise<Spawned> {
-  return new Promise((resolve) => {
+export function run(command: string, args: string[], options: SpawnOptions) {
+  return new Promise<Spawned>((resolve) => {
     let child: ReturnType<typeof spawn>;
     try {
       child = spawn(command, args, {
@@ -33,7 +31,12 @@ export function run(command: string, args: string[], options: SpawnOptions): Pro
         stdio: [options.stdin == null ? "ignore" : "pipe", "pipe", "pipe"],
       });
     } catch (error) {
-      resolve({ code: null, timedOut: false, stdout: "", stderr: `ai-usage: could not start ${command}: ${error instanceof Error ? error.message : String(error)}` });
+      resolve({
+        code: null,
+        timedOut: false,
+        stdout: "",
+        stderr: `ai-usage: could not start ${command}: ${error instanceof Error ? error.message : String(error)}`,
+      });
       return;
     }
     const maxStdout = options.maxStdout ?? 8 * 1024 * 1024;
@@ -89,7 +92,6 @@ export function run(command: string, args: string[], options: SpawnOptions): Pro
     });
     child.on("close", (code) => finish(code));
     if (options.stdin != null && child.stdin !== null) {
-      // A child that exits without reading closes the pipe; that is its answer.
       child.stdin.on("error", () => {});
       child.stdin.end(options.stdin);
     }
