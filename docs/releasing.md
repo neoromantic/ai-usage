@@ -9,6 +9,8 @@ git tag -a v1.2.3 -m v1.2.3
 git push origin v1.2.3
 ```
 
+Before a release that changes how ai-usage installs or runs on Windows, such as `install.ps1` or the Task Scheduler task, run CI by hand on `main`, with `gh workflow run ci.yml` or Run workflow on its Actions page, and tag once that run passes: only a run by hand installs on Windows.
+
 Notes for a release go in `docs/releases/v1.2.3.md`, named after the tag and committed before it is pushed. They are written for the people who install it: what changed for them, what to do about it, and what it does not do yet, with made-up names only, since the repository is public. When the release changes a claim of the README, an install command, or a picture in `docs/demo`, its notes say so, for the website (see [After a release](#after-a-release)).
 
 The workflow then:
@@ -156,21 +158,22 @@ The target `darwin/app` is the menu bar app. It needs macOS with Xcode or the Co
 
 A version with a suffix, such as `v9.9.9-local`, counts as a development build: the binary never registers with the scheduler on its own and never updates itself, and self-update leaves an app of that version alone. Use one for anything you run by hand. Give it a release of v0.4.0 or later before the suffix: the team takes a suffixed version before v0.4.0, such as the `v0.0.0-local` that earlier releases said to use, for a build of a release that drops the snapshot fields v0.4.0 added, and holds them back from every device until it is built again.
 
-To try an installer against local files, serve the folder and point the installer at it with `AI_USAGE_DOWNLOAD_URL`. CI does this on every push with `.github/scripts/install-smoke.sh`, on Linux and Windows, and `scripts/verify.sh --push` does it on a Mac.
+To try an installer against local files, serve the folder and point the installer at it with `AI_USAGE_DOWNLOAD_URL`. CI does this with `.github/scripts/install-smoke.sh` on Linux, and on Windows too in a run by hand, and `scripts/verify.sh --push` does it on a Mac.
 
 ## CI
 
-`.github/workflows/ci.yml` runs on pushes to `main` and on pull requests, on Linux and, for the installer, Windows. It runs no macOS job: a Mac checks macOS before the push, as below.
+`.github/workflows/ci.yml` runs on pushes to `main`, on pull requests, and by hand, on Linux, and a run by hand installs on Windows too. It runs no macOS job: a Mac checks macOS before the push, as below.
 
-- `gofmt` and `go build` with the oldest Go that `go.mod` allows, at the patch its `toolchain` line names, which is also the Go Vercel builds the relay with
-- `sh -n` and ShellCheck on the shell scripts, `macos/build.sh` among them, and a PowerShell parse of `install.ps1`
-- a cross-compile of the six binaries
-- `go vet`, `staticcheck` and `deadcode -test` for Linux, macOS, and Windows, and `go mod tidy -diff`, with the stable Go
-- `go test -race` on Linux; Windows is cross-compiled and installed by the smoke test, but its unit tests are not a gate
-- the Homebrew smoke test on Linux: `formula.sh` refuses v0.7.0 and a prerelease; a formula of local files installs, with no dependency even when Homebrew acts as on an older Linux, where a copy without the override gets glibc and gcc, passes `brew test`, and reports `"method": "homebrew"` and its command in the JSON; the crontab line names Homebrew's `opt` path, and stays so after a copy in `~/.local/bin` runs; and the formula of a release passes `brew style` and `brew audit --strict`
-- the installer smoke test on Linux and Windows. On Windows it also registers the Task Scheduler task for real, checks that it runs on battery, and removes it.
+On a pull request, the job `changes` reads which files it changes. One that changes only Markdown, pictures, `docs/`, `bb/`, or `macos/` starts no Go job, unless it changes `macos/build.sh`, which `lint` checks, or a release's notes in `docs/releases/`, since the release may rely on that pull request's `ci` (see step 2 above); the plugin's job runs only when `bb/`, `internal/view/`, `internal/snapshot/`, `docs/demo/`, `scripts/demo`'s TypeScript, or the workflow changes. A push to `main` and a run by hand run every job.
+
+The Go jobs use the oldest Go that `go.mod` allows, at the patch its `toolchain` line names, which is also the Go Vercel builds the relay with. On a GitHub-hosted runner each restores its own build, module, and staticcheck caches, keyed by the job, the OS, the Go version, `go.sum`, and the commit; the newest one that matches all but the commit is restored. A run on `main` or by hand saves them, and so does a pull request's run that found none. Before `go test`, each file gets the time of the last commit on `main`'s line, or of the pull request's merge, that changed it: a checkout gives every file the time of the checkout, and `go test` reuses a test's result only while each file it read keeps its size and time. The self-hosted runner keeps its caches on its own disk.
+
+- `lint`: `gofmt`; `go vet`, `staticcheck` and `deadcode -test` for Linux, macOS, and Windows, the three at once; `go mod tidy -diff`; `sh -n` and ShellCheck on the shell scripts, `macos/build.sh` among them; and a PowerShell parse of `install.ps1`
+- `test`: `go test -race` on Linux, with `GORACE=atexit_sleep_ms=0`, so a test binary and each copy of it a test starts do not sleep a second as they exit; Windows is cross-compiled and, in a run by hand, installed, but its unit tests are not a gate
+- `brew`: the six release binaries, built as the release builds them, and the Homebrew smoke test on Linux with them: `formula.sh` refuses v0.7.0 and a prerelease; a formula of local files installs, with no dependency even when Homebrew acts as on an older Linux, where a copy without the override gets glibc and gcc, passes `brew test`, and reports `"method": "homebrew"` and its command in the JSON; the crontab line names Homebrew's `opt` path, and stays so after a copy in `~/.local/bin` runs; and the formula of a release passes `brew style` and `brew audit --strict`
+- `install`: the installer smoke test on Linux, and in a run by hand on Windows, where it also registers the Task Scheduler task for real, checks that it runs on battery, and removes it
 - devkit's hygiene job: actionlint and zizmor on the workflows, gitleaks on the new commits, and devkit's privacy scan of the lines a change adds
-- the job `ci`, which needs all of the above and fails when any of them failed or was cancelled. It is the one check the branch ruleset requires, and the one the release workflow requires on the commit it publishes. Its step runs under `always()`: a step's condition without one gets an implicit `success()`, which is false once a needed job failed, so the step would be skipped and `ci` would pass
+- the job `ci`, which needs all of the above and fails when any of them failed or was cancelled; a job the pull request did not need is skipped, which passes. It is the one check the branch ruleset requires, and the one the release workflow requires on the commit it publishes. Its step runs under `always()`: a step's condition without one gets an implicit `success()`, which is false once a needed job failed, so the step would be skipped and `ci` would pass
 
 macOS is checked on a Mac, with `scripts/verify.sh --push` before the push of any change to how ai-usage behaves there: `macos/`, launchd and scheduling, self-update and the app's install, darwin-only Go files, the installer's macOS path, the Homebrew formula, the report's JSON the app reads, and `docs/demo/*.json`; `AGENTS.md` lists the paths. On a Mac it runs `go test` on darwin; the app's checks, `AIUsageChecks`, and its release build with `macos/build.sh`; the installer smoke test, which there builds the app too, checks that the installer puts it in `~/Applications` of a home of its own with the release's version, that the upgrade replaces it, and that it runs; and the Homebrew smoke test above, with the binary run in a home of its own. Its install and brew steps stop when Homebrew has installed ai-usage on that Mac. The release workflow still builds, signs, and notarizes on macOS, and checks what it built, but it relies on that local run for the tests.
 
