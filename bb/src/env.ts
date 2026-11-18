@@ -41,7 +41,9 @@ export function cleanEnv(env: NodeJS.ProcessEnv, sanitize: Sanitize): Env {
     seen.add(dir);
     dirs.push(dir);
   }
-  out.PATH = (dirs.length > 0 ? dirs : ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]).join(path.delimiter);
+  out.PATH = (dirs.length > 0 ? dirs : ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]).join(
+    path.delimiter,
+  );
   return out;
 }
 

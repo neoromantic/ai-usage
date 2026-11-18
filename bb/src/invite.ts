@@ -6,9 +6,18 @@ function quote(s: string): string {
   return `'${s.replaceAll("'", `'\\''`)}'`;
 }
 
-export function inviteMessage(key: string, relay: { configured: string | null; builtIn: string | null }): string {
-  const custom = relay.configured !== null && relay.configured !== relay.builtIn ? relay.configured : null;
-  const env = [custom === null ? null : `AI_USAGE_RELAY=${quote(custom)}`, `AI_USAGE_TEAM_KEY=${quote(key)}`].filter((x) => x !== null).join(" ");
+export function inviteMessage(
+  key: string,
+  relay: { configured: string | null; builtIn: string | null },
+): string {
+  const custom =
+    relay.configured !== null && relay.configured !== relay.builtIn ? relay.configured : null;
+  const env = [
+    custom === null ? null : `AI_USAGE_RELAY=${quote(custom)}`,
+    `AI_USAGE_TEAM_KEY=${quote(key)}`,
+  ]
+    .filter((x) => x !== null)
+    .join(" ");
   return [
     "Join my AI Usage team: it shows what is left of our Claude Code, Codex and Grok subscriptions, and who uses them.",
     "",

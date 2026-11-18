@@ -33,7 +33,12 @@ export function run(command: string, args: string[], options: SpawnOptions): Pro
         stdio: [options.stdin == null ? "ignore" : "pipe", "pipe", "pipe"],
       });
     } catch (error) {
-      resolve({ code: null, timedOut: false, stdout: "", stderr: `ai-usage: could not start ${command}: ${error instanceof Error ? error.message : String(error)}` });
+      resolve({
+        code: null,
+        timedOut: false,
+        stdout: "",
+        stderr: `ai-usage: could not start ${command}: ${error instanceof Error ? error.message : String(error)}`,
+      });
       return;
     }
     const maxStdout = options.maxStdout ?? 8 * 1024 * 1024;

@@ -2,41 +2,22 @@
   "name": "@goodit/bb-plugin-ai-usage",
   "version": "0.11.0",
   "description": "Your team's Claude Code, Codex and Grok subscriptions in BB: what is left of each limit, who used it, and what it costs, from ai-usage.",
+  "keywords": [
+    "ai-usage",
+    "bb-plugin",
+    "claude-code",
+    "codex",
+    "quota",
+    "team",
+    "usage-limits"
+  ],
+  "homepage": "https://github.com/neoromantic/ai-usage#in-bb",
+  "bugs": "https://github.com/neoromantic/ai-usage/issues",
   "license": "MIT",
-  "type": "module",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/neoromantic/ai-usage.git",
     "directory": "bb"
-  },
-  "homepage": "https://github.com/neoromantic/ai-usage#in-bb",
-  "bugs": "https://github.com/neoromantic/ai-usage/issues",
-  "keywords": [
-    "bb-plugin",
-    "ai-usage",
-    "claude-code",
-    "codex",
-    "quota",
-    "usage-limits",
-    "team"
-  ],
-  "engines": {
-    "bb": ">=0.46.1",
-    "bbPluginSdk": ">=0.6.49"
-  },
-  "bb": {
-    "name": "AI Usage",
-    "description": "Shows your team's Claude Code, Codex and Grok subscriptions: what is left of each limit, when it runs out, who used it, and what it costs. Installs ai-usage on this machine when it is missing.",
-    "branding": {
-      "icon": "./icons/ai-usage.svg",
-      "experimental_icons": {
-        "team": "./icons/ai-usage.svg"
-      }
-    },
-    "server": "./server.ts",
-    "app": "./app.tsx",
-    "host": "./host.ts",
-    "skills": []
   },
   "files": [
     "dist",
@@ -54,6 +35,7 @@
     "PLUGIN_OVERVIEW.md",
     "LICENSE"
   ],
+  "type": "module",
   "scripts": {
     "sync-demo": "bun scripts/sync-demo.ts",
     "build": "bun scripts/sync-demo.ts && bb plugin build",
@@ -86,5 +68,23 @@
     "sonner": "^1.7.4",
     "tailwind-merge": "^3.4.0",
     "typescript": "^5.7.0"
+  },
+  "engines": {
+    "bb": ">=0.46.1",
+    "bbPluginSdk": ">=0.6.49"
+  },
+  "bb": {
+    "name": "AI Usage",
+    "description": "Shows your team's Claude Code, Codex and Grok subscriptions: what is left of each limit, when it runs out, who used it, and what it costs. Installs ai-usage on this machine when it is missing.",
+    "branding": {
+      "icon": "./icons/ai-usage.svg",
+      "experimental_icons": {
+        "team": "./icons/ai-usage.svg"
+      }
+    },
+    "server": "./server.ts",
+    "app": "./app.tsx",
+    "host": "./host.ts",
+    "skills": []
   }
 }

@@ -21,7 +21,10 @@ export interface JobEvents {
 export class Jobs {
   private readonly jobs = new Map<string, JobView>();
 
-  constructor(private readonly events: JobEvents, private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly events: JobEvents,
+    private readonly now: () => number = Date.now,
+  ) {}
 
   get(id: string): JobView | null {
     return this.jobs.get(id) ?? null;
@@ -39,7 +42,8 @@ export class Jobs {
   }
 
   running(hostId: string): JobView | null {
-    for (const job of this.jobs.values()) if (job.hostId === hostId && job.status === "running") return job;
+    for (const job of this.jobs.values())
+      if (job.hostId === hostId && job.status === "running") return job;
     return null;
   }
 
@@ -47,20 +51,34 @@ export class Jobs {
    * Starts work as a job on a machine. A request for the job that already
    * runs there joins it; another kind of job waits for its end.
    */
-  start(hostId: string, kind: JobKind, work: (job: JobView, log: (line: string) => void) => Promise<string>): JobView {
+  start(
+    hostId: string,
+    kind: JobKind,
+    work: (job: JobView, log: (line: string) => void) => Promise<string>,
+  ): JobView {
     const busy = this.running(hostId);
     if (busy !== null) {
       if (busy.kind === kind) return busy;
       throw new BusyError(busy);
     }
-    const job: JobView = { id: randomUUID(), hostId, kind, status: "running", startedAt: this.now(), endedAt: null, message: "", log: [] };
+    const job: JobView = {
+      id: randomUUID(),
+      hostId,
+      kind,
+      status: "running",
+      startedAt: this.now(),
+      endedAt: null,
+      message: "",
+      log: [],
+    };
     this.jobs.set(job.id, job);
     this.prune();
     this.events.changed(job);
     const log = (line: string) => this.append(job.id, line);
     void work(job, log).then(
       (message) => this.finish(job.id, "done", message),
-      (error: unknown) => this.finish(job.id, "failed", error instanceof Error ? error.message : String(error)),
+      (error: unknown) =>
+        this.finish(job.id, "failed", error instanceof Error ? error.message : String(error)),
     );
     return job;
   }
@@ -84,7 +102,9 @@ export class Jobs {
 
   private prune(): void {
     if (this.jobs.size <= KEEP) return;
-    const done = [...this.jobs.values()].filter((j) => j.status !== "running").sort((a, b) => a.startedAt - b.startedAt);
+    const done = [...this.jobs.values()]
+      .filter((j) => j.status !== "running")
+      .sort((a, b) => a.startedAt - b.startedAt);
     for (const job of done.slice(0, this.jobs.size - KEEP)) this.jobs.delete(job.id);
   }
 }

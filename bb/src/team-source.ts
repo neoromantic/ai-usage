@@ -40,11 +40,18 @@ export async function teamSource(order: string[], m: SourceMachine): Promise<Tea
         continue;
       }
       const relay = await m.relay(id);
-      return { key, relay: relay.configured !== null && relay.configured !== relay.builtIn ? relay.configured : null };
+      return {
+        key,
+        relay:
+          relay.configured !== null && relay.configured !== relay.builtIn ? relay.configured : null,
+      };
     } catch (error) {
       why = error instanceof Error ? error.message : String(error);
     }
   }
-  if (found) throw new NoTeamError(`Could not read the team of a machine that runs ai-usage (${why}); install with its team key from the AI Usage page instead.`);
+  if (found)
+    throw new NoTeamError(
+      `Could not read the team of a machine that runs ai-usage (${why}); install with its team key from the AI Usage page instead.`,
+    );
   return null;
 }

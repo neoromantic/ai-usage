@@ -52,15 +52,50 @@ type Shot = {
 const shots: Shot[] = [
   { name: "team", from: "team.json", cols: 124, typed: "ai-usage", social: true },
   { name: "team-light", from: "team.json", cols: 124, typed: "ai-usage", theme: "light" },
-  { name: "team-devices", from: "team.json", cols: 124, typed: "ai-usage --devices", args: ["--devices"] },
+  {
+    name: "team-devices",
+    from: "team.json",
+    cols: 124,
+    typed: "ai-usage --devices",
+    args: ["--devices"],
+  },
   { name: "team-80", from: "team.json", cols: 80, typed: "ai-usage" },
-  { name: "team-attention", from: "team.json", cols: 124, typed: "ai-usage", lines: [0, 25], social: true },
-  { name: "team-matrix", from: "team.json", cols: 124, typed: "ai-usage", cut: ["DEVICES", "PROJECTS"], social: true },
+  {
+    name: "team-attention",
+    from: "team.json",
+    cols: 124,
+    typed: "ai-usage",
+    lines: [0, 25],
+    social: true,
+  },
+  {
+    name: "team-matrix",
+    from: "team.json",
+    cols: 124,
+    typed: "ai-usage",
+    cut: ["DEVICES", "PROJECTS"],
+    social: true,
+  },
   { name: "team-bots", from: "team.json", cols: 124, keys: ["%", "G"], rows: 52, social: true },
-  { name: "team-cost", from: "team.json", cols: 124, typed: "ai-usage", cut: ["COST", "UTILIZATION"], social: true },
+  {
+    name: "team-cost",
+    from: "team.json",
+    cols: 124,
+    typed: "ai-usage",
+    cut: ["COST", "UTILIZATION"],
+    social: true,
+  },
   // The matrix in dollars, framed as team-matrix frames it in tokens: on a
   // screen tall enough for the whole page.
-  { name: "team-dollars", from: "team.json", cols: 124, keys: ["$"], rows: 160, cut: ["DEVICES", "PROJECTS"], social: true },
+  {
+    name: "team-dollars",
+    from: "team.json",
+    cols: 124,
+    keys: ["$"],
+    rows: 160,
+    cut: ["DEVICES", "PROJECTS"],
+    social: true,
+  },
   { name: "team-status", from: "team.json", cols: 124, keys: ["s"], rows: 52 },
   {
     name: "devices-status",
@@ -73,10 +108,31 @@ const shots: Shot[] = [
   },
   { name: "team-help", from: "team.json", cols: 124, keys: ["?"], rows: 40 },
   // Enter picks ATTENTION's first line, j j the bots' Codex, Enter opens it.
-  { name: "team-detail", from: "team.json", cols: 124, keys: ["\r", "j", "j", "\r"], rows: 34, social: true },
+  {
+    name: "team-detail",
+    from: "team.json",
+    cols: 124,
+    keys: ["\r", "j", "j", "\r"],
+    rows: 34,
+    social: true,
+  },
   { name: "solo", from: "solo.json", cols: 110, typed: "ai-usage", social: true },
-  { name: "solo-forecast", from: "solo.json", cols: 110, typed: "ai-usage", lines: [0, 19], social: true },
-  { name: "solo-utilization", from: "solo.json", cols: 110, typed: "ai-usage", cut: ["UTILIZATION", "USAGE"], social: true },
+  {
+    name: "solo-forecast",
+    from: "solo.json",
+    cols: 110,
+    typed: "ai-usage",
+    lines: [0, 19],
+    social: true,
+  },
+  {
+    name: "solo-utilization",
+    from: "solo.json",
+    cols: 110,
+    typed: "ai-usage",
+    cut: ["UTILIZATION", "USAGE"],
+    social: true,
+  },
   {
     name: "install",
     from: "solo.json",
@@ -110,7 +166,21 @@ const shots: Shot[] = [
 ];
 
 // The tour is the interactive view, key after key, as a video.
-const tour = { from: "team.json", cols: 124, rows: 52, steps: [[], ["s"], ["%", "G"], ["$", "G"], ["\r", "j", "j", "\r"], ["p", "p"], ["?"]] as string[][], seconds: 2.6 };
+const tour = {
+  from: "team.json",
+  cols: 124,
+  rows: 52,
+  steps: [
+    [],
+    ["s"],
+    ["%", "G"],
+    ["$", "G"],
+    ["\r", "j", "j", "\r"],
+    ["p", "p"],
+    ["?"],
+  ] as string[][],
+  seconds: 2.6,
+};
 
 const env = {
   ...process.env,
@@ -124,16 +194,58 @@ const env = {
 
 const palette = {
   dark: {
-    bg: "#0f1115", fg: "#d7dae0", bar: "#1a1d23", border: "#2b2f37", dot: ["#ff5f57", "#febc2e", "#28c840"],
-    prompt: "#5fafff", backdrop: "linear-gradient(135deg, #1e2a4a 0%, #3b1f4a 55%, #4a2a1f 100%)",
-    ansi: ["#2b2f37", "#ff5f5f", "#87d75f", "#ffd75f", "#5fafff", "#d787ff", "#5fd7d7", "#d7dae0",
-      "#6c7280", "#ff8787", "#afff87", "#ffff87", "#87d7ff", "#ffafff", "#87ffff", "#ffffff"],
+    bg: "#0f1115",
+    fg: "#d7dae0",
+    bar: "#1a1d23",
+    border: "#2b2f37",
+    dot: ["#ff5f57", "#febc2e", "#28c840"],
+    prompt: "#5fafff",
+    backdrop: "linear-gradient(135deg, #1e2a4a 0%, #3b1f4a 55%, #4a2a1f 100%)",
+    ansi: [
+      "#2b2f37",
+      "#ff5f5f",
+      "#87d75f",
+      "#ffd75f",
+      "#5fafff",
+      "#d787ff",
+      "#5fd7d7",
+      "#d7dae0",
+      "#6c7280",
+      "#ff8787",
+      "#afff87",
+      "#ffff87",
+      "#87d7ff",
+      "#ffafff",
+      "#87ffff",
+      "#ffffff",
+    ],
   },
   light: {
-    bg: "#ffffff", fg: "#1f2328", bar: "#eef0f3", border: "#d0d7de", dot: ["#ff5f57", "#febc2e", "#28c840"],
-    prompt: "#0087af", backdrop: "linear-gradient(135deg, #dfe8ff 0%, #f3e3ff 55%, #ffe9dc 100%)",
-    ansi: ["#1f2328", "#d70000", "#008700", "#af8700", "#005fd7", "#8700af", "#008787", "#6c6c6c",
-      "#8a8a8a", "#ff0000", "#00af00", "#d7af00", "#0087ff", "#af00d7", "#00afaf", "#1f2328"],
+    bg: "#ffffff",
+    fg: "#1f2328",
+    bar: "#eef0f3",
+    border: "#d0d7de",
+    dot: ["#ff5f57", "#febc2e", "#28c840"],
+    prompt: "#0087af",
+    backdrop: "linear-gradient(135deg, #dfe8ff 0%, #f3e3ff 55%, #ffe9dc 100%)",
+    ansi: [
+      "#1f2328",
+      "#d70000",
+      "#008700",
+      "#af8700",
+      "#005fd7",
+      "#8700af",
+      "#008787",
+      "#6c6c6c",
+      "#8a8a8a",
+      "#ff0000",
+      "#00af00",
+      "#d7af00",
+      "#0087ff",
+      "#af00d7",
+      "#00afaf",
+      "#1f2328",
+    ],
   },
 };
 
@@ -148,9 +260,18 @@ function xterm256(n: number, theme: Theme): string {
   return hex(step(Math.floor(i / 36)), step(Math.floor(i / 6) % 6), step(i % 6));
 }
 
-const hex = (r: number, g: number, b: number) => "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
+const hex = (r: number, g: number, b: number) =>
+  "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
 
-type Style = { fg?: string; bg?: string; bold?: boolean; faint?: boolean; italic?: boolean; under?: boolean; reverse?: boolean };
+type Style = {
+  fg?: string;
+  bg?: string;
+  bold?: boolean;
+  faint?: boolean;
+  italic?: boolean;
+  under?: boolean;
+  reverse?: boolean;
+};
 
 function sgr(codes: number[], s: Style, theme: Theme): Style {
   s = { ...s };
@@ -194,7 +315,9 @@ const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 // html is the terminal's text as lines of styled spans.
 function html(text: string, theme: Theme): string {
   const p = palette[theme];
-  text = text.replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, "").replace(/\x1b\[[0-9;?]*[A-La-ln-z]/g, "");
+  text = text
+    .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, "")
+    .replace(/\x1b\[[0-9;?]*[A-La-ln-z]/g, "");
   let style: Style = {};
   const lines: string[] = [];
   for (const line of text.replace(/\n+$/, "").split("\n")) {
@@ -216,7 +339,9 @@ function html(text: string, theme: Theme): string {
         style.faint ? "opacity:.6" : "",
         style.italic ? "font-style:italic" : "",
         style.under ? "text-decoration:underline" : "",
-      ].filter(Boolean).join(";");
+      ]
+        .filter(Boolean)
+        .join(";");
       out += `<span style="${css}">${esc(parts[i])}</span>`;
     }
     lines.push(out || " ");
@@ -246,17 +371,41 @@ body{background:${p.bg};font:14px/1.32 "JetBrains Mono",Menlo,monospace;font-var
 <script>document.fonts.ready.then(()=>document.body.classList.add("ready"))</script>`;
 }
 
-const tmux = (...args: string[]) => $`tmux -L ${tmuxSocket} -f /dev/null ${args}`.env(env).quiet().nothrow();
+const tmux = (...args: string[]) =>
+  $`tmux -L ${tmuxSocket} -f /dev/null ${args}`.env(env).quiet().nothrow();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // view runs the interactive view in a terminal cols by rows, presses keys,
 // and returns the screen.
-async function view(from: string, cols: number, rows: number, theme: Theme, keys: string[]): Promise<string> {
+async function view(
+  from: string,
+  cols: number,
+  rows: number,
+  theme: Theme,
+  keys: string[],
+): Promise<string> {
   await tmux("kill-server");
   const fgbg = theme === "dark" ? "15;0" : "0;15";
   const cmd = `${bin} report --from ${join(out, from)}; sleep 600`;
-  await tmux("new-session", "-d", "-s", "shot", "-x", String(cols), "-y", String(rows),
-    "-e", `TZ=${env.TZ}`, "-e", "COLORTERM=truecolor", "-e", `COLORFGBG=${fgbg}`, "-e", `LANG=${env.LANG}`, cmd);
+  await tmux(
+    "new-session",
+    "-d",
+    "-s",
+    "shot",
+    "-x",
+    String(cols),
+    "-y",
+    String(rows),
+    "-e",
+    `TZ=${env.TZ}`,
+    "-e",
+    "COLORTERM=truecolor",
+    "-e",
+    `COLORFGBG=${fgbg}`,
+    "-e",
+    `LANG=${env.LANG}`,
+    cmd,
+  );
   await sleep(1200);
   for (const k of keys) {
     await tmux("send-keys", "-t", "shot", "-l", k);
@@ -275,9 +424,16 @@ async function printed(s: Shot, theme: Theme): Promise<string> {
   if (s.shell) {
     text = await $`sh -c ${s.shell}`.cwd(root).env(e).text();
   } else {
-    text = await $`${bin} report --from ${join(out, s.from)} --width ${s.cols} --color always --plain ${s.args ?? []}`.env(e).text();
+    text =
+      await $`${bin} report --from ${join(out, s.from)} --width ${s.cols} --color always --plain ${s.args ?? []}`
+        .env(e)
+        .text();
   }
-  if (s.lines) text = text.split("\n").slice(...s.lines).join("\n");
+  if (s.lines)
+    text = text
+      .split("\n")
+      .slice(...s.lines)
+      .join("\n");
   return s.cut ? cutText(text, s.cut) : text;
 }
 
@@ -292,8 +448,13 @@ function cutText(text: string, cut: [string, string]): string {
 }
 
 async function browser(...args: string[]) {
-  const r = await $`agent-browser --engine chrome --headed false --session ${session} ${args}`.quiet().nothrow();
-  if (r.exitCode !== 0) throw new Error(`agent-browser ${args.join(" ")}: ${r.stderr.toString() || r.stdout.toString()}`);
+  const r = await $`agent-browser --engine chrome --headed false --session ${session} ${args}`
+    .quiet()
+    .nothrow();
+  if (r.exitCode !== 0)
+    throw new Error(
+      `agent-browser ${args.join(" ")}: ${r.stderr.toString() || r.stdout.toString()}`,
+    );
   return r.stdout.toString();
 }
 
@@ -345,7 +506,11 @@ async function shootTour() {
     frames.push(png);
   }
   const list = join(tmp, "tour.txt");
-  writeFileSync(list, frames.map((f) => `file '${f}'\nduration ${tour.seconds}`).join("\n") + `\nfile '${frames.at(-1)}'\n`);
+  writeFileSync(
+    list,
+    frames.map((f) => `file '${f}'\nduration ${tour.seconds}`).join("\n") +
+      `\nfile '${frames.at(-1)}'\n`,
+  );
   const mp4 = join(out, "social", "tour.mp4");
   const gif = join(out, "social", "tour.gif");
   const scale = "scale=trunc(iw/4)*2:trunc(ih/4)*2";
@@ -364,7 +529,10 @@ async function app() {
   if (process.platform !== "darwin") return;
   const macos = join(root, "macos");
   await $`xcrun swift build --product AIUsageBar`.cwd(macos).quiet();
-  const exe = join((await $`xcrun swift build --show-bin-path`.cwd(macos).text()).trim(), "AIUsageBar");
+  const exe = join(
+    (await $`xcrun swift build --show-bin-path`.cwd(macos).text()).trim(),
+    "AIUsageBar",
+  );
   const drawn = join(tmp, "app");
   await $`${exe} --render ${join(out, "team.json")} ${drawn}`.env(env).quiet();
   const pictures: [string, string][] = [
@@ -386,18 +554,28 @@ async function app() {
     await $`cp -f ${join(drawn, from + "-dark.png")} ${join(out, to + ".png")}`;
     await $`cp -f ${join(drawn, from + "-light.png")} ${join(out, to + "-light.png")}`;
   }
-  const tabs = ["limits", "usage", "projects"].map((t) => `<img src="${join(drawn, `popover-${t}-dark.png`)}">`).join("");
+  const tabs = ["limits", "usage", "projects"]
+    .map((t) => `<img src="${join(drawn, `popover-${t}-dark.png`)}">`)
+    .join("");
   const file = join(tmp, "app.html");
-  writeFileSync(file, `<!doctype html><meta charset="utf-8"><style>
+  writeFileSync(
+    file,
+    `<!doctype html><meta charset="utf-8"><style>
 *{margin:0;padding:0;box-sizing:border-box}
 .frame{display:inline-flex;gap:40px;align-items:flex-start;padding:64px 72px;background:${palette.dark.backdrop}}
 img{width:400px;border-radius:12px;box-shadow:0 24px 64px rgba(0,0,0,.45)}
 </style><body><div class="frame">${tabs}</div>
-<script>Promise.all([...document.images].map((i)=>i.decode())).then(()=>document.body.classList.add("ready"))</script>`);
+<script>Promise.all([...document.images].map((i)=>i.decode())).then(()=>document.body.classList.add("ready"))</script>`,
+  );
   const png = join(tmp, "app-tabs.png");
   await photograph(file, [{ selector: ".frame", path: png }]);
   await $`cp -f ${png} ${join(out, "social", "app-tabs.png")}`;
-  console.log(["menubar", ...pictures.slice(1).map((p) => p[1])].map((n) => `docs/demo/${n}.png`).concat("docs/demo/social/app-tabs.png").join("\n"));
+  console.log(
+    ["menubar", ...pictures.slice(1).map((p) => p[1])]
+      .map((n) => `docs/demo/${n}.png`)
+      .concat("docs/demo/social/app-tabs.png")
+      .join("\n"),
+  );
 }
 
 // diagram photographs scripts/demo/diagram.html, the architecture.

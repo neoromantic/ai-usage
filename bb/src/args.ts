@@ -47,11 +47,16 @@ export function allowed(args: readonly string[]): boolean {
   }
   if (a === "uninstall") {
     const flags = args.slice(1);
-    return flags.length <= 2 && flags.every((f) => f === "--forget" || f === "--purge") && new Set(flags).size === flags.length;
+    return (
+      flags.length <= 2 &&
+      flags.every((f) => f === "--forget" || f === "--purge") &&
+      new Set(flags).size === flags.length
+    );
   }
   if (a === "cost" && c !== undefined && COST_TARGET.test(c)) {
     if ((b === "confirm" || b === "cancel") && rest.length === 0) return true;
-    if (b === "skip") return rest.length === 1 && ["renewal", "price", "still_paid"].includes(rest[0] ?? "");
+    if (b === "skip")
+      return rest.length === 1 && ["renewal", "price", "still_paid"].includes(rest[0] ?? "");
     if (b === "set") return costSet(rest);
   }
   return false;

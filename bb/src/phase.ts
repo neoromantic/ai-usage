@@ -30,7 +30,8 @@ export function phaseOf(f: HostFacts): Phase {
   if (f.host.status === "disconnected") return "offline";
   if (f.probe === null) return "loading";
   if (f.probe.platform === "win32") return "unsupported";
-  if (f.probe.bin === null) return f.job?.kind === "install" && f.job.status === "failed" ? "install-failed" : "absent";
+  if (f.probe.bin === null)
+    return f.job?.kind === "install" && f.job.status === "failed" ? "install-failed" : "absent";
   if (f.report?.schemaMismatch === true) return "schema-mismatch";
   if (f.report?.ok === true) return "ready";
   if (f.report?.nothingCollected === true || collected(f.probe) === false) return "needs-first-run";

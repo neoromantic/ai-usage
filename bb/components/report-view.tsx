@@ -23,7 +23,13 @@ import {
   tokenLabel,
   usd,
 } from "../src/format";
-import { PERIODS, type CostQuestion, type Period, type Report, type TeamAccount } from "../src/report";
+import {
+  PERIODS,
+  type CostQuestion,
+  type Period,
+  type Report,
+  type TeamAccount,
+} from "../src/report";
 import { Badge, Bar, Dot, Section } from "./bits";
 
 export interface ReportProps {
@@ -58,10 +64,15 @@ function AttentionList({ report }: ReportProps) {
           const tone = attentionTone(a.kind);
           return (
             <li key={i} className="flex gap-3 px-3 py-2 text-sm">
-              <Dot state={tone === "out" ? "out" : tone === "tight" ? "tight" : null} className="mt-1.5" />
+              <Dot
+                state={tone === "out" ? "out" : tone === "tight" ? "tight" : null}
+                className="mt-1.5"
+              />
               <div className="min-w-0">
                 <span className="font-medium">{words.subject}</span>
-                {words.text !== "" ? <span className="text-muted-foreground"> · {words.text}</span> : null}
+                {words.text !== "" ? (
+                  <span className="text-muted-foreground"> · {words.text}</span>
+                ) : null}
               </div>
             </li>
           );
@@ -87,13 +98,26 @@ function Subscriptions({ report, now, timeZone }: ReportProps) {
           g.accounts.map((a) => {
             const windows = limitingWindows(a);
             return (
-              <div key={`${g.provider}/${a.label}`} className="space-y-2 rounded-lg border border-border bg-card p-3">
+              <div
+                key={`${g.provider}/${a.label}`}
+                className="space-y-2 rounded-lg border border-border bg-card p-3"
+              >
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 truncate text-sm font-medium" title={a.label}>
                     {accountTitle(g.provider, a)}
-                    {a.plan !== null ? <span className="font-normal text-muted-foreground"> · {plan(a.plan)}</span> : null}
+                    {a.plan !== null ? (
+                      <span className="font-normal text-muted-foreground"> · {plan(a.plan)}</span>
+                    ) : null}
                   </div>
-                  <Badge className={cn(a.state === "out" || a.state === "over" ? "text-destructive-text" : a.state === "tight" ? "text-warning-text" : "")}>
+                  <Badge
+                    className={cn(
+                      a.state === "out" || a.state === "over"
+                        ? "text-destructive-text"
+                        : a.state === "tight"
+                          ? "text-warning-text"
+                          : "",
+                    )}
+                  >
                     {a.state}
                   </Badge>
                 </div>
@@ -106,22 +130,33 @@ function Subscriptions({ report, now, timeZone }: ReportProps) {
                         <span>
                           <span className="font-medium">{left(w)}</span> left
                           {w.resets_at !== null ? (
-                            <span className="text-muted-foreground"> · resets {clock(w.resets_at, now, timeZone)}</span>
+                            <span className="text-muted-foreground">
+                              {" "}
+                              · resets {clock(w.resets_at, now, timeZone)}
+                            </span>
                           ) : null}
                         </span>
                       </div>
                       <Bar percent={w.percent} state={w.state} />
-                      {forecast !== null ? <div className="text-[11px] text-muted-foreground">{forecast}</div> : null}
+                      {forecast !== null ? (
+                        <div className="text-[11px] text-muted-foreground">{forecast}</div>
+                      ) : null}
                     </div>
                   );
                 })}
-                {windows.length === 0 && a.no_reading !== null ? <div className="text-xs text-muted-foreground">{a.no_reading}</div> : null}
-                {windows.length === 0 && a.no_reading === null ? <div className="text-xs text-muted-foreground">No reading of its limits yet</div> : null}
+                {windows.length === 0 && a.no_reading !== null ? (
+                  <div className="text-xs text-muted-foreground">{a.no_reading}</div>
+                ) : null}
+                {windows.length === 0 && a.no_reading === null ? (
+                  <div className="text-xs text-muted-foreground">No reading of its limits yet</div>
+                ) : null}
                 <div className="text-[11px] text-muted-foreground">
                   {a.users === 1 ? "1 user" : `${a.users} users`}
                   {a.busiest !== null && a.users > 1 ? ` · most: ${a.busiest}` : ""}
                   {a.last_active_at !== null ? ` · last used ${ago(a.last_active_at, now)}` : ""}
-                  {a.quota !== null && a.quota.age_seconds >= 600 ? ` · reading ${duration(a.quota.age_seconds)} old` : ""}
+                  {a.quota !== null && a.quota.age_seconds >= 600
+                    ? ` · reading ${duration(a.quota.age_seconds)} old`
+                    : ""}
                 </div>
               </div>
             );
@@ -136,7 +171,10 @@ function MatrixBlock({ report }: { report: Report }) {
   const [period, setPeriod] = useState<Period>("7d");
   if (report.team.matrix.rows.length === 0) return null;
   const m = matrixView(report, period);
-  const span = period === "today" && report.team.today_local ? "Today" : `${PERIODS.find((p) => p.id === period)?.title} UTC`;
+  const span =
+    period === "today" && report.team.today_local
+      ? "Today"
+      : `${PERIODS.find((p) => p.id === period)?.title} UTC`;
   return (
     <Section
       title="Devices × subscriptions"
@@ -149,7 +187,12 @@ function MatrixBlock({ report }: { report: Report }) {
               role="tab"
               aria-selected={p.id === period}
               onClick={() => setPeriod(p.id)}
-              className={cn("rounded-md px-2 py-0.5 text-xs", p.id === period ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground")}
+              className={cn(
+                "rounded-md px-2 py-0.5 text-xs",
+                p.id === period
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
             >
               {p.title}
             </button>
@@ -181,7 +224,10 @@ function MatrixBlock({ report }: { report: Report }) {
                 {row.cells.map((cell, i) => (
                   <td key={i} className="px-2 py-1.5 text-right">
                     <span
-                      className={cn("inline-block min-w-8 rounded px-1 text-right", cell.heat > 0 ? "bg-foreground text-background" : "text-muted-foreground")}
+                      className={cn(
+                        "inline-block min-w-8 rounded px-1 text-right",
+                        cell.heat > 0 ? "bg-foreground text-background" : "text-muted-foreground",
+                      )}
                       style={cell.heat > 0 ? { opacity: 0.25 + cell.heat * 0.15 } : undefined}
                       title={cell.share !== null ? `${share(cell.share)}% of column` : undefined}
                     >
@@ -224,13 +270,17 @@ function Devices({ report, now }: ReportProps) {
               <Dot state={d.silent ? "tight" : d.error !== null ? "out" : "ok"} />
               <span className="font-medium">{deviceName(d)}</span>
               {d.this_device ? <Badge>this machine</Badge> : null}
-              {d.pooled.length > 0 ? <Badge title={d.pooled.join(", ")}>Account Pooler</Badge> : null}
+              {d.pooled.length > 0 ? (
+                <Badge title={d.pooled.join(", ")}>Account Pooler</Badge>
+              ) : null}
               <span className="text-xs text-muted-foreground">
                 {d.collector_version}
                 {d.collected_at !== null ? ` · reported ${ago(d.collected_at, now)}` : ""}
               </span>
             </div>
-            {d.note !== null && d.note !== "" ? <div className="pl-4 text-xs text-muted-foreground">{d.note}</div> : null}
+            {d.note !== null && d.note !== "" ? (
+              <div className="pl-4 text-xs text-muted-foreground">{d.note}</div>
+            ) : null}
           </li>
         ))}
       </ul>
@@ -242,10 +292,15 @@ function CostBlock({ report, now, timeZone, answer }: ReportProps) {
   const c = report.cost!;
   const active = c.subscriptions.filter((s) => s.state !== "ended");
   const next = c.next_charge;
-  const nextSub = next === null ? undefined : c.subscriptions.find((s) => s.provider === next.provider && s.account === next.account);
+  const nextSub =
+    next === null
+      ? undefined
+      : c.subscriptions.find((s) => s.provider === next.provider && s.account === next.account);
   const parts = [
     `${usd(c.total_usd)} a month for ${active.length === 1 ? "1 subscription" : `${active.length} subscriptions`}${c.without_price > 0 ? `, +${c.without_price} without a price` : ""}`,
-    c.used_pct !== null ? `the team used ${c.used_estimated ? "~" : ""}${share(c.used_pct)}% over 4 weeks` : null,
+    c.used_pct !== null
+      ? `the team used ${c.used_estimated ? "~" : ""}${share(c.used_pct)}% over 4 weeks`
+      : null,
     next !== null
       ? `next charge ${provider(next.provider)} ${nextSub?.alias ?? nextSub?.name ?? next.account} ${clock(next.at, now, timeZone)}${next.usd !== null ? ` · ${usd(next.usd)}` : ""}`
       : null,
@@ -293,18 +348,34 @@ function Question({ q, answer }: { q: CostQuestion; answer?: (args: string[]) =>
             <Button size="sm" disabled={busy} onClick={() => void act(["cost", "confirm", target])}>
               Still paying
             </Button>
-            <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(["cost", "cancel", target])}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void act(["cost", "cancel", target])}
+            >
               Cancelled
             </Button>
           </>
         ) : null}
         {q.kind === "renewal" && q.suggestion !== null ? (
-          <Button size="sm" disabled={busy} onClick={() => void act(["cost", "set", target, "--renews", q.suggestion!])}>
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() => void act(["cost", "set", target, "--renews", q.suggestion!])}
+          >
             Charges {q.suggestion}
           </Button>
         ) : null}
         {q.kind === "renewal" && q.suggestion_yearly !== null && q.choices.includes("yearly") ? (
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(["cost", "set", target, "--yearly", "--renews", q.suggestion_yearly!])}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() =>
+              void act(["cost", "set", target, "--yearly", "--renews", q.suggestion_yearly!])
+            }
+          >
             Yearly, {q.suggestion_yearly}
           </Button>
         ) : null}
@@ -312,7 +383,15 @@ function Question({ q, answer }: { q: CostQuestion; answer?: (args: string[]) =>
           ? q.choices.map((choice) => {
               const price = /\$([\d,.]+)/.exec(choice)?.[1];
               return price === undefined ? null : (
-                <Button key={choice} size="sm" variant="outline" disabled={busy} onClick={() => void act(["cost", "set", target, "--price", price.replaceAll(",", "")])}>
+                <Button
+                  key={choice}
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() =>
+                    void act(["cost", "set", target, "--price", price.replaceAll(",", "")])
+                  }
+                >
                   {choice}
                 </Button>
               );
@@ -328,18 +407,35 @@ function Question({ q, answer }: { q: CostQuestion; answer?: (args: string[]) =>
                 if (v === null) return void toast.error("Type a price in dollars, as 20 or 19.99");
                 void act(["cost", "set", target, "--price", v]);
               } else {
-                if (!/^(\d{4}-\d{2}-\d{2}|\d{1,2})$/.test(typed.trim())) return void toast.error("Type a day, as 2026-11-04, or a day of the month");
+                if (!/^(\d{4}-\d{2}-\d{2}|\d{1,2})$/.test(typed.trim()))
+                  return void toast.error("Type a day, as 2026-11-04, or a day of the month");
                 void act(["cost", "set", target, "--renews", typed.trim()]);
               }
             }}
           >
-            <Input className="h-8 w-36" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={q.kind === "price" ? "$ a month" : "YYYY-MM-DD"} aria-label="Answer" />
-            <Button size="sm" variant="outline" type="submit" disabled={busy || typed.trim() === ""}>
+            <Input
+              className="h-8 w-36"
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              placeholder={q.kind === "price" ? "$ a month" : "YYYY-MM-DD"}
+              aria-label="Answer"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              type="submit"
+              disabled={busy || typed.trim() === ""}
+            >
               Save
             </Button>
           </form>
         ) : null}
-        <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act(["cost", "skip", target, q.kind])}>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy}
+          onClick={() => void act(["cost", "skip", target, q.kind])}
+        >
           Don't ask again
         </Button>
       </div>

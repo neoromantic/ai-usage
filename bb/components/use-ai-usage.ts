@@ -2,7 +2,12 @@
 // once, again when the server says something changed, and every minute
 // while a surface is open. The report comes only when it changed.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useBbNavigate, useRealtime, useRealtimeConnectionState, useRpc } from "@get-bb/plugin-sdk/app";
+import {
+  useBbNavigate,
+  useRealtime,
+  useRealtimeConnectionState,
+  useRpc,
+} from "@get-bb/plugin-sdk/app";
 import type { Report } from "../src/report";
 import type { HostView, JobView, rpcContract } from "../src/rpc";
 
@@ -29,7 +34,13 @@ export function useAiUsage(hostId: string | null = null) {
       else if (r.hash === null) report.current = null;
       hash.current = r.hash;
       viewHost.current = r.view.hostId;
-      setState({ view: r.view, job: r.job, report: report.current, reportAt: r.reportAt, refreshing: r.refreshing });
+      setState({
+        view: r.view,
+        job: r.job,
+        report: report.current,
+        reportAt: r.reportAt,
+        refreshing: r.refreshing,
+      });
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));

@@ -57,5 +57,9 @@ export default definePluginApp((app) => {
   });
   app.slots.experimental_appOverlay({ id: "commands", component: CommandBridge });
   app.commands.register({ id: "open", title: "AI Usage: Open", run: () => bridge.open?.() });
-  app.commands.register({ id: "refresh", title: "AI Usage: Refresh", run: () => bridge.refresh?.() });
+  app.commands.register({
+    id: "refresh",
+    title: "AI Usage: Refresh",
+    run: () => bridge.refresh?.(),
+  });
 });

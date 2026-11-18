@@ -1,7 +1,18 @@
 // How the panel prints the report's numbers and times, the way the menu bar
 // app does (macos/Sources/AIUsageKit/Format.swift, Glance.swift). It picks
 // among what the report decided and works out nothing of its own.
-import type { Attention, MatrixCell, MatrixColumn, MatrixRow, Report, Share, TeamAccount, TeamDevice, Usage, Window } from "./report.js";
+import type {
+  Attention,
+  MatrixCell,
+  MatrixColumn,
+  MatrixRow,
+  Report,
+  Share,
+  TeamAccount,
+  TeamDevice,
+  Usage,
+  Window,
+} from "./report.js";
 
 export const NONE = "–";
 
@@ -122,7 +133,12 @@ export function limitingWindows(a: TeamAccount): Window[] {
   const main = windows.find((w) => w.main);
   let tightest: Window | undefined;
   for (const w of windows) {
-    if (known(w) && (w.limits || w.main) && (tightest === undefined || percentLeft(w) < percentLeft(tightest))) tightest = w;
+    if (
+      known(w) &&
+      (w.limits || w.main) &&
+      (tightest === undefined || percentLeft(w) < percentLeft(tightest))
+    )
+      tightest = w;
   }
   const first = main !== undefined && known(main) ? main : tightest;
   if (first === undefined) return [];
@@ -137,7 +153,8 @@ export function limitingWindows(a: TeamAccount): Window[] {
 /** The pace a window's forecast takes, as the report names it. */
 export function pace(w: Window): string {
   const length = w.minutes !== null && w.minutes > 0 ? w.minutes : windowMinutes(w.name);
-  if (w.forecast?.basis === "recent") return (length ?? 10080) < 1440 ? "the recent pace" : "the last day's pace";
+  if (w.forecast?.basis === "recent")
+    return (length ?? 10080) < 1440 ? "the recent pace" : "the last day's pace";
   return (length ?? 10080) === 10080 ? "this week's pace" : "this window's pace";
 }
 
@@ -189,7 +206,12 @@ export function matrixView(r: Report, p: "today" | "7d" | "30d" | "90d") {
   const top = Math.max(0, ...rows.flatMap((row) => row.cells.map((c) => shown(c)[p])));
   const cell = (c: MatrixCell | undefined) => {
     const tokens = c === undefined ? 0 : shown(c)[p];
-    return { text: millions(tokens), heat: heatStep(tokens, top), tokens, share: c === undefined ? null : shownShare(c)[p] };
+    return {
+      text: millions(tokens),
+      heat: heatStep(tokens, top),
+      tokens,
+      share: c === undefined ? null : shownShare(c)[p],
+    };
   };
   return {
     columns: columns.map((c: MatrixColumn) => ({
@@ -206,7 +228,10 @@ export function matrixView(r: Report, p: "today" | "7d" | "30d" | "90d") {
       total: estimated(millions(shown(row)[p]), row.burn_estimated),
     })),
     // The team's total is an estimate when a row in it is, as the app's.
-    total: estimated(millions(rows.reduce((sum, row) => sum + shown(row)[p], 0)), rows.some((row) => row.burn_estimated)),
+    total: estimated(
+      millions(rows.reduce((sum, row) => sum + shown(row)[p], 0)),
+      rows.some((row) => row.burn_estimated),
+    ),
   };
 }
 

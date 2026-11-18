@@ -51,7 +51,10 @@ beforeAll(() => {
   mkdirSync(path.join(home, "tmp"));
   // A crontab with someone else's line that only looks like ours.
   mkdirSync(path.join(home, "fakebin"));
-  writeFileSync(path.join(home, "fakebin/crontab"), "#!/bin/sh\necho '*/15 * * * * /opt/bots/run # ai-usage bots'\n");
+  writeFileSync(
+    path.join(home, "fakebin/crontab"),
+    "#!/bin/sh\necho '*/15 * * * * /opt/bots/run # ai-usage bots'\n",
+  );
   chmodSync(path.join(home, "fakebin/crontab"), 0o755);
 });
 afterAll(() => rmSync(home, { recursive: true, force: true }));
@@ -112,7 +115,18 @@ describe("probe", () => {
   test("runs the copy the scheduler runs, with its state folder", async () => {
     const scheduled = path.join(home, "opt/ai-usage/bin/ai-usage");
     const state = path.join(home, "state");
-    const status = JSON.stringify({ schema_version: 4, collector: null, sources: [], install: { version: "v0.11.0", method: "self", home: state, collected: true, schedule: { state: "other", program: scheduled, home: state, error: null } } });
+    const status = JSON.stringify({
+      schema_version: 4,
+      collector: null,
+      sources: [],
+      install: {
+        version: "v0.11.0",
+        method: "self",
+        home: state,
+        collected: true,
+        schedule: { state: "other", program: scheduled, home: state, error: null },
+      },
+    });
     fake(path.join(home, ".local/bin/ai-usage"), "v0.11.0", status);
     fake(scheduled, "v0.11.1", status);
     writeFileSync(calls, "");
@@ -121,22 +135,56 @@ describe("probe", () => {
     expect(p.aiHome).toBe(state);
     expect(p.version).toBe("v0.11.1");
     // Marked as BB's, so the runs record no usage stats.
-    expect(readFileSync(calls, "utf8")).toContain(`${scheduled} status --json AI_USAGE_HOME=${state} CALLER=bb`);
+    expect(readFileSync(calls, "utf8")).toContain(
+      `${scheduled} status --json AI_USAGE_HOME=${state} CALLER=bb`,
+    );
   });
 });
 
 describe("run", () => {
   test("passes the key on standard input and refuses other commands", async () => {
     const bin = path.join(home, ".local/bin/ai-usage");
-    const out = await runCommand(machine(linux), { bin, aiHome: null, args: ["team", "join"], stdin: "aiu-team-1:AAEC\n", json: false, timeoutMs: 10_000 });
+    const out = await runCommand(machine(linux), {
+      bin,
+      aiHome: null,
+      args: ["team", "join"],
+      stdin: "aiu-team-1:AAEC\n",
+      json: false,
+      timeoutMs: 10_000,
+    });
     expect(out.code).toBe(0);
     expect(readFileSync(calls, "utf8")).not.toContain("aiu-team-1");
-    await expect(runCommand(machine(linux), { bin, aiHome: null, args: ["sh"], stdin: null, json: false, timeoutMs: 10_000 })).rejects.toThrow();
-    await expect(runCommand(machine(linux), { bin: "/bin/sh", aiHome: null, args: ["version"], stdin: null, json: false, timeoutMs: 10_000 })).rejects.toThrow();
+    await expect(
+      runCommand(machine(linux), {
+        bin,
+        aiHome: null,
+        args: ["sh"],
+        stdin: null,
+        json: false,
+        timeoutMs: 10_000,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      runCommand(machine(linux), {
+        bin: "/bin/sh",
+        aiHome: null,
+        args: ["version"],
+        stdin: null,
+        json: false,
+        timeoutMs: 10_000,
+      }),
+    ).rejects.toThrow();
   });
 
   test("says ai-usage's own error", async () => {
-    const out = await runCommand(machine(linux), { bin: path.join(home, ".local/bin/ai-usage"), aiHome: null, args: ["report", "--json"], stdin: null, json: true, timeoutMs: 10_000 });
+    const out = await runCommand(machine(linux), {
+      bin: path.join(home, ".local/bin/ai-usage"),
+      aiHome: null,
+      args: ["report", "--json"],
+      stdin: null,
+      json: true,
+      timeoutMs: 10_000,
+    });
     expect(out.code).toBe(1);
     expect(out.json).toBeNull();
     expect(out.message).toBe("nothing collected yet");
@@ -154,7 +202,11 @@ echo "REPORT that stays out of the log"
     const seen: string[] = [];
     const fetchFake = (async (url: string | URL | Request) => {
       seen.push(String(url));
-      if (String(url).endsWith("/releases/latest")) return new Response(null, { status: 302, headers: { location: "https://github.com/neoromantic/ai-usage/releases/tag/v0.11.0" } });
+      if (String(url).endsWith("/releases/latest"))
+        return new Response(null, {
+          status: 302,
+          headers: { location: "https://github.com/neoromantic/ai-usage/releases/tag/v0.11.0" },
+        });
       return new Response(script, { status: 200 });
     }) as typeof fetch;
     const lines: string[] = [];
@@ -164,9 +216,14 @@ echo "REPORT that stays out of the log"
       onLine: (l) => lines.push(l),
     });
     expect(out).toMatchObject({ ok: true, code: 0, tag: "v0.11.0" });
-    expect(seen).toEqual(["https://github.com/neoromantic/ai-usage/releases/latest", "https://raw.githubusercontent.com/neoromantic/ai-usage/v0.11.0/install.sh"]);
+    expect(seen).toEqual([
+      "https://github.com/neoromantic/ai-usage/releases/latest",
+      "https://raw.githubusercontent.com/neoromantic/ai-usage/v0.11.0/install.sh",
+    ]);
     const log = lines.join("\n");
-    expect(log).toContain("url=https://github.com/neoromantic/ai-usage/releases/download/v0.11.0 app=1 path=1 relay=https://relay.example.com caller=bb");
+    expect(log).toContain(
+      "url=https://github.com/neoromantic/ai-usage/releases/download/v0.11.0 app=1 path=1 relay=https://relay.example.com caller=bb",
+    );
     expect(log).toContain("key=aiu-team-…");
     expect(log).not.toContain("made-up-key");
     expect(log).not.toContain("REPORT");
@@ -175,15 +232,28 @@ echo "REPORT that stays out of the log"
   test("a failed install says the installer's error", async () => {
     const fetchFake = (async (url: string | URL | Request) =>
       String(url).endsWith("/latest")
-        ? new Response(null, { status: 302, headers: { location: "https://github.com/neoromantic/ai-usage/releases/tag/v0.11.0" } })
-        : new Response('#!/bin/sh\necho "ai-usage install: ai-usage is installed with Homebrew" >&2\nexit 1\n')) as typeof fetch;
-    const out = await install(machine({ ...linux, fetch: fetchFake }), { teamKey: null, relay: null, onLine: () => {} });
+        ? new Response(null, {
+            status: 302,
+            headers: { location: "https://github.com/neoromantic/ai-usage/releases/tag/v0.11.0" },
+          })
+        : new Response(
+            '#!/bin/sh\necho "ai-usage install: ai-usage is installed with Homebrew" >&2\nexit 1\n',
+          )) as typeof fetch;
+    const out = await install(machine({ ...linux, fetch: fetchFake }), {
+      teamKey: null,
+      relay: null,
+      onLine: () => {},
+    });
     expect(out.ok).toBe(false);
     expect(out.message).toBe("ai-usage is installed with Homebrew");
   });
 
   test("does not run on Windows", async () => {
-    const out = await install(machine({ platform: "win32" }), { teamKey: null, relay: null, onLine: () => {} });
+    const out = await install(machine({ platform: "win32" }), {
+      teamKey: null,
+      relay: null,
+      onLine: () => {},
+    });
     expect(out.ok).toBe(false);
   });
 });

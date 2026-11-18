@@ -29,8 +29,10 @@ export default experimental_defineHostEntry({
   experimental_signals: hostSignals,
   handlers: {
     probe: async (_input, context) => probe(machine(context.experimental_paths.tempDir)),
-    run: async (input, context) => runCommand(machine(context.experimental_paths.tempDir), input, context.signal),
-    relay: async (input, context) => relays(machine(context.experimental_paths.tempDir), input.bin, input.aiHome),
+    run: async (input, context) =>
+      runCommand(machine(context.experimental_paths.tempDir), input, context.signal),
+    relay: async (input, context) =>
+      relays(machine(context.experimental_paths.tempDir), input.bin, input.aiHome),
     install: async (input, context) => {
       // The call itself keeps the worker; the lease covers the few seconds
       // between the script's end and the reply.
@@ -41,7 +43,10 @@ export default experimental_defineHostEntry({
           relay: input.relay,
           signal: context.signal,
           onLine: (line) => {
-            void context.experimental_emitSignal("installLog", { jobId: input.jobId, line: line.slice(0, 4000) });
+            void context.experimental_emitSignal("installLog", {
+              jobId: input.jobId,
+              line: line.slice(0, 4000),
+            });
           },
         });
       } finally {
