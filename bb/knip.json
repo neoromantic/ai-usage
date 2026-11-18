@@ -1,0 +1,5 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "include": ["files", "dependencies", "devDependencies", "unlisted", "unresolved"],
+  "entry": ["server.ts", "app.tsx", "host.ts"]
+}

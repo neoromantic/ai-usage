@@ -24,7 +24,7 @@
 #            report lists both
 #   plugin   the BB plugin in bb/: bun install, oxfmt and oxlint on it and
 #            on scripts/demo's TypeScript, its types, its tests, which read
-#            docs/demo, and bb plugin build
+#            docs/demo, bb plugin build, and Knip
 #   app      the menu bar app's checks, and a build of it (macOS)
 #   pictures the app's pictures of the team demo, every tab and state in
 #            light and dark; with --push, of the solo demo too (macOS)
