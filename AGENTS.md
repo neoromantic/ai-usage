@@ -47,7 +47,13 @@ Use the project section's native commands for checks, offline tests and builds:
 - JS and TS follow the [lint and format standard](https://github.com/neoromantic/devkit/blob/main/docs/standards/lint-format.md):
   no prose comments (rationale goes in the PR), tests beside their code, no mocks of the code
   under test, no fixed sleeps or retries. Fix the code; exceptions go in `.oxlintrc.json`.
-  Tests follow the [testing standard](https://github.com/neoromantic/devkit/blob/main/docs/standards/testing.md).
+- A test names the behaviour it protects and fails on a believable bug. Strengthen the test that
+  owns a contract instead of adding another; delete tests that repeat one or restate the code.
+  Tests run in parallel workers, each with its own temp dir, port, database and environment
+  ([testing standard](https://github.com/neoromantic/devkit/blob/main/docs/standards/testing.md)).
+- A pull request's CI runs one runtime version and only the jobs its diff can affect; other
+  versions and platforms run after merge, on a schedule or on request
+  ([CI speed standard](https://github.com/neoromantic/devkit/blob/main/docs/standards/ci-speed.md)).
 
 ### Commits and releases
 
