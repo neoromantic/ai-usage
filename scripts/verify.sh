@@ -22,8 +22,9 @@
 #   stack    a relay on 127.0.0.1 and two made-up devices in homes of their
 #            own: a team key, a join, a collect on each, and the first's
 #            report lists both
-#   plugin   the BB plugin in bb/: bun install, its types, its tests, which
-#            read docs/demo, and bb plugin build
+#   plugin   the BB plugin in bb/: bun install, oxfmt and oxlint on it and
+#            on scripts/demo's TypeScript, its types, its tests, which read
+#            docs/demo, and bb plugin build
 #   app      the menu bar app's checks, and a build of it (macOS)
 #   pictures the app's pictures of the team demo, every tab and state in
 #            light and dark; with --push, of the solo demo too (macOS)
@@ -177,8 +178,9 @@ else
 		macos/Sources/AIUsageBar/* | macos/Sources/AIUsageKit/* | docs/demo/*.json) want pictures "$f" ;;
 		esac
 		case $f in docs/demo/*.json) want page "$f" ;; esac
-		# The BB plugin reads the report's JSON and bundles the team demo.
-		case $f in bb/* | internal/view/* | internal/snapshot/* | docs/demo/*.json) want plugin "$f" ;; esac
+		# The BB plugin reads the report's JSON and bundles the team demo; its
+		# lint and format check cover scripts/demo's TypeScript too.
+		case $f in bb/* | internal/view/* | internal/snapshot/* | docs/demo/*.json | scripts/demo/*.ts) want plugin "$f" ;; esac
 		case $f in *.sh | install.ps1) want shell "$f" ;; esac
 		if [ -n "$push" ]; then
 			case $f in macos/*) want build "$f" ;; esac

@@ -37,7 +37,7 @@ edit to a golden file.
 | `lint` | Go code changed | staticcheck and deadcode at CI's pinned versions for this OS; `--push`: linux, darwin, windows | 3s; 14s with `--push` |
 | `page` | Go code or a demo report | both demo reports printed at 80 and 110 columns, and the interactive view driven by keys in a tmux of its own | 4s |
 | `stack` | Go code | a relay on 127.0.0.1, two devices in made-up homes: `team key`, `team join`, a collect on each, and the first's report lists both | under 1s |
-| `plugin` | `bb/`, `internal/view`, `internal/snapshot`, a demo report | `bun run check` in `bb/`: the BB plugin's types, its tests, which read every demo report, an older one, and an unknown kind of attention, and its `bb plugin build` | 20s; a minute cold |
+| `plugin` | `bb/`, `internal/view`, `internal/snapshot`, a demo report, `scripts/demo/*.ts` | `bun run check` in `bb/`: oxfmt and oxlint on the BB plugin and on `scripts/demo`'s TypeScript, the plugin's types, its tests, which read every demo report, an older one, and an unknown kind of attention, and its `bb plugin build` | 20s; a minute cold |
 | `app` | `macos/`, `internal/view`, `internal/snapshot`, a demo report | `AIUsageChecks`, the app's decoding and words, and a debug build of the app | 6s; 25s cold |
 | `pictures` | the app's UI or words (`AIUsageBar`, `AIUsageKit`), a demo report | every tab and state of the popover, the Team window, Settings, and the menu bar, light and dark, from `team.json`; `--push` adds `solo.json` | 45s; +20s |
 | `build` | `--push` and `macos/` changed | `macos/build.sh`: the universal, signed release bundle | 80s |
