@@ -287,16 +287,21 @@ function sgr(codes: number[], s: Style, theme: Theme) {
 
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+const ESC = "\u001b";
+const BEL = "\u0007";
+const OSC = new RegExp(String.raw`${ESC}\][^${BEL}${ESC}]*(${BEL}|${ESC}\\)`, "g");
+const CSI_NOT_SGR = new RegExp(String.raw`${ESC}\[[0-9;?]*[A-La-ln-z]`, "g");
+const SGR_PARAMS = new RegExp(String.raw`${ESC}\[([0-9;:]*)m`);
+const SGR = new RegExp(String.raw`${ESC}\[[0-9;]*m`, "g");
+
 function html(text: string, theme: Theme) {
   const p = palette[theme];
-  text = text
-    .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, "")
-    .replace(/\x1b\[[0-9;?]*[A-La-ln-z]/g, "");
+  text = text.replace(OSC, "").replace(CSI_NOT_SGR, "");
   let style: Style = {};
   const lines: string[] = [];
   for (const line of text.replace(/\n+$/, "").split("\n")) {
     let out = "";
-    const parts = line.split(/\x1b\[([0-9;:]*)m/);
+    const parts = line.split(SGR_PARAMS);
     for (let i = 0; i < parts.length; i++) {
       if (i % 2 === 1) {
         style = sgr(parts[i] === "" ? [] : parts[i].split(/[;:]/).map(Number), style, theme);
@@ -405,7 +410,7 @@ async function printed(s: Shot, theme: Theme) {
 
 function cutText(text: string, cut: [string, string]) {
   const lines = text.split("\n");
-  const plain = lines.map((l) => l.replace(/\x1b\[[0-9;]*m/g, ""));
+  const plain = lines.map((l) => l.replace(SGR, ""));
   const first = plain.findIndex((l) => l.startsWith(cut[0]));
   const last = plain.findIndex((l, i) => i > first && l.startsWith(cut[1]));
   return lines.slice(first, last < 0 ? undefined : last).join("\n");
