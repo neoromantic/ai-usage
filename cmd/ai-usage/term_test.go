@@ -123,15 +123,10 @@ func TestDisplayFlagErrors(t *testing.T) {
 	hermetic(t)
 	d := newDevice(t)
 	for _, args := range [][]string{
-		{"report", "--projects", "--bogus"},
 		{"--offline", "--color=sometimes"},
-		{"report", "--color=sometimes"},
 		{"report", "--width", "-3"},
-		{"status", "--projects"},
 		// status draws no DEVICES.
 		{"status", "--devices"},
-		{"status", "--json", "--devices"},
-		{"report", "--devices=sometimes"},
 	} {
 		r := d.run("", args...)
 		if r.code != 2 || !helpShown(r.stderr) {

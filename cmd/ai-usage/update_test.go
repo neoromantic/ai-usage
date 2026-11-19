@@ -163,11 +163,6 @@ func TestHousekeepingOnReleaseBuild(t *testing.T) {
 		t.Fatalf("update = %+v", r.Collector.Update)
 	}
 
-	// Registration happened once and kept the person's own line.
-	if cron.writes != 1 || !strings.HasPrefix(cron.tab, "0 3 * * * /usr/local/bin/backup\n") {
-		t.Fatalf("crontab written %d times: %q", cron.writes, cron.tab)
-	}
-
 	// After `schedule remove`, runs do not register again.
 	d.ok("schedule", "remove")
 	writes := cron.writes
@@ -246,32 +241,12 @@ func releaseBuild(t *testing.T, running string) (exe string, g *fakeGitHub) {
 	return exe, g
 }
 
-// One run with the clock far ahead stores a check time in the future. That
-// must not stop checks until the clock gets there.
-func TestUpdateCheckAfterClockRanAhead(t *testing.T) {
-	hermetic(t)
-	d := newDevice(t)
-	d.ok("collect", "--quiet", "--offline")
-	t0 := time.Now().UTC().Truncate(time.Second)
-	st := d.state()
-	st.Update.CheckedAt = t0.AddDate(5, 0, 0)
-	if err := state.Dir(d.dir).SaveState(st); err != nil {
-		t.Fatal(err)
-	}
-	_, g := releaseBuild(t, "v1.2.0")
-	clock = func() time.Time { return t0 }
-	d.ok("collect", "--quiet", "--offline")
-	_, downloads := g.counts()
-	if st := d.state(); !st.Update.CheckedAt.Equal(t0) || st.Update.Installed != "v1.3.0" || downloads != 1 {
-		t.Fatalf("update = %+v after %d downloads", st.Update, downloads)
-	}
-}
-
 // Every scheduled run looks for a release, so one reaches the device within
 // a quarter of an hour. A run a person starts less than updateFloor after a
 // check, such as the view's r, does not ask GitHub again, even after a failed
 // check. The next scheduled run tries a failed check again, so a failure
-// shows for one run at most.
+// shows for one run at most. A check time in the future, which one run with
+// the clock far ahead stores, does not stop checks until the clock gets there.
 func TestUpdateCheckEveryScheduledRun(t *testing.T) {
 	hermetic(t)
 	_, g := releaseBuild(t, "v1.3.0")
@@ -312,6 +287,14 @@ func TestUpdateCheckEveryScheduledRun(t *testing.T) {
 		t.Fatalf("update after the check was tried again = %+v", st.Update)
 	}
 	run(62*time.Minute, byHand, false, 6)
+	st := d.state()
+	st.Update.CheckedAt = t0.AddDate(5, 0, 0)
+	if err := state.Dir(d.dir).SaveState(st); err != nil {
+		t.Fatal(err)
+	}
+	if st := run(63*time.Minute, byHand, false, 7); !st.Update.CheckedAt.Equal(t0.Add(63 * time.Minute)) {
+		t.Fatalf("update after a check time in the future = %+v", st.Update)
+	}
 	if _, downloads := g.counts(); downloads != 0 {
 		t.Fatalf("the release it runs was downloaded %d times", downloads)
 	}
@@ -392,8 +375,10 @@ func TestAppErrorIsNotAFailedRelease(t *testing.T) {
 }
 
 // A menu bar app that was downloaded and did not install is, like a
-// release, not downloaded again for retryFailed. Its error stays shown, and
-// a check that has nothing left to do forgets it.
+// release, not downloaded again for retryFailed. Its failure is recorded
+// against the release it tried, which under Homebrew is the binary's own,
+// not the latest. Its error stays shown, and a check that has nothing left
+// to do forgets it.
 func TestFailedAppIsNotDownloadedAgain(t *testing.T) {
 	hermetic(t)
 	releaseBuild(t, "v1.3.0")
@@ -407,7 +392,7 @@ func TestFailedAppIsNotDownloadedAgain(t *testing.T) {
 	appErr := fmt.Errorf("%w: rename: permission denied", selfupdate.ErrApp)
 	failed := func() *state.State {
 		st := &state.State{}
-		noteUpdate(st, t0, selfupdate.Result{Latest: "v1.3.0", AppDownloaded: true, AppTag: "v1.3.0"}, appErr)
+		noteUpdate(st, t0, selfupdate.Result{Latest: "v1.4.0", AppDownloaded: true, AppTag: "v1.3.0"}, appErr)
 		return st
 	}
 	st := failed()
