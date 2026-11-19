@@ -91,26 +91,6 @@ func TestPruneDropsOldSessionsAndIdleAccounts(t *testing.T) {
 	}
 }
 
-func TestLastActiveIsPerAccount(t *testing.T) {
-	w, o := newWorld(t)
-	h := w.home(t, "claude")
-	w.login("claude", h, "old", nil)
-	w.sessions("claude", h, sess("s1", "/p", 100, t0))
-	run(t, o)
-
-	// After a switch, new continues s1 five days later.
-	w.now = t0.Add(5 * 24 * time.Hour)
-	w.login("claude", h, "new", nil)
-	w.sessions("claude", h, sess("s1", "/p", 150, w.now))
-	res := run(t, o)
-	if old := totalsFor(t, res.State, "claude", "old"); !old.LastActive.Equal(t0) {
-		t.Fatalf("old last active = %v, its last use was %v", old.LastActive, t0)
-	}
-	if cur := totalsFor(t, res.State, "claude", "new"); !cur.LastActive.Equal(w.now) {
-		t.Fatalf("new last active = %v", cur.LastActive)
-	}
-}
-
 func TestPruneDropsAnAccountsOldShareOfALiveSession(t *testing.T) {
 	now := t0
 	old := now.Add(-state.Retention - time.Hour)

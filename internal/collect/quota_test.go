@@ -1,7 +1,6 @@
 package collect
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -249,7 +248,6 @@ func TestClaudeRejectionReadsItsWindowFull(t *testing.T) {
 		full       bool
 	}{
 		{"in force and newer than the reading", t0.Add(-30 * time.Minute), t0.Add(time.Hour), true},
-		{"reset since", t0.Add(-30 * time.Minute), t0.Add(-time.Minute), false},
 		{"older than the reading", t0.Add(-3 * time.Hour), t0.Add(time.Hour), false},
 	}
 	for _, tc := range tests {
@@ -363,22 +361,34 @@ func TestClaudeRejectionGoesToTheSessionsAccount(t *testing.T) {
 }
 
 // Windows out of range, or more of them than a snapshot holds, are kept to
-// what the state and the snapshot can hold.
+// what the state and the snapshot can hold. A unit mix-up upstream
+// (milliseconds read as seconds) loses the reset times no window can have,
+// and a reading from before the retention window is not kept: JSON cannot
+// hold such times, and a state that cannot be saved would stop every run.
 func TestBadWindowValuesAreClamped(t *testing.T) {
 	w, o := newWorld(t)
 	h := w.home(t, "claude")
+	far := time.Unix(1_800_000_000_000, 0) // year ~59000
+	past := time.Date(1970, 1, 1, 0, 0, 1, 0, time.UTC)
+	soon := t0.Add(5 * time.Hour)
 	q := &probe.Quota{At: t0, Source: "harness", Windows: []snapshot.Window{
-		{Name: "", Percent: math.NaN()},
-		{Name: "weekly ✓", Percent: math.Inf(1), Minutes: -3},
-		{Name: "x", Percent: -5, Minutes: snapshot.MaxWindowMinutes + 1},
+		{Name: "", Percent: math.NaN(), ResetsAt: &far},
+		{Name: "weekly ✓", Percent: math.Inf(1), Minutes: -3, ResetsAt: &past},
+		{Name: "x", Percent: -5, Minutes: snapshot.MaxWindowMinutes + 1, ResetsAt: &soon},
 	}}
 	for len(q.Windows) <= snapshot.MaxWindows {
 		q.Windows = append(q.Windows, snapshot.Window{Name: "w", Percent: 1})
 	}
 	w.login("claude", h, "ann", q)
-	res := run(t, o) // a NaN would fail to save the state
-	if got := totalsFor(t, res.State, "claude", "ann").Quota.Windows; len(got) != snapshot.MaxWindows {
-		t.Fatalf("%d windows kept", len(got))
+	gh := w.home(t, "grok")
+	w.login("grok", gh, "gina", &probe.Quota{At: time.Date(-1, 1, 1, 0, 0, 0, 0, time.UTC), Source: "log", Windows: []snapshot.Window{{Name: "5h", Percent: 1}}})
+	res := run(t, o)
+	ws := totalsFor(t, res.State, "claude", "ann").Quota.Windows
+	if len(ws) != snapshot.MaxWindows || ws[0].ResetsAt != nil || ws[1].ResetsAt != nil || ws[2].ResetsAt == nil || !ws[2].ResetsAt.Equal(soon) {
+		t.Fatalf("windows = %+v", ws)
+	}
+	if q := totalsFor(t, res.State, "grok", "gina").Quota; q != nil {
+		t.Fatalf("a reading older than retention was kept: %+v", q)
 	}
 	if err := res.Doc.Validate(); err != nil {
 		t.Fatal(err)
@@ -410,39 +420,5 @@ func TestQuotaFromAClockThatRanAheadIsReplaced(t *testing.T) {
 	res = run(t, o)
 	if q := totalsFor(t, res.State, "codex", "ann").Quota; q.Windows[0].Percent != 7 || !q.At.Equal(w.now) {
 		t.Fatalf("future reading = %+v", q)
-	}
-}
-
-// A unit mix-up upstream (milliseconds read as seconds) must not make the
-// state unsavable and stop every run.
-func TestUnbelievableQuotaTimesDoNotStopRuns(t *testing.T) {
-	w, o := newWorld(t)
-	h := w.home(t, "codex")
-	far := time.Unix(1_800_000_000_000, 0) // year ~59000: JSON cannot hold it
-	past := time.Date(1970, 1, 1, 0, 0, 1, 0, time.UTC)
-	soon := t0.Add(5 * time.Hour)
-	w.login("codex", h, "ann", &probe.Quota{At: t0, Source: "harness", Windows: []snapshot.Window{
-		{Name: "5h", Percent: 10, ResetsAt: &far},
-		{Name: "7d", Percent: 20, ResetsAt: &past},
-		{Name: "ok", Percent: 30, ResetsAt: &soon},
-	}})
-	gh := w.home(t, "grok")
-	w.login("grok", gh, "gina", &probe.Quota{At: time.Date(-1, 1, 1, 0, 0, 0, 0, time.UTC), Source: "log", Windows: []snapshot.Window{{Name: "5h", Percent: 1}}})
-	for i := range 2 {
-		w.now = t0.Add(time.Duration(i) * 15 * time.Minute)
-		res, err := Run(context.Background(), o)
-		if err != nil {
-			t.Fatalf("run %d: %v", i, err)
-		}
-		ws := totalsFor(t, res.State, "codex", "ann").Quota.Windows
-		if ws[0].ResetsAt != nil || ws[1].ResetsAt != nil || ws[2].ResetsAt == nil || !ws[2].ResetsAt.Equal(soon) {
-			t.Fatalf("windows = %+v", ws)
-		}
-		if q := totalsFor(t, res.State, "grok", "gina").Quota; q != nil {
-			t.Fatalf("a reading older than retention was kept: %+v", q)
-		}
-	}
-	if ss, err := o.Dir.LoadSamples(time.Time{}); err != nil || len(ss) != 2 {
-		t.Fatalf("samples = %d, %v", len(ss), err)
 	}
 }

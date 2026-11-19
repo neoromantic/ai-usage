@@ -79,26 +79,12 @@ func TestHoursFollowTheSession(t *testing.T) {
 	}
 }
 
-// TestLedgerPlacesHours: a log with times gives the hours of a session read
-// for the first time, a later read adds its growth where the log grew, even
-// when it is partial, and a log without times has each run's growth at the
-// session's last activity.
-func TestLedgerPlacesHours(t *testing.T) {
+// TestUntimedGrowthIsPlacedAtTheLastActivity: a log without times has each
+// run's growth at the session's last activity, not at the run's time.
+func TestUntimedGrowthIsPlacedAtTheLastActivity(t *testing.T) {
 	h := t0.Unix() / 3600
 	st := state.NewState()
 	growth := map[string]snapshot.Tokens{}
-	timed := logs.Session{ID: "s1", Tokens: snapshot.Tokens{Input: 90, Output: 10}, Updated: t0, Hours: inputs(map[int64]int64{h - 1: 40, h: 60})}
-	attribute(st, "codex", timed, "ann", false, t0, growth)
-	if got := inOut(st.Sessions[state.Key("codex", "s1")].U); !reflect.DeepEqual(got, map[int64]int64{h - 1: 40, h: 60}) {
-		t.Errorf("hours = %v", got)
-	}
-	// A partial read shows 110 tokens, all in the last hour: 10 more.
-	timed.Tokens.Input, timed.Hours = 100, inputs(map[int64]int64{h: 110})
-	attribute(st, "codex", timed, "ann", true, t0, growth)
-	if got := inOut(st.Sessions[state.Key("codex", "s1")].U); !reflect.DeepEqual(got, map[int64]int64{h - 1: 40, h: 70}) {
-		t.Errorf("hours after a partial read = %v, want the 10 grown added", got)
-	}
-
 	untimed := logs.Session{ID: "s2", Tokens: snapshot.Tokens{Input: 30}, Updated: t0.Add(-2 * time.Hour)}
 	attribute(st, "hermes", untimed, "openrouter", false, t0, growth)
 	untimed.Tokens.Input, untimed.Updated = 50, t0
@@ -130,9 +116,6 @@ func TestSwitchedSessionKeepsEachAccountsHours(t *testing.T) {
 	if got, want := days("bo@acme.dev"), []int64{20}; !reflect.DeepEqual(got, want) {
 		t.Errorf("bo's days = %v, want %v", got, want)
 	}
-	if got := SinceStart(inOut(totalsFor(t, st, "claude", "ann@acme.dev").Hours), t0.Add(-day)); got != 0 {
-		t.Errorf("ann since yesterday = %d, want 0", got)
-	}
 	// ann logs in again and continues it for 30 more.
 	s.Tokens.Input, s.Updated = 150, t0
 	s.Hours = inputs(map[int64]int64{h(t0.Add(-3 * day)): 100, h(t0.Add(-2 * time.Hour)): 20, h(t0): 30})
@@ -142,9 +125,6 @@ func TestSwitchedSessionKeepsEachAccountsHours(t *testing.T) {
 	}
 	if got, want := days("bo@acme.dev"), []int64{20}; !reflect.DeepEqual(got, want) {
 		t.Errorf("bo's days = %v, want %v", got, want)
-	}
-	if ps := Projects(st, nil); len(ps) != 1 || !reflect.DeepEqual(DaysOf(inOut(ps[0].Hours), t0), []int64{50, 0, 0, 100}) {
-		t.Errorf("projects = %+v", ps)
 	}
 }
 

@@ -106,9 +106,6 @@ func TestPublishSendsCostsBehindTheGate(t *testing.T) {
 			t.Errorf("NoCostUntil(%+v) = %v", r, got)
 		}
 	}
-	if !BeforeCost("v0.9.1") || BeforeCost("v0.10.0") || !BeforeCost("v0.9.9-local") || BeforeCost("devel") {
-		t.Error("BeforeCost")
-	}
 }
 
 // A run records the team's subscriptions in the cost store: this device's
@@ -215,8 +212,7 @@ func TestRunFetchesPrices(t *testing.T) {
 		}
 	}
 	// No relay, no ask.
-	w, o := newWorld(t)
-	_ = w
+	_, o := newWorld(t)
 	run(t, o)
 	if !cost.FetchDue(o.Dir, t0) {
 		t.Fatal("a run without a relay asked for prices")

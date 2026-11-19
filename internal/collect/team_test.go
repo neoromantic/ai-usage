@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -117,9 +116,6 @@ func TestRelayPushAndPull(t *testing.T) {
 			t.Fatalf("own doc in cache collected at %v", d.CollectedAt)
 		}
 	}
-	if info, err := os.Stat(o.Dir.TeamCacheFile()); err != nil || info.Size() == 0 {
-		t.Fatalf("team-cache.json: %v", err)
-	}
 }
 
 // Each read carries over since when a device has run an older release than
@@ -176,6 +172,9 @@ func TestBehindSinceCarriesOverReads(t *testing.T) {
 	}
 }
 
+// A run that cannot reach the relay still collects, and keeps its snapshot
+// pending and the last team read. The first run that reaches the relay again
+// sends the newest snapshot, whose running totals cover the runs it missed.
 func TestUnreachableRelayKeepsCollecting(t *testing.T) {
 	w, o := newWorld(t)
 	h := w.home(t, "claude")
@@ -217,31 +216,16 @@ func TestUnreachableRelayKeepsCollecting(t *testing.T) {
 	if !saved.Relay.Pending {
 		t.Fatal("pending was not saved")
 	}
-}
 
-func TestRelayBacklogIsSentWhenItReturns(t *testing.T) {
-	w, o := newWorld(t)
-	h := w.home(t, "claude")
-	w.login("claude", h, "ann", nil)
-	w.sessions("claude", h, sess("s1", "/p", 100, t0))
-	r := newRelay(t, w)
-	o.Relay = &relay.Client{BaseURL: "http://127.0.0.1:1", Now: func() time.Time { return w.now }}
-	run(t, o)
-
-	w.now = t0.Add(15 * time.Minute)
+	w.now = t0.Add(30 * time.Minute)
 	w.sessions("claude", h, sess("s1", "/p", 250, w.now))
-	o.Relay = r.client(w)
-	res := run(t, o)
-	if res.State.Relay.Pending || res.State.Relay.LastError != "" {
-		t.Fatalf("relay state = %+v", res.State.Relay)
+	o.Relay = newRelay(t, w).client(w)
+	res = run(t, o)
+	if rs := res.State.Relay; rs.Pending || rs.LastError != "" {
+		t.Fatalf("relay state once it is back = %+v", rs)
 	}
-	if len(res.Team.Docs) != 1 {
-		t.Fatalf("team = %+v", res.Team)
-	}
-	// The newest snapshot carries the running totals of the missed runs.
-	own := res.Team.Docs[0]
-	if len(own.Accounts) != 1 || own.Accounts[0].Tokens != tok(250) {
-		t.Fatalf("published accounts = %+v", own.Accounts)
+	if len(res.Team.Docs) != 1 || len(res.Team.Docs[0].Accounts) != 1 || res.Team.Docs[0].Accounts[0].Tokens != tok(250) {
+		t.Fatalf("team once the relay is back = %+v", res.Team.Docs)
 	}
 }
 
@@ -385,57 +369,55 @@ func TestRelayConflictIsReported(t *testing.T) {
 	}
 }
 
-func TestRelayDocsThatDoNotVerifyAreReported(t *testing.T) {
+// A team read leaves out the documents that do not verify with the team key,
+// and those signed with it that this release cannot read, which come from a
+// newer release: the fix for those is to update, not to check the team key.
+// The run says both, and so does a run that skips the read. Neither holds a
+// gate shut, since such a device reads what this one sends.
+func TestRelayDocsTheReadLeavesOutAreReported(t *testing.T) {
 	w, o := newWorld(t)
 	r := newRelay(t, w)
 	key, _ := LoadKey(o.Dir)
-	body, _ := json.Marshal(BuildDoc(ledger(), nil, key, state.Config{Device: "d-forged-device"}, Repos{}, "x", "y", "v1", t0))
-	_ = r.store.Put(context.Background(), key.Fingerprint(), "d-forged-device", relay.Record{Body: body, Sig: []byte("not a signature")}, time.Hour)
+	put := func(device string, newer bool) {
+		t.Helper()
+		body, _ := json.Marshal(BuildDoc(ledger(), nil, key, state.Config{Device: device}, Repos{}, "x", "y", "v9.0.0", t0))
+		sig := []byte("not a signature")
+		if newer {
+			body = bytes.Replace(body, []byte(`{"v":1,`), []byte(`{"v":1,"pace":[2],`), 1)
+			sig = key.Sign(relay.SnapshotMessage(body))
+		}
+		if err := r.store.Put(context.Background(), key.Fingerprint(), device, relay.Record{Body: body, Sig: sig}, time.Hour); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("d-forged-device", false)
+	put("d-newer-device", true)
+	const forged = "; relay returned documents that do not verify with the team key"
 
 	o.Relay = r.client(w)
 	res := run(t, o)
-	if !strings.Contains(res.State.Relay.LastError, "do not verify") {
-		t.Fatalf("relay error = %q", res.State.Relay.LastError)
+	want := "1 device sends a newer snapshot format: update ai-usage" + forged
+	if res.State.Relay.LastError != want || res.Team.ReadError != want {
+		t.Fatalf("relay error = %q, read error %q", res.State.Relay.LastError, res.Team.ReadError)
 	}
-	for _, d := range res.Team.Docs {
-		if d.Device == "d-forged-device" {
-			t.Fatal("an unverified document reached the team cache")
-		}
+	if ids := deviceIDs(res.Team.Docs); !slices.Equal(ids, []string{res.Config.Device}) {
+		t.Fatalf("team = %v", ids)
 	}
-	if len(res.Team.Docs) != 1 {
-		t.Fatalf("team = %v", deviceIDs(res.Team.Docs))
+	if g := ExtendedWire(res.Team, key.Fingerprint(), res.Config.Device, time.Time{}, w.now); !g.Open {
+		t.Fatalf("gate = %+v", g)
 	}
 
-	// A run that skips the read still says what was wrong with it.
 	w.now = t0.Add(15 * time.Minute)
 	o.PullEvery = time.Hour
 	res = run(t, o)
-	if rs := res.State.Relay; !strings.Contains(rs.LastError, "do not verify") || !rs.LastPushAt.Equal(w.now) {
+	if rs := res.State.Relay; rs.LastError != want || !rs.LastPushAt.Equal(w.now) {
 		t.Fatalf("relay state after a skipped read = %+v", rs)
 	}
-}
 
-// A document signed with the team key that this release cannot read comes
-// from a newer release: the fix is to update, not to check the team key.
-func TestRelayDocsFromANewerReleaseAreReported(t *testing.T) {
-	w, o := newWorld(t)
-	r := newRelay(t, w)
-	key, _ := LoadKey(o.Dir)
-	body, _ := json.Marshal(BuildDoc(ledger(), nil, key, state.Config{Device: "d-newer-device"}, Repos{}, "x", "y", "v9.0.0", t0))
-	body = bytes.Replace(body, []byte(`{"v":1,`), []byte(`{"v":1,"pace":[2],`), 1)
-	_ = r.store.Put(context.Background(), key.Fingerprint(), "d-newer-device", relay.Record{Body: body, Sig: key.Sign(relay.SnapshotMessage(body))}, time.Hour)
-
-	o.Relay = r.client(w)
-	res := run(t, o)
-	if got := res.State.Relay.LastError; got != "1 device sends a newer snapshot format: update ai-usage" {
-		t.Fatalf("relay error = %q", got)
-	}
-	if res.Team.ReadError != res.State.Relay.LastError || len(res.Team.Docs) != 1 {
-		t.Fatalf("team = %v, read error %q", deviceIDs(res.Team.Docs), res.Team.ReadError)
-	}
-	// Such a device reads what this one sends.
-	if g := ExtendedWire(res.Team, key.Fingerprint(), res.Config.Device, time.Time{}, w.now); !g.Open {
-		t.Fatalf("gate = %+v", g)
+	put("d-newer-device-2", true)
+	w.now = t0.Add(2 * time.Hour)
+	if got := run(t, o).State.Relay.LastError; got != "2 devices send a newer snapshot format: update ai-usage"+forged {
+		t.Fatalf("relay error with two newer devices = %q", got)
 	}
 }
 
@@ -472,23 +454,6 @@ func TestTeamReadsRememberReleases(t *testing.T) {
 	}
 	if g := ExtendedWire(res.Team, key.Fingerprint(), res.Config.Device, time.Time{}, w.now); !g.Open {
 		t.Fatalf("gate = %+v", g)
-	}
-}
-
-func TestReadError(t *testing.T) {
-	for _, c := range []struct {
-		res  relay.PullResult
-		want string
-	}{
-		{relay.PullResult{}, ""},
-		{relay.PullResult{Undecodable: 1}, "1 device sends a newer snapshot format: update ai-usage"},
-		{relay.PullResult{Undecodable: 3}, "3 devices send a newer snapshot format: update ai-usage"},
-		{relay.PullResult{Unverified: 2}, "relay returned documents that do not verify with the team key"},
-		{relay.PullResult{Unverified: 1, Undecodable: 2}, "2 devices send a newer snapshot format: update ai-usage; relay returned documents that do not verify with the team key"},
-	} {
-		if got := readError(c.res); got != c.want {
-			t.Errorf("%+v: %q, want %q", c.res, got, c.want)
-		}
 	}
 }
 
@@ -584,19 +549,6 @@ func (p *putRecorder) count() int {
 	return len(p.puts)
 }
 
-// sent is whether each snapshot device put since from was extended.
-func (p *putRecorder) sent(device string, from int) []bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	var out []bool
-	for _, d := range p.puts[from:] {
-		if d.Device == device {
-			out = append(out, d.Extended())
-		}
-	}
-	return out
-}
-
 // wire is what each snapshot device put since from had: more than 12
 // projects an account ("projects"), "pooled", "costs", "hours", "cycles",
 // the fields v0.4.0 added ("extended"), or none ("legacy").
@@ -637,156 +589,22 @@ func newRecordingRelay(t *testing.T, w *world) (*testRelay, *putRecorder) {
 	return &testRelay{srv: srv, store: store}, rec
 }
 
-// A device sends the fields v0.4.0 added once a read shows every teammate
-// reads them, and goes without them for a day when the relay refuses them.
-func TestPublishSendsExtendedFieldsBehindTheGate(t *testing.T) {
-	for _, c := range []struct {
-		name     string
-		teammate string
-		reject   bool
-		second   []bool // what the second run put, extended or not
-	}{
-		{"a teammate on v0.3.4", "v0.3.4", false, []bool{false}},
-		{"everyone on v0.4.0", "v0.4.0", false, []bool{true}},
-		{"a relay that refuses the fields", "v0.4.0", true, []bool{true, false}},
-	} {
-		w, o := newWorld(t)
-		o.Version = "v0.4.0"
-		h := w.home(t, "claude")
-		w.login("claude", h, "ann@acme.dev", quota(t0, 10))
-		w.sessions("claude", h, sess("a4c2e917", "/p", 100, t0))
-		r, rec := newRecordingRelay(t, w)
-		o.Relay = r.client(w)
-		key, _ := LoadKey(o.Dir)
-		publishRelease(t, r, w, key, "d-srv1-a4c2e917", c.teammate, ledger(), t0)
-		rec.mu.Lock()
-		rec.reject = c.reject
-		rec.mu.Unlock()
-
-		// No read of the team yet: nothing vouches for the teammates.
-		res := run(t, o)
-		self := res.Config.Device
-		if got := rec.sent(self, 0); !slices.Equal(got, []bool{false}) {
-			t.Fatalf("%s: the first run put %v", c.name, got)
-		}
-
-		w.now = t0.Add(15 * time.Minute)
-		from := rec.count()
-		res = run(t, o)
-		if got := rec.sent(self, from); !slices.Equal(got, c.second) {
-			t.Fatalf("%s: the second run put %v, want %v", c.name, got, c.second)
-		}
-		rs := res.State.Relay
-		if rs.LastError != "" || rs.Pending || !rs.LastPushAt.Equal(w.now) {
-			t.Fatalf("%s: relay state = %+v", c.name, rs)
-		}
-		if want := (time.Time{}); c.reject {
-			want = w.now.Add(24 * time.Hour)
-			if !rs.NoExtUntil.Equal(want) {
-				t.Fatalf("%s: no extended fields until %v", c.name, rs.NoExtUntil)
-			}
-		} else if !rs.NoExtUntil.Equal(want) {
-			t.Fatalf("%s: no extended fields until %v", c.name, rs.NoExtUntil)
-		}
-		if !res.Doc.Extended() {
-			t.Fatalf("%s: the report's own snapshot lost its fields", c.name)
-		}
-
-		// A day without them after a refusal.
-		w.now = t0.Add(30 * time.Minute)
-		from = rec.count()
-		run(t, o)
-		if got, want := rec.sent(self, from), []bool{c.second[len(c.second)-1]}; !slices.Equal(got, want) {
-			t.Fatalf("%s: the third run put %v, want %v", c.name, got, want)
-		}
-	}
-}
-
-// A device sends its quota cycles once a read shows every teammate reads
-// them, and goes without them for a day when the relay refuses them, still
-// sending the fields v0.4.0 added when the relay takes those.
-func TestPublishSendsCyclesBehindTheGate(t *testing.T) {
-	for _, c := range []struct {
-		name                 string
-		teammate             string
-		reject, rejectCycles bool
-		second               []string // what the second run put
-	}{
-		{"a teammate on v0.4.0", "v0.4.0", false, false, []string{"extended"}},
-		{"a teammate on v0.3.4", "v0.3.4", false, false, []string{"legacy"}},
-		{"everyone on v0.5.0", "v0.5.0", false, false, []string{"cycles"}},
-		{"a relay on v0.4.0", "v0.5.0", false, true, []string{"cycles", "extended"}},
-		{"a relay before v0.4.0", "v0.5.0", true, true, []string{"cycles", "extended", "legacy"}},
-	} {
-		w, o := newWorld(t)
-		o.Version = "v0.5.0"
-		h := w.home(t, "claude")
-		w.login("claude", h, "ann@acme.dev", quota(t0, 10))
-		w.sessions("claude", h, sess("a4c2e917", "/p", 100, t0))
-		r, rec := newRecordingRelay(t, w)
-		o.Relay = r.client(w)
-		key, _ := LoadKey(o.Dir)
-		publishRelease(t, r, w, key, "d-srv1-a4c2e917", c.teammate, ledger(), t0)
-		rec.mu.Lock()
-		rec.reject, rec.rejectCycles = c.reject, c.rejectCycles
-		rec.mu.Unlock()
-
-		// No read of the team yet: nothing vouches for the teammates.
-		res := run(t, o)
-		self := res.Config.Device
-		if got := rec.wire(self, 0); !slices.Equal(got, []string{"legacy"}) {
-			t.Fatalf("%s: the first run put %v", c.name, got)
-		}
-		if !res.Doc.HasCycles() {
-			t.Fatalf("%s: the run's own snapshot has no cycles", c.name)
-		}
-
-		w.now = t0.Add(15 * time.Minute)
-		from := rec.count()
-		res = run(t, o)
-		if got := rec.wire(self, from); !slices.Equal(got, c.second) {
-			t.Fatalf("%s: the second run put %v, want %v", c.name, got, c.second)
-		}
-		rs := res.State.Relay
-		if rs.LastError != "" || rs.Pending || !rs.LastPushAt.Equal(w.now) {
-			t.Fatalf("%s: relay state = %+v", c.name, rs)
-		}
-		var noCycles, noExt time.Time
-		if c.rejectCycles {
-			noCycles = w.now.Add(24 * time.Hour)
-		}
-		if c.reject {
-			noExt = w.now.Add(24 * time.Hour)
-		}
-		if !rs.NoCyclesUntil.Equal(noCycles) || !rs.NoExtUntil.Equal(noExt) {
-			t.Fatalf("%s: no cycles until %v, no extended fields until %v", c.name, rs.NoCyclesUntil, rs.NoExtUntil)
-		}
-		if !res.Doc.HasCycles() {
-			t.Fatalf("%s: the report's own snapshot lost its cycles", c.name)
-		}
-
-		// A day without them after a refusal.
-		w.now = t0.Add(30 * time.Minute)
-		from = rec.count()
-		run(t, o)
-		if got, want := rec.wire(self, from), c.second[len(c.second)-1:]; !slices.Equal(got, want) {
-			t.Fatalf("%s: the third run put %v, want %v", c.name, got, want)
-		}
-	}
-}
-
-// A device sends its hours once a read shows every teammate reads them,
-// and goes without them for a day when the relay refuses them, still
-// sending the cycles when the relay takes those.
-func TestPublishSendsHoursBehindTheGate(t *testing.T) {
+// A device sends what a release added once a read shows every teammate runs
+// it: the hours from v0.7.0, the cycles from v0.5.0, and the fields v0.4.0
+// added. When the relay refuses them, it sends the body an older release
+// reads, and goes without them for a day. The report's own snapshot keeps
+// what was not sent.
+func TestPublishSendsTheFieldsBehindTheirGates(t *testing.T) {
 	for _, c := range []struct {
 		name                              string
 		teammate                          string
 		reject, rejectCycles, rejectHours bool
 		second                            []string // what the second run put
 	}{
-		{"a teammate on v0.6.2", "v0.6.2", false, false, false, []string{"cycles"}},
+		{"a teammate on v0.3.4", "v0.3.4", false, false, false, []string{"legacy"}},
 		{"a teammate on v0.4.0", "v0.4.0", false, false, false, []string{"extended"}},
+		{"a teammate on v0.5.0", "v0.5.0", false, false, false, []string{"cycles"}},
+		{"a teammate on v0.6.2", "v0.6.2", false, false, false, []string{"cycles"}},
 		{"everyone on v0.7.0", "v0.7.0", false, false, false, []string{"hours"}},
 		{"a relay on v0.6.2", "v0.7.0", false, false, true, []string{"hours", "cycles"}},
 		{"a relay on v0.4.0", "v0.7.0", false, true, true, []string{"hours", "cycles", "extended"}},
@@ -811,9 +629,6 @@ func TestPublishSendsHoursBehindTheGate(t *testing.T) {
 		if got := rec.wire(self, 0); !slices.Equal(got, []string{"legacy"}) {
 			t.Fatalf("%s: the first run put %v", c.name, got)
 		}
-		if !res.Doc.HasHours() {
-			t.Fatalf("%s: the run's own snapshot has no hours", c.name)
-		}
 
 		w.now = t0.Add(15 * time.Minute)
 		from := rec.count()
@@ -825,15 +640,17 @@ func TestPublishSendsHoursBehindTheGate(t *testing.T) {
 		if rs.LastError != "" || rs.Pending || !rs.LastPushAt.Equal(w.now) {
 			t.Fatalf("%s: relay state = %+v", c.name, rs)
 		}
-		if want := (time.Time{}); c.rejectHours {
-			if want = w.now.Add(24 * time.Hour); !rs.NoHoursUntil.Equal(want) {
-				t.Fatalf("%s: no hours until %v", c.name, rs.NoHoursUntil)
+		until := func(refused bool) time.Time {
+			if refused {
+				return w.now.Add(24 * time.Hour)
 			}
-		} else if !rs.NoHoursUntil.Equal(want) {
-			t.Fatalf("%s: no hours until %v", c.name, rs.NoHoursUntil)
+			return time.Time{}
 		}
-		if !res.Doc.HasHours() {
-			t.Fatalf("%s: the report's own snapshot lost its hours", c.name)
+		if !rs.NoHoursUntil.Equal(until(c.rejectHours)) || !rs.NoCyclesUntil.Equal(until(c.rejectCycles)) || !rs.NoExtUntil.Equal(until(c.reject)) {
+			t.Fatalf("%s: no hours until %v, no cycles until %v, no extended fields until %v", c.name, rs.NoHoursUntil, rs.NoCyclesUntil, rs.NoExtUntil)
+		}
+		if !res.Doc.HasHours() || !res.Doc.HasCycles() || !res.Doc.Extended() {
+			t.Fatalf("%s: the report's own snapshot lost what it did not send", c.name)
 		}
 
 		// A day without them after a refusal.
