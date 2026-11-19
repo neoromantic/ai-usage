@@ -156,7 +156,9 @@ func TestCostCommandErrors(t *testing.T) {
 }
 
 // TestAskCost: the first run's questions, answered on the terminal: the
-// suggestion taken with Enter, a skip, and never-ask, which ends them.
+// suggestion taken with Enter, a skip, and never-ask, which ends them. A
+// renewal that may be yearly asks the cadence first, and yearly is offered
+// the subscription's own date of the year.
 func TestAskCost(t *testing.T) {
 	hermetic(t)
 	d := newDevice(t)
@@ -178,22 +180,13 @@ func TestAskCost(t *testing.T) {
 	if !strings.Contains(out.String(), "price a month, in USD, as Max 5x $100 or Max 20x $200: ") || !strings.Contains(out.String(), "price question is not asked again") || !strings.Contains(out.String(), "asks nothing about the cost") {
 		t.Fatalf("asked:\n%s", out.String())
 	}
-}
 
-// TestAskCostYearly: the cadence is asked first, and yearly is offered the
-// subscription's own date of the year.
-func TestAskCostYearly(t *testing.T) {
-	hermetic(t)
-	d := newDevice(t)
-	d.claude("11111111-aaaa", "/work/app", 1)
-	d.ok("collect", "--quiet", "--offline")
-	d.env()
-	month, year := "2099-02-01", "2099-06-01"
-	qs := []view.Question{{Kind: view.AskRenewal, Provider: "claude", Account: "dev@example.com", Text: "When does it charge?",
-		Suggestion: &month, SuggestionYearly: &year, Choices: []string{"monthly", "yearly"}}}
-	var out strings.Builder
+	year := "2099-06-01"
+	qs = []view.Question{{Kind: view.AskRenewal, Provider: "claude", Account: "dev@example.com", Text: "When does it charge?",
+		Suggestion: &sugg, SuggestionYearly: &year, Choices: []string{"monthly", "yearly"}}}
+	out.Reset()
 	askCost(qs, strings.NewReader("y\n\n"), &out)
-	s := oneSub(t, d.costOf())
+	s = oneSub(t, d.costOf())
 	if s.Cadence != "yearly" || s.RenewsAt == nil || s.RenewsAt.Local().Format("2006-01-02") != year {
 		t.Fatalf("yearly: %+v\n%s", s, out.String())
 	}

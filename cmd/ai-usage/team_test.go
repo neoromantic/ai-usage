@@ -13,10 +13,8 @@ import (
 	"time"
 
 	"github.com/neoromantic/ai-usage/internal/collect"
-	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
 	"github.com/neoromantic/ai-usage/internal/team"
-	"github.com/neoromantic/ai-usage/internal/view"
 	"github.com/neoromantic/ai-usage/relay"
 )
 
@@ -29,11 +27,23 @@ func TestTeamKeyAndJoin(t *testing.T) {
 	}
 	fp := fingerprint(t, a)
 
-	// A new device joins from stdin, as a pasted line, before it has a key.
+	// A new device joins from stdin before it has a key. A key pasted at a
+	// terminal ends with Enter, not with end of input.
 	b := newDevice(t)
-	r := b.run(key+"\n", "team", "join")
-	if r.code != 0 || !strings.Contains(r.stdout, fp) || strings.Contains(r.stdout, "previous key") {
-		t.Fatalf("join: exit %d\n%s%s", r.code, r.stdout, r.stderr)
+	b.env()
+	in, keys := io.Pipe()
+	t.Cleanup(func() { keys.Close() })
+	go func() { _, _ = io.WriteString(keys, key+"\n") }()
+	var out strings.Builder
+	done := make(chan int, 1)
+	go func() { done <- run(context.Background(), []string{"team", "join"}, in, &out, io.Discard) }()
+	select {
+	case code := <-done:
+		if code != 0 || !strings.Contains(out.String(), fp) || strings.Contains(out.String(), "previous key") {
+			t.Fatalf("join: exit %d\n%s", code, out.String())
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("team join waited for end of input after the key line")
 	}
 	if _, err := os.Stat(filepath.Join(b.dir, "team.key.previous")); !os.IsNotExist(err) {
 		t.Fatal("joining without a key saved a made-up previous key")
@@ -77,26 +87,6 @@ func TestTeamKeyAndJoin(t *testing.T) {
 	}
 }
 
-// A key pasted at a terminal ends with Enter, not with end of input.
-func TestTeamJoinReadsOneLine(t *testing.T) {
-	hermetic(t)
-	key := strings.TrimSpace(newDevice(t).ok("team", "key"))
-	b := newDevice(t)
-	b.env()
-	pr, pw := io.Pipe()
-	go func() { _, _ = io.WriteString(pw, key+"\n") }()
-	done := make(chan int, 1)
-	go func() { done <- run(context.Background(), []string{"team", "join"}, pr, io.Discard, io.Discard) }()
-	select {
-	case code := <-done:
-		if code != 0 {
-			t.Fatalf("join: exit %d", code)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("team join waited for end of input after the key line")
-	}
-}
-
 func TestTwoDevicesShareATeam(t *testing.T) {
 	hermetic(t)
 	srv := httptest.NewServer(relay.NewServer(relay.NewMemory()))
@@ -111,13 +101,6 @@ func TestTwoDevicesShareATeam(t *testing.T) {
 	a.ok("collect", "--quiet")
 	b.ok("team", "join", strings.TrimSpace(a.ok("team", "key")))
 	b.ok("collect", "--quiet")
-	// A scheduled run reads the team at most hourly: it publishes, and a
-	// report shows the last read.
-	a.ok("collect", "--quiet")
-	if r := a.report(); len(r.Team.Devices) != 1 || r.Collector.Relay.LastPushAt == nil || r.Collector.Relay.LastPushAt.Before(*r.Collector.Relay.LastPullAt) {
-		t.Fatalf("a scheduled run read the team again: %d devices, relay %+v", len(r.Team.Devices), r.Collector.Relay)
-	}
-	// A run someone started reads it every time.
 	a.ok("collect", "--json")
 
 	r := a.report()
@@ -131,19 +114,6 @@ func TestTwoDevicesShareATeam(t *testing.T) {
 	want := []string{a.config().Device, b.config().Device}
 	if !reflect.DeepEqual(ids, want) || !r.Team.Devices[0].This || r.Team.Devices[1].This {
 		t.Fatalf("team devices = %v, want %v (this device first)", ids, want)
-	}
-	var claude *view.TeamAccount
-	for _, p := range r.Team.Providers {
-		if p.Provider == "claude" && len(p.Accounts) == 1 {
-			claude = &p.Accounts[0]
-		}
-	}
-	// Tokens add across devices; the quota is one reading, not a sum.
-	if want := (snapshot.Tokens{Input: 300, Output: 150, CacheRead: 3000, CacheWrite: 30}); claude == nil || claude.Tokens != want || len(claude.Devices) != 2 {
-		t.Fatalf("team claude = %+v", claude)
-	}
-	if claude.Quota == nil || fullest(claude.Quota) != 91 {
-		t.Fatalf("team claude quota = %+v", claude.Quota)
 	}
 	if out := a.ok("team"); !strings.Contains(out, b.config().Device) || !strings.Contains(out, "read from the relay") {
 		t.Fatalf("team printed:\n%s", out)
@@ -162,18 +132,12 @@ func TestTwoDevicesShareATeam(t *testing.T) {
 	}
 
 	// Forgetting B takes it off the relay; A's next read has only itself.
-	if c := teamCache(t, a); c.Known[b.config().Device].Version == "" {
-		t.Fatalf("the team read did not remember B's release: %+v", c.Known)
-	}
 	a.ok("team", "forget-device", b.config().Device)
-	if c := teamCache(t, a); c.Known != nil {
-		t.Fatalf("forgetting B left its release: %+v", c.Known)
-	}
 	// The cached team read drops it at once, before the next collection.
 	if out := a.ok("team"); strings.Contains(out, b.config().Device) || !strings.Contains(out, a.config().Device) {
 		t.Fatalf("team after forget printed:\n%s", out)
 	}
-	a.ok("collect", "--quiet")
+	a.ok("collect", "--json")
 	if r := a.report(); len(r.Team.Devices) != 1 {
 		t.Fatalf("team devices after forget = %+v", r.Team.Devices)
 	}

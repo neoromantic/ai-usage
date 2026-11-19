@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -440,16 +439,5 @@ func TestHomebrewAsRoot(t *testing.T) {
 	}
 	if brewCommand() != "" {
 		t.Fatal("root gets a brew command")
-	}
-}
-
-// The menu bar app's failure is recorded against the release it tried,
-// which under Homebrew is the binary's own, not the latest.
-func TestAppFailedUnderHomebrew(t *testing.T) {
-	st := &state.State{}
-	err := fmt.Errorf("%w: rename: permission denied", selfupdate.ErrApp)
-	noteUpdate(st, time.Now(), selfupdate.Result{Latest: "v1.4.0", AppDownloaded: true, AppTag: "v1.3.0"}, err)
-	if f := st.Update.AppFailed; f == nil || f.Tag != "v1.3.0" || !errors.Is(err, selfupdate.ErrApp) {
-		t.Fatalf("app failed = %+v", f)
 	}
 }

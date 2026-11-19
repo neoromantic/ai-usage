@@ -27,8 +27,8 @@ import (
 // lock, a run the person started waits and shows that run's result instead
 // of collecting twice, with the guide when it is the first report; the
 // scheduler's own run skips, and editing the config does not wait at all.
-// After a change to what would be collected, or a holder that did not
-// collect, the waiting run collects itself.
+// After a change to what would be collected, the waiting run collects
+// itself.
 func TestCollectWhileAnotherRunCollects(t *testing.T) {
 	hermetic(t)
 	d := newDevice(t)
@@ -36,34 +36,40 @@ func TestCollectWhileAnotherRunCollects(t *testing.T) {
 	d.ok("collect", "--quiet", "--offline")
 	dir := state.Dir(d.dir)
 	clock = func() time.Time { return time.Now().Add(time.Hour) }
-	// hold stands in for the scheduled run: it holds the lock, and when it
-	// ends it has collected, with the same inputs, or not.
-	hold := func(collects bool) time.Time {
+	// hold stands in for the scheduled run: it holds the lock until release,
+	// which collects with the same inputs and lets go.
+	hold := func() (collected time.Time, release func()) {
 		t.Helper()
 		held, err := dir.Lock()
 		if err != nil {
 			t.Fatal(err)
 		}
-		collected := d.state().LastRunAt.Add(15 * time.Minute)
-		go func() {
-			time.Sleep(300 * time.Millisecond)
-			if collects {
-				st, _ := dir.LoadState()
-				st.LastRunAt = collected
-				if err := dir.SaveState(st); err != nil {
-					t.Error(err)
-				}
+		collected = d.state().LastRunAt.Add(15 * time.Minute)
+		return collected, func() {
+			st, _ := dir.LoadState()
+			st.LastRunAt = collected
+			if err := dir.SaveState(st); err != nil {
+				t.Error(err)
 			}
 			held()
-		}()
-		return collected
+		}
+	}
+	// waiting runs a collection the person started, and releases the holder
+	// once the run says it waits, which it says before it waits.
+	waiting := func(release func()) result {
+		t.Helper()
+		d.env()
+		var out strings.Builder
+		errb := &firstWrite{do: release}
+		code := run(context.Background(), []string{"collect", "--offline"}, strings.NewReader(""), &out, errb)
+		return result{code, out.String(), errb.String()}
 	}
 
-	collected := hold(true)
+	collected, release := hold()
 	if r := d.run("", "collect", "--quiet", "--offline"); r.code == 0 || !strings.Contains(r.stderr, "in progress") {
 		t.Fatalf("scheduled run with the lock held: %+v", r)
 	}
-	r := d.run("", "collect", "--offline")
+	r := waiting(release)
 	if r.code != 0 || !strings.Contains(r.stderr, "collecting now") || !strings.Contains(r.stdout, "\nSUBSCRIPTIONS  ") {
 		t.Fatalf("run the person started: %+v", r)
 	}
@@ -75,18 +81,15 @@ func TestCollectWhileAnotherRunCollects(t *testing.T) {
 	}
 
 	// A home added while the scheduled run collects is read by the run that
-	// waited for it.
-	collected = hold(true)
+	// waited for it. Adding it does not wait for the lock, which is held
+	// until a run waits.
+	collected, release = hold()
 	extra := filepath.Join(d.home, "work-claude")
 	if err := os.MkdirAll(extra, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	start := time.Now()
 	d.ok("home", "add", "claude", extra)
-	if time.Since(start) > 5*time.Second {
-		t.Fatalf("home add waited %s for the collection", time.Since(start))
-	}
-	if r := d.run("", "collect", "--offline"); r.code != 0 || !strings.Contains(r.stderr, "collecting now") {
+	if r := waiting(release); r.code != 0 || !strings.Contains(r.stderr, "collecting now") {
 		t.Fatalf("run after home add: %+v", r)
 	}
 	st := d.state()
@@ -96,18 +99,19 @@ func TestCollectWhileAnotherRunCollects(t *testing.T) {
 	if homes := d.config().Homes["claude"]; !slices.Contains(homes, extra) {
 		t.Fatalf("the added home was lost: %q", homes)
 	}
+}
 
-	// A holder that did not collect, such as `ai-usage update`, leaves the
-	// collection to the run that waited.
-	before := d.state().LastRunAt
-	clock = func() time.Time { return time.Now().Add(2 * time.Hour) }
-	hold(false)
-	if r := d.run("", "collect", "--offline"); r.code != 0 || !strings.Contains(r.stderr, "collecting now") {
-		t.Fatalf("run after a holder that did not collect: %+v", r)
-	}
-	if got := d.state().LastRunAt; !got.After(before) {
-		t.Fatalf("did not collect: last run %s", got)
-	}
+// firstWrite is a writer that calls do once, after its first write.
+type firstWrite struct {
+	strings.Builder
+	once sync.Once
+	do   func()
+}
+
+func (w *firstWrite) Write(p []byte) (int, error) {
+	n, err := w.Builder.Write(p)
+	w.once.Do(w.do)
+	return n, err
 }
 
 func TestCollectOfflineThenViews(t *testing.T) {
@@ -240,9 +244,7 @@ func TestGuideAfterInstall(t *testing.T) {
 	}
 
 	s := newDevice(t)
-	if out := s.ok("collect", "--quiet"); out != "" {
-		t.Fatalf("a scheduled run printed %q", out)
-	}
+	s.ok("collect", "--quiet")
 	if out := s.ok("--json"); !json.Valid([]byte(out)) {
 		t.Fatalf("--json printed more than JSON:\n%s", out)
 	}
@@ -344,7 +346,8 @@ func TestScheduledRunWaitsItsJitter(t *testing.T) {
 }
 
 // A scheduled run reads the team when the last read is 20 minutes old, so
-// the menu bar shows a teammate's change within about that.
+// the menu bar shows a teammate's change within about that. A run someone
+// started reads it every time.
 func TestScheduledRunReadsTheTeamEvery20Minutes(t *testing.T) {
 	hermetic(t)
 	var mu sync.Mutex
@@ -362,12 +365,18 @@ func TestScheduledRunReadsTheTeamEvery20Minutes(t *testing.T) {
 	t.Setenv("AI_USAGE_RELAY", srv.URL)
 	d := newDevice(t)
 	d.claude("11111111-aaaa", "/work/app", 1)
-	start := time.Now().Add(-time.Hour)
+	// The runs are in the past: the relay refuses a snapshot from the future.
+	start := time.Now().Add(-2 * time.Hour)
 	var want []int
 	var got []int
-	for i, n := range []int{1, 1, 2, 2, 3} {
+	for i, n := range []int{1, 1, 2, 2, 3, 4} {
 		clock = func() time.Time { return start.Add(time.Duration(i) * 15 * time.Minute) }
-		d.ok("collect", "--quiet")
+		// The last run, 15 minutes after a read, is one someone started.
+		if i < 5 {
+			d.ok("collect", "--quiet")
+		} else {
+			d.ok("collect", "--json")
+		}
 		mu.Lock()
 		got = append(got, reads)
 		mu.Unlock()

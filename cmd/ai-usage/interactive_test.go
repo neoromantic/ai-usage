@@ -78,7 +78,7 @@ func TestViewConfig(t *testing.T) {
 }
 
 // TestReportStaysStatic: a terminal on standard input alone prints the
-// report, and --plain is a display flag of every command that draws.
+// report.
 func TestReportStaysStatic(t *testing.T) {
 	hermetic(t)
 	saved := stdinTTY
@@ -87,22 +87,10 @@ func TestReportStaysStatic(t *testing.T) {
 
 	d := newDevice(t)
 	d.claude("11111111-aaaa", "/work/api", 1)
-	for _, args := range [][]string{
-		{"collect", "--offline"},
-		{"collect", "--offline", "--plain"},
-		{"--offline", "--plain", "--width", "120"},
-		{"report"},
-		{"report", "--plain", "--color=never"},
-	} {
+	for _, args := range [][]string{{"collect", "--offline"}, {"report"}} {
 		if out := d.ok(args...); !strings.HasPrefix(out, "ai-usage") {
 			t.Fatalf("%v printed %q", args, out)
 		}
-	}
-	if out := d.ok("status", "--plain"); !strings.Contains(out, "ai-usage") {
-		t.Fatalf("status --plain printed %q", out)
-	}
-	if out := d.ok("help"); !strings.Contains(out, "--plain") {
-		t.Fatal("usage does not list --plain")
 	}
 
 	// A file is not a terminal either.
