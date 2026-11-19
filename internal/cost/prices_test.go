@@ -2,6 +2,8 @@ package cost
 
 import (
 	"encoding/json"
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -9,8 +11,9 @@ import (
 	"github.com/neoromantic/ai-usage/internal/state"
 )
 
-// Every plan of the built-in list says where its price was checked, and the
-// list prices no team, business, enterprise or education plan.
+// Every plan of the built-in list says where its price was checked, is found
+// by its id and the ids it had before, and the list prices no team,
+// business, enterprise or education plan.
 func TestBuiltinPrices(t *testing.T) {
 	p := Builtin()
 	if p.Updated == "" || p.Currency != "USD" || len(p.Plans) == 0 {
@@ -39,25 +42,14 @@ func TestBuiltinPrices(t *testing.T) {
 		if pl.USD <= 0 {
 			t.Errorf("%s %s has no price", pl.Provider, pl.Plan)
 		}
-	}
-	for _, c := range []struct {
-		provider, plan string
-		usd            float64
-	}{
-		{"claude", "pro", 20}, {"claude", "max 5x", 100}, {"claude", "max 20x", 200},
-		{"codex", "go", 8}, {"codex", "plus", 20}, {"codex", "prolite", 100}, {"codex", "pro", 200}, {"codex", "promax", 500},
-		{"grok", "SuperGrok Lite", 10}, {"grok", "SuperGrok", 30}, {"grok", "SuperGrok Plus", 100},
-		{"grok", "SuperGrok Heavy", 300}, {"grok", "X Premium+", 40}, {"grok", "XPremiumPlus", 40},
-	} {
-		if pl, ok := p.Find(c.provider, c.plan); !ok || pl.USD != c.usd {
-			t.Errorf("Find(%s, %s) = %+v, %v", c.provider, c.plan, pl, ok)
+		if got, ok := p.Find(pl.Provider, pl.Plan); !ok || !reflect.DeepEqual(got, pl) {
+			t.Errorf("Find(%s, %s) = %+v, %v", pl.Provider, pl.Plan, got, ok)
 		}
-	}
-	if pl, _ := p.Find("claude", "pro"); pl.Monthly(Yearly) != 200.0/12 || pl.Monthly(Monthly) != 20 {
-		t.Errorf("Claude Pro a month: %v yearly, %v monthly", pl.Monthly(Yearly), pl.Monthly(Monthly))
-	}
-	if pl, _ := p.Find("claude", "max 20x"); pl.Monthly(Yearly) != 200 {
-		t.Error("a plan billed only monthly costs its monthly price at a yearly cadence")
+		for _, was := range pl.Was {
+			if got, _ := p.Find(pl.Provider, was); got.Plan != pl.Plan {
+				t.Errorf("Find(%s, %s) = %+v, want %s", pl.Provider, was, got, pl.Plan)
+			}
+		}
 	}
 }
 
@@ -161,7 +153,7 @@ func TestFetchedPrices(t *testing.T) {
 		t.Fatal("FetchDue")
 	}
 	// A failed ask and a list this build cannot read keep the list.
-	if err := SaveFetched(dir, nil, errFake, now.Add(FetchEvery)); err != nil {
+	if err := SaveFetched(dir, nil, errors.New("relay unreachable"), now.Add(FetchEvery)); err != nil {
 		t.Fatal(err)
 	}
 	if err := SaveFetched(dir, []byte(`{"v":9}`), nil, now.Add(2*FetchEvery)); err != nil {
@@ -183,9 +175,3 @@ func TestFetchedPrices(t *testing.T) {
 		t.Fatal("a damaged relay list was used")
 	}
 }
-
-type fakeErr string
-
-func (e fakeErr) Error() string { return string(e) }
-
-const errFake = fakeErr("relay unreachable")

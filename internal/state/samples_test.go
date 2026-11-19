@@ -17,6 +17,9 @@ func sampleAt(at time.Time, label string) Sample {
 
 func TestSamplesAppendAndLoadAcrossDays(t *testing.T) {
 	d := tempDir(t)
+	if got, err := d.LoadSamples(time.Time{}); err != nil || got != nil {
+		t.Fatalf("LoadSamples without a samples dir = %v, %v", got, err)
+	}
 	day1 := time.Date(2026, 9, 1, 23, 50, 0, 0, time.UTC)
 	times := []time.Time{
 		day1,
@@ -71,13 +74,6 @@ func TestSamplesAppendAndLoadAcrossDays(t *testing.T) {
 	}
 	if len(some) != 2 || !some[0].At.Equal(times[2]) || !some[1].At.Equal(times[3]) {
 		t.Fatalf("LoadSamples(since) = %+v", some)
-	}
-}
-
-func TestLoadSamplesWithoutDirectory(t *testing.T) {
-	got, err := tempDir(t).LoadSamples(time.Time{})
-	if err != nil || got != nil {
-		t.Fatalf("LoadSamples = %v, %v", got, err)
 	}
 }
 

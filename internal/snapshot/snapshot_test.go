@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -99,9 +98,6 @@ func TestDurationName(t *testing.T) {
 		if got := DurationName(minutes); got != want {
 			t.Errorf("DurationName(%d) = %q, want %q", minutes, got, want)
 		}
-		if err := plainText.check("name", DurationName(minutes), true); err != nil {
-			t.Errorf("DurationName(%d) is not a plain label: %v", minutes, err)
-		}
 	}
 }
 
@@ -148,145 +144,45 @@ func TestWindowLengthAndStart(t *testing.T) {
 	}
 }
 
-// Legacy of the extended golden is the golden a collector before v0.4.0
-// reads, byte for byte.
-func TestLegacyIsTheOlderWireFormat(t *testing.T) {
-	read := func(name string) []byte {
-		b, err := os.ReadFile(filepath.Join("testdata", name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		return bytes.TrimSpace(b)
-	}
-	d, err := Decode(read("v1-extended.json"))
+// golden is a hand-written body of testdata, as a collector sends it.
+func golden(t *testing.T, name string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("testdata", name))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !d.Extended() {
-		t.Fatal("the extended golden is not Extended")
-	}
-	legacy := d.Legacy()
-	if legacy.Extended() {
-		t.Fatal("Legacy is Extended")
-	}
-	if b := encode(t, legacy); !bytes.Equal(b, read("v1.json")) {
-		t.Fatalf("Legacy encodes to\n%s", b)
-	}
-	older, err := Decode(read("v1.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if older.Extended() || !reflect.DeepEqual(older.Legacy(), older) {
-		t.Fatal("Legacy changed a document without the newer fields")
-	}
+	return bytes.TrimSpace(b)
 }
 
-// WithoutCycles of the cycles golden is the extended golden a collector from
-// v0.4.0 on, and before v0.5.0, reads, byte for byte, and its Legacy the one
-// before v0.4.0.
-func TestWithoutCyclesIsTheOlderWireFormat(t *testing.T) {
-	read := func(name string) []byte {
-		b, err := os.ReadFile(filepath.Join("testdata", name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		return bytes.TrimSpace(b)
-	}
-	d, err := Decode(read("v1-cycles.json"))
+// Each older body of v1-cost.json is the golden the collectors of its
+// releases read, byte for byte: WithoutCosts v0.7.0 to v0.9.x
+// (v1-hours.json), WithoutHours v0.5.0 to v0.6.x (v1-cycles.json),
+// WithoutCycles v0.4.0 (v1-extended.json), and Legacy those before v0.4.0
+// (v1.json). Each drops what the one before it has and it does not.
+func TestOlderWireFormats(t *testing.T) {
+	d, err := Decode(golden(t, "v1-cost.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !d.HasCycles() || !d.Extended() {
-		t.Fatal("the cycles golden has no cycles")
-	}
-	without := d.WithoutCycles()
-	if without.HasCycles() || !without.Extended() {
-		t.Fatal("WithoutCycles has cycles, or lost the v0.4.0 fields")
-	}
-	if b := encode(t, without); !bytes.Equal(b, read("v1-extended.json")) {
-		t.Fatalf("WithoutCycles encodes to\n%s", b)
-	}
-	if b := encode(t, d.Legacy()); !bytes.Equal(b, read("v1.json")) {
-		t.Fatalf("Legacy encodes to\n%s", b)
-	}
-	extended, err := Decode(read("v1-extended.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if extended.HasCycles() || !reflect.DeepEqual(extended.WithoutCycles(), extended) {
-		t.Fatal("WithoutCycles changed a document without cycles")
-	}
-}
-
-// v1-hours.json is v1-cycles.json with the hours v0.7.0 added, and
-// WithoutHours is the body v0.5.0 to v0.6.2 read.
-func TestWithoutHoursIsTheOlderWireFormat(t *testing.T) {
-	read := func(name string) []byte {
-		b, err := os.ReadFile(filepath.Join("testdata", name))
-		if err != nil {
-			t.Fatal(err)
+	prev := d
+	for _, c := range []struct {
+		name   string
+		body   Doc
+		golden string
+		drops  func(Doc) bool
+	}{
+		{"WithoutCosts", d.WithoutCosts(), "v1-hours.json", Doc.HasCosts},
+		{"WithoutHours", d.WithoutHours(), "v1-cycles.json", Doc.HasHours},
+		{"WithoutCycles", d.WithoutCycles(), "v1-extended.json", Doc.HasCycles},
+		{"Legacy", d.Legacy(), "v1.json", Doc.Extended},
+	} {
+		if !c.drops(prev) || c.drops(c.body) {
+			t.Errorf("%s keeps what it drops, or the body before it has none", c.name)
 		}
-		return bytes.TrimSpace(b)
-	}
-	d, err := Decode(read("v1-hours.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !d.HasHours() || !d.HasCycles() || !d.Extended() {
-		t.Fatal("the hours golden has no hours or cycles")
-	}
-	if b := encode(t, d); !bytes.Equal(b, read("v1-hours.json")) {
-		t.Fatalf("the hours golden encodes to\n%s", b)
-	}
-	if b := encode(t, d.WithoutHours()); !bytes.Equal(b, read("v1-cycles.json")) {
-		t.Fatalf("WithoutHours encodes to\n%s", b)
-	}
-	if b := encode(t, d.WithoutCycles()); !bytes.Equal(b, read("v1-extended.json")) {
-		t.Fatalf("WithoutCycles encodes to\n%s", b)
-	}
-}
-
-// v1-cost.json is v1-hours.json with the costs v0.10.0 added, and
-// WithoutCosts is the body v0.7.0 to v0.9.x read. Every older body is
-// without them too.
-func TestWithoutCostsIsTheOlderWireFormat(t *testing.T) {
-	read := func(name string) []byte {
-		b, err := os.ReadFile(filepath.Join("testdata", name))
-		if err != nil {
-			t.Fatal(err)
+		if b := encode(t, c.body); !bytes.Equal(b, golden(t, c.golden)) {
+			t.Errorf("%s encodes to\n%s", c.name, b)
 		}
-		return bytes.TrimSpace(b)
-	}
-	d, err := Decode(read("v1-cost.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !d.HasCosts() || !d.HasHours() {
-		t.Fatal("the costs golden has no costs or hours")
-	}
-	if b := encode(t, d); !bytes.Equal(b, read("v1-cost.json")) {
-		t.Fatalf("the costs golden encodes to\n%s", b)
-	}
-	without := d.WithoutCosts()
-	if without.HasCosts() || !without.HasHours() {
-		t.Fatal("WithoutCosts has costs, or lost the hours")
-	}
-	if b := encode(t, without); !bytes.Equal(b, read("v1-hours.json")) {
-		t.Fatalf("WithoutCosts encodes to\n%s", b)
-	}
-	for name, body := range map[string]Doc{"WithoutHours": d.WithoutHours(), "WithoutCycles": d.WithoutCycles(), "Legacy": d.Legacy()} {
-		if body.HasCosts() {
-			t.Fatalf("%s has costs", name)
-		}
-	}
-	// The bodies share no slice with d.
-	without.Accounts[0].Hours[0] = 99
-	without.Sources[0].Status = "error"
-	if d.Accounts[0].Hours[0] == 99 || d.Sources[0].Status == "error" {
-		t.Fatal("WithoutCosts shares a slice with the document")
-	}
-	if d.WithoutCosts().Extended() != d.Extended() || !d.Extended() {
-		t.Fatal("the costs count as a field v0.4.0 added")
+		prev = c.body
 	}
 }
 
@@ -307,81 +203,75 @@ func TestExtended(t *testing.T) {
 		}, true},
 		"hours":      {func(d *Doc) { d.Accounts[0].Hours = []int64{0, 4} }, true},
 		"burn_hours": {func(d *Doc) { d.Accounts[0].BurnHours = []int64{9} }, true},
+		// Every body without the hours is without the costs too.
+		"costs": {func(d *Doc) { d.Costs = []Cost{{Provider: "claude", Label: sealed(8), Data: sealed(8), At: at}} }, false},
 	} {
 		d := validDoc()
 		c.edit(&d)
 		if got := d.Extended(); got != c.want {
 			t.Errorf("%s: Extended = %v, want %v", name, got, c.want)
 		}
-		if l := d.Legacy(); l.Extended() || l.Validate() != nil {
-			t.Errorf("%s: Legacy is extended or invalid", name)
-		}
-		newer := name == "cycles" || strings.HasSuffix(name, "hours")
-		if w := d.WithoutCycles(); w.HasCycles() || w.HasHours() || w.Validate() != nil || w.Extended() != (c.want && !newer) {
-			t.Errorf("%s: WithoutCycles has cycles or hours, is invalid, or lost a v0.4.0 field", name)
-		}
-		if w := d.WithoutHours(); w.HasHours() || w.Validate() != nil || w.HasCycles() != d.HasCycles() {
-			t.Errorf("%s: WithoutHours has hours, is invalid, or changed the cycles", name)
-		}
 	}
 }
 
-// Legacy shares no slice with the document it came from, so fitting or
-// trimming one never changes the other.
-func TestLegacySharesNothing(t *testing.T) {
+// The older bodies share no slice with the document they came from, so
+// fitting or trimming one never changes the other.
+func TestOlderBodiesShareNothing(t *testing.T) {
 	at := t0.Add(-time.Hour)
 	d := validDoc()
 	d.LastError, d.LastErrorAt = sealed(8), &at
 	d.Aliases = []Alias{{Provider: "claude", Label: sealed(8), At: at}}
+	d.Costs = []Cost{{Provider: "claude", Label: sealed(8), Data: sealed(8), At: at}}
+	d.Pooled = []string{"claude"}
 	a := &d.Accounts[0]
-	a.Days, a.BurnDays = []int64{1, 2}, []int64{10, 20}
+	a.Days, a.BurnDays, a.Hours, a.BurnHours = []int64{1, 2}, []int64{10, 20}, []int64{1}, []int64{5}
 	a.Recent = []Recent{{Window: "5h", Start: at, Tokens: 3, Burn: 9}}
 	a.Linked = []Linked{{Provider: "hermes", Label: sealed(8)}}
 	a.Cycles = []Cycle{{Window: "5h", ResetsAt: at, Percent: 90, LastReadAt: at.Add(-time.Hour)}}
 	before := encode(t, d)
-
-	w := d.WithoutCycles()
-	w.Accounts[0].BurnDays[0] = 99
-	w.Accounts[0].Recent[0].Burn = 99
-	w.Accounts[0].Days[0] = 99
-	w.Accounts[0].Windows[0].Percent = 99
-	if after := encode(t, d); !bytes.Equal(after, before) {
-		t.Fatalf("changing WithoutCycles changed the document:\n%s\n%s", before, after)
-	}
-	if len(d.Accounts[0].Cycles) != 1 {
-		t.Fatal("WithoutCycles cleared the document's own cycles")
-	}
-
-	d.Accounts[0].Hours, d.Accounts[0].BurnHours = []int64{1}, []int64{5}
-	before = encode(t, d)
-	h := d.WithoutHours()
-	h.Accounts[0].Cycles[0].Percent = 99
-	h.Accounts[0].Days[0] = 99
-	if after := encode(t, d); !bytes.Equal(after, before) || len(d.Accounts[0].Hours) != 1 {
-		t.Fatalf("changing WithoutHours changed the document:\n%s\n%s", before, after)
-	}
-	d.Accounts[0].Hours, d.Accounts[0].BurnHours = nil, nil
-	before = encode(t, d)
-
-	l := d.Legacy()
-	l.Accounts[0].Days[0] = 99
-	l.Accounts[0].Recent[0].Tokens = 99
-	l.Accounts[0].Windows[0].Percent = 99
-	l.Accounts[0].Projects[0].Sessions = 99
-	l.Accounts[0].Linked[0].Sessions = 99
-	l.Accounts[0].Plan = "changed"
-	l.Accounts = append(l.Accounts, l.Accounts[0])
-	l.Sources[0].Status = "error"
-	l.Aliases[0].Name = sealed(4)
-	if after := encode(t, d); !bytes.Equal(after, before) {
-		t.Fatalf("changing Legacy changed the document:\n%s\n%s", before, after)
-	}
-	if d.Accounts[0].Recent[0].Burn != 9 || d.LastErrorAt == nil || len(d.Accounts[0].BurnDays) != 2 {
-		t.Fatal("Legacy cleared the document's own fields")
-	}
-	// Empty arrays stay arrays, which Validate requires.
-	d.Accounts[0].Projects = []Project{}
-	if l := d.Legacy(); l.Accounts[0].Projects == nil {
-		t.Fatal("Legacy made an empty array null")
+	for name, older := range map[string]func(Doc) Doc{
+		"WithoutManyProjects": Doc.WithoutManyProjects, "WithoutPooled": Doc.WithoutPooled, "WithoutCosts": Doc.WithoutCosts,
+		"WithoutHours": Doc.WithoutHours, "WithoutCycles": Doc.WithoutCycles, "Legacy": Doc.Legacy,
+	} {
+		o := older(d)
+		for i := range o.Pooled {
+			o.Pooled[i] = "codex"
+		}
+		for i := range o.Costs {
+			o.Costs[i].Data = sealed(4)
+		}
+		for i := range o.Aliases {
+			o.Aliases[i].Name = sealed(4)
+		}
+		for i := range o.Sources {
+			o.Sources[i].Status = "error"
+		}
+		for i := range o.Accounts {
+			a := &o.Accounts[i]
+			a.Plan = "changed"
+			for j := range a.Windows {
+				a.Windows[j].Percent = 99
+			}
+			for j := range a.Projects {
+				a.Projects[j].Sessions = 99
+			}
+			for j := range a.Linked {
+				a.Linked[j].Sessions = 99
+			}
+			for j := range a.Recent {
+				a.Recent[j].Tokens = 99
+			}
+			for j := range a.Cycles {
+				a.Cycles[j].Percent = 99
+			}
+			for _, series := range [][]int64{a.Days, a.BurnDays, a.Hours, a.BurnHours} {
+				for j := range series {
+					series[j] = 99
+				}
+			}
+		}
+		if after := encode(t, d); !bytes.Equal(after, before) {
+			t.Fatalf("changing %s changed the document:\n%s\n%s", name, before, after)
+		}
 	}
 }

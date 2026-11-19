@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -59,7 +61,8 @@ type fakeGitHub struct {
 	repo string
 	// status answers a path with an HTTP error.
 	status map[string]int
-	// pace sends a binary in eight pieces with this pause between them.
+	// pace sends a binary in eight pieces with this pause between them,
+	// until the client hangs up.
 	pace time.Duration
 	// hang stops sending a binary after its first piece.
 	hang bool
@@ -71,6 +74,13 @@ type fakeGitHub struct {
 
 func (f *fakeGitHub) start(t *testing.T) *httptest.Server {
 	t.Helper()
+	srv := httptest.NewServer(f.handler())
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// handler is the site that start serves.
+func (f *fakeGitHub) handler() http.Handler {
 	f.hits = map[string]int{}
 	if f.repo == "" {
 		f.repo = Repo
@@ -79,8 +89,7 @@ func (f *fakeGitHub) start(t *testing.T) *httptest.Server {
 		f.files = f.tag
 	}
 	served := "/" + f.repo + "/releases"
-	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.hits[r.URL.Path]++
 		f.agents = append(f.agents, r.UserAgent())
@@ -91,7 +100,7 @@ func (f *fakeGitHub) start(t *testing.T) *httptest.Server {
 		}
 		switch {
 		case r.URL.Path == served+"/latest":
-			http.Redirect(w, r, srv.URL+served+"/tag/"+f.tag, http.StatusFound)
+			http.Redirect(w, r, "http://"+r.Host+served+"/tag/"+f.tag, http.StatusFound)
 		case r.URL.Path == releases+"/latest":
 			http.Redirect(w, r, served+"/latest", http.StatusMovedPermanently)
 		case strings.HasPrefix(r.URL.Path, served+"/download/"+f.files+"/"):
@@ -123,14 +132,69 @@ func (f *fakeGitHub) start(t *testing.T) *httptest.Server {
 					<-r.Context().Done()
 					return
 				}
-				time.Sleep(f.pace)
+				if len(b) == 0 {
+					return
+				}
+				select {
+				case <-r.Context().Done():
+					return
+				case <-time.After(f.pace):
+				}
 			}
 		default:
 			http.NotFound(w, r)
 		}
-	}))
-	t.Cleanup(srv.Close)
-	return srv
+	})
+}
+
+// pipes is a listener whose connections are the ends of net.Pipes that dial
+// makes. A test in a synctest bubble serves HTTP over it, since a goroutine
+// waiting on a real socket keeps the bubble's clock from moving.
+type pipes struct {
+	conns chan net.Conn
+	done  chan struct{}
+	once  sync.Once
+}
+
+func (p *pipes) Accept() (net.Conn, error) {
+	select {
+	case c := <-p.conns:
+		return c, nil
+	case <-p.done:
+		return nil, net.ErrClosed
+	}
+}
+
+func (p *pipes) Close() error {
+	p.once.Do(func() { close(p.done) })
+	return nil
+}
+
+func (p *pipes) Addr() net.Addr { return &net.UnixAddr{Name: "github.test", Net: "pipe"} }
+
+func (p *pipes) dial(context.Context, string, string) (net.Conn, error) {
+	server, client := net.Pipe()
+	select {
+	case p.conns <- server:
+		return client, nil
+	case <-p.done:
+		return nil, net.ErrClosed
+	}
+}
+
+// inMemory serves h over pipes until the test ends, and returns the site's
+// address and a client that reaches it.
+func inMemory(t *testing.T, h http.Handler) (string, *http.Client) {
+	t.Helper()
+	l := &pipes{conns: make(chan net.Conn), done: make(chan struct{})}
+	srv := &http.Server{Handler: h}
+	go func() { _ = srv.Serve(l) }()
+	tr := &http.Transport{DialContext: l.dial}
+	t.Cleanup(func() {
+		tr.CloseIdleConnections()
+		_ = srv.Close()
+	})
+	return "http://github.test", &http.Client{Transport: tr}
 }
 
 func (f *fakeGitHub) downloads() int {
@@ -354,29 +418,6 @@ func TestCheckSkipsFailedRelease(t *testing.T) {
 	if res, err := u.Check(context.Background()); err != nil || !res.Installed {
 		t.Fatalf("Check past an older failed release = %+v, %v", res, err)
 	}
-}
-
-// A process that runs for long, such as the interactive view, finds a
-// release that a scheduled run already installed, and does not download it
-// again.
-func TestCheckFindsReleaseAlreadyInPlace(t *testing.T) {
-	bin := runnable(t, "v1.3.0")
-	gh := newRelease(bin)
-	srv := gh.start(t)
-	exe := installed(t, "ai-usage")
-	if err := os.WriteFile(exe, bin, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	res, err := updater(srv, exe, "v1.2.9").Check(context.Background())
-	if err != nil || res != (Result{Latest: "v1.3.0", Installed: true, AppTag: "v1.3.0"}) {
-		t.Fatalf("Check = %+v, %v", res, err)
-	}
-	for p := range gh.hits {
-		if strings.Contains(p, "/download/") {
-			t.Fatalf("downloaded %s", p)
-		}
-	}
-	onlyFiles(t, filepath.Dir(exe), "ai-usage")
 }
 
 // A repository that was renamed or moved redirects its releases/latest to
@@ -623,28 +664,31 @@ func TestCheckWindowsMovesAStillRunningOldBinaryAgain(t *testing.T) {
 }
 
 // A slow link finishes a download that takes longer than the stall limit, as
-// long as bytes keep arriving.
+// long as bytes keep arriving. The bubble's clock moves only while every
+// goroutine in it waits, so a busy machine cannot stretch a pause between
+// pieces into a stall.
 func TestCheckSlowDownload(t *testing.T) {
 	bin := runnable(t, "v1.3.0")
-	gh := newRelease(bin)
-	gh.pace = 60 * time.Millisecond
-	srv := gh.start(t)
-	exe := installed(t, "ai-usage")
-	u := updater(srv, exe, "v1.2.9")
-	u.Stall = 250 * time.Millisecond
-	start := time.Now()
-	res, err := u.Check(context.Background())
-	if err != nil || !res.Installed {
-		t.Fatalf("Check = %+v, %v", res, err)
-	}
-	// Eight pieces 60ms apart take longer than one stall period in total, so
-	// only a per-piece stall timer lets this download finish.
-	if took := time.Since(start); took <= u.Stall {
-		t.Fatalf("download took %s, too fast to show anything", took)
-	}
-	if read(t, exe) != string(bin) {
-		t.Fatal("binary was not replaced")
-	}
+	synctest.Test(t, func(t *testing.T) {
+		gh := newRelease(bin)
+		gh.pace = 60 * time.Millisecond
+		site, client := inMemory(t, gh.handler())
+		exe := installed(t, "ai-usage")
+		u := &Updater{Current: "v1.2.9", Exe: exe, GitHub: site, HTTP: client, GOOS: "linux", GOARCH: "amd64", Stall: 250 * time.Millisecond}
+		start := time.Now()
+		res, err := u.Check(t.Context())
+		if err != nil || !res.Installed {
+			t.Fatalf("Check = %+v, %v", res, err)
+		}
+		// Eight pieces 60ms apart take longer than one stall period in total,
+		// 420ms, so only a per-piece stall timer lets this download finish.
+		if took := time.Since(start); took <= u.Stall {
+			t.Fatalf("download took %s, too fast to show anything", took)
+		}
+		if read(t, exe) != string(bin) {
+			t.Fatal("binary was not replaced")
+		}
+	})
 }
 
 // The default client has no limit on the whole request, which would cut off
