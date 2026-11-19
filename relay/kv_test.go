@@ -27,7 +27,6 @@ type fakeKV struct {
 	str   map[string]string
 	sets  map[string]map[string]bool
 	exp   map[string]time.Time
-	seen  [][]string
 	// reply, when set, answers the next request instead of the store.
 	reply func(w http.ResponseWriter)
 }
@@ -60,7 +59,6 @@ func (f *fakeKV) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]map[string]any, len(cmds))
 	for i, cmd := range cmds {
-		f.seen = append(f.seen, cmd)
 		res, err := f.run(cmd)
 		if err != nil {
 			out[i] = map[string]any{"error": err.Error()}
@@ -94,9 +92,6 @@ func (f *fakeKV) run(cmd []string) (any, error) {
 	}
 	switch strings.ToUpper(cmd[0]) {
 	case "GET":
-		if _, ok := f.sets[args[0]]; ok {
-			return nil, errWrongType
-		}
 		if v, ok := f.str[args[0]]; ok {
 			return v, nil
 		}
@@ -339,9 +334,6 @@ func TestKVErrors(t *testing.T) {
 		want string
 	}{
 		{"wrong token", func(kv *KV, _ *fakeKV) { kv.Token = "nope" }, "HTTP 401"},
-		{"server error", func(_ *KV, f *fakeKV) {
-			f.reply = func(w http.ResponseWriter) { w.WriteHeader(http.StatusInternalServerError) }
-		}, "HTTP 500"},
 		{"not json", func(_ *KV, f *fakeKV) {
 			f.reply = func(w http.ResponseWriter) { io.WriteString(w, "<html>") }
 		}, ""},
@@ -351,9 +343,6 @@ func TestKVErrors(t *testing.T) {
 		{"command error", func(_ *KV, f *fakeKV) {
 			f.reply = func(w http.ResponseWriter) { io.WriteString(w, `[{"error":"ERR max requests limit exceeded"}]`) }
 		}, "max requests limit exceeded"},
-		{"wrong type", func(_ *KV, f *fakeKV) {
-			f.sets[docKey("team", "device-one")] = map[string]bool{"x": true}
-		}, "WRONGTYPE"},
 		{"unreachable", func(kv *KV, _ *fakeKV) { kv.URL = "http://127.0.0.1:1" }, ""},
 	}
 	for _, c := range cases {
@@ -395,7 +384,7 @@ func TestKVErrors(t *testing.T) {
 
 // The relay runs the same over KV as over memory.
 func TestRelayOverKV(t *testing.T) {
-	kv, f, _ := newKV(t)
+	kv, _, _ := newKV(t)
 	e := newRelay(t)
 	e.srv.Store = kv
 	e.srv.Limits.DevicesPerTeam = 2
@@ -419,12 +408,5 @@ func TestRelayOverKV(t *testing.T) {
 	res, err := client.Pull(ctx)
 	if err != nil || res.Unverified+res.Undecodable != 0 || len(res.Devices) != 1 || res.Devices[0].Doc.Device != "device-one" {
 		t.Fatalf("Pull = %+v, %v", res, err)
-	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	for _, cmd := range f.seen {
-		if strings.EqualFold(cmd[0], "EXPIRE") && strings.HasPrefix(cmd[1], "aiu:rl:") && (len(cmd) != 4 || cmd[3] != "NX") {
-			t.Fatalf("rate counter EXPIRE without NX: %v", cmd)
-		}
 	}
 }

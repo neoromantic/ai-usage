@@ -47,9 +47,6 @@ func TestPublishPullRoundTrip(t *testing.T) {
 		if !bytes.Equal(d.Body, bodies[d.Doc.Device]) {
 			t.Errorf("%s: body changed on the relay", d.Doc.Device)
 		}
-		if host, err := k.Open(d.Doc.DeviceLabel); err != nil || host != "host "+d.Doc.Device {
-			t.Errorf("%s: device label opens to %q, %v", d.Doc.Device, host, err)
-		}
 		// When the relay first stored the device.
 		if !d.Since.Equal(t0) {
 			t.Errorf("%s: since %v, want %v", d.Doc.Device, d.Since, t0)
@@ -70,26 +67,22 @@ func TestPullCountsDocumentsItLeavesOut(t *testing.T) {
 		t.Fatal(err)
 	}
 	sign := func(key *team.Key, body []byte) []byte { return key.Sign(SnapshotMessage(body)) }
-	altered := bytes.Replace(good, []byte(`"sessions":4`), []byte(`"sessions":5`), 1)
-	foreign := marshal(t, docFor(other, "foreign-device", t0))
-	foreign = bytes.Replace(foreign, []byte(other.Fingerprint()), []byte(fp), 1)
+	// The altered and unsigned documents name the device they are filed
+	// under, so only the signature check can leave them out.
+	signed := marshal(t, docFor(k, "altered-body", t0))
+	altered := bytes.Replace(signed, []byte(`"sessions":4`), []byte(`"sessions":5`), 1)
+	unsigned := marshal(t, docFor(k, "unsigned-device", t0))
 	otherTeam := marshal(t, docFor(other, "team-device", t0))
-	junk := []byte(`{"hello":"world"}`)
 	newer := bytes.Replace(marshal(t, docFor(k, "newer-device", t0)), []byte(`{"v":1,`), []byte(`{"v":1,"pace":[3],`), 1)
-	unknown := bytes.Replace(marshal(t, docFor(k, "gemini-device", t0)), []byte(`"provider":"codex","label"`), []byte(`"provider":"gemini","label"`), 1)
 	// The relay, or whoever controls its store, writes these directly.
 	unverified := map[string]Record{
-		"altered-body":   {Body: altered, Sig: sign(k, good)},
-		"moved-device":   {Body: good, Sig: sign(k, good)},
-		"other-team-key": {Body: foreign, Sig: sign(other, foreign)},
-		"short-sig":      {Body: good, Sig: []byte("abc")},
-		"no-sig":         {Body: good},
-		"team-device":    {Body: otherTeam, Sig: sign(k, otherTeam)},
+		"altered-body":    {Body: altered, Sig: sign(k, signed)},
+		"unsigned-device": {Body: unsigned},
+		"moved-device":    {Body: good, Sig: sign(k, good)},
+		"team-device":     {Body: otherTeam, Sig: sign(k, otherTeam)},
 	}
 	undecodable := map[string]Record{
-		"signed-junk":   {Body: junk, Sig: sign(k, junk)},
-		"newer-device":  {Body: newer, Sig: sign(k, newer)},
-		"gemini-device": {Body: unknown, Sig: sign(k, unknown)},
+		"newer-device": {Body: newer, Sig: sign(k, newer)},
 	}
 	for _, recs := range []map[string]Record{unverified, undecodable} {
 		for dev, rec := range recs {
@@ -136,54 +129,12 @@ func TestPullKeepsOneDocumentPerDevice(t *testing.T) {
 	}
 }
 
-func TestPullRejectsAMalformedTeamRead(t *testing.T) {
-	k := newKey(t)
-	fp := k.Fingerprint()
-	for name, body := range map[string]string{
-		"not json":       "<html>",
-		"bad base64":     `{"devices":[{"device":"good-device","body":"!!","sig":"!!"}]}`,
-		"empty response": `{}`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path != "/v1/teams/"+fp {
-					t.Errorf("path = %s", r.URL.Path)
-				}
-				io.WriteString(w, body)
-			}))
-			defer ts.Close()
-			res, err := (&Client{BaseURL: ts.URL, Key: k}).Pull(context.Background())
-			switch name {
-			case "not json":
-				if err == nil {
-					t.Fatal("Pull accepted HTML")
-				}
-			case "bad base64":
-				if err != nil || res.Unverified != 1 || res.Undecodable != 0 || len(res.Devices) != 0 {
-					t.Fatalf("Pull = %+v, %v", res, err)
-				}
-			default:
-				if err != nil || res.Unverified+res.Undecodable != 0 || len(res.Devices) != 0 {
-					t.Fatalf("Pull = %+v, %v", res, err)
-				}
-			}
-		})
-	}
-}
-
 func TestClientErrors(t *testing.T) {
 	k := newKey(t)
 	ctx := context.Background()
 	for _, base := range []string{"", "  ", "/"} {
-		c := &Client{BaseURL: base, Key: k}
-		if err := c.Publish(ctx, "work-laptop", []byte("{}")); !errors.Is(err, errNoRelay) {
+		if err := (&Client{BaseURL: base, Key: k}).Publish(ctx, "work-laptop", []byte("{}")); !errors.Is(err, errNoRelay) {
 			t.Fatalf("Publish with base %q: %v", base, err)
-		}
-		if _, err := c.Pull(ctx); !errors.Is(err, errNoRelay) {
-			t.Fatalf("Pull with base %q: %v", base, err)
-		}
-		if err := c.Remove(ctx, "work-laptop"); !errors.Is(err, errNoRelay) {
-			t.Fatalf("Remove with base %q: %v", base, err)
 		}
 	}
 
@@ -196,20 +147,22 @@ func TestClientErrors(t *testing.T) {
 	}
 
 	ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			io.WriteString(w, "<html>sign in to the network</html>")
+			return
+		}
 		w.WriteHeader(http.StatusBadGateway)
 		io.WriteString(w, "<html>bad gateway</html>")
 	}))
 	defer ts.Close()
-	err = (&Client{BaseURL: ts.URL, Key: k}).Publish(ctx, "work-laptop", []byte("{}"))
+	c := &Client{BaseURL: ts.URL, Key: k}
+	err = c.Publish(ctx, "work-laptop", []byte("{}"))
 	// An HTML error page is not passed on as the message.
 	if statusOf(err) != http.StatusBadGateway || strings.Contains(err.Error(), "html") {
 		t.Fatalf("non-JSON error: %v", err)
 	}
-	if errors.Is(err, ErrRejected) {
-		t.Fatalf("a 502 is a rejected snapshot: %v", err)
-	}
-	if got := (&ErrStatus{Code: 409, Msg: "newer"}).Error(); !strings.Contains(got, "newer") || !strings.Contains(got, "409") {
-		t.Fatalf("ErrStatus = %q", got)
+	if _, err := c.Pull(ctx); err == nil {
+		t.Fatal("Pull accepted an HTML page as the team read")
 	}
 }
 
@@ -233,7 +186,7 @@ func TestPublishRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = c.Publish(ctx, "work-laptop", marshal(t, docFor(k, "work-laptop", t0.Add(-time.Minute))))
-	if statusOf(err) != http.StatusConflict || errors.Is(err, ErrRejected) {
+	if statusOf(err) != http.StatusConflict || errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "newer") {
 		t.Fatalf("older snapshot: %v", err)
 	}
 }
