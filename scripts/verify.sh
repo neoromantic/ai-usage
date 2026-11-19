@@ -12,8 +12,7 @@
 # staged, unstaged, and untracked. The steps:
 #
 #   go       gofmt, go vet, go build, go test; go test reruns only packages
-#            whose code or inputs changed, and a TestRun failure in
-#            internal/tui, which depends on timing, is run once more
+#            whose code or inputs changed
 #   lint     staticcheck and deadcode at CI's versions: this OS, or with
 #            --push every release OS
 #   shell    sh -n and shellcheck on the shell scripts, a parse of install.ps1
@@ -278,15 +277,8 @@ step_go() {
 	go vet ./...
 	go build ./...
 	if ! go test ./... >"$ev/go-test.txt" 2>&1; then
-		failed=$(sed -n 's/^FAIL[[:space:]]\{1,\}\([^[:space:]]*\).*/\1/p' "$ev/go-test.txt" | sort -u)
-		if [ "$failed" = github.com/neoromantic/ai-usage/internal/tui ]; then
-			echo "  internal/tui failed; it depends on timing, so once more"
-			go test -count=1 ./internal/tui >>"$ev/go-test.txt" 2>&1 ||
-				{ grep -E '^(---|FAIL|panic)' "$ev/go-test.txt" | head -n 40; fail "go test; see go-test.txt"; }
-		else
-			grep -E '^(---|FAIL|panic)|_test\.go:[0-9]+:' "$ev/go-test.txt" | head -n 40
-			fail "go test; see go-test.txt"
-		fi
+		grep -E '^(---|FAIL|panic)|_test\.go:[0-9]+:' "$ev/go-test.txt" | head -n 40
+		fail "go test; see go-test.txt"
 	fi
 	echo "  packages ok: $(grep -c '^ok' "$ev/go-test.txt" || true)"
 	case "$changed" in *go.mod* | *go.sum*) go mod tidy -diff ;; *) [ -z "$push" ] || go mod tidy -diff ;; esac

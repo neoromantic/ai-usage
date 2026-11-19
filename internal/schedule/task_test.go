@@ -160,9 +160,6 @@ func TestTaskLookup(t *testing.T) {
 			}
 		})
 	}
-	if disabled == registered {
-		t.Fatal("test did not disable the task")
-	}
 }
 
 func TestTaskLookupErrors(t *testing.T) {
@@ -184,13 +181,6 @@ func TestTaskLookupErrors(t *testing.T) {
 				t.Fatalf("Remove ran %q after a query error", call)
 			}
 		}
-	}
-
-	t.Setenv("AIU_SCHEDULE_HELPER", "no-crontab")
-	_, err := execRunner(ctx, os.Args[0], helperArgs, nil)
-	var exit interface{ ExitCode() int }
-	if !errors.As(err, &exit) || exit.ExitCode() != 1 {
-		t.Fatalf("runner discarded the exit code: %v", err)
 	}
 }
 

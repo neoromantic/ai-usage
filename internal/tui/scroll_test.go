@@ -188,9 +188,8 @@ func TestPinnedHead(t *testing.T) {
 }
 
 // TestPinnedHeadSideways: the pinned head is the page's own, so the names
-// of the subscriptions scroll sideways with the matrix under them, and s
-// pins the status view's head in its place. The wheel keeps it pinned, and
-// the help covers it.
+// of the subscriptions scroll sideways with the matrix under them, and the
+// help covers it.
 func TestPinnedHeadSideways(t *testing.T) {
 	m := model(t, 80, 24, Config{Report: bigTeam(t), Render: view.Render})
 	h := m.page.DevicesHead
@@ -205,19 +204,11 @@ func TestPinnedHeadSideways(t *testing.T) {
 	if _, pinned := sight(t, m); !pinned || m.opts.MatrixScroll != 2 || screen(m)[3] == names {
 		t.Fatalf("scrolled sideways by %d, pinned %v, names %q, were %q", m.opts.MatrixScroll, pinned, screen(m)[3], names)
 	}
-	m = update(t, m, tea.MouseWheelMsg{Button: tea.MouseWheelDown})
-	if _, pinned := sight(t, m); !pinned || m.top != h[0]+11 {
-		t.Fatalf("wheel down: top %d, pinned %v", m.top, pinned)
-	}
-	m = keys(t, m, "s")
-	if _, pinned := sight(t, m); !pinned || !strings.HasPrefix(screen(m)[1], "DEVICES  27 · ") || !strings.HasPrefix(screen(m)[3], "  DEVICE ") {
-		t.Fatalf("status view, pinned %v:\n%s", pinned, strings.Join(screen(m), "\n"))
-	}
 	m = keys(t, m, "?")
 	if rows := screen(m); rows[1] != "" || rows[2] != "KEYS" {
 		t.Fatalf("the help under a pinned head:\n%s", strings.Join(rows, "\n"))
 	}
-	if m = keys(t, m, "esc"); !strings.HasPrefix(screen(m)[1], "DEVICES  27 · ") {
+	if m = keys(t, m, "esc"); !strings.HasPrefix(screen(m)[1], "DEVICES × SUBSCRIPTIONS  27 · ") {
 		t.Fatalf("the head is not back after the help: %q", screen(m)[1])
 	}
 }

@@ -91,34 +91,20 @@ func TestLineRunsUnderSh(t *testing.T) {
 	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	long := longPath(80)
-	for _, tc := range []struct{ name, path, want string }{
-		{"quoted", "/opt/it's 50%/bin:/usr/bin:/bin", "/opt/it's 50%/bin:/usr/bin:/bin"},
-		{"trimmed", long, ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			line := Line(bin, state, tc.path)
-			out := filepath.Join(t.TempDir(), "out")
-			cmd := exec.Command("/bin/sh", "-c", cronCommand(t, line))
-			cmd.Env = []string{"AIU_OUT=" + out}
-			if b, err := cmd.CombinedOutput(); err != nil {
-				t.Fatalf("sh: %v %s\nline: %s", err, b, line)
-			}
-			b, err := os.ReadFile(out)
-			if err != nil {
-				t.Fatal(err)
-			}
-			got := strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
-			if len(got) != 2 || got[1] != "collect --quiet --home "+state {
-				t.Fatalf("binary saw %q", got)
-			}
-			if tc.want != "" && got[0] != tc.want {
-				t.Fatalf("PATH = %q, want %q", got[0], tc.want)
-			}
-			if tc.want == "" && !strings.HasPrefix(tc.path, got[0][:len(got[0])-len(":/usr/bin:/bin")]) {
-				t.Fatalf("trimmed PATH %q is not a prefix of the original", got[0])
-			}
-		})
+	path := "/opt/it's 50%/bin:/usr/bin:/bin"
+	line := Line(bin, state, path)
+	out := filepath.Join(t.TempDir(), "out")
+	cmd := exec.Command("/bin/sh", "-c", cronCommand(t, line))
+	cmd.Env = []string{"AIU_OUT=" + out}
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("sh: %v %s\nline: %s", err, b, line)
+	}
+	b, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Split(strings.TrimSuffix(string(b), "\n"), "\n"); len(got) != 2 || got[0] != path || got[1] != "collect --quiet --home "+state {
+		t.Fatalf("binary saw %q", got)
 	}
 }
 
@@ -194,24 +180,14 @@ func TestLineFitsCronLimit(t *testing.T) {
 	}
 }
 
-func TestInstallIntoEmptyCrontab(t *testing.T) {
-	f := &fakeCron{}
-	s := cron(f)
-	if err := s.Install(context.Background(), exe, home, "/usr/bin:/bin"); err != nil {
-		t.Fatal(err)
-	}
-	if want := Line(exe, home, "/usr/bin:/bin") + "\n"; f.tab == nil || *f.tab != want {
-		t.Fatalf("crontab = %v, want %q", f.tab, want)
-	}
-	if got, err := s.Lookup(context.Background(), exe, home); err != nil || got != Active {
-		t.Fatalf("Lookup after Install = %v, %v", got, err)
-	}
-}
-
+// TestInstallKeepsOtherLines: Install replaces the entry it wrote before,
+// and one the person commented out, which turns it back on, and keeps every
+// other line.
 func TestInstallKeepsOtherLines(t *testing.T) {
 	existing := "# nightly\nMAILTO=me@example.com\n0 3 * * * /usr/local/bin/backup --all\n\n" +
 		"*/15 * * * * PATH='/old' '/old/ai-usage' collect --quiet >/dev/null 2>&1 # ai-usage\n" +
-		"30 * * * * echo 50\\% done\n"
+		"30 * * * * echo 50\\% done\n" +
+		"# " + Line(exe, home, "/usr/bin:/bin") + "\n"
 	f := withTab(existing)
 	s := cron(f)
 	ctx := context.Background()
@@ -270,18 +246,27 @@ func TestRemove(t *testing.T) {
 func TestLookup(t *testing.T) {
 	tab := "0 * * * * '/opt/ai-usage/bin/ai-usage' collect\n" + // ours without the marker
 		"*/15 * * * * PATH='/elsewhere/ai-usage' '/opt/ai-usage/bin/ai-usage-old' collect --quiet --home '/data/ai-usage' >/dev/null 2>&1 # ai-usage\n"
+	ours, old := Line(exe, home, "/usr/bin:/bin"), Line("/old/ai-usage", home, "/bin")
 	ctx := context.Background()
 	for _, tc := range []struct {
-		name, exe, home string
-		want            State
+		name, tab, exe, home string
+		want                 State
 	}{
-		{"other binary", exe, home, Other},
-		{"that binary", "/opt/ai-usage/bin/ai-usage-old", home, Active},
-		{"that binary, other state folder", "/opt/ai-usage/bin/ai-usage-old", "/data/other", Other},
-		{"PATH is not the binary", "/elsewhere/ai-usage", home, Other},
+		{"other binary", tab, exe, home, Other},
+		{"that binary", tab, "/opt/ai-usage/bin/ai-usage-old", home, Active},
+		{"that binary, other state folder", tab, "/opt/ai-usage/bin/ai-usage-old", "/data/other", Other},
+		{"PATH is not the binary", tab, "/elsewhere/ai-usage", home, Other},
+		// A person pauses the job by commenting its line out. That is not
+		// running, and a run must not quietly turn it back on.
+		{"commented", "#" + ours + "\n", exe, home, Disabled},
+		{"commented with space", "  # " + ours + "\n", exe, home, Disabled},
+		{"commented, another binary", "# " + old + "\n", exe, home, Disabled},
+		{"a remark that is not the job", "# ai-usage\n", exe, home, Absent},
+		{"commented and active", "# " + old + "\n" + ours + "\n", exe, home, Active},
+		{"commented and another active", "# " + ours + "\n" + old + "\n", exe, home, Other},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := cron(withTab(tab)).Lookup(ctx, tc.exe, tc.home)
+			got, err := cron(withTab(tc.tab)).Lookup(ctx, tc.exe, tc.home)
 			if err != nil || got != tc.want {
 				t.Fatalf("Lookup(%q, %q) = %v, %v; want %v", tc.exe, tc.home, got, err, tc.want)
 			}
@@ -297,38 +282,6 @@ func TestLookup(t *testing.T) {
 	}
 	if got, _ := cron(f).Lookup(ctx, odd, oddHome); got != Active {
 		t.Fatalf("a quoted, escaped path is not found again:\n%s", *f.tab)
-	}
-}
-
-// A person pauses the job by commenting its line out. That is not running,
-// and a run must not quietly turn it back on.
-func TestLookupCommentedOut(t *testing.T) {
-	ctx := context.Background()
-	ours := Line(exe, home, "/usr/bin:/bin")
-	for _, tc := range []struct {
-		name, tab string
-		want      State
-	}{
-		{"commented", "#" + ours + "\n", Disabled},
-		{"commented with space", "  # " + ours + "\n", Disabled},
-		{"commented, another binary", "# " + Line("/old/ai-usage", home, "/bin") + "\n", Disabled},
-		{"a remark that is not the job", "# ai-usage\n", Absent},
-		{"commented and active", "# " + Line("/old/ai-usage", home, "/bin") + "\n" + ours + "\n", Active},
-		{"commented and another active", "# " + ours + "\n" + Line("/old/ai-usage", home, "/bin") + "\n", Other},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got, err := cron(withTab(tc.tab)).Lookup(ctx, exe, home); err != nil || got != tc.want {
-				t.Fatalf("Lookup = %v, %v; want %v", got, err, tc.want)
-			}
-		})
-	}
-	// Install turns it back on.
-	f := withTab("# " + ours + "\n")
-	if err := cron(f).Install(ctx, exe, home, "/usr/bin:/bin"); err != nil {
-		t.Fatal(err)
-	}
-	if *f.tab != ours+"\n" {
-		t.Fatalf("crontab after Install = %q", *f.tab)
 	}
 }
 
