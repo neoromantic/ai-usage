@@ -132,15 +132,14 @@ The app runs `ai-usage report --json` and shows what it says. It never works out
 
 `scripts/verify.sh` runs the checks the branch's changes need and keeps what they showed in `.verify/latest/`; `scripts/verify.sh --push` runs them at the depth CI does. Run that before a branch's first push. After a rebase, run `scripts/verify.sh` only when you resolved a conflict, for what the resolution touched; CI runs the rest. The skill [verify-ai-usage](.agents/skills/verify-ai-usage/SKILL.md) says what each step proves, how to read its evidence, and how to drive the report, a team, and the app by hand without touching this machine's own ai-usage.
 
-CI runs no macOS job: it tests on Linux, and builds and installs on Linux and Windows. A Mac is the macOS gate. A change that touches how ai-usage behaves on macOS needs `scripts/verify.sh --push` on a Mac before its push: `macos/`, the launchd and scheduling code (`internal/schedule`, `cmd/ai-usage/schedule.go`), self-update and the app's install (`internal/selfupdate`, `cmd/ai-usage/app.go`, `cmd/ai-usage/update.go`), darwin-only Go files, the installer's macOS path in `install.sh`, the Homebrew formula and how the binary knows brew installed it (`.github/scripts/formula.sh`, `internal/fsutil`), the report's JSON that the app reads (`internal/view`, `internal/snapshot`), and `docs/demo/*.json`. On a Mac, `--push` runs `go test` on darwin, the app's checks and its release build, the installer smoke test, and the Homebrew smoke test, which CI ran on macOS before. The install and brew steps stop when Homebrew has installed ai-usage on that Mac; run `brew uninstall ai-usage` first, and install it again after. Say in the pull request that `--push` passed on a Mac.
+CI runs no macOS job: it tests and installs on Linux, builds for every release OS, and installs on Windows only in a run by hand, as [docs/releasing.md](docs/releasing.md) says before a release. A Mac is the macOS gate. A change that touches how ai-usage behaves on macOS needs `scripts/verify.sh --push` on a Mac before its push: `macos/`, the launchd and scheduling code (`internal/schedule`, `cmd/ai-usage/schedule.go`), self-update and the app's install (`internal/selfupdate`, `cmd/ai-usage/app.go`, `cmd/ai-usage/update.go`), darwin-only Go files, the installer's macOS path in `install.sh`, the Homebrew formula and how the binary knows brew installed it (`.github/scripts/formula.sh`, `internal/fsutil`), the report's JSON that the app reads (`internal/view`, `internal/snapshot`), and `docs/demo/*.json`. On a Mac, `--push` runs `go test` on darwin, the app's checks and its release build, the installer smoke test, and the Homebrew smoke test, which CI ran on macOS before. The install and brew steps stop when Homebrew has installed ai-usage on that Mac; run `brew uninstall ai-usage` first, and install it again after. Say in the pull request that `--push` passed on a Mac.
 
-CI, `.github/workflows/ci.yml`, runs these, on Linux:
+CI, `.github/workflows/ci.yml`, runs these, on Linux, with the Go of `go.mod`'s `toolchain` line:
 
 ```sh
 gofmt -l .              # prints nothing
 go vet ./...
-go build ./...
-go test ./...
+go test -race ./...
 go mod tidy -diff
 ```
 

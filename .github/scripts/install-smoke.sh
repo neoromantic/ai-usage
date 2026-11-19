@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install a locally built release through the install script, the way a person
-# would, and check the result. CI runs it on Linux and Windows, and
-# scripts/verify.sh --push on a Mac.
+# would, and check the result. CI runs it on Linux, and on Windows in a run by
+# hand; scripts/verify.sh --push runs it on a Mac.
 #
 #   .github/scripts/install-smoke.sh
 #

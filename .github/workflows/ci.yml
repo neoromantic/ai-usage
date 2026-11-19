@@ -14,19 +14,76 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Every Go job uses the Go of go.mod's toolchain line: the oldest Go go.mod
+# allows, at that patch, so code that needs a newer one fails here, and the
+# Go Vercel builds the relay with. On a GitHub-hosted runner each Go job
+# restores its own build, module and staticcheck caches, under a key that
+# changes with every commit, so it gets the newest. A run on main or by hand
+# saves them, and so does a pull request's run that found none. The
+# self-hosted runner keeps its caches on its own disk.
 jobs:
-  lint:
+  # A pull request that changes only Markdown, pictures, docs/, the BB plugin,
+  # or the menu bar app starts no Go job, unless it changes macos/build.sh,
+  # which lint checks, or a release's notes in docs/releases/, as the release
+  # may rely on that pull request's ci. The plugin's job runs when bb/, the
+  # report's JSON, the demo, scripts/demo's TypeScript, or this workflow
+  # changes. A push to main and a run by hand run every job.
+  changes:
     if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      go: ${{ steps.files.outputs.go }}
+      plugin: ${{ steps.files.outputs.plugin }}
+    steps:
+      - id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          go=true
+          plugin=true
+          if [ -n "$PR" ]; then
+            files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[] | .filename, .previous_filename // empty')
+            printf '%s\n' "$files"
+            if ! printf '%s\n' "$files" | grep -vqE '^(docs|bb|macos)/|\.(md|png|jpe?g|gif|svg|webp)$' &&
+              ! printf '%s\n' "$files" | grep -qE '^(macos/build\.sh$|docs/releases/)'; then
+              go=false
+            fi
+            printf '%s\n' "$files" | grep -qE '^(bb/|internal/view/|internal/snapshot/|docs/demo/|scripts/demo/[^/]+\.ts$|\.github/workflows/ci\.yml$)' || plugin=false
+          fi
+          echo "go=$go plugin=$plugin"
+          echo "go=$go" >>"$GITHUB_OUTPUT"
+          echo "plugin=$plugin" >>"$GITHUB_OUTPUT"
+
+  # gofmt; go vet, staticcheck and deadcode for every release OS, macOS
+  # among them, though CI runs no macOS job: a Mac checks macOS before the
+  # push with scripts/verify.sh --push (see AGENTS.md); go mod tidy; sh -n and
+  # ShellCheck on the shell scripts; and a parse of install.ps1.
+  lint:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ${{ fromJSON('{"true":"oss-linux","false":"ubuntu-latest"}')[format('{0}', vars.CI_SELF_HOSTED == 'true' && github.ref == 'refs/heads/main')] }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # The oldest Go that go.mod allows, so code that needs a newer one fails here.
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - id: go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: ${{ runner.environment != 'self-hosted' }}
+          cache: false
+      - id: cache
+        if: runner.environment == 'github-hosted'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/.cache/staticcheck
+            ~/go/pkg/mod
+          key: go-lint-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: go-lint-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
       - name: gofmt
         run: |
           unformatted=$(gofmt -l .)
@@ -35,7 +92,28 @@ jobs:
             echo "$unformatted"
             exit 1
           fi
-      - run: go build ./...
+      # The three OSes at once, each into a file of its own, printed after.
+      - name: vet, staticcheck and deadcode for every release OS; go mod tidy
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
+          go install golang.org/x/tools/cmd/deadcode@v0.52.0
+          bin=$(go env GOPATH)/bin
+          analyze() {
+            export GOOS=$1
+            go vet ./... && "$bin/staticcheck" ./... || return
+            d=$("$bin/deadcode" -test ./...) || return
+            [ -z "$d" ] || { echo "$d"; return 1; }
+          }
+          pids=
+          for os in linux darwin windows; do
+            analyze "$os" >"$RUNNER_TEMP/lint-$os.txt" 2>&1 &
+            pids="$pids $!"
+          done
+          failed=0
+          for pid in $pids; do wait "$pid" || failed=1; done
+          for os in linux darwin windows; do echo "== $os"; cat "$RUNNER_TEMP/lint-$os.txt"; done
+          [ "$failed" = 0 ]
+          go mod tidy -diff
       - name: Shell scripts
         run: |
           for f in install.sh scripts/*.sh .github/scripts/*.sh macos/build.sh; do sh -n "$f"; done
@@ -46,73 +124,123 @@ jobs:
           $errors = $null
           [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD/install.ps1", [ref]$null, [ref]$errors)
           if ($errors) { $errors | Format-List | Out-String | Write-Host; exit 1 }
-      # All but the menu bar app, which builds only on macOS.
-      - name: Cross-compile every release target
-        run: sh .github/scripts/dist.sh v9.9.9-ci "$RUNNER_TEMP/dist"
+      - if: steps.cache.outcome == 'success' && steps.cache.outputs.cache-hit != 'true' && (github.event_name != 'pull_request' || steps.cache.outputs.cache-matched-key == '')
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/.cache/staticcheck
+            ~/go/pkg/mod
+          key: ${{ steps.cache.outputs.cache-primary-key }}
 
-  # CI runs no macOS job: macOS is checked on a Mac before the push, with
-  # scripts/verify.sh --push, which runs go test on darwin, the menu bar
-  # app's checks and release build, and the installer and Homebrew smoke
-  # tests there (see AGENTS.md). vet, staticcheck and deadcode still cover
-  # darwin here. Windows builds and installs (see lint and install), but its
-  # unit tests are not a release gate: Windows is not a supported collector
-  # host yet.
+  # go test -race on Linux. Windows builds (see brew) and installs (see
+  # install), but its unit tests are not a release gate: Windows is not a
+  # supported collector host yet.
   test:
-    if: github.event.pull_request.draft != true
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ${{ fromJSON('{"true":"oss-linux","false":"ubuntu-latest"}')[format('{0}', vars.CI_SELF_HOSTED == 'true' && github.ref == 'refs/heads/main')] }}
     steps:
+      # The history, without the files' contents, gives each file its time below.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+          fetch-depth: 0
+          filter: blob:none
+      - id: go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: stable
-          cache: ${{ runner.environment != 'self-hosted' }}
-      - name: vet, staticcheck and deadcode for every release OS; go mod tidy
+          go-version-file: go.mod
+          cache: false
+      - id: cache
+        if: runner.environment == 'github-hosted'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-test-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: go-test-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
+      # go test reuses a cached result only while each file the test read
+      # keeps its size and time, and a checkout gives every file the time of
+      # the checkout. So each file and folder gets the time of the last commit
+      # on main's line, or of this pull request's merge, that changed it.
+      - name: Files get their last commit's time
         run: |
-          go install honnef.co/go/tools/cmd/staticcheck@v0.8.2
-          go install golang.org/x/tools/cmd/deadcode@v0.52.0
-          bin=$(go env GOPATH)/bin
-          for os in linux darwin windows; do
-            GOOS=$os go vet ./...
-            GOOS=$os "$bin/staticcheck" ./...
-            d=$(GOOS=$os "$bin/deadcode" -test ./...)
-            [ -z "$d" ] || { echo "$d"; exit 1; }
-          done
-          go mod tidy -diff
+          git log --first-parent --diff-merges=first-parent --no-renames --name-only --format=@%ct HEAD |
+            awk '/^@/ { t = substr($0, 2); next }
+              $0 == "" || ($0 in seen) { next }
+              { seen[$0] = 1; print t, $0; d = $0
+                while (sub("/[^/]*$", "", d)) if (!(d in dir)) dir[d] = t
+                if (!("." in dir)) dir["."] = t }
+              END { for (d in dir) print dir[d], d }' |
+            while read -r t f; do
+              if [ -e "$f" ] || [ -L "$f" ]; then touch -h -d "@$t" "$f"; fi
+            done
       - run: go test -race ./...
+        env:
+          # The race runtime otherwise sleeps a second as each test binary,
+          # and each copy of one a test starts, exits.
+          GORACE: atexit_sleep_ms=0
+      - if: steps.cache.outcome == 'success' && steps.cache.outputs.cache-hit != 'true' && (github.event_name != 'pull_request' || steps.cache.outputs.cache-matched-key == '')
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ steps.cache.outputs.cache-primary-key }}
 
+  # Builds this runner's release file, serves it on 127.0.0.1, and runs
+  # install.sh or install.ps1 against it twice: a fresh install, then an
+  # upgrade. Windows runs only in a run by hand, as before a release that
+  # changes how ai-usage installs there (see docs/releasing.md).
   install:
-    if: github.event.pull_request.draft != true
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: ${{ github.event_name == 'workflow_dispatch' && fromJSON('["ubuntu-latest","windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
     runs-on: ${{ fromJSON(format('{{"true":"oss-linux","false":"{0}"}}', matrix.os))[format('{0}', vars.CI_SELF_HOSTED == 'true' && github.ref == 'refs/heads/main' && matrix.os == 'ubuntu-latest')] }}
     steps:
       - run: git config --global core.autocrlf false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - id: go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: stable
-          cache: ${{ runner.environment != 'self-hosted' }}
-      # Builds this runner's release file, serves it on 127.0.0.1, and runs
-      # install.sh or install.ps1 against it twice: a fresh install, then an
-      # upgrade.
+          go-version-file: go.mod
+          cache: false
+      - id: cache
+        if: runner.environment == 'github-hosted' && runner.os == 'Linux'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-install-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: go-install-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
       - name: Install from a local release
         shell: bash
         run: sh .github/scripts/install-smoke.sh
+      - if: steps.cache.outcome == 'success' && steps.cache.outputs.cache-hit != 'true' && (github.event_name != 'pull_request' || steps.cache.outputs.cache-matched-key == '')
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ steps.cache.outputs.cache-primary-key }}
 
-  # The Homebrew formula, from formula.sh, with a local build, on Linux: brew
-  # installs and tests it, the binary knows brew installed it, and the
-  # formula the tap gets passes brew's style and audit. Cron runs brew's opt
-  # path, and a script copy installed later leaves it so. On macOS,
-  # scripts/verify.sh --push runs the same smoke before the push; launchd is
-  # left to the unit tests.
+  # Every release file but the menu bar app, and the Homebrew formula, from
+  # formula.sh, with that build, on Linux: brew installs and tests it, the
+  # binary knows brew installed it, and the formula the tap gets passes
+  # brew's style and audit. Cron runs brew's opt path, and a script copy
+  # installed later leaves it so. On macOS, scripts/verify.sh --push runs the
+  # same smoke before the push; launchd is left to the unit tests.
   brew:
-    if: github.event.pull_request.draft != true
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
@@ -122,15 +250,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - id: go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: stable
-          cache: ${{ runner.environment != 'self-hosted' }}
+          go-version-file: go.mod
+          cache: false
+      - id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-brew-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: go-brew-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
       # Linux runners have Homebrew, off PATH.
       - run: echo /home/linuxbrew/.linuxbrew/bin >>"$GITHUB_PATH"
-      # The formula names all four binaries, so all four are built.
-      - name: Build a local release
-        run: TARGETS="darwin/amd64 darwin/arm64 linux/amd64 linux/arm64" sh .github/scripts/dist.sh v9.9.9 "$RUNNER_TEMP/dist"
+      # The menu bar app builds only on macOS, and dist.sh skips it here.
+      - name: Build every release file
+        run: sh .github/scripts/dist.sh v9.9.9 "$RUNNER_TEMP/dist"
       - name: formula.sh refuses an old release and a prerelease
         run: |
           for tag in v0.7.0 v0.8.0-rc1; do
@@ -204,40 +341,32 @@ jobs:
           brew style ci/aiu
           brew audit --strict --formula ci/aiu/ai-usage
           brew untap ci/aiu
+      - if: steps.cache.outcome == 'success' && steps.cache.outputs.cache-hit != 'true' && (github.event_name != 'pull_request' || steps.cache.outputs.cache-matched-key == '')
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ steps.cache.outputs.cache-primary-key }}
 
   # The BB plugin in bb/: oxfmt and oxlint on it and on scripts/demo's
   # TypeScript, its types, its tests, which read docs/demo, its build with
   # BB's own bb plugin build, from the bb-app package, and Knip, with
-  # bb/knip.json. It runs when bb/, the report's JSON, the demo, or
-  # scripts/demo's TypeScript changes, and on main. oxlint's landmines rules
-  # need Node 22.18 or later.
+  # bb/knip.json. oxlint's landmines rules need Node 22.18 or later.
   plugin:
-    if: github.event.pull_request.draft != true
+    needs: changes
+    if: needs.changes.outputs.plugin == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Changes the plugin reads
-        id: changes
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          run=true
-          if [ -n "$BASE" ]; then
-            git fetch --quiet --depth=1 origin "$BASE"
-            git diff --name-only "$BASE" HEAD | grep -qE '^(bb/|internal/view/|internal/snapshot/|docs/demo/|scripts/demo/[^/]+\.ts$|\.github/workflows/ci\.yml)' || run=false
-          fi
-          echo "run=$run" >>"$GITHUB_OUTPUT"
-      - if: steps.changes.outputs.run == 'true'
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           package-manager-cache: false
-      - if: steps.changes.outputs.run == 'true'
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-      - if: steps.changes.outputs.run == 'true'
-        working-directory: bb
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - working-directory: bb
         run: |
           bun install --frozen-lockfile
           bun run check
@@ -249,9 +378,10 @@ jobs:
     permissions:
       contents: read
 
-  # The one check a branch ruleset requires: every job above passed.
+  # The one check a branch ruleset requires: every job above passed or was
+  # not needed.
   ci:
-    needs: [lint, test, install, brew, plugin, hygiene]
+    needs: [changes, lint, test, install, brew, plugin, hygiene]
     if: always() && github.event.pull_request.draft != true
     runs-on: ${{ fromJSON('{"true":"oss-linux","false":"ubuntu-latest"}')[format('{0}', vars.CI_SELF_HOSTED == 'true' && github.ref == 'refs/heads/main')] }}
     permissions:
