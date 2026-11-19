@@ -138,7 +138,8 @@ func fakeProbeEnv() probe.Env {
 		Command: func(ctx context.Context, name string, args ...string) *exec.Cmd {
 			return exec.CommandContext(ctx, os.Args[0], append([]string{"-test.run=^TestHelperProcess$", "--", name}, args...)...)
 		},
-		Environ: []string{"AIU_FAKE_HARNESS=1"},
+		// The race runtime otherwise sleeps a second before a clean exit.
+		Environ: []string{"AIU_FAKE_HARNESS=1", "GORACE=atexit_sleep_ms=0"},
 		HomeDir: home,
 		Now:     time.Now,
 		Timeout: 30 * time.Second,

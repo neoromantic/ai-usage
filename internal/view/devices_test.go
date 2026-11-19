@@ -13,6 +13,7 @@ import (
 // folded into REST, those scrolled off the left and those off the right
 // edge, at every width and scroll, and has no REST when every column shows.
 func TestMatrixRest(t *testing.T) {
+	t.Parallel()
 	r := loadReport(t, "team")
 	for w := 80; w <= 160; w += 4 {
 		for _, share := range []bool{false, true} {

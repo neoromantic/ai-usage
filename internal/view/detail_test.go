@@ -100,6 +100,7 @@ func TestPicks(t *testing.T) {
 // TestDetailLines: a detail keeps the page's line contract at every width,
 // in every period, and in ASCII, for every row it opens.
 func TestDetailLines(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"team", "single"} {
 		r := loadReport(t, name)
 		for _, k := range Render(r, Options{Width: 120, Interactive: true}).Picks {
