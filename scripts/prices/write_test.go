@@ -19,8 +19,12 @@ func diff(provider, plan string, annual bool, fix float64) difference {
 }
 
 // -write sets each fixed price and the day, and leaves every other byte:
-// the lines, the order of the keys, and each source.
+// the lines, the order of the keys, and each source. With nothing to fix,
+// the list is left as it is, its day too.
 func TestRewrite(t *testing.T) {
+	if got, err := rewrite([]byte(writeList), nil, "2026-03-04"); err != nil || string(got) != writeList {
+		t.Errorf("rewrite with nothing to fix = %s, %v; want the list unchanged", got, err)
+	}
 	got, err := rewrite([]byte(writeList), []difference{
 		diff("codex", "plus", false, 25),
 		diff("grok", "SuperGrok", true, 349.5),
@@ -36,14 +40,6 @@ func TestRewrite(t *testing.T) {
 	).Replace(writeList)
 	if string(got) != want {
 		t.Errorf("rewrite =\n%s\nwant\n%s", got, want)
-	}
-}
-
-// With nothing to fix, the list is left as it is, its day too.
-func TestRewriteNothing(t *testing.T) {
-	got, err := rewrite([]byte(writeList), nil, "2026-03-04")
-	if err != nil || string(got) != writeList {
-		t.Errorf("rewrite = %s, %v; want the list unchanged", got, err)
 	}
 }
 

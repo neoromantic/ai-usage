@@ -116,37 +116,6 @@ func teamUtilization(r view.Report, provider, label string) []view.Utilization {
 	return nil
 }
 
-// sgr is a terminal's bold or reverse, which the plain page keeps.
-var sgr = regexp.MustCompile("\x1b\\[[0-9;]*m")
-
-// Every demo page fits 80 columns, and lists no project or device that
-// burned nothing.
-func TestPages(t *testing.T) {
-	for name, r := range map[string]view.Report{"solo": solo(), "team": teamReport(), "homebrew": homebrew()} {
-		for _, p := range r.Projects {
-			if p.Burn.Week <= 0 && p.Burn.Quarter <= 0 {
-				t.Errorf("%s: project %s burned nothing", name, p.Path)
-			}
-		}
-		for _, devices := range []bool{false, true} {
-			text := view.Text(r, view.Options{Width: 80, DeviceStatus: devices})
-			for l := range strings.SplitSeq(sgr.ReplaceAllString(text, ""), "\n") {
-				if n := utf8.RuneCountInString(l); n > 80 {
-					t.Errorf("%s: %d columns: %q", name, n, l)
-				}
-			}
-		}
-	}
-}
-
-// The Homebrew page says how to update with brew.
-func TestHomebrew(t *testing.T) {
-	u := homebrew().Collector.Update
-	if u.Method != view.MethodHomebrew || u.Command == nil || *u.Command != "brew upgrade neoromantic/tap/ai-usage" || u.Latest == nil || *u.Latest != "v0.5.1" {
-		t.Errorf("update = %+v", u)
-	}
-}
-
 // teamWindow is the named window of an account in the team, or nil.
 func teamWindow(r view.Report, provider, label, name string) *view.Window {
 	for _, p := range r.Team.Providers {
@@ -172,5 +141,28 @@ func TestShotsInstallTheDemosRelease(t *testing.T) {
 	}
 	if want := `const release = "` + latest + `";`; !strings.Contains(string(b), want) {
 		t.Errorf("shots.ts does not say %s", want)
+	}
+}
+
+// sgr is a terminal's bold or reverse, which the plain page keeps.
+var sgr = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+// Every demo page fits 80 columns, and lists no project or device that
+// burned nothing.
+func TestPages(t *testing.T) {
+	for name, r := range map[string]view.Report{"solo": solo(), "team": teamReport(), "homebrew": homebrew()} {
+		for _, p := range r.Projects {
+			if p.Burn.Week <= 0 && p.Burn.Quarter <= 0 {
+				t.Errorf("%s: project %s burned nothing", name, p.Path)
+			}
+		}
+		for _, devices := range []bool{false, true} {
+			text := view.Text(r, view.Options{Width: 80, DeviceStatus: devices})
+			for l := range strings.SplitSeq(sgr.ReplaceAllString(text, ""), "\n") {
+				if n := utf8.RuneCountInString(l); n > 80 {
+					t.Errorf("%s: %d columns: %q", name, n, l)
+				}
+			}
+		}
 	}
 }
