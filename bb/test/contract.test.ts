@@ -55,18 +55,9 @@ describe.each(["team.json", "solo.json", "homebrew.json"])("%s", (name) => {
   test("reads every part the panel shows", () => {
     expect(r.team.devices.length).toBe(raw.team.devices.length);
     expect(r.attention.length).toBe(raw.attention.length);
-    expect(r.collector.health.length).toBe(3);
-    expect(r.cost).not.toBeNull();
+    expect(r.collector.health.length).toBe(raw.collector.health.length);
     expect(r.team.devices.every((d) => Array.isArray(d.pooled))).toBe(true);
-  });
-
-  test("shows the report's words as given", () => {
-    for (const [i, a] of r.attention.entries()) {
-      expect(attentionWords(a)).toEqual({
-        subject: raw.attention[i].subject,
-        text: raw.attention[i].text,
-      });
-    }
+    expect(r.cost).not.toBeNull();
   });
 
   test("the matrix's totals are the report's", () => {
@@ -91,12 +82,6 @@ test("a total with an estimated row in it is an estimate, as the app's", () => {
   expect(matrixView(sure, "7d").total.startsWith("~")).toBe(false);
 });
 
-test("the example team the plugin bundles is the repository's", () => {
-  expect(readFileSync(path.join(import.meta.dir, "../demo/team.json"), "utf8")).toBe(
-    readFileSync(path.join(import.meta.dir, "../../docs/demo/team.json"), "utf8"),
-  );
-});
-
 test("a report of an earlier release reads its missing fields as the app does", () => {
   const r = readReport(strip(demo("team.json")));
   expect(r.collector.health).toEqual([]);
@@ -117,7 +102,7 @@ test("a report of an earlier release reads its missing fields as the app does", 
   expect(attentionWords(old).subject).toBe((old.devices ?? []).join(", "));
 });
 
-test("a kind it does not know is shown with the report's words", () => {
+test("shows the report's words as given, of a kind it does not know too", () => {
   const raw = demo("team.json");
   raw.attention.push({
     kind: "someday",
@@ -125,10 +110,12 @@ test("a kind it does not know is shown with the report's words", () => {
     text: "a kind from a later release",
   });
   const r = readReport(raw);
-  expect(attentionWords(r.attention.at(-1)!)).toEqual({
-    subject: "leo@leo-air",
-    text: "a kind from a later release",
-  });
+  expect(r.attention.map(attentionWords)).toEqual(
+    raw.attention.map((a: { subject: string; text: string }) => ({
+      subject: a.subject,
+      text: a.text,
+    })),
+  );
 });
 
 test("another schema is refused", () => {

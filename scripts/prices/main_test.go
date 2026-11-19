@@ -152,7 +152,7 @@ func TestCompareMatches(t *testing.T) {
 
 // A changed price, a new tier, a plan the page dropped, and a page that
 // could not be read are each reported; the unreadable page's plans are not
-// reported as changed.
+// reported as changed, and its words cannot break the report's tables.
 func TestCompareFindings(t *testing.T) {
 	l := testList()
 	l.Plans = append(l.Plans, listPlan{Provider: "codex", Plan: "pro", Name: "Pro 200", USD: 200, Source: store})
@@ -166,7 +166,7 @@ func TestCompareFindings(t *testing.T) {
 			{Name: "ChatGPT Ultra", USD: 1200},
 			{Name: "500 Credits", USD: 20},
 		}},
-		pricing: {err: errors.New("HTTP 403")},
+		pricing: {err: errors.New("HTTP 403\nForbidden | blocked")},
 	})
 	if !r.findings() {
 		t.Fatal("no findings")
@@ -191,7 +191,7 @@ func TestCompareFindings(t *testing.T) {
 		"| Codex Go | $80 a year | $90, $7 |",
 		"| Codex ChatGPT Ultra | $1200 |",
 		"### Plans their page no longer shows",
-		"| [claude.com/pricing](https://claude.com/pricing) | HTTP 403 |",
+		`| [claude.com/pricing](https://claude.com/pricing) | HTTP 403 Forbidden \| blocked |`,
 		"docs/releasing.md#prices",
 	} {
 		if !strings.Contains(md, s) {
@@ -200,12 +200,5 @@ func TestCompareFindings(t *testing.T) {
 	}
 	if strings.Contains(md, "Claude Pro") {
 		t.Errorf("report names a plan of the unreadable page:\n%s", md)
-	}
-}
-
-// A page's text cannot break the report's tables.
-func TestCell(t *testing.T) {
-	if got := cell("a|b\nc"); got != `a\|b c` {
-		t.Errorf("cell = %q", got)
 	}
 }

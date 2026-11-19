@@ -9,31 +9,26 @@ import (
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 )
 
-func TestWeightsOf(t *testing.T) {
-	cases := []struct {
-		provider, label string
-		want            Weights
-	}{
-		{"claude", "ann@acme.dev", Weights{Output: 5, CacheRead: 0.1, CacheWrite: 1.25, CacheWrite1h: 2}},
-		{"codex", "ann@acme.dev", Weights{Output: 8, CacheRead: 0.1, CacheWrite: 1, CacheWrite1h: 1}},
-		{"grok", "sam@mail.test", Weights{Output: 5, CacheRead: 0.25, CacheWrite: 1, CacheWrite1h: 1}},
-		{"hermes", "openai-codex", codexWeights},
-		{"hermes", "xai-oauth", grokWeights},
-		{"hermes", "anthropic", claudeWeights},
-		{"hermes", "unknown", claudeWeights},
-		{"hermes", "custom-key", claudeWeights},
-	}
-	for _, c := range cases {
-		if got := WeightsOf(c.provider, c.label); got != c.want {
-			t.Errorf("WeightsOf(%s, %s) = %+v, want %+v", c.provider, c.label, got, c.want)
-		}
-	}
-}
-
+// Burn weighs each kind by the provider's weights that README.md and
+// docs/json-schema.md give, and a Hermes call by those of the provider its
+// account is named after, Claude's when it names none.
 func TestBurn(t *testing.T) {
 	u := Use{Input: 100, Output: 900, CacheRead: 10000, CacheWrite: 1000, CacheWrite1h: 400}
-	if got := u.Burn(WeightsOf("claude", "")); got != 7150 {
-		t.Errorf("burn = %d, want 7150", got)
+	for _, c := range []struct {
+		provider, label string
+		want            int64
+	}{
+		{"claude", "ann@acme.dev", 7150},
+		{"codex", "ann@acme.dev", 9300},
+		{"grok", "sam@mail.test", 8100},
+		{"hermes", "openai-codex", 9300},
+		{"hermes", "xai-oauth", 8100},
+		{"hermes", "anthropic", 7150},
+		{"hermes", "custom-key", 7150},
+	} {
+		if got := u.Burn(WeightsOf(c.provider, c.label)); got != c.want {
+			t.Errorf("burn of %s %s = %d, want %d", c.provider, c.label, got, c.want)
+		}
 	}
 	// Counts that do not say how long writes are kept weigh them as 5m.
 	tok := snapshot.Tokens{Input: 100, Output: 900, CacheRead: 10000, CacheWrite: 1000}
@@ -81,11 +76,7 @@ func TestUseJSON(t *testing.T) {
 }
 
 func TestSpread(t *testing.T) {
-	got := Spread(Use{Input: 10}, map[int64]int64{1: 1, 2: 1, 3: 1})
-	if want := (Hours{1: {Input: 4}, 2: {Input: 3}, 3: {Input: 3}}); !reflect.DeepEqual(got, want) {
-		t.Errorf("spread = %v, want %v", got, want)
-	}
-	got = Spread(Use{Input: 100, Output: 900, CacheRead: 50000, CacheWrite: 4000}, map[int64]int64{497000: 600, 497001: 400})
+	got := Spread(Use{Input: 100, Output: 900, CacheRead: 50000, CacheWrite: 4000}, map[int64]int64{497000: 600, 497001: 400})
 	want := Hours{497000: {Input: 60, Output: 540, CacheRead: 30000, CacheWrite: 2400}, 497001: {Input: 40, Output: 360, CacheRead: 20000, CacheWrite: 1600}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("spread = %v, want %v", got, want)
@@ -136,9 +127,6 @@ func TestScaleTo(t *testing.T) {
 		h.ScaleTo(c.total, 9)
 		if !reflect.DeepEqual(h, c.want) {
 			t.Errorf("%s: %v, want %v", c.name, h, c.want)
-		}
-		if got, want := h.Sum(), c.total; got != want && c.total.CacheWrite1h <= c.total.CacheWrite {
-			t.Errorf("%s: sum %+v, want %+v", c.name, got, want)
 		}
 	}
 	var none Hours

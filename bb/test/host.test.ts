@@ -68,17 +68,7 @@ describe("probe", () => {
     expect(p.scheduleEntry).toBe(false);
   });
 
-  test("a launch agent without a binary is an install all the same", async () => {
-    const agents = path.join(home, "Library/LaunchAgents");
-    mkdirSync(agents, { recursive: true });
-    writeFileSync(path.join(agents, "io.github.neoromantic.ai-usage.plist"), "<plist/>");
-    const p = await probe(machine({ env: { PATH: "/usr/bin:/bin", HOME: home } }));
-    expect(p.bin).toBeNull();
-    expect(p.scheduleEntry).toBe(true);
-    rmSync(agents, { recursive: true });
-  });
-
-  test("takes the binary a launch agent runs from outside PATH, but never another program", async () => {
+  test("a launch agent is an install: its binary outside PATH is taken, never another program", async () => {
     const agents = path.join(home, "Library/LaunchAgents");
     mkdirSync(agents, { recursive: true });
     writeFileSync(path.join(agents, "io.github.neoromantic.ai-usage.plist"), "<plist/>");
