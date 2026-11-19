@@ -43,7 +43,8 @@ func mustWrite(t *testing.T, path string, lines ...string) {
 	}
 }
 
-// repeat reads n copies of c.
+// repeat reads n copies of c. It fills each read by doubling what it has
+// copied, as a byte at a time is slow under the race detector.
 type repeat struct {
 	c byte
 	n int
@@ -54,8 +55,9 @@ func (r *repeat) Read(p []byte) (int, error) {
 		return 0, io.EOF
 	}
 	p = p[:min(len(p), r.n)]
-	for i := range p {
-		p[i] = r.c
+	p[0] = r.c
+	for done := 1; done < len(p); done *= 2 {
+		copy(p[done:], p[:done])
 	}
 	r.n -= len(p)
 	return len(p), nil
