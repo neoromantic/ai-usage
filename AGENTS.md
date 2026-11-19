@@ -184,7 +184,7 @@ When something visible changes, in the report, the interactive view, or the app,
 
 Each commit is one plain-English sentence that says what changed and why, as in `git log`, with the issue at the end when there is one, such as `(#20)`. Releases follow [docs/releasing.md](docs/releasing.md), with notes in `docs/releases/<tag>.md` for the people who install them.
 
-Each wait for CI on the way to a release costs about ten minutes, so keep them few. Merge each branch whose `ci` is green as soon as GitHub can merge it; the ruleset does not ask for a branch brought up to date. Rebase only a branch with a conflict, one at a time. Branches that change the same report code (`internal/view`, `internal/tui`, `macos/`) start from the branch they build on, or merge in that order. The release notes and redrawn pictures go into the last branch, or into a branch opened while the others' CI runs, never into a pull request after the merges.
+Each wait for CI on the way to a release costs about three minutes on a pull request that changes Go code, and the run on `main` can take longer, so keep them few. Merge each branch whose `ci` is green as soon as GitHub can merge it; the ruleset does not ask for a branch brought up to date. Rebase only a branch with a conflict, one at a time. Branches that change the same report code (`internal/view`, `internal/tui`, `macos/`) start from the branch they build on, or merge in that order. The release notes and redrawn pictures go into the last branch, or into a branch opened while the others' CI runs, never into a pull request after the merges.
 
 ### Website
 
