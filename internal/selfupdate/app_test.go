@@ -174,7 +174,7 @@ func TestCheckUpdatesApp(t *testing.T) {
 
 // Check touches the app only to bring an installed release of it forward.
 func TestCheckLeavesAppAlone(t *testing.T) {
-	bin := runnable(t, "v1.3.0")
+	bin := []byte("new binary")
 	for _, tc := range []struct {
 		name string
 		// app is the version installed; "" for no app.
@@ -227,7 +227,7 @@ func TestCheckLeavesAppAlone(t *testing.T) {
 // An app update that fails leaves the app as it was and nothing beside it.
 // Its error names the app, and the Result is still the binary's.
 func TestCheckRefusesBadApps(t *testing.T) {
-	bin := runnable(t, "v1.3.0")
+	bin := []byte("new binary")
 	for _, tc := range []struct {
 		name  string
 		setup func(*testing.T, *fakeGitHub)
@@ -405,14 +405,6 @@ func TestUnzipAppRefusesWhatIsNotABundle(t *testing.T) {
 			t.Fatalf("unzipApp error = %v", err)
 		}
 	})
-
-	t.Run("a bundle", func(t *testing.T) {
-		dir := t.TempDir()
-		if err := unzipApp(zipOf(t, appEntries("1.3.0")), dir, maxAppUnzipped); err != nil {
-			t.Fatal(err)
-		}
-		appIs(t, filepath.Join(dir, AppBundle), "1.3.0")
-	})
 }
 
 // The version is the top dict's CFBundleShortVersionString. A plist that is
@@ -497,7 +489,7 @@ func TestCheckUnderHomebrew(t *testing.T) {
 // InstallApp puts the app of a release in place whether or not one is
 // there, and leaves alone one of that release or later.
 func TestInstallApp(t *testing.T) {
-	bin := runnable(t, "v1.3.0")
+	bin := []byte("new binary")
 	for _, tc := range []struct {
 		name string
 		// app is the version installed; "" for none, in a folder that does

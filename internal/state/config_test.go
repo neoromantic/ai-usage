@@ -41,40 +41,31 @@ func TestEditConfigKeepsConcurrentEdits(t *testing.T) {
 	}
 }
 
+// LoadConfig gives a device without a valid id a new one, once, and keeps
+// the rest of the config.
 func TestLoadConfigCreatesDeviceOnce(t *testing.T) {
 	d := tempDir(t)
-	c1, err := d.LoadConfig()
+	c, err := d.LoadConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !snapshot.ValidDevice(c1.Device) {
-		t.Fatalf("device id %q is not valid", c1.Device)
-	}
-	c2, err := d.LoadConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c2.Device != c1.Device {
-		t.Fatalf("device id changed between loads: %q then %q", c1.Device, c2.Device)
+	if !snapshot.ValidDevice(c.Device) {
+		t.Fatalf("device id %q is not valid", c.Device)
 	}
 	checkPrivate(t, d.Path("config.json"))
-}
-
-func TestLoadConfigReplacesInvalidDeviceAndKeepsTheRest(t *testing.T) {
-	d := tempDir(t)
 	if err := d.SaveConfig(Config{Device: "NOT A DEVICE", Relay: "https://relay.example", ScheduleOff: true}); err != nil {
 		t.Fatal(err)
 	}
-	c, err := d.LoadConfig()
+	c, err = d.LoadConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !snapshot.ValidDevice(c.Device) || c.Relay != "https://relay.example" || !c.ScheduleOff {
 		t.Fatalf("config = %+v", c)
 	}
-	again, _ := d.LoadConfig()
-	if again.Device != c.Device {
-		t.Fatal("replacement device id was not saved")
+	again, err := d.LoadConfig()
+	if err != nil || again.Device != c.Device {
+		t.Fatalf("device id changed between loads: %q then %q, %v", c.Device, again.Device, err)
 	}
 }
 

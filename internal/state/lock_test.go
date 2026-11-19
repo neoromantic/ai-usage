@@ -65,17 +65,10 @@ func TestLockWait(t *testing.T) {
 	}
 	// The holder finishes while the other run waits.
 	waited := 0
-	done := make(chan struct{})
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		held()
-		close(done)
-	}()
-	unlock, err := d.LockWait(ctx, 10*time.Second, func() { waited++ })
+	unlock, err := d.LockWait(ctx, 10*time.Second, func() { waited++; held() })
 	if err != nil {
 		t.Fatalf("LockWait: %v", err)
 	}
-	<-done
 	if waited != 1 {
 		t.Fatalf("waiting called %d times", waited)
 	}

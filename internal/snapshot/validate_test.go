@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"math"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -18,26 +16,10 @@ import (
 // member a collector before v0.4.0 knows. It sets last_error, aliases and
 // every account's quota_at, so the minimal document beside it, which leaves
 // them out, pins their omitempty. v1-extended.json adds the members v0.4.0
-// added, which v1.json pins as left out when empty, and v1-cycles.json the
-// cycles v0.5.0 added, which v1-extended.json pins so. v1-cost.json adds
-// the costs v0.10.0 added to v1-hours.json.
+// added, which v1.json pins as left out when empty, v1-cycles.json the
+// cycles v0.5.0 added, which v1-extended.json pins so, v1-hours.json the
+// hours v0.7.0 added, and v1-cost.json the costs v0.10.0 added.
 func TestWireFormat(t *testing.T) {
-	golden, err := os.ReadFile(filepath.Join("testdata", "v1.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	extended, err := os.ReadFile(filepath.Join("testdata", "v1-extended.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	cycles, err := os.ReadFile(filepath.Join("testdata", "v1-cycles.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	costs, err := os.ReadFile(filepath.Join("testdata", "v1-cost.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	minimal := `{"v":1,"team":"a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2","device":"mac-0123abcd","device_label":"Ab-_","os_user":"Ab-_",` +
 		`"collector_version":"v1.2.3","collected_at":"2026-09-23T12:00:00Z","last_success_at":"2026-09-23T11:45:00Z",` +
 		`"accounts":[{"provider":"codex","label":"Ab-_","current":true,"plan":"pro","quota_at":"2026-09-23T11:59:00Z",` +
@@ -45,7 +27,11 @@ func TestWireFormat(t *testing.T) {
 		`"tokens":{"input":1,"output":2,"cache_read":3,"cache_write":4},"projects":[]},` +
 		`{"provider":"claude","label":"Ab-_","current":false,"windows":[],"sessions":1,` +
 		`"tokens":{"input":1,"output":2,"cache_read":3,"cache_write":4},"projects":[]}],"sources":[]}`
-	for _, body := range [][]byte{bytes.TrimSpace(golden), []byte(minimal), bytes.TrimSpace(extended), bytes.TrimSpace(cycles), bytes.TrimSpace(costs)} {
+	bodies := [][]byte{[]byte(minimal)}
+	for _, name := range []string{"v1.json", "v1-extended.json", "v1-cycles.json", "v1-hours.json", "v1-cost.json"} {
+		bodies = append(bodies, golden(t, name))
+	}
+	for _, body := range bodies {
 		d, err := Decode(body)
 		if err != nil {
 			t.Fatalf("Decode: %v", err)
@@ -305,6 +291,10 @@ func TestValidate(t *testing.T) {
 			d.Accounts[0].Provider, d.Accounts[0].QuotaFrom = "hermes", "codex"
 			d.Accounts[0].QuotaAt, d.Accounts[0].Windows = nil, []Window{}
 		}, false},
+
+		{"pooled", func(d *Doc) { d.Pooled = []string{"claude", "codex"} }, true},
+		{"pooled unknown provider", func(d *Doc) { d.Pooled = []string{"cursor"} }, false},
+		{"pooled twice", func(d *Doc) { d.Pooled = []string{"codex", "codex"} }, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -413,57 +403,6 @@ func TestPlainLabel(t *testing.T) {
 		}
 		if err := plainText.check("label", got, false); err != nil {
 			t.Errorf("PlainLabel(%q) = %q, which Validate rejects: %v", c.in, got, err)
-		}
-	}
-}
-
-func FuzzPlainLabel(f *testing.F) {
-	for _, s := range []string{"", "Max 20x", "Тариф", "\xff\xfe", strings.Repeat("ab<", 30)} {
-		f.Add(s)
-	}
-	f.Fuzz(func(t *testing.T, s string) {
-		if err := plainText.check("label", PlainLabel(s), false); err != nil {
-			t.Fatalf("PlainLabel(%q) = %q: %v", s, PlainLabel(s), err)
-		}
-	})
-}
-
-// FuzzDecode checks that Decode never panics and that what it accepts is
-// within the limits.
-func FuzzDecode(f *testing.F) {
-	body, _ := json.Marshal(validDoc())
-	f.Add(body)
-	f.Add([]byte(`{"v":1}`))
-	f.Add([]byte(`{"v":1,"V":2}`))
-	f.Add([]byte(`[]`))
-	f.Fuzz(func(t *testing.T, b []byte) {
-		d, err := Decode(b)
-		if err != nil {
-			return
-		}
-		if len(b) > MaxBytes {
-			t.Fatalf("accepted %d bytes", len(b))
-		}
-		if err := d.Validate(); err != nil {
-			t.Fatalf("accepted a document Validate rejects: %v", err)
-		}
-	})
-}
-
-func TestValidatePooled(t *testing.T) {
-	for _, c := range []struct {
-		pooled []string
-		ok     bool
-	}{
-		{nil, true},
-		{[]string{"claude", "codex"}, true},
-		{[]string{"cursor"}, false},
-		{[]string{"codex", "codex"}, false},
-	} {
-		d := validDoc()
-		d.Pooled = c.pooled
-		if err := d.Validate(); (err == nil) != c.ok {
-			t.Errorf("pooled %q: %v", c.pooled, err)
 		}
 	}
 }

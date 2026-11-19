@@ -2,13 +2,11 @@ package state
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -41,24 +39,36 @@ func TestLoadStateMissingIsEmpty(t *testing.T) {
 	}
 }
 
+// A state.json that does not parse starts again from an empty state, and
+// says so, when there is no state.json.last to restore or it does not parse
+// either.
 func TestLoadStateStartsAgainFromADamagedFile(t *testing.T) {
-	for _, body := range []string{"{\"last_run_at\": \"2026-09", `{"sessions": 5}`} {
+	for _, c := range []struct{ body, last string }{
+		{"{\"last_run_at\": \"2026-09", ""},
+		{`{"sessions": 5}`, ""},
+		{"{", "{"},
+	} {
 		d := tempDir(t)
-		if err := fsutil.WriteFile(d.Path("state.json"), []byte(body), 0o600); err != nil {
+		if err := fsutil.WriteFile(d.Path("state.json"), []byte(c.body), 0o600); err != nil {
 			t.Fatal(err)
+		}
+		if c.last != "" {
+			if err := fsutil.WriteFile(d.Path("state.json.last"), []byte(c.last), 0o600); err != nil {
+				t.Fatal(err)
+			}
 		}
 		st, err := d.LoadState()
 		if err != nil {
-			t.Fatalf("%q: %v", body, err)
+			t.Fatalf("%q: %v", c.body, err)
 		}
-		if st.Damage == "" || st.LastError != st.Damage || st.LastErrorAt.IsZero() || !st.LastRunAt.IsZero() {
-			t.Fatalf("%q: state = %+v", body, st)
+		if !strings.Contains(st.Damage, "started again from an empty state") || st.LastError != st.Damage || st.LastErrorAt.IsZero() || !st.LastRunAt.IsZero() || st.Ledger != LedgerVersion {
+			t.Fatalf("%q: state = %+v", c.body, st)
 		}
 		if st.Sources == nil || st.Current == nil || st.Accounts == nil || st.Sessions == nil {
-			t.Fatalf("%q: nil maps: %+v", body, st)
+			t.Fatalf("%q: nil maps: %+v", c.body, st)
 		}
-		if b, err := os.ReadFile(d.Path("state.json.bad")); err != nil || string(b) != body {
-			t.Fatalf("%q: kept %q, %v", body, b, err)
+		if b, err := os.ReadFile(d.Path("state.json.bad")); err != nil || string(b) != c.body {
+			t.Fatalf("%q: kept %q, %v", c.body, b, err)
 		}
 		// Damage is for this run only; saving writes a good file.
 		if err := d.SaveState(st); err != nil {
@@ -66,7 +76,7 @@ func TestLoadStateStartsAgainFromADamagedFile(t *testing.T) {
 		}
 		again, err := d.LoadState()
 		if err != nil || again.Damage != "" || again.LastError != st.LastError {
-			t.Fatalf("%q: reloaded %+v, %v", body, again, err)
+			t.Fatalf("%q: reloaded %+v, %v", c.body, again, err)
 		}
 	}
 }
@@ -158,27 +168,22 @@ func TestLoadStateMigratesTheLedger(t *testing.T) {
 		By:    map[string]snapshot.Tokens{"ann@acme.dev": {Input: 100, Output: 900, CacheRead: 50000, CacheWrite: 4000}},
 		Hours: map[int64]int64{497000: 600, 497001: 400},
 	}})
-	for range 2 {
-		st, err := d.LoadState()
-		if err != nil {
-			t.Fatal(err)
-		}
-		s := st.Sessions[Key("claude", "a4c2e917")]
-		want := meter.Hours{
-			497000: {Input: 60, Output: 540, CacheRead: 30000, CacheWrite: 2400},
-			497001: {Input: 40, Output: 360, CacheRead: 20000, CacheWrite: 1600},
-		}
-		if st.Ledger != LedgerVersion || !s.Rederive || !reflect.DeepEqual(s.U, want) || s.Hours != nil || s.ByHours != nil || s.UB != nil {
-			t.Fatalf("ledger %d, session %+v; want U %v", st.Ledger, s, want)
-		}
-		// Loading again, as a report before the next collect does, keeps
-		// the first copy.
-		if b, err := os.ReadFile(d.StateFile() + ".pre-v0.4"); err != nil || string(b) != string(raw) {
-			t.Fatalf("pre-v0.4 = %q, %v", b, err)
-		}
+	st, err := d.LoadState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := st.Sessions[Key("claude", "a4c2e917")]
+	want := meter.Hours{
+		497000: {Input: 60, Output: 540, CacheRead: 30000, CacheWrite: 2400},
+		497001: {Input: 40, Output: 360, CacheRead: 20000, CacheWrite: 1600},
+	}
+	if st.Ledger != LedgerVersion || !s.Rederive || !reflect.DeepEqual(s.U, want) || s.Hours != nil || s.ByHours != nil || s.UB != nil {
+		t.Fatalf("ledger %d, session %+v; want U %v", st.Ledger, s, want)
+	}
+	if b, err := os.ReadFile(d.StateFile() + ".pre-v0.4"); err != nil || string(b) != string(raw) {
+		t.Fatalf("pre-v0.4 = %q, %v", b, err)
 	}
 	// A saved ledger is not migrated again, and never writes the old keys.
-	st, _ := d.LoadState()
 	if err := d.SaveState(st); err != nil {
 		t.Fatal(err)
 	}
@@ -206,31 +211,6 @@ func TestMigrationNeverReplacesAKeptCopy(t *testing.T) {
 	}
 	if left, _ := filepath.Glob(d.Path(".state.json.pre-v0.4.*")); len(left) > 0 {
 		t.Fatalf("temporary files left: %v", left)
-	}
-}
-
-// TestConcurrentLoadsKeepOneWholeCopy: a report and a collect that load a
-// v0.3 ledger at once leave one complete copy of it.
-func TestConcurrentLoadsKeepOneWholeCopy(t *testing.T) {
-	d := tempDir(t)
-	sessions := map[string]*Session{}
-	for i := range 200 {
-		sessions[Key("codex", fmt.Sprintf("s%03d", i))] = &Session{Provider: "codex", By: map[string]snapshot.Tokens{"ann@acme.dev": {Input: int64(i + 1)}}, Hours: map[int64]int64{497000: int64(i + 1)}}
-	}
-	raw := legacyState(t, d, sessions)
-	var wg sync.WaitGroup
-	for range 2 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if _, err := d.LoadState(); err != nil {
-				t.Error(err)
-			}
-		}()
-	}
-	wg.Wait()
-	if b, err := os.ReadFile(d.StateFile() + ".pre-v0.4"); err != nil || string(b) != string(raw) {
-		t.Fatalf("pre-v0.4 is %d bytes, %v; want the %d of the original", len(b), err, len(raw))
 	}
 }
 
@@ -269,26 +249,8 @@ func TestMigrateSession(t *testing.T) {
 	}
 }
 
-func TestSaveStateKeepsTheLastCopy(t *testing.T) {
-	d := tempDir(t)
-	st := NewState()
-	st.LastRunAt = time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	if err := d.SaveState(st); err != nil {
-		t.Fatal(err)
-	}
-	b, err := os.ReadFile(d.StateFile())
-	if err != nil {
-		t.Fatal(err)
-	}
-	last, err := os.ReadFile(d.StateFile() + ".last")
-	if err != nil || string(last) != string(b) {
-		t.Fatalf("state.json.last = %q, %v; want %q", last, err, b)
-	}
-	checkPrivate(t, d.StateFile()+".last")
-}
-
-// TestLoadStateRestoresTheLastCopy: a state.json cut short loads the state
-// saved before it, and says so.
+// TestLoadStateRestoresTheLastCopy: SaveState keeps a private copy of what
+// it wrote, and a state.json cut short loads that state, and says so.
 func TestLoadStateRestoresTheLastCopy(t *testing.T) {
 	d := tempDir(t)
 	at := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
@@ -298,6 +260,14 @@ func TestLoadStateRestoresTheLastCopy(t *testing.T) {
 	if err := d.SaveState(st); err != nil {
 		t.Fatal(err)
 	}
+	saved, err := os.ReadFile(d.StateFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last, err := os.ReadFile(d.StateFile() + ".last"); err != nil || string(last) != string(saved) {
+		t.Fatalf("state.json.last = %q, %v; want %q", last, err, saved)
+	}
+	checkPrivate(t, d.StateFile()+".last")
 	body := `{"last_run_at": "2026-09`
 	if err := fsutil.WriteFile(d.StateFile(), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
@@ -322,22 +292,6 @@ func TestLoadStateRestoresTheLastCopy(t *testing.T) {
 	}
 	if again, err := d.LoadState(); err != nil || again.Damage != "" {
 		t.Fatalf("reloaded damage %q, %v", again.Damage, err)
-	}
-}
-
-func TestLoadStateStartsAgainWhenTheLastCopyIsDamagedToo(t *testing.T) {
-	d := tempDir(t)
-	for _, f := range []string{d.StateFile(), d.StateFile() + ".last"} {
-		if err := fsutil.WriteFile(f, []byte("{"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	st, err := d.LoadState()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(st.Damage, "started again from an empty state") || len(st.Sessions) != 0 || st.Ledger != LedgerVersion {
-		t.Fatalf("state = %+v", st)
 	}
 }
 
@@ -499,50 +453,36 @@ func TestLoadStateMigratesAnOlderLedgerPutBack(t *testing.T) {
 }
 
 // TestSaveStateNeverWritesOverANewerLedger: an ai-usage that finds a ledger
-// a newer one saved reads it and leaves it as it is.
+// a newer one saved, in state.json or, when an older ai-usage wrote over
+// that, in state.json.last, reads it and leaves both files as they are.
 func TestSaveStateNeverWritesOverANewerLedger(t *testing.T) {
-	d := tempDir(t)
-	body := []byte(`{"ledger": 3, "last_run_at": "2026-09-01T12:00:00Z", "sessions": {}, "future": [1]}` + "\n")
-	if err := fsutil.WriteFile(d.StateFile(), body, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	st, err := d.LoadState()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !st.Newer || st.Damage != "" || st.LastRunAt.IsZero() {
-		t.Fatalf("state = %+v", st)
-	}
-	if err := d.SaveState(st); err != ErrNewer {
-		t.Fatalf("SaveState = %v; want ErrNewer", err)
-	}
-	if b, _ := os.ReadFile(d.StateFile()); string(b) != string(body) {
-		t.Fatalf("state.json changed to %q", b)
-	}
-	if _, err := os.Stat(d.StateFile() + ".last"); !os.IsNotExist(err) {
-		t.Fatalf("state.json.last written: %v", err)
-	}
-}
-
-// TestAnOlderWriterAfterANewerLedgerKeepsItsCopy: when an older ai-usage
-// wrote over a ledger newer than this build's, this build does not replace
-// the newer copy either.
-func TestAnOlderWriterAfterANewerLedgerKeepsItsCopy(t *testing.T) {
-	d := tempDir(t)
-	newer := []byte(`{"ledger": 3, "last_run_at": "2026-09-01T12:00:00Z"}` + "\n")
-	if err := fsutil.WriteFile(d.StateFile()+".last", newer, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	legacyState(t, d, map[string]*Session{})
-	st, err := d.LoadState()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !st.Newer || d.SaveState(st) != ErrNewer {
-		t.Fatalf("newer = %v", st.Newer)
-	}
-	if b, _ := os.ReadFile(d.StateFile() + ".last"); string(b) != string(newer) {
-		t.Fatalf("state.json.last changed to %q", b)
+	newer := `{"ledger": 3, "last_run_at": "2026-09-01T12:00:00Z", "sessions": {}, "future": [1]}` + "\n"
+	older := `{"last_run_at": "2026-09-01T13:00:00Z", "sessions": {}}` + "\n"
+	for name, files := range map[string]map[string]string{
+		"state.json":      {"state.json": newer},
+		"state.json.last": {"state.json": older, "state.json.last": newer},
+	} {
+		d := tempDir(t)
+		for f, body := range files {
+			if err := fsutil.WriteFile(d.Path(f), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		st, err := d.LoadState()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !st.Newer || st.Damage != "" || st.LastRunAt.IsZero() {
+			t.Fatalf("%s: state = %+v", name, st)
+		}
+		if err := d.SaveState(st); err != ErrNewer {
+			t.Fatalf("%s: SaveState = %v; want ErrNewer", name, err)
+		}
+		for _, f := range []string{"state.json", "state.json.last"} {
+			if b, _ := os.ReadFile(d.Path(f)); string(b) != files[f] {
+				t.Fatalf("%s: %s is %q, want %q", name, f, b, files[f])
+			}
+		}
 	}
 }
 

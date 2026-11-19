@@ -92,6 +92,7 @@ func TestPrice(t *testing.T) {
 	}{
 		"list":             {"claude", "max 20x", Answer{}, 200, true, PriceList, ""},
 		"list yearly":      {"claude", "pro", Answer{Cadence: Yearly}, 200.0 / 12, true, PriceList, ""},
+		"list, no yearly":  {"claude", "max 20x", Answer{Cadence: Yearly}, 200, true, PriceList, ""},
 		"free":             {"codex", "free", Answer{}, 0, true, PriceList, ""},
 		"not in the list":  {"codex", "team", Answer{}, 0, false, PriceUnknown, ""},
 		"coarse max":       {"claude", "max", Answer{}, 0, false, PriceUnknown, ""},
