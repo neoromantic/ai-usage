@@ -86,55 +86,19 @@ func cyclesFixture(t *testing.T, version string) *fixture {
 	return f
 }
 
+// TestUtilization: each subscription's fullest percent before each reset,
+// newest first, from this device's cycles and the team's: of a week, the
+// fuller of two readings of one reset, and the one read to its end; not the
+// week now, which has not ended, nor one older than 90 days; of a window
+// shorter than a day, the last 12 that ended, without the ones read only
+// empty; and the week Codex replaced early, partly read. Hermes, which
+// borrows a reading, has none of its own.
 func TestUtilization(t *testing.T) {
 	r := Build(cyclesFixture(t, "v0.5.0").in)
-	ann := findTeamAccount(t, r, "claude", "ann")
-	if len(ann.Utilization) != 2 {
-		t.Fatalf("claude ann: %+v", ann.Utilization)
-	}
-	week, short := ann.Utilization[0], ann.Utilization[1]
-	if week.Window != "7d" || !week.Main || short.Window != "5h" || short.Main {
-		t.Fatalf("windows: %s %v, %s %v", week.Window, week.Main, short.Window, short.Main)
-	}
-	// The other device's reading of the week that ended 5 days ago is the
-	// fuller, and read to its end; the week now has not ended.
-	want := []struct {
-		pct     float64
-		partial bool
-		state   string
-	}{{85, false, StateTight}, {100, false, StateOut}, {40, false, StateUnder}}
-	if len(week.Cycles) != len(want) {
-		t.Fatalf("weekly cycles: %+v", week.Cycles)
-	}
-	for i, w := range want {
-		if c := week.Cycles[i]; c.Percent != w.pct || c.Partial != w.partial || c.State != w.state {
-			t.Errorf("weekly cycle %d: %+v, want %+v", i, c, w)
-		}
-	}
-	if week.Out != 1 || week.Average != 75 {
-		t.Errorf("weekly: %d out, %v average", week.Out, week.Average)
-	}
-	// Of a window shorter than a day, the last 12 that ended, without the
-	// ones read only empty.
-	if len(short.Cycles) != collect.ShortCycles || short.Cycles[0].Percent != 10 {
-		t.Errorf("5h cycles: %+v", short.Cycles)
-	}
-
-	// Codex reset bob's week early: the week it replaced ended, partly read.
-	bob := findTeamAccount(t, r, "codex", "bob")
-	if len(bob.Utilization) != 1 || len(bob.Utilization[0].Cycles) != 2 {
-		t.Fatalf("codex bob: %+v", bob.Utilization)
-	}
-	if c := bob.Utilization[0].Cycles; c[0].Percent != 45 || !c[0].Partial || c[1].Percent != 70 || c[1].Partial {
-		t.Errorf("codex bob's cycles: %+v", c)
-	}
+	ann, bob := findTeamAccount(t, r, "claude", "ann"), findTeamAccount(t, r, "codex", "bob")
 	if h := findTeamAccount(t, r, "hermes", "openai-codex"); h.Utilization == nil || len(h.Utilization) != 0 {
 		t.Errorf("hermes: %+v", h.Utilization)
 	}
-	if r.Team.CyclesReason != nil || len(r.Team.CyclesHeldBackBy) != 0 {
-		t.Errorf("a team on v0.5.0: %v %v", r.Team.CyclesHeldBackBy, r.Team.CyclesReason)
-	}
-
 	b, err := json.MarshalIndent(struct {
 		HeldBackBy []string      `json:"cycles_held_back_by"`
 		Reason     *string       `json:"cycles_reason"`

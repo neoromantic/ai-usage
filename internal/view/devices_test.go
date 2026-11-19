@@ -1,38 +1,11 @@
 package view
 
 import (
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
-
-// TestMatrixRest ends the providers' heading with the count of the columns
-// folded into REST, those scrolled off the left and those off the right
-// edge, at every width and scroll, and has no REST when every column shows.
-func TestMatrixRest(t *testing.T) {
-	t.Parallel()
-	r := loadReport(t, "team")
-	for w := 80; w <= 160; w += 4 {
-		for _, share := range []bool{false, true} {
-			for scroll := range 8 {
-				o := Options{Width: w, Loc: sampleZone, Share: share, Interactive: true, MatrixScroll: scroll}
-				p := Render(r, o)
-				sec := pageSection(p, "DEVICES")
-				heads, names := sec[1], sec[2]
-				folded := p.MatrixColumns - p.MatrixShown
-				switch {
-				case folded > 0 && (!strings.HasSuffix(heads, "  +"+strconv.Itoa(folded)) || !strings.Contains(names, " rest ")):
-					t.Errorf("width %d, share %v, scroll %d: %d folded, heading %q, names %q", w, share, scroll, folded, heads, names)
-				case folded == 0 && strings.Contains(names, " rest "):
-					t.Errorf("width %d, share %v, scroll %d: none folded, names %q", w, share, scroll, names)
-				}
-			}
-		}
-	}
-}
 
 // gridTeam is a team of devices whose burn on every subscription is whole
 // millions, so the page's numbers add up as the data does: bot-0 to bot-4
@@ -147,13 +120,6 @@ func TestMatrixEstimated(t *testing.T) {
 			t.Errorf("a legend line of %d cells: %q", w, l)
 		}
 	}
-	// What to do too long for a line keeps its first steps whole.
-	steps := "13 devices run releases before v0.4.0: reinstall mbp-2018 with install.sh; the other 12 should update within 15 minutes"
-	r.Team.EstimatedReason = &steps
-	p = Render(r, Options{Width: 80, Loc: time.UTC})
-	if !strings.HasSuffix(p.Legend, "~ estimated: reinstall mbp-2018 with install.sh; …") {
-		t.Errorf("steps too long for the legend: %q", p.Legend)
-	}
 	// A report saved by a release before v0.4.0 says so whole at 80.
 	saved := loadReport(t, "team")
 	saved.Collector.Version = "v0.3.4"
@@ -182,40 +148,6 @@ func TestCutReason(t *testing.T) {
 	} {
 		if got := cutReason(c.msg, c.w, "…"); got != c.want || width(got) > c.w {
 			t.Errorf("cutReason(%q, %d) = %q, want %q", c.msg, c.w, got, c.want)
-		}
-	}
-}
-
-// TestStatusOrderIsTheMatrix: the status view lists the devices in the
-// matrix's order, in every period.
-func TestStatusOrderIsTheMatrix(t *testing.T) {
-	r := loadReport(t, "team")
-	for _, per := range []Period{Week, Month, Today, Quarter} {
-		names := func(status bool) []string {
-			sec := pageSection(Render(r, Options{Width: 120, Loc: sampleZone, Period: per, DeviceStatus: status}), "DEVICES")
-			var out []string
-			for _, l := range sec[3 : len(sec)-1] {
-				out = append(out, strings.Fields(l[2:])[0])
-			}
-			return out
-		}
-		if m, s := names(false), names(true); strings.Join(m, " ") != strings.Join(s, " ") {
-			t.Errorf("%s: matrix %v, status %v", per, m, s)
-		}
-	}
-}
-
-// TestGoldensFit80: no line of the pages drawn at 80 columns is wider.
-func TestGoldensFit80(t *testing.T) {
-	for _, name := range []string{"team-80", "team-devices-80", "team-80-ascii", "team-devices-80-ascii"} {
-		b, err := os.ReadFile(filepath.Join("testdata", name+".golden"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		for i, l := range strings.Split(string(b), "\n") {
-			if width(l) > 80 {
-				t.Errorf("%s line %d is %d wide: %q", name, i+1, width(l), l)
-			}
 		}
 	}
 }

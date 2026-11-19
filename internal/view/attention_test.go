@@ -383,95 +383,6 @@ func kindsCost() *Cost {
 	}
 }
 
-// Every kind in its place: what runs out, a tight window of one's own, one
-// someone outside the team fills, failures, a subscription in use with no
-// reading, silence, a reinstall's old record, old releases (the ones that
-// need a reinstall first), what will be left unused, and what no one uses.
-func TestAttentionOrderOfEveryKind(t *testing.T) {
-	r := newKindsReport()
-	var got []string
-	for _, a := range r.Attention {
-		got = append(got, strings.Join(strings.Fields(a.Kind+" "+a.Name+" "+strings.Join(a.Devices, ",")), " "))
-	}
-	want := []string{
-		"out lee", "over bob", "tight ann", "outside sam", "error bot-b",
-		"no_reading a-very-long-subscription-name", "silent bot-c", "duplicate ann@annbook",
-		"old srv1", "old bot-a", "under kim", "check gone", "idle max", "cost bob", "cost ann", "cost kim",
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("attention =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
-	}
-	out, dup, stuck, old := r.Attention[0], r.Attention[7], r.Attention[8], r.Attention[9]
-	if out.ReadingAge != 30*3600 {
-		t.Errorf("a stale OUT has no age: %+v", out)
-	}
-	if dup.DeviceID != "d-3f9a1c2e5b7d9f1a3c5e7b9d" || dup.Message != "ann@annbook" {
-		t.Errorf("duplicate = %+v", dup)
-	}
-	if !reflect.DeepEqual(stuck.Limitations, []string{LimitNoClaudeQuota, LimitNoUpdateErrors}) || stuck.Message != "v0.4.0" || len(old.Limitations) != 0 {
-		t.Errorf("old = %+v, %+v", stuck, old)
-	}
-}
-
-// At 80 columns every ATTENTION line fits, beside a 40-character label,
-// and each new kind keeps what to do.
-func TestAttentionLinesAt80(t *testing.T) {
-	r := newKindsReport()
-	lines := pageSection(Render(r, Options{Width: 80, Loc: time.UTC, Interactive: true}), "ATTENTION")
-	if len(lines) != len(r.Attention)+1 {
-		t.Fatalf("ATTENTION =\n%s", strings.Join(lines, "\n"))
-	}
-	for _, l := range lines {
-		if width(l) > 80 {
-			t.Errorf("%d columns: %q", width(l), l)
-		}
-	}
-	squeeze := func(l string) string { return strings.Join(strings.Fields(l), " ") }
-	for i, want := range map[int]string{
-		1:  "OUT claude lee@corp.test back Fri 12:00, in 3d · reading 1d old",
-		3:  "TIGHT claude ann@acme.dev ~91% at reset Fri 12:00",
-		4:  "OUTSIDE claude sam@mail.test +25 points, no team device spent",
-		6:  "NO READING claude a-very-long-subscr… on v0.2.0: reinstall with install.sh",
-		8:  "DUPLICATE ann@annbook ai-usage team forget-device 3f9a1c2e",
-		9:  "OLD 1 device on v0.2.0 no Claude quota; reinstall",
-		10: "OLD 1 device on v0.3.4 bot-a · latest v0.4.0",
-		12: "CHECK claude gone@mail.test still paid? last confirmed 13 Jul",
-		13: "IDLE claude max@mail.test idle 11d, $100/mo paid and unused",
-		16: "COST claude kim@corp.test list price $17 → $20/mo",
-	} {
-		if got := squeeze(lines[i]); got != want {
-			t.Errorf("line %d = %q, want %q", i, got, want)
-		}
-	}
-	// Where NO READING widens the kind column, a stale OUT keeps its
-	// reading's age before how long until it is back.
-	soon := r
-	soon.Attention = slices.Clone(r.Attention)
-	soon.Attention[0].At = tp(now.Add(47 * time.Hour))
-	if l := pageSection(Render(soon, Options{Width: 80, Loc: time.UTC, Interactive: true}), "ATTENTION")[1]; !strings.HasSuffix(l, "back Thu 11:00 · reading 1d old") || width(l) > 80 {
-		t.Errorf("a stale OUT back in 1d 23h = %q", l)
-	}
-	// A little more room shows the release and what to do; OLD names the
-	// device.
-	mid := pageSection(Render(r, Options{Width: 86, Loc: time.UTC, Interactive: true}), "ATTENTION")
-	if !strings.HasSuffix(mid[6], "  on v0.2.0: reinstall with install.sh") {
-		t.Errorf("at 86, NO READING = %q", mid[6])
-	}
-	// With room, the fuller forms.
-	wide := pageSection(Render(r, Options{Width: 160, Loc: time.UTC, Interactive: true}), "ATTENTION")
-	for i, want := range map[int]string{
-		3: "TIGHT claude ann@acme.dev ~91% at reset Fri 12:00 at this week's pace",
-		4: "OUTSIDE claude sam@mail.test +25 points in 20h, no team device spent",
-		6: "NO READING claude a-very-long-subscripti… annbook runs v0.2.0: reinstall with install.sh",
-		8: "DUPLICATE ann@annbook reinstalled as ann@annbook: ai-usage team forget-device 3f9a1c2e",
-		9: "OLD 1 device on v0.2.0 srv1 · cannot read Claude quota; reinstall with install.sh",
-	} {
-		if got := squeeze(wide[i]); got != want {
-			t.Errorf("at 160, line %d = %q, want %q", i, got, want)
-		}
-	}
-}
-
 // A forecast at the last day's pace says so.
 func TestAttentionNamesTheRecentPace(t *testing.T) {
 	r := newKindsReport()
@@ -645,8 +556,9 @@ func TestDeviceNoteIsTheStatusViews(t *testing.T) {
 	}
 }
 
-// ATTENTION with every kind, and tokens no login was known for, at 80 and
-// 120 columns, and its entries in the JSON.
+// ATTENTION with every kind, in the order of what matters most, and tokens
+// no login was known for, at 80 and 120 columns, and its entries in the
+// JSON.
 func TestAttentionGolden(t *testing.T) {
 	r := newKindsReport()
 	unknown := subAccount(collect.UnknownAccount, false, now)
@@ -667,4 +579,17 @@ func TestAttentionGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	golden(t, "attention.json.golden", string(js)+"\n")
+
+	// Where NO READING widens the kind column, a stale OUT keeps its
+	// reading's age before how long until it is back.
+	soon := r
+	soon.Attention = slices.Clone(r.Attention)
+	soon.Attention[0].At = tp(now.Add(47 * time.Hour))
+	if l := pageSection(Render(soon, Options{Width: 80, Loc: time.UTC, Interactive: true}), "ATTENTION")[1]; !strings.HasSuffix(l, "back Thu 11:00 · reading 1d old") || width(l) > 80 {
+		t.Errorf("a stale OUT back in 1d 23h = %q", l)
+	}
+	// A little more room than 80 shows the release and what to do.
+	if l := pageSection(Render(r, Options{Width: 86, Loc: time.UTC, Interactive: true}), "ATTENTION")[6]; !strings.HasSuffix(l, "  on v0.2.0: reinstall with install.sh") {
+		t.Errorf("at 86, NO READING = %q", l)
+	}
 }

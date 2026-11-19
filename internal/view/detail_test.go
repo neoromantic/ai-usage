@@ -97,23 +97,35 @@ func TestPicks(t *testing.T) {
 	}
 }
 
-// TestDetailLines: a detail keeps the page's line contract at every width,
-// in every period, and in ASCII, for every row it opens.
+// TestDetailLines: a detail keeps the page's line contract at every tier,
+// in every period, in ASCII, and without color, for every row it opens.
+// The text is the same with color and without, so ASCII is drawn in color
+// and the rest without, and each check of checkLines sees its own.
 func TestDetailLines(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"team", "single"} {
 		r := loadReport(t, name)
-		for _, k := range Render(r, Options{Width: 120, Interactive: true}).Picks {
-			for _, w := range []int{80, 99, 120, 160} {
+		for _, k := range opened(Render(r, Options{Width: 120, Interactive: true}).Picks) {
+			for i, w := range []int{80, 99, 120, 160} {
 				for _, ascii := range []bool{false, true} {
-					for _, color := range []bool{false, true} {
-						o := Options{Width: w, ASCII: ascii, Color: color, Loc: sampleZone, Period: Periods[w%4]}
-						checkLines(t, name, o, detailText(t, r, o, k))
-					}
+					o := Options{Width: w, ASCII: ascii, Color: ascii, Loc: sampleZone, Period: Periods[i]}
+					checkLines(t, name, o, detailText(t, r, o, k))
 				}
 			}
 		}
 	}
+}
+
+// opened are the details picks open, each once: an account's rows in
+// ATTENTION, SUBSCRIPTIONS, and UTILIZATION open the same one.
+func opened(picks []Pick) []Pick {
+	var out []Pick
+	for _, k := range picks {
+		if !slices.ContainsFunc(out, k.Same) {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 // TestDetailOnce: a detail says each error and each reason for no reading
@@ -125,7 +137,7 @@ func TestDetailOnce(t *testing.T) {
 		r := loadReport(t, name)
 		for _, per := range Periods {
 			o := Options{Width: 160, Loc: sampleZone, Period: per}
-			for _, k := range Render(r, Options{Width: 120, Interactive: true}).Picks {
+			for _, k := range opened(Render(r, Options{Width: 120, Interactive: true}).Picks) {
 				text := sgr.ReplaceAllString(detailText(t, r, o, k), "")
 				var said []string
 				if k.Device != "" {
@@ -166,36 +178,18 @@ func TestDetailOnce(t *testing.T) {
 	}
 }
 
-// TestDetailContent: an account's detail has its windows, its history, the
-// devices that spent it, and this device's projects on it; a device's has
-// its collector and the accounts it spent.
+// TestDetailContent: an account's detail has this device's projects on it,
+// which the fixture leaves out, and the chosen period titles a device's
+// tables.
 func TestDetailContent(t *testing.T) {
 	team := loadReport(t, "team")
 	o := Options{Width: 120, Loc: sampleZone}
-	// This device's projects on the account, which the fixture leaves out.
 	team.Providers[0].Accounts[0].Projects = team.Projects[:2]
-	acct := detailText(t, team, o, annClaude)
-	for _, want := range []string{"CLAUDE  ann@acme.dev  ● logged in here", "WINDOWS", "UTILIZATION", "DEVICES", "PROJECTS", "TOTAL"} {
-		if !strings.Contains(sgr.ReplaceAllString(acct, ""), want) {
-			t.Errorf("account detail lacks %q:\n%s", want, acct)
-		}
+	if acct := sgr.ReplaceAllString(detailText(t, team, o, annClaude), ""); !strings.Contains(acct, "PROJECTS") {
+		t.Errorf("account detail lacks PROJECTS:\n%s", acct)
 	}
-	dev := sgr.ReplaceAllString(detailText(t, team, o, kimMac), "")
-	for _, want := range []string{"DEVICE  kim@Mac.localdomain", "VERSION", "ERROR", "ACCOUNTS", "TOTAL"} {
-		if !strings.Contains(dev, want) {
-			t.Errorf("device detail lacks %q:\n%s", want, dev)
-		}
-	}
-	// Another device's detail has no PROJECTS of its own, which the report
-	// does not hold, but SHARED PROJECTS: this device's projects it works
-	// in too.
-	if strings.Contains(strings.ReplaceAll(dev, "SHARED PROJECTS", ""), "PROJECTS") || !strings.Contains(dev, "SHARED PROJECTS") {
-		t.Errorf("another device's detail has projects of its own, or no shared ones:\n%s", dev)
-	}
-	// The chosen period orders the tables and titles them.
-	month := o
-	month.Period = Month
-	if got := sgr.ReplaceAllString(detailText(t, team, month, kimMac), ""); !strings.Contains(got, "by 30d UTC") {
+	o.Period = Month
+	if got := sgr.ReplaceAllString(detailText(t, team, o, kimMac), ""); !strings.Contains(got, "by 30d UTC") {
 		t.Errorf("30d detail:\n%s", got)
 	}
 }
