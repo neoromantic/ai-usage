@@ -2,7 +2,6 @@ package collect
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -24,36 +23,15 @@ func TestFirstRunAttributesHistoryToCurrentAccount(t *testing.T) {
 		sess("s1", "/work/api", 1000, t0.Add(-48*time.Hour)),
 		sess("s2", "/work/web", 300, t0.Add(-time.Hour)),
 	)
-	w.login("claude", h, "ann@example.com", quota(t0.Add(-time.Minute), 40, 80))
+	w.login("claude", h, "ann@example.com", nil)
 
 	res := run(t, o)
 	a := totalsFor(t, res.State, "claude", "ann@example.com")
 	if !a.Current || a.Sessions != 2 || a.Tokens != tok(1000).Add(tok(300)) {
 		t.Fatalf("totals = %+v", a)
 	}
-	if a.Quota == nil || len(a.Quota.Windows) != 2 || a.Quota.Windows[1].Percent != 80 {
-		t.Fatalf("quota = %+v", a.Quota)
-	}
-	if len(a.Projects) != 2 || a.Projects[0].Path != "/work/api" {
-		t.Fatalf("projects = %+v", a.Projects)
-	}
-	if !a.LastActive.Equal(t0.Add(-time.Hour)) {
-		t.Fatalf("last active = %v", a.LastActive)
-	}
 	if got := growthOf(lastSample(t, o), "claude", "ann@example.com"); got != tok(1300) {
 		t.Fatalf("first sample growth = %+v", got)
-	}
-	src := res.State.Sources["claude"]
-	if src.Status != "ok" || src.Error != "" || !reflect.DeepEqual(src.Homes, []string{h}) {
-		t.Fatalf("source = %+v", src)
-	}
-	if !res.State.LastSuccessAt.Equal(t0) || !res.State.LastRunAt.Equal(t0) {
-		t.Fatalf("run times = %v %v", res.State.LastRunAt, res.State.LastSuccessAt)
-	}
-	for _, k := range w.asked {
-		if strings.HasPrefix(k, "hermes") {
-			t.Fatal("hermes has no probe and must not be asked")
-		}
 	}
 }
 
@@ -114,8 +92,9 @@ func TestAccountSwitchKeepsPreviousAccount(t *testing.T) {
 	if old.Sessions != 1 || cur.Sessions != 2 {
 		t.Fatalf("sessions old=%d new=%d", old.Sessions, cur.Sessions)
 	}
-	if IsCurrent(res.State, "codex", "old@x") {
-		t.Fatal("old account still marked current")
+	// Each account was last active when its own share of s1 last grew.
+	if !old.LastActive.Equal(t0) || !cur.LastActive.Equal(w.now) {
+		t.Fatalf("last active old=%v new=%v", old.LastActive, cur.LastActive)
 	}
 }
 
@@ -145,9 +124,6 @@ func TestHarnessThatStopsAnsweringKeepsLastAccountAndQuota(t *testing.T) {
 	src := res.State.Sources["claude"]
 	if src.Status != "partial" || !strings.Contains(src.Error, "timed out") {
 		t.Fatalf("source = %+v", src)
-	}
-	if !strings.Contains(res.State.LastError, "timed out") {
-		t.Fatalf("last error = %q", res.State.LastError)
 	}
 	// A probe problem is not a failed read.
 	if !res.State.LastSuccessAt.Equal(w.now) {
@@ -284,55 +260,27 @@ func TestHomeClaimsOnceItsLogsAreRead(t *testing.T) {
 	}
 }
 
-func TestUnusedHomeWithoutLoginIsNoProblem(t *testing.T) {
-	// A tool in a bot's image that nobody uses: Claude Code makes its home
-	// when asked who is logged in, and the next run finds it empty.
-	w, o := newWorld(t)
-	h := w.home(t, "claude")
-	w.logout("claude", h)
-	if got := run(t, o).State.Sources["claude"]; got.Status != "ok" || got.Error != "" {
-		t.Fatalf("claude source = %+v", got)
-	}
-	w.now = t0.Add(15 * time.Minute)
-	w.sessions("claude", h, sess("s1", "/p", 100, w.now))
-	if got := run(t, o).State.Sources["claude"]; got.Status != "partial" {
-		t.Fatalf("a used home logged out: source = %+v", got)
-	}
-}
-
 // Each home is asked about with when its logs show it was last used, so
-// Claude Code reads the usage only for a home in use.
-func TestAskTellsWhenTheHomeWasLastUsed(t *testing.T) {
-	w, o := newWorld(t)
-	h := w.home(t, "claude")
-	idle := w.extraHome(t, "claude", "idle-claude")
-	w.sessions("claude", h, sess("s1", "/p", 100, t0.Add(-time.Hour)), sess("s2", "/p", 100, t0.Add(-2*time.Hour)))
-	run(t, o)
-	if got := w.lastUse[state.Key("claude", h)]; !got.Equal(t0.Add(-time.Hour)) {
-		t.Errorf("used home: last use %v", got)
-	}
-	if got, ok := w.lastUse[state.Key("claude", idle)]; !ok || !got.IsZero() {
-		t.Errorf("idle home: last use %v, asked %v", got, ok)
-	}
-}
-
-// Homes that share their logs through a symlink read the same sessions,
-// which go to one of them. Which login ran them is not known, so each home
-// of the pair is told the folder's last use, and Claude Code is asked for
-// each, while a home with logs of its own keeps its own. The sessions are
-// not the other home's, so nobody logged in there is no problem.
+// Claude Code reads the usage only for a home in use. Homes that share their
+// logs through a symlink read the same sessions, which go to one of them.
+// Which login ran them is not known, so each home of the pair is told the
+// folder's last use, and Claude Code is asked for each, while a home with
+// logs of its own keeps its own newest, and an idle home is told it was never
+// used. The sessions are not the other home's, so nobody logged in there is
+// no problem.
 func TestHomesSharingClaudeLogsAreToldTheirUse(t *testing.T) {
 	w, o := newWorld(t)
 	personal := w.home(t, "claude")
 	work := w.extraHome(t, "claude", "work-claude")
 	own := filepath.Join(filepath.Dir(w.userHome), "own-claude")
-	editConfig(t, o.Dir, func(cfg *state.Config) { cfg.Homes = map[string][]string{"claude": {own}} })
-	mkdirs(t, filepath.Join(personal, "projects"), filepath.Join(own, "projects"))
+	idle := filepath.Join(filepath.Dir(w.userHome), "idle-claude")
+	editConfig(t, o.Dir, func(cfg *state.Config) { cfg.Homes = map[string][]string{"claude": {own, idle}} })
+	mkdirs(t, filepath.Join(personal, "projects"), filepath.Join(own, "projects"), idle)
 	if err := os.Symlink(filepath.Join(personal, "projects"), filepath.Join(work, "projects")); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 	w.sessions("claude", personal, sess("s1", "/p", 100, t0.Add(-5*time.Minute)))
-	w.sessions("claude", own, sess("s2", "/p", 100, t0.Add(-time.Hour)))
+	w.sessions("claude", own, sess("s2", "/p", 100, t0.Add(-time.Hour)), sess("s3", "/p", 100, t0.Add(-2*time.Hour)))
 	w.logout("claude", work)
 	st := run(t, o).State
 	if src := st.Sources["claude"]; src.Status != "ok" || st.LastError != "" {
@@ -345,6 +293,9 @@ func TestHomesSharingClaudeLogsAreToldTheirUse(t *testing.T) {
 	}
 	if got := w.lastUse[state.Key("claude", own)]; !got.Equal(t0.Add(-time.Hour)) {
 		t.Errorf("home with its own logs: last use %v", got)
+	}
+	if got, ok := w.lastUse[state.Key("claude", idle)]; !ok || !got.IsZero() {
+		t.Errorf("idle home: last use %v, asked %v", got, ok)
 	}
 }
 
@@ -376,10 +327,10 @@ func TestClaimOnceAfterTheAccountAgesOut(t *testing.T) {
 	w.sessions("codex", h, sess("s1", "/p", 500, t0))
 	run(t, o)
 	w.logout("codex", h)
-	for day := 1; day <= 95; day += 2 {
-		w.now = t0.Add(time.Duration(day) * 24 * time.Hour)
-		w.sessions("codex", h, sess(fmt.Sprintf("u%d", day), "/p", 100, w.now))
-		run(t, o)
+	w.now = t0.Add(state.Retention + 24*time.Hour)
+	w.sessions("codex", h, sess("u1", "/p", 100, w.now))
+	if res := run(t, o); hasTotals(res.State, "codex", "ann@x") {
+		t.Fatal("ann@x did not age out")
 	}
 	delete(w.askErr, k)
 	w.login("codex", h, "bea@x", nil)

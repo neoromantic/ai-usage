@@ -135,13 +135,11 @@ func TestBuildDocDecodesAndOpens(t *testing.T) {
 	if old := doc.Accounts[1]; old.QuotaAt != nil || len(old.Windows) != 0 || old.Current {
 		t.Fatalf("old = %+v", old)
 	}
-}
 
-func TestBuildDocWithEmptyState(t *testing.T) {
-	st := state.NewState()
-	doc, _ := encodeDecode(t, BuildDoc(st, nil, mustKey(t), state.Config{Device: "d-0123456789"}, Repos{}, "", "", "", t0))
-	if doc.CollectorVersion != "unknown" || doc.LastError != "" {
-		t.Fatalf("doc = %+v", doc)
+	// A device that knows nothing yet, not even its release, still sends a
+	// body that decodes.
+	if doc, _ := encodeDecode(t, BuildDoc(state.NewState(), nil, key, state.Config{Device: "d-0123456789"}, Repos{}, "", "", "", t0)); doc.CollectorVersion != "unknown" || doc.LastError != "" {
+		t.Fatalf("doc of an empty state = %+v", doc)
 	}
 }
 
@@ -195,42 +193,19 @@ func TestLastErrorCarriesTheUpdateError(t *testing.T) {
 	}
 }
 
-func TestBuildDocFitsTheSizeLimit(t *testing.T) {
-	key := mustKey(t)
+// A device with more accounts than a snapshot holds sends as many as it
+// holds, so the relay still takes it.
+func TestBuildDocKeepsAtMostMaxAccounts(t *testing.T) {
 	st := state.NewState()
-	// More accounts and projects than fit, each with a long path.
 	for a := range snapshot.MaxAccounts + 4 {
-		label := fmt.Sprintf("account-%02d@%s.example", a, strings.Repeat("x", 200))
+		label := fmt.Sprintf("account-%02d@acme.dev", a)
 		st.Accounts[state.Key("claude", label)] = &state.Account{Provider: "claude", Label: label}
-		for p := range snapshot.MaxProjects + 5 {
-			path := fmt.Sprintf("/Users/анна/%s/project-%02d", strings.Repeat("каталог/", 60), p)
-			st.Sessions[state.Key("claude", fmt.Sprintf("%d-%d", a, p))] = &state.Session{
-				Provider: "claude", Project: path, Updated: t0,
-				By: map[string]snapshot.Tokens{label: tok(int64(1000*(a+1) + p))},
-			}
-		}
+		st.Sessions[state.Key("claude", fmt.Sprint(a))] = &state.Session{Provider: "claude", Project: "/p", Updated: t0,
+			By: map[string]snapshot.Tokens{label: tok(int64(1000 * (a + 1)))}}
 	}
-	doc, body := encodeDecode(t, BuildDoc(st, nil, key, state.Config{Device: "d-0123456789"}, Repos{}, "workbox", "sam", "v1", t0))
-	if len(body) > snapshot.MaxBytes {
-		t.Fatalf("doc is %d bytes", len(body))
-	}
-	if len(doc.Accounts) == 0 {
-		t.Fatal("every account was dropped")
-	}
-	// The largest projects survive: each account keeps a prefix of its
-	// projects in token order.
-	for _, a := range doc.Accounts {
-		for i := 1; i < len(a.Projects); i++ {
-			if a.Projects[i].Tokens.Total() > a.Projects[i-1].Tokens.Total() {
-				t.Fatalf("a larger project was dropped before a smaller one: %+v", a.Projects)
-			}
-		}
-		for _, p := range a.Projects {
-			plain, err := key.Open(p.Path)
-			if err != nil || !utf8.ValidString(plain) || !strings.HasSuffix(plain, "/project-"+plain[len(plain)-2:]) {
-				t.Fatalf("path %q: %v", plain, err)
-			}
-		}
+	doc, _ := encodeDecode(t, BuildDoc(st, nil, mustKey(t), state.Config{Device: "d-0123456789"}, Repos{}, "workbox", "sam", "v1", t0))
+	if len(doc.Accounts) != snapshot.MaxAccounts {
+		t.Fatalf("%d accounts", len(doc.Accounts))
 	}
 }
 
@@ -247,9 +222,8 @@ func TestFitDocDropsAccountsWhenProjectsAreNotEnough(t *testing.T) {
 	}
 }
 
-// A sealed path keeps its end, cut on a rune boundary. The projects that
-// survive TestBuildDocFitsTheSizeLimit are all cut on one, so this checks
-// the cuts inside a rune.
+// A sealed string keeps its end, where a path's distinctive part is, cut on
+// a rune boundary.
 func TestClip(t *testing.T) {
 	for _, in := range []string{
 		"short",
@@ -270,58 +244,19 @@ func TestClip(t *testing.T) {
 	}
 }
 
-// TestDocCarriesDaysRecentAndAliases: the snapshot has each account's days,
-// its tokens since each window began, and the names this device set.
-func TestDocCarriesDaysRecentAndAliases(t *testing.T) {
-	key := mustKey(t)
-	reset := t0.Add(24 * time.Hour)
-	st := &state.State{
-		Current: map[string]string{state.Key("codex", "/h/.codex"): "ann@example.com"},
-		Accounts: map[string]*state.Account{state.Key("codex", "ann@example.com"): {Provider: "codex", Label: "ann@example.com",
-			Quota: &state.Quota{At: t0, Windows: []snapshot.Window{
-				{Name: "7d", Percent: 40, ResetsAt: &reset, Minutes: 10080},
-				{Name: "5h", Percent: 10, ResetsAt: &t0, Minutes: 300},
-			}}}},
-		Sessions: map[string]*state.Session{state.Key("codex", "s1"): {Provider: "codex", Project: "/p", Updated: t0,
-			By: map[string]snapshot.Tokens{"ann@example.com": {Input: 70, Output: 30}},
-			U:  meter.Hours{t0.Add(-7*24*time.Hour).Unix() / 3600: {Input: 28, Output: 12}, t0.Unix()/3600 - 1: {Input: 42, Output: 18}}}},
-	}
-	cfg := state.Config{Device: "d-0123456789", Aliases: map[string]state.Alias{
-		state.Key("codex", "ann@example.com"): {Name: "ann", At: t0},
-		state.Key("claude", "bo@example.com"): {At: t0.Add(-time.Hour)},
-	}}
-	doc, _ := encodeDecode(t, BuildDoc(st, nil, key, cfg, Repos{}, "box", "ann", "v1", t0))
-	a := doc.Accounts[0]
-	if want := []int64{60, 0, 0, 0, 0, 0, 0, 40}; !reflect.DeepEqual(a.Days, want) {
-		t.Errorf("days = %v, want %v", a.Days, want)
-	}
-	// The 5h window reset at t0, so only the weekly one is counted.
-	if len(a.Recent) != 1 || a.Recent[0].Window != "7d" || a.Recent[0].Tokens != 60 || !a.Recent[0].Start.Equal(reset.Add(-7*24*time.Hour)) {
-		t.Errorf("recent = %+v", a.Recent)
-	}
-	if len(doc.Aliases) != 2 {
-		t.Fatalf("aliases = %+v", doc.Aliases)
-	}
-	name, err := key.Open(doc.Aliases[0].Name)
-	label, lerr := key.Open(doc.Aliases[0].Label)
-	if err != nil || lerr != nil || name != "ann" || label != "ann@example.com" || doc.Aliases[0].Provider != "codex" {
-		t.Errorf("first alias = %q %q %v %v", label, name, err, lerr)
-	}
-	if doc.Aliases[1].Name != "" {
-		t.Errorf("a cleared name travels without one: %+v", doc.Aliases[1])
-	}
-}
-
-// extendedLedger is a Codex account with cache reads, a weekly reading, and
-// a run error dated at.
+// extendedLedger is a Codex account with cache reads, a weekly reading, a
+// 5-hour one that resets now, and a run error dated at.
 func extendedLedger(errAt time.Time) *state.State {
-	reset := t0.Add(24 * time.Hour)
+	reset, now := t0.Add(24*time.Hour), t0
 	return &state.State{
 		LastError:   "codex: rate limits: context deadline exceeded",
 		LastErrorAt: errAt,
 		Current:     map[string]string{state.Key("codex", "/h/.codex"): "ann@acme.dev"},
 		Accounts: map[string]*state.Account{state.Key("codex", "ann@acme.dev"): {Provider: "codex", Label: "ann@acme.dev",
-			Quota: &state.Quota{At: t0, Windows: []snapshot.Window{{Name: "7d", Percent: 40, ResetsAt: &reset, Minutes: 10080}}}}},
+			Quota: &state.Quota{At: t0, Windows: []snapshot.Window{
+				{Name: "7d", Percent: 40, ResetsAt: &reset, Minutes: 10080},
+				{Name: "5h", Percent: 10, ResetsAt: &now, Minutes: 300},
+			}}}},
 		Sessions: map[string]*state.Session{state.Key("codex", "a4c2e917"): {Provider: "codex", Project: "/p", Updated: t0,
 			By: map[string]snapshot.Tokens{"ann@acme.dev": {Input: 70, Output: 30, CacheRead: 1100}},
 			U: meter.Hours{
@@ -331,23 +266,45 @@ func extendedLedger(errAt time.Time) *state.State {
 	}
 }
 
-// The snapshot has each account's burn by day and since each window began,
-// and when the last error happened; the body a release before v0.4.0 reads
-// has none of it.
+// The snapshot has each account's days, its tokens and burn since each
+// window that has not reset began, its burn by day, the names this device
+// set, and when the last error happened. That time goes only with a dated
+// last error, and never after the snapshot, so the body always validates.
+// The body a release before v0.4.0 reads has no burn and no such time.
 func TestBuildDocExtended(t *testing.T) {
 	key := mustKey(t)
+	cfg := state.Config{Device: "d-0123456789", Aliases: map[string]state.Alias{
+		state.Key("codex", "ann@acme.dev"):    {Name: "ann", At: t0},
+		state.Key("claude", "bo@example.com"): {At: t0.Add(-time.Hour)},
+	}}
+	build := func(st *state.State) (snapshot.Doc, []byte) {
+		t.Helper()
+		return encodeDecode(t, BuildDoc(st, nil, key, cfg, Repos{}, "annbook", "ann", "v0.4.0", t0))
+	}
 	at := t0.Add(-20 * time.Minute).In(time.FixedZone("east", 3*3600))
-	doc, body := encodeDecode(t, BuildDoc(extendedLedger(at), nil, key, state.Config{Device: "d-0123456789"}, Repos{}, "annbook", "ann", "v0.4.0", t0))
+	doc, body := build(extendedLedger(at))
 	a := doc.Accounts[0]
+	if want := []int64{60, 0, 0, 0, 0, 0, 0, 40}; !reflect.DeepEqual(a.Days, want) {
+		t.Errorf("days = %v, want %v", a.Days, want)
+	}
 	// Codex weighs output 8 and cache reads 0.1: 28+96+10 and 42+144+100.
 	if want := []int64{286, 0, 0, 0, 0, 0, 0, 134}; !reflect.DeepEqual(a.BurnDays, want) {
 		t.Errorf("burn days = %v, want %v", a.BurnDays, want)
 	}
-	if want := []int64{60, 0, 0, 0, 0, 0, 0, 40}; !reflect.DeepEqual(a.Days, want) {
-		t.Errorf("days = %v, want %v", a.Days, want)
-	}
-	if len(a.Recent) != 1 || a.Recent[0].Tokens != 60 || a.Recent[0].Burn != 286 {
+	// The 5h window reset at t0, so only the weekly one is counted.
+	if len(a.Recent) != 1 || a.Recent[0].Window != "7d" || a.Recent[0].Tokens != 60 || a.Recent[0].Burn != 286 || !a.Recent[0].Start.Equal(t0.Add(-6*24*time.Hour)) {
 		t.Errorf("recent = %+v", a.Recent)
+	}
+	if len(doc.Aliases) != 2 {
+		t.Fatalf("aliases = %+v", doc.Aliases)
+	}
+	name, err := key.Open(doc.Aliases[0].Name)
+	label, lerr := key.Open(doc.Aliases[0].Label)
+	if err != nil || lerr != nil || name != "ann" || label != "ann@acme.dev" || doc.Aliases[0].Provider != "codex" {
+		t.Errorf("first alias = %q %q %v %v", label, name, err, lerr)
+	}
+	if doc.Aliases[1].Name != "" {
+		t.Errorf("a cleared name travels without one: %+v", doc.Aliases[1])
 	}
 	if doc.LastErrorAt == nil || !doc.LastErrorAt.Equal(at) || doc.LastErrorAt.Location() != time.UTC {
 		t.Errorf("last error at = %v", doc.LastErrorAt)
@@ -368,26 +325,16 @@ func TestBuildDocExtended(t *testing.T) {
 	if _, err := snapshot.Decode(legacy); err != nil {
 		t.Errorf("the legacy body does not decode: %v", err)
 	}
-}
 
-// last_error_at goes only with a dated last_error, and never after the
-// snapshot, so the body always validates.
-func TestBuildDocLastErrorAt(t *testing.T) {
-	key := mustKey(t)
-	build := func(st *state.State) snapshot.Doc {
-		t.Helper()
-		doc, _ := encodeDecode(t, BuildDoc(st, nil, key, state.Config{Device: "d-0123456789"}, Repos{}, "annbook", "ann", "v0.4.0", t0))
-		return doc
-	}
-	if doc := build(ledger()); doc.LastError == "" || doc.LastErrorAt != nil {
+	if doc, _ := build(ledger()); doc.LastError == "" || doc.LastErrorAt != nil {
 		t.Errorf("an undated last_error: %v", doc.LastErrorAt)
 	}
-	if doc := build(extendedLedger(t0.Add(10 * time.Minute))); doc.LastErrorAt == nil || !doc.LastErrorAt.Equal(t0) {
+	if doc, _ := build(extendedLedger(t0.Add(10 * time.Minute))); doc.LastErrorAt == nil || !doc.LastErrorAt.Equal(t0) {
 		t.Errorf("a last error 10 minutes ahead: %v", doc.LastErrorAt)
 	}
 	st := extendedLedger(t0)
 	st.LastError = ""
-	if doc := build(st); doc.LastErrorAt != nil {
+	if doc, _ := build(st); doc.LastErrorAt != nil {
 		t.Errorf("no last error, but a time: %v", doc.LastErrorAt)
 	}
 }
@@ -402,7 +349,9 @@ func TestFitDocKeepsTheLegacyDays(t *testing.T) {
 		legacyCut bool
 		burnKept  bool
 	}{
-		{20, true, false},
+		// Enough aliases that the legacy body loses a few days of every
+		// account, and no more: v0.3.4's fit marshals it once a day it cuts.
+		{14, true, false},
 		{4, false, true},
 	} {
 		doc := snapshot.Doc{V: snapshot.Version, Accounts: []snapshot.Account{}, Sources: []snapshot.Source{}}

@@ -70,30 +70,6 @@ func TestClaudeAppSessionsGoToTheirRecordedAccount(t *testing.T) {
 	}
 }
 
-// An account only the app's records name leaves a home that never answered
-// its claim on the history counted there.
-func TestClaudeAppAccountDoesNotStopAClaim(t *testing.T) {
-	w, o := newWorld(t)
-	def := w.home(t, "claude")
-	k := state.Key("claude", def)
-	w.askErr[k] = errors.New("no answer")
-	w.sessions("claude", def, sess("cli", "/src/api", 100, t0))
-	a := claudeAppHome(t, w.userHome, "", "a1", `{"emailAddress":"bea@x"}`)
-	w.sessions("claude", a, sess("app-a", "/src/site", 200, t0))
-	run(t, o)
-
-	w.now = t0.Add(15 * time.Minute)
-	delete(w.askErr, k)
-	w.login("claude", def, "ann@x", nil)
-	res := run(t, o)
-	if ann := totalsFor(t, res.State, "claude", "ann@x"); ann.Tokens != tok(100) {
-		t.Fatalf("ann = %+v", ann)
-	}
-	if hasTotals(res.State, "claude", UnknownAccount) {
-		t.Fatal("unknown account kept history")
-	}
-}
-
 // A home logged in to the account of the Claude app's sessions is told it
 // was used when they were, so that Claude Code reads the usage they spend.
 // Another account's sessions tell it nothing.

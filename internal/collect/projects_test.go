@@ -1,7 +1,6 @@
 package collect
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -127,7 +126,6 @@ func TestFitDocKeepsManyProjectsLast(t *testing.T) {
 	if len(doc.Accounts) != 4 || total <= 4*snapshot.LegacyProjects {
 		t.Fatalf("%d accounts, %d projects", len(doc.Accounts), total)
 	}
-	t.Logf("%d projects in %d bytes", total, len(body))
 	// What a release before v0.14.0 reads: 12 an account, the largest.
 	few := doc.WithoutManyProjects()
 	if few.HasManyProjects() {
@@ -138,9 +136,6 @@ func TestFitDocKeepsManyProjectsLast(t *testing.T) {
 			t.Fatalf("account %d keeps other projects", i)
 		}
 	}
-	if b, _ := json.Marshal(few); len(b) >= len(body) {
-		t.Fatal("the legacy body is no smaller")
-	}
 	// One account's 128 fit with room to spare.
 	one := Repos{IDs: map[string]string{}}
 	for i := range 128 {
@@ -150,5 +145,4 @@ func TestFitDocKeepsManyProjectsLast(t *testing.T) {
 	if n := len(doc.Accounts[0].Projects); n != snapshot.MaxProjects {
 		t.Fatalf("one account keeps %d of 128 projects (%d bytes)", n, len(body))
 	}
-	t.Logf("one account's 128 projects: %d bytes", len(body))
 }

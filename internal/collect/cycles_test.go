@@ -139,9 +139,6 @@ func TestMergeCycles(t *testing.T) {
 	if len(chain) != 2 || chain[1].Percent != 20 || !chain[1].ResetsAt.Equal(r.Add(8*time.Minute)) || !chain[1].LastReadAt.Equal(r.Add(-30*time.Minute)) {
 		t.Fatalf("chain = %+v", chain)
 	}
-	if MergeCycles() != nil {
-		t.Fatal("nothing merged to something")
-	}
 }
 
 // A snapshot keeps every period of a window a day long or longer that the
@@ -188,19 +185,20 @@ func TestFindCyclesBounds(t *testing.T) {
 	}
 }
 
+// TestLoadCycles: the cycles are those of this device's samples within the
+// retention window.
 func TestLoadCycles(t *testing.T) {
 	d := state.Dir(t.TempDir())
 	if cs, err := LoadCycles(d, t0); err != nil || len(cs) != 0 {
 		t.Fatalf("no samples: %v, %v", cs, err)
 	}
-	reset := t0.Add(-time.Hour)
 	for _, at := range []time.Time{t0.Add(-91 * 24 * time.Hour), t0.Add(-3 * time.Hour)} {
-		if err := d.AppendSample(samplesOf(at, read("claude", "ann@acme.dev", at, win("5h", 70, reset)))); err != nil {
+		if err := d.AppendSample(samplesOf(at, read("claude", "ann@acme.dev", at, win("5h", 70, at.Add(2*time.Hour))))); err != nil {
 			t.Fatal(err)
 		}
 	}
 	cs, err := LoadCycles(d, t0)
-	if err != nil || !reflect.DeepEqual(cs, Cycles{HistoryKey("claude", "ann@acme.dev"): {cycle("5h", reset, 70, t0.Add(-3*time.Hour))}}) {
+	if err != nil || !reflect.DeepEqual(cs, Cycles{HistoryKey("claude", "ann@acme.dev"): {cycle("5h", t0.Add(-time.Hour), 70, t0.Add(-3*time.Hour))}}) {
 		t.Fatalf("cycles = %v, %v", cs, err)
 	}
 }

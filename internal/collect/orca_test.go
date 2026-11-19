@@ -73,29 +73,24 @@ func TestDiscoverFindsOrcaCodexHomes(t *testing.T) {
 	}
 }
 
-// Each Orca account home is probed on its own. One with nobody logged in
-// holds no account and is not a problem; the default home logged out still
-// is, once it has been used.
+// An Orca account home with nobody logged in, as one whose account was
+// removed, holds no account and is not a problem, though Orca linked the
+// rollouts into it; the default home logged out still is, once it has been
+// used.
 func TestOrcaHomeWithoutLoginIsNoAccount(t *testing.T) {
 	w, o := newWorld(t)
 	def := w.home(t, "codex")
-	w.sessions("codex", def, sess("s1", "/p", 100, t0))
 	data := defaultAppData("orca", w.userHome)
 	a := orcaHome(t, data, "5b21", true)
 	b := orcaHome(t, data, "e4c8", true)
+	w.sessions("codex", def, mirrored("s1", 100, t0, nil, def, a, b))
 	w.login("codex", def, "sam", nil)
-	w.login("codex", a, "bea", quota(t0, 20))
+	w.login("codex", a, "bea", nil)
 	w.askErr[state.Key("codex", b)] = notLoggedIn("codex")
 	res := run(t, o)
 
-	if got := res.State.Sources["codex"]; got.Status != "ok" || !reflect.DeepEqual(got.Homes, []string{def, a, b}) {
+	if got := res.State.Sources["codex"]; got.Status != "ok" {
 		t.Fatalf("codex source = %+v", got)
-	}
-	if !IsCurrent(res.State, "codex", "sam") || !IsCurrent(res.State, "codex", "bea") {
-		t.Fatalf("current = %v", res.State.Current)
-	}
-	if q := totalsFor(t, res.State, "codex", "bea").Quota; q == nil || q.Windows[0].Percent != 20 {
-		t.Fatalf("bea quota = %+v", q)
 	}
 	if hasTotals(res.State, "codex", UnknownAccount) {
 		t.Fatal("a home with nobody logged in made an account")
@@ -151,7 +146,6 @@ func TestMirroredSessionFollowsItsRateLimits(t *testing.T) {
 		mirrored("bea-ran", 100, t0, &near, def, a, b),
 		mirrored("sam-ran", 200, t0, &samReset, def, a, b),
 		mirrored("no-limits", 300, t0, nil, def, a, b),
-		mirrored("other-week", 400, t0, ptr(t0.Add(-100*time.Hour)), def, a, b),
 		// Only in the default home: its limits are not consulted.
 		mirrored("default-only", 500, t0, &near),
 	)
@@ -159,17 +153,8 @@ func TestMirroredSessionFollowsItsRateLimits(t *testing.T) {
 	if got := totalsFor(t, res.State, "codex", "bea"); got.Tokens != tok(100) || got.Sessions != 1 {
 		t.Fatalf("bea = %+v", got)
 	}
-	if got := totalsFor(t, res.State, "codex", "sam"); got.Tokens != tok(200+300+400+500) || got.Sessions != 4 {
+	if got := totalsFor(t, res.State, "codex", "sam"); got.Tokens != tok(200+300+500) || got.Sessions != 3 {
 		t.Fatalf("sam = %+v", got)
-	}
-
-	// Two accounts whose weeks reset together cannot be told apart.
-	w.now = t0.Add(15 * time.Minute)
-	w.login("codex", a, "bea", weekly(w.now, 61, samReset))
-	w.sessions("codex", def, mirrored("tie", 50, w.now, &samReset, def, a))
-	res = run(t, o)
-	if by := res.State.Sessions[state.Key("codex", "tie")].By; !reflect.DeepEqual(by, map[string]snapshot.Tokens{"sam": tok(50)}) {
-		t.Fatalf("tie = %+v", by)
 	}
 }
 

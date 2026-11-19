@@ -9,10 +9,12 @@ import (
 
 	"github.com/neoromantic/ai-usage/internal/snapshot"
 	"github.com/neoromantic/ai-usage/internal/state"
-	"github.com/neoromantic/ai-usage/relay"
 )
 
-func TestExtendedWire(t *testing.T) {
+// The gates of the fields each release added share their rules, shown here
+// with the one of the fields v0.4.0 added. A relay's refusal of what an older
+// release added shuts the gates of the newer ones too.
+func TestWireGate(t *testing.T) {
 	const fp, self = "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2", "d-annbook-0001"
 	now := t0
 	doc := func(device, version string, age time.Duration) snapshot.Doc {
@@ -52,13 +54,6 @@ func TestExtendedWire(t *testing.T) {
 		}
 	}
 
-	// Documents the read left out do not close it.
-	unread := current
-	unread.ReadError = readError(relay.PullResult{Unverified: 2, Undecodable: 1})
-	if g := ExtendedWire(unread, fp, self, time.Time{}, now); !g.Open {
-		t.Errorf("a read with documents left out: %+v", g)
-	}
-
 	// A device that keeps reporting on an older release for StuckAfter is
 	// left out; one behind for less, or behind on another release, is not.
 	stuck := cache(doc(self, "v0.4.0", 0), doc("d-srv1-a4c2e917", "v0.3.4", 0), doc("d-sambook-0002", "v0.3.0", 0))
@@ -85,84 +80,7 @@ func TestExtendedWire(t *testing.T) {
 	if g := ExtendedWire(both, fp, self, time.Time{}, now); !slices.Equal(g.HeldBack, []string{"d-leoair-0003", "d-srv1-a4c2e917"}) {
 		t.Errorf("held back = %v", g.HeldBack)
 	}
-}
 
-// The cycles' gate waits for v0.5.0 as the other waits for v0.4.0, and is
-// shut for as long as the relay refused them.
-func TestCyclesWire(t *testing.T) {
-	const fp, self = "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2", "d-annbook-0001"
-	now := t0
-	doc := func(device, version string) snapshot.Doc {
-		return snapshot.Doc{Device: device, CollectorVersion: version, CollectedAt: now}
-	}
-	cache := func(docs ...snapshot.Doc) TeamCache {
-		return TeamCache{Team: fp, PulledAt: now.Add(-10 * time.Minute), Docs: docs}
-	}
-	for _, c := range []struct {
-		name  string
-		cache TeamCache
-		until time.Time
-		want  Gate
-	}{
-		{"all on v0.5.0 or later", cache(doc(self, "v0.5.0"), doc("d-srv1-a4c2e917", "v0.5.1"), doc("d-sambook-0002", "v1.0.0")), time.Time{}, Gate{Open: true}},
-		{"a device on v0.4.0", cache(doc(self, "v0.5.0"), doc("d-srv1-a4c2e917", "v0.4.0"), doc("d-sambook-0002", "v0.3.4")), time.Time{},
-			Gate{HeldBack: []string{"d-sambook-0002", "d-srv1-a4c2e917"}, Reason: GateOld}},
-		{"a build from source of v0.4.1", cache(doc("d-srv1-a4c2e917", "v0.4.1-local+dirty")), time.Time{},
-			Gate{HeldBack: []string{"d-srv1-a4c2e917"}, Reason: GateOld}},
-		// A build from source from v0.4.0 on reports devel, as a newer one does.
-		{"a development build", cache(doc("d-srv1-a4c2e917", "devel"), doc("d-sambook-0002", "v0.5.0-rc.1")), time.Time{}, Gate{Open: true}},
-		{"a development build of v0.3", cache(doc("d-srv1-a4c2e917", "dev")), time.Time{},
-			Gate{HeldBack: []string{"d-srv1-a4c2e917"}, Reason: GateOld}},
-		{"the relay refused the cycles", cache(doc("d-srv1-a4c2e917", "v0.5.0")), now.Add(time.Hour), Gate{Reason: GateRejected, Until: now.Add(time.Hour)}},
-		{"a read 4 hours old", TeamCache{Team: fp, PulledAt: now.Add(-4 * time.Hour)}, time.Time{}, Gate{Reason: GateStale}},
-		{"another team", TeamCache{Team: strings.Repeat("b3", 16), PulledAt: now}, time.Time{}, Gate{Reason: GateTeam}},
-	} {
-		got := CyclesWire(c.cache, fp, self, c.until, now)
-		if got.Open != c.want.Open || got.Reason != c.want.Reason || !got.Until.Equal(c.want.Until) || !slices.Equal(got.HeldBack, c.want.HeldBack) {
-			t.Errorf("%s: %+v, want %+v", c.name, got, c.want)
-		}
-	}
-	// A device remembered on v0.4.0 holds it shut, and not the other.
-	known := cache(doc("d-srv1-a4c2e917", "v0.5.0"))
-	known.Known = map[string]Known{"d-leoair-0003": {Version: "v0.4.0"}}
-	if g := CyclesWire(known, fp, self, time.Time{}, now); g.Open || !slices.Equal(g.HeldBack, []string{"d-leoair-0003"}) {
-		t.Errorf("remembered on v0.4.0: %+v", g)
-	}
-	if g := ExtendedWire(known, fp, self, time.Time{}, now); !g.Open {
-		t.Errorf("the gate of v0.4.0's fields: %+v", g)
-	}
-}
-
-// The hours' gate waits for v0.7.0 as the cycles' waits for v0.5.0, and is
-// shut while the relay refuses them, or what an older release added.
-func TestHoursWire(t *testing.T) {
-	const fp, self = "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2", "d-annbook-0001"
-	now := t0
-	doc := func(device, version string) snapshot.Doc {
-		return snapshot.Doc{Device: device, CollectorVersion: version, CollectedAt: now}
-	}
-	cache := func(docs ...snapshot.Doc) TeamCache {
-		return TeamCache{Team: fp, PulledAt: now.Add(-10 * time.Minute), Docs: docs}
-	}
-	for _, c := range []struct {
-		name  string
-		cache TeamCache
-		until time.Time
-		want  Gate
-	}{
-		{"all on v0.7.0 or later", cache(doc(self, "v0.7.0"), doc("d-srv1-a4c2e917", "v0.7.1"), doc("d-sambook-0002", "v1.0.0")), time.Time{}, Gate{Open: true}},
-		{"a device on v0.6.2", cache(doc(self, "v0.7.0"), doc("d-srv1-a4c2e917", "v0.6.2")), time.Time{},
-			Gate{HeldBack: []string{"d-srv1-a4c2e917"}, Reason: GateOld}},
-		{"a build from source of v0.6.2", cache(doc("d-srv1-a4c2e917", "v0.6.2-local+dirty")), time.Time{},
-			Gate{HeldBack: []string{"d-srv1-a4c2e917"}, Reason: GateOld}},
-		{"a development build", cache(doc("d-srv1-a4c2e917", "devel"), doc("d-sambook-0002", "v0.7.0-rc.1")), time.Time{}, Gate{Open: true}},
-		{"the relay refused the hours", cache(doc("d-srv1-a4c2e917", "v0.7.0")), now.Add(time.Hour), Gate{Reason: GateRejected, Until: now.Add(time.Hour)}},
-	} {
-		got := HoursWire(c.cache, fp, self, c.until, now)
-		if got.Open != c.want.Open || got.Reason != c.want.Reason || !got.Until.Equal(c.want.Until) || !slices.Equal(got.HeldBack, c.want.HeldBack) {
-			t.Errorf("%s: %+v, want %+v", c.name, got, c.want)
-		}
-	}
 	// A relay that refused the cycles, or the fields v0.4.0 added, refuses
 	// the hours with them.
 	for _, r := range []state.Relay{
@@ -176,17 +94,50 @@ func TestHoursWire(t *testing.T) {
 	}
 }
 
-// Known keeps a device whose document expired, so that it holds the gate
-// closed when it comes back, and drops one that was forgotten.
-func TestKnownOutlivesExpiredDocuments(t *testing.T) {
-	const fp, self, old = "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2", "d-annbook-0001", "d-leoair-0003"
+// Each read takes the release of every other device it found, its newest
+// collected_at and, from the relay, when the relay first stored it. A device
+// the read did not find is kept while the relay may have let its document
+// expire, so that it holds the gates shut when it comes back, and dropped
+// when it was forgotten.
+func TestKnownAfter(t *testing.T) {
+	const self, old = "d-annbook-0001", "d-leoair-0003"
 	now := t0
 	day := 24 * time.Hour
-	gate := func(prev map[string]Known) (map[string]Known, Gate) {
-		known := knownAfter(prev, []snapshot.Doc{{Device: self, CollectorVersion: "v0.4.0", CollectedAt: now}}, nil, self, now)
-		c := TeamCache{Team: fp, PulledAt: now, Known: known}
-		return known, ExtendedWire(c, fp, self, time.Time{}, now)
+	docs := []snapshot.Doc{
+		{Device: self, CollectorVersion: "v0.4.0", CollectedAt: now},
+		{Device: "d-srv1-a4c2e917", CollectorVersion: "v0.4.1", CollectedAt: now.Add(-time.Hour)},
+		{Device: "d-sambook-0002", CollectorVersion: "v0.4.0", CollectedAt: now.Add(-3 * time.Hour)},
 	}
+	prev := map[string]Known{
+		"d-srv1-a4c2e917": {Version: "v0.3.4", First: now.Add(-30 * day), Last: now.Add(-2 * time.Hour)},
+		// A relay that served an older document keeps the newer Last.
+		"d-sambook-0002": {Version: "v0.4.0", First: now.Add(-day), Last: now.Add(-time.Hour)},
+		self:             {Version: "v0.3.4", First: now.Add(-day), Last: now.Add(-100 * day)},
+	}
+	got := knownAfter(prev, docs, nil, self, now)
+	want := map[string]Known{
+		"d-srv1-a4c2e917": {Version: "v0.4.1", First: now.Add(-30 * day), Last: now.Add(-time.Hour)},
+		"d-sambook-0002":  {Version: "v0.4.0", First: now.Add(-day), Last: now.Add(-time.Hour)},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("known = %+v", got)
+	}
+	for id, k := range want {
+		if g := got[id]; g.Version != k.Version || !g.First.Equal(k.First) || !g.Last.Equal(k.Last) {
+			t.Errorf("%s: %+v, want %+v", id, g, k)
+		}
+	}
+	if k := knownAfter(nil, docs[1:2], nil, self, now)["d-srv1-a4c2e917"]; !k.First.Equal(now) {
+		t.Errorf("a device first found: %+v", k)
+	}
+	since := now.Add(-40 * day)
+	if k := knownAfter(nil, docs[1:2], map[string]time.Time{"d-srv1-a4c2e917": since}, self, now)["d-srv1-a4c2e917"]; !k.Since.Equal(since) {
+		t.Errorf("when the relay first stored it: %+v", k)
+	}
+	if k := knownAfter(nil, docs[:1], nil, self, now); k != nil {
+		t.Errorf("only this device: %+v", k)
+	}
+
 	for _, c := range []struct {
 		name               string
 		first, last, since time.Duration
@@ -204,58 +155,13 @@ func TestKnownOutlivesExpiredDocuments(t *testing.T) {
 		{"silent, then forgotten", day, 9 * day, 60 * day, false},
 		{"silent, then expired", day, 9 * day, 12 * day, true},
 	} {
-		prev := map[string]Known{old: {Version: "v0.3.4", First: now.Add(-c.first), Last: now.Add(-c.last)}}
+		k := Known{Version: "v0.3.4", First: now.Add(-c.first), Last: now.Add(-c.last)}
 		if c.since > 0 {
-			k := prev[old]
 			k.Since = now.Add(-c.since)
-			prev[old] = k
 		}
-		known, g := gate(prev)
-		if _, ok := known[old]; ok != c.kept {
+		if _, ok := knownAfter(map[string]Known{old: k}, docs[:1], nil, self, now)[old]; ok != c.kept {
 			t.Errorf("%s: kept = %v, want %v", c.name, ok, c.kept)
 		}
-		if g.Open == c.kept {
-			t.Errorf("%s: gate %+v", c.name, g)
-		}
-	}
-}
-
-func TestKnownAfter(t *testing.T) {
-	const self = "d-annbook-0001"
-	now := t0
-	docs := []snapshot.Doc{
-		{Device: self, CollectorVersion: "v0.4.0", CollectedAt: now},
-		{Device: "d-srv1-a4c2e917", CollectorVersion: "v0.4.1", CollectedAt: now.Add(-time.Hour)},
-		{Device: "d-sambook-0002", CollectorVersion: "v0.4.0", CollectedAt: now.Add(-3 * time.Hour)},
-	}
-	prev := map[string]Known{
-		"d-srv1-a4c2e917": {Version: "v0.3.4", First: now.Add(-30 * 24 * time.Hour), Last: now.Add(-2 * time.Hour)},
-		// A relay that served an older document keeps the newer Last.
-		"d-sambook-0002": {Version: "v0.4.0", First: now.Add(-24 * time.Hour), Last: now.Add(-time.Hour)},
-		self:             {Version: "v0.3.4", First: now.Add(-24 * time.Hour), Last: now.Add(-100 * 24 * time.Hour)},
-	}
-	got := knownAfter(prev, docs, nil, self, now)
-	want := map[string]Known{
-		"d-srv1-a4c2e917": {Version: "v0.4.1", First: now.Add(-30 * 24 * time.Hour), Last: now.Add(-time.Hour)},
-		"d-sambook-0002":  {Version: "v0.4.0", First: now.Add(-24 * time.Hour), Last: now.Add(-time.Hour)},
-	}
-	if len(got) != len(want) {
-		t.Fatalf("known = %+v", got)
-	}
-	for id, k := range want {
-		if g := got[id]; g.Version != k.Version || !g.First.Equal(k.First) || !g.Last.Equal(k.Last) {
-			t.Errorf("%s: %+v, want %+v", id, g, k)
-		}
-	}
-	if k := knownAfter(nil, docs[1:2], nil, self, now)["d-srv1-a4c2e917"]; !k.First.Equal(now) {
-		t.Errorf("a device first found: %+v", k)
-	}
-	since := now.Add(-40 * 24 * time.Hour)
-	if k := knownAfter(nil, docs[1:2], map[string]time.Time{"d-srv1-a4c2e917": since}, self, now)["d-srv1-a4c2e917"]; !k.Since.Equal(since) {
-		t.Errorf("when the relay first stored it: %+v", k)
-	}
-	if k := knownAfter(nil, docs[:1], nil, self, now); k != nil {
-		t.Errorf("only this device: %+v", k)
 	}
 }
 

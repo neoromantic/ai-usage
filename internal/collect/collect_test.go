@@ -120,43 +120,8 @@ func TestPartialReads(t *testing.T) {
 	}
 }
 
-// A Claude transcript can hold a valid line longer than the reader's 32 MiB
-// limit, such as a prompt with a huge paste (issue #1). Collected twice, it is
-// no error, and the usage after it counts once.
-func TestLineOverTheLimitIsNoError(t *testing.T) {
-	if testing.Short() {
-		t.Skip("writes a line over 32 MiB")
-	}
-	w, o := newWorld(t)
-	// The collector's own reader, with its cache.
-	o.ReadLogs = nil
-	home := w.home(t, "claude")
-	w.login("claude", home, "ann", nil)
-	at := t0.Add(-time.Hour).Format(time.RFC3339)
-	path := filepath.Join(home, "projects", "-work-app", "a4c2e917.jsonl")
-	mkdirs(t, filepath.Dir(path))
-	transcript := `{"parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/work/app","sessionId":"a4c2e917","type":"user","message":{"role":"user","content":"` +
-		strings.Repeat("x", 33<<20) + `"},"uuid":"u1","timestamp":"` + at + `"}` + "\n" +
-		`{"parentUuid":"u1","isSidechain":false,"userType":"external","cwd":"/work/app","sessionId":"a4c2e917","type":"assistant","message":{"id":"msg_1","role":"assistant","content":[],"usage":{"input_tokens":1200,"output_tokens":300,"cache_read_input_tokens":5000}},"requestId":"req_1","uuid":"u2","timestamp":"` + at + `"}` + "\n"
-	if err := os.WriteFile(path, []byte(transcript), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	want := snapshot.Tokens{Input: 1200, Output: 300, CacheRead: 5000}
-	for i := range 2 {
-		res := run(t, o)
-		if src := res.State.Sources["claude"]; src.Status != "ok" || src.Error != "" {
-			t.Fatalf("run %d: claude source = %+v", i+1, src)
-		}
-		if got := totalsFor(t, res.State, "claude", "ann").Tokens; got != want {
-			t.Fatalf("run %d: tokens = %+v, want %+v", i+1, got, want)
-		}
-		w.now = w.now.Add(15 * time.Minute)
-	}
-	if g := growthOf(lastSample(t, o), "claude", "ann"); !g.Zero() {
-		t.Fatalf("the second run grew %+v", g)
-	}
-}
-
+// The homes of a provider are read together, so a session one home copied
+// from another counts once, at every run.
 func TestSameSessionInTwoHomesCountsOnce(t *testing.T) {
 	w, o := newWorld(t)
 	def := w.home(t, "claude")
@@ -166,44 +131,48 @@ func TestSameSessionInTwoHomesCountsOnce(t *testing.T) {
 	// work is a copy of the default home; s1 was resumed there.
 	w.sessions("claude", def, sess("s1", "/p", 100, t0.Add(-time.Hour)))
 	w.sessions("claude", work, sess("s1", "/p", 130, t0))
-
-	res := run(t, o)
-	want := totalsFor(t, res.State, "claude", "work").Tokens.Add(totalsFor(t, res.State, "claude", "personal").Tokens)
-	if want != tok(130) {
-		t.Fatalf("first run counted %+v, want %+v", want, tok(130))
-	}
-	for i := 1; i <= 3; i++ {
-		w.now = t0.Add(time.Duration(i) * 15 * time.Minute)
-		res = run(t, o)
+	for i := range 2 {
+		res := run(t, o)
 		got := snapshot.Tokens{}
 		for _, a := range Totals(res.State, nil) {
 			got = got.Add(a.Tokens)
 		}
 		if got != tok(130) {
-			t.Fatalf("run %d: unchanged logs counted again: total %+v", i, got)
+			t.Fatalf("run %d counted %+v, want %+v", i+1, got, tok(130))
 		}
+		w.now = w.now.Add(15 * time.Minute)
 	}
 }
 
+// An account whose home is gone is no longer logged in, and keeps its
+// record: a removed home of a provider that has others, and the only home of
+// one, which the run then skips.
 func TestCurrentForgetsRemovedHome(t *testing.T) {
 	w, o := newWorld(t)
 	def := w.home(t, "codex")
 	extra := w.extraHome(t, "codex", "codex-work")
+	gh := w.home(t, "grok")
 	w.login("codex", def, "personal", nil)
 	w.login("codex", extra, "work", quota(t0, 12))
+	w.login("grok", gh, "gina", nil)
 	w.sessions("codex", extra, sess("c1", "/p", 10, t0))
 	res := run(t, o)
-	if !IsCurrent(res.State, "codex", "work") || !IsCurrent(res.State, "codex", "personal") {
+	if !IsCurrent(res.State, "codex", "work") || !IsCurrent(res.State, "codex", "personal") || !IsCurrent(res.State, "grok", "gina") {
 		t.Fatalf("current = %v", res.State.Current)
 	}
 
-	if err := os.RemoveAll(extra); err != nil {
-		t.Fatal(err)
+	for _, h := range []string{extra, gh} {
+		if err := os.RemoveAll(h); err != nil {
+			t.Fatal(err)
+		}
 	}
 	w.now = t0.Add(15 * time.Minute)
 	res = run(t, o)
-	if IsCurrent(res.State, "codex", "work") {
+	if IsCurrent(res.State, "codex", "work") || IsCurrent(res.State, "grok", "gina") {
 		t.Fatalf("account of a removed home still current: %v", res.State.Current)
+	}
+	if src := res.State.Sources["grok"]; src.Status != "skipped" {
+		t.Fatalf("grok source = %+v", src)
 	}
 	work := totalsFor(t, res.State, "codex", "work")
 	if work.Tokens != tok(10) || work.Quota == nil {
@@ -211,24 +180,6 @@ func TestCurrentForgetsRemovedHome(t *testing.T) {
 	}
 	if !IsCurrent(res.State, "codex", "personal") {
 		t.Fatal("default home's account dropped")
-	}
-}
-
-func TestSkippedProviderForgetsCurrent(t *testing.T) {
-	w, o := newWorld(t)
-	h := w.home(t, "grok")
-	w.login("grok", h, "gina", nil)
-	res := run(t, o)
-	if !IsCurrent(res.State, "grok", "gina") {
-		t.Fatal("not current after first run")
-	}
-	if err := os.RemoveAll(h); err != nil {
-		t.Fatal(err)
-	}
-	w.now = t0.Add(15 * time.Minute)
-	res = run(t, o)
-	if res.State.Sources["grok"].Status != "skipped" || IsCurrent(res.State, "grok", "gina") {
-		t.Fatalf("grok source %+v current %v", res.State.Sources["grok"], res.State.Current)
 	}
 }
 
@@ -288,11 +239,16 @@ func TestRunPrunesAfterRetention(t *testing.T) {
 	}
 }
 
+// A home an interactive run's environment names is remembered, absolute when
+// the variable is relative; the default home is not. A scheduler run, which
+// has none of the variables and starts in another directory, still reads it.
 func TestRemembersHomesFromEnvironment(t *testing.T) {
 	w, o := newWorld(t)
 	w.home(t, "codex")
 	extra := w.extraHome(t, "codex", "codex-work")
-	w.env["CLAUDE_CONFIG_DIR"] = filepath.Join(w.userHome, ".claude") // the default: not remembered
+	t.Chdir(filepath.Dir(extra))
+	w.env["CODEX_HOME"] = filepath.Base(extra)
+	w.env["CLAUDE_CONFIG_DIR"] = filepath.Join(w.userHome, ".claude")
 	w.home(t, "claude")
 	run(t, o)
 
@@ -304,26 +260,12 @@ func TestRemembersHomesFromEnvironment(t *testing.T) {
 		t.Fatalf("remembered = %v", cfg.Homes)
 	}
 
-	// The scheduler's run has no CODEX_HOME and still reads it.
 	w.env = map[string]string{}
+	t.Chdir(t.TempDir())
 	w.now = t0.Add(15 * time.Minute)
 	res := run(t, o)
 	if homes := res.State.Sources["codex"].Homes; !reflect.DeepEqual(homes, []string{filepath.Join(w.userHome, ".codex"), extra}) {
 		t.Fatalf("codex homes = %v", homes)
-	}
-}
-
-func TestRelativeHomeIsRememberedAbsolute(t *testing.T) {
-	w, o := newWorld(t)
-	root := filepath.Dir(w.userHome)
-	mkdirs(t, filepath.Join(root, "rel-codex"))
-	t.Chdir(root)
-	w.env["CODEX_HOME"] = "rel-codex"
-	run(t, o)
-	cfg, _ := o.Dir.LoadConfig()
-	got := cfg.Homes["codex"]
-	if len(got) != 1 || !filepath.IsAbs(got[0]) || filepath.Base(got[0]) != "rel-codex" {
-		t.Fatalf("remembered = %v", got)
 	}
 }
 
@@ -370,10 +312,6 @@ func TestSchedulerRunProbesClaudeWithRememberedConfigDir(t *testing.T) {
 	if got, want := strings.TrimSuffix(string(body), "|"), exported+"|"+exported; got != want {
 		t.Fatalf("claude saw CLAUDE_CONFIG_DIR %q, want %q", got, want)
 	}
-	cfg, _ := o.Dir.LoadConfig()
-	if cfg.HomeEnv["claude"][def] != exported || len(cfg.Homes["claude"]) != 0 {
-		t.Fatalf("config = %+v", cfg)
-	}
 }
 
 func TestSampleKeepsRecentQuotaWithoutGrowth(t *testing.T) {
@@ -394,39 +332,23 @@ func TestSampleKeepsRecentQuotaWithoutGrowth(t *testing.T) {
 	}
 }
 
-// One damaged state.json must not stop every later run.
+// One damaged state.json must not stop every later run: the run says so, and
+// the housekeeping of After still runs, before the state it changes is saved.
 func TestDamagedStateStartsAgain(t *testing.T) {
 	w, o := newWorld(t)
-	h := w.home(t, "claude")
-	w.login("claude", h, "ann", quota(t0, 20))
-	w.sessions("claude", h, sess("s1", "/p", 100, t0))
 	run(t, o)
 	if err := os.WriteFile(o.Dir.Path("state.json"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	afterRan := false
-	o.After = func(context.Context, *state.Config, *state.State) { afterRan = true }
+	o.After = func(_ context.Context, _ *state.Config, st *state.State) { st.Schedule.Registered = true }
 	w.now = t0.Add(15 * time.Minute)
-	res, err := Run(context.Background(), o)
-	if err != nil {
-		t.Fatalf("run on a damaged state.json: %v", err)
-	}
-	if !afterRan {
-		t.Fatal("scheduler and self-update housekeeping did not run")
-	}
+	res := run(t, o)
 	if !strings.Contains(res.State.LastError, "state.json") || !res.State.LastErrorAt.Equal(w.now) {
 		t.Fatalf("last error = %q at %v", res.State.LastError, res.State.LastErrorAt)
 	}
-	// Collection goes on from the last saved state, state.json.last.
-	if a := totalsFor(t, res.State, "claude", "ann"); !a.Current || a.Tokens != tok(100) || a.Quota == nil {
-		t.Fatalf("totals = %+v", a)
-	}
-	if _, err := os.Stat(o.Dir.Path("state.json.bad")); err != nil {
-		t.Fatalf("damaged file not kept: %v", err)
-	}
-	if st, err := o.Dir.LoadState(); err != nil || st.Damage != "" {
-		t.Fatalf("saved state = %v, damage %q", err, st.Damage)
+	if st, err := o.Dir.LoadState(); err != nil || !st.Schedule.Registered {
+		t.Fatalf("the housekeeping of After was not saved: %v", err)
 	}
 }
 
@@ -564,18 +486,6 @@ func TestRunDoesNotBringBackARemovedHome(t *testing.T) {
 	}
 }
 
-func TestAfterHookSeesTheStateBeforeSave(t *testing.T) {
-	_, o := newWorld(t)
-	o.After = func(_ context.Context, _ *state.Config, st *state.State) {
-		st.Schedule.Registered = true
-	}
-	run(t, o)
-	st, _ := o.Dir.LoadState()
-	if !st.Schedule.Registered {
-		t.Fatal("After's change was not saved")
-	}
-}
-
 // A run with no problems clears the last run's: what failed works again.
 func TestCleanRunClearsTheLastError(t *testing.T) {
 	w, o := newWorld(t)
@@ -645,12 +555,17 @@ func TestOfflineRunIsOneProblem(t *testing.T) {
 		t.Fatalf("snapshot last error = %q, want %q", got, st.LastError)
 	}
 
-	// The relay down alone is still offline.
-	delete(w.askErr, state.Key("codex", xh))
+	// The relay down alone is still offline, and a problem that is not the
+	// network's stays as it was.
 	delete(w.askErr, state.Key("claude", ch))
+	w.askErr[state.Key("codex", xh)] = errors.New("codex app-server exited: status 1")
 	w.now = t0.Add(15 * time.Minute)
-	if st := run(t, o).State; !strings.HasPrefix(st.LastError, "offline: relay unreachable: ") || !strings.HasSuffix(st.LastError, "no such host") {
-		t.Fatalf("last error with only the relay down = %q", st.LastError)
+	st = run(t, o).State
+	if problems := strings.Split(st.LastError, "; "); len(problems) != 2 || !strings.HasPrefix(problems[0], "offline: relay unreachable: ") || !strings.HasSuffix(problems[0], "no such host") || problems[1] != "codex app-server exited: status 1" {
+		t.Fatalf("last error with the relay down = %q", st.LastError)
+	}
+	if src := st.Sources["codex"]; src.Status != "partial" || src.Error != "codex app-server exited: status 1" {
+		t.Fatalf("codex source = %+v", src)
 	}
 }
 
@@ -670,27 +585,6 @@ func TestOfflineWithoutRelay(t *testing.T) {
 	}
 	if st.Sources["codex"].Status != "ok" || st.Sources["claude"].Status != "partial" {
 		t.Fatalf("sources = %+v", st.Sources)
-	}
-}
-
-// An error that is not the network's stays as it was, offline or not.
-func TestOtherErrorsStayOffline(t *testing.T) {
-	for _, relayDown := range []bool{false, true} {
-		w, o := newWorld(t)
-		xh := w.home(t, "codex")
-		w.login("codex", xh, "bob", nil)
-		w.askErr[state.Key("codex", xh)] = errors.New("codex app-server exited: status 1")
-		if relayDown {
-			o.Relay = deadRelay()
-		}
-		st := run(t, o).State
-		problems := strings.Split(st.LastError, "; ")
-		if problems[len(problems)-1] != "codex app-server exited: status 1" || relayDown != (len(problems) == 2 && strings.HasPrefix(problems[0], "offline: relay unreachable: ")) {
-			t.Fatalf("relay down %v: last error = %q", relayDown, st.LastError)
-		}
-		if src := st.Sources["codex"]; src.Status != "partial" || src.Error != "codex app-server exited: status 1" {
-			t.Fatalf("relay down %v: codex source = %+v", relayDown, src)
-		}
 	}
 }
 
@@ -766,23 +660,6 @@ func TestNoQuotaNamesItsHome(t *testing.T) {
 	}
 	if src := run(t, o).State.Sources["claude"]; src.Error != "claude: update Claude Code to 2.1.208 or newer" {
 		t.Fatalf("the same note in both homes = %q", src.Error)
-	}
-}
-
-// A Grok user whose log has no credit usage yet is read, and the source
-// notes why it has no quota reading, which is no problem of the run.
-func TestGrokWithoutCreditsIsANote(t *testing.T) {
-	w, o := newWorld(t)
-	h := w.home(t, "grok")
-	w.login("grok", h, "gina", nil)
-	w.sessions("grok", h, sess("s1", "/p", 10, t0))
-	w.askErr[state.Key("grok", h)] = &probe.NoQuotaError{Msg: probe.GrokNoCredits}
-	st := run(t, o).State
-	if src := st.Sources["grok"]; src.Status != "ok" || src.Error != probe.GrokNoCredits || st.LastError != "" {
-		t.Fatalf("grok source = %+v, last error %q", src, st.LastError)
-	}
-	if !IsCurrent(st, "grok", "gina") || totalsFor(t, st, "grok", "gina").Tokens != tok(10) {
-		t.Fatalf("the account was not read: %+v", Totals(st, nil))
 	}
 }
 

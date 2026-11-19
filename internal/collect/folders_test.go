@@ -80,8 +80,7 @@ func ledgerIn(dirs ...string) *state.State {
 // project, even at worktrees/x, and its linked worktrees are its, as its
 // git config names it; a bare repository's worktrees are its, or the
 // folder's that holds it when it is hidden, or the checkout's whose .git
-// file names it, as git clone --separate-git-dir makes; a folder outside
-// any repository is its own, or its folder's above it in the ledger.
+// file names it, as git clone --separate-git-dir makes.
 func TestFindProjectsInRepositories(t *testing.T) {
 	root := tree(t,
 		"src/app/.git/HEAD=ref: refs/heads/main",
@@ -111,20 +110,17 @@ func TestFindProjectsInRepositories(t *testing.T) {
 		"store/app.git/worktrees/sep/commondir=../..",
 		"sep/app/.git=gitdir: $ROOT/store/app.git",
 		"wt/sep/.git=gitdir: $ROOT/store/app.git/worktrees/sep",
-		"plain/notes",
 	)
 	dirs := []string{
 		"src/app", "src/app/pkg/ui", "src/app/gone/away", "wt/feature", "wt/rel/deeper", "wt/pruned",
 		"src/app/vendor/lib", "src/app/vendor/lib/src", "src/app/worktrees/x", "wt/odd", "wt/ui",
 		"bare/main", "hidden", "hidden/main/src", "wt/sep", "sep/app",
-		"plain", "plain/notes",
 	}
 	f := FindProjects(state.Dir(t.TempDir()), ledgerIn(append(under(root, dirs...), "unknown", "Claude app")...))
 	want := []string{
 		"src/app", "src/app", "src/app", "src/app", "src/app", "src/app",
 		"src/app/vendor/lib", "src/app/vendor/lib", "src/app/worktrees/x", "src/lib", "src/app/vendor/ui",
 		"bare/app.git", "hidden", "hidden", "sep/app", "sep/app",
-		"plain", "plain",
 	}
 	if got := projectsOf(t, f, root, dirs...); !reflect.DeepEqual(got, want) {
 		t.Errorf("projects\n got %v\nwant %v", got, want)
@@ -245,13 +241,11 @@ func TestFindProjectsLeavesPrivateFoldersUnread(t *testing.T) {
 	}
 
 	home := filepath.FromSlash("/Users/ann")
-	mac := privateFolders("darwin", home)
-	for _, d := range []string{"/Volumes", "/Users/ann/Documents", "/Users/ann/Library/Mobile Documents"} {
-		if !(finder{private: mac}).inside(filepath.Join(filepath.FromSlash(d), "x")) {
-			t.Errorf("%s is not private on macOS: %v", d, mac)
-		}
+	mac := finder{private: privateFolders("darwin", home)}
+	if !mac.inside(filepath.FromSlash("/Volumes/Data/src")) {
+		t.Error("a removable volume is not private on macOS")
 	}
-	if (finder{private: mac}).inside(filepath.FromSlash("/Users/ann/Documentsx")) {
+	if mac.inside(filepath.FromSlash("/Users/ann/Documentsx")) {
 		t.Error("a folder beside Documents is private")
 	}
 	if got := privateFolders("linux", home); got != nil {

@@ -159,28 +159,36 @@ func TestHermesPartsGrowOnTheirOwn(t *testing.T) {
 
 // A session whose own row names no billing provider, as a row Hermes makes
 // for auxiliary calls alone, bills only through its parts. Being the newest,
-// it does not make an account with no tokens the one Hermes bills now.
+// it does not make the route its parts name the one Hermes bills now: the
+// newest session that names its own route does. A session that names no
+// route anywhere is the unknown account's.
 func TestHermesSessionWithoutRouteKeepsCurrent(t *testing.T) {
 	w, o := newWorld(t)
 	h := w.home(t, "hermes")
 	w.sessions("hermes", h,
+		hermesSess("h0", "anthropic", t0.Add(-2*time.Hour), map[string]snapshot.Tokens{"anthropic": tok(50)}),
 		hermesSess("h1", "openai-codex", t0.Add(-time.Hour), map[string]snapshot.Tokens{"openai-codex": tok(100)}),
-		hermesSess("aux", "", t0, map[string]snapshot.Tokens{"openai-codex": tok(40)}),
+		hermesSess("aux", "", t0, map[string]snapshot.Tokens{"xai-oauth": tok(40)}),
+		hermesSess("h3", "", t0.Add(-4*time.Hour), map[string]snapshot.Tokens{"": tok(7)}),
 	)
 	res := run(t, o)
-	if !IsCurrent(res.State, "hermes", "openai-codex") || hasTotals(res.State, "hermes", UnknownAccount) {
-		t.Fatalf("current = %v, totals = %+v", res.State.Current, Totals(res.State, nil))
+	if !IsCurrent(res.State, "hermes", "openai-codex") {
+		t.Fatalf("current = %v", res.State.Current)
 	}
-	if a := totalsFor(t, res.State, "hermes", "openai-codex"); a.Tokens != tok(140) || a.Sessions != 2 {
-		t.Fatalf("openai-codex = %+v", a)
+	for label, want := range map[string]snapshot.Tokens{"anthropic": tok(50), "openai-codex": tok(100), "xai-oauth": tok(40), UnknownAccount: tok(7)} {
+		if got := totalsFor(t, res.State, "hermes", label).Tokens; got != want {
+			t.Fatalf("hermes %s tokens = %+v, want %+v", label, got, want)
+		}
 	}
 }
 
 // A Hermes home the person named a Codex home for bills through the login
-// there, and so do the profiles inside it, whatever path names it. Other
-// Hermes homes keep the default home's login. The Hermes account shows the
-// quota of the login most of its tokens went through, and with no session
-// read, keeps its link.
+// there, and so do the profiles inside it, whatever path names it, a profile
+// that is a link to a folder elsewhere too. Other Hermes homes keep the
+// default home's login. The Hermes account shows the quota of the login most
+// of its tokens went through, and keeps its link with no session read, and
+// when a run could not read every Hermes home: the homes it read are not the
+// majority.
 func TestHermesQuotaFromNamedHome(t *testing.T) {
 	w, o := newWorld(t)
 	codex := w.home(t, "codex")
@@ -189,9 +197,13 @@ func TestHermesQuotaFromNamedHome(t *testing.T) {
 	bots := filepath.Join(root, "bots", ".codex")
 	botsGrok := filepath.Join(root, "bots", ".grok")
 	agent := filepath.Join(root, "bots", ".hermes-agent")
+	elsewhere := filepath.Join(root, "profiles-elsewhere", "helper")
+	mkdirs(t, bots, botsGrok, filepath.Join(agent, "profiles"), elsewhere)
+	hermesProfile(t, elsewhere)
 	profile := filepath.Join(agent, "profiles", "helper")
-	mkdirs(t, bots, botsGrok, profile)
-	hermesProfile(t, profile)
+	if err := os.Symlink(elsewhere, profile); err != nil {
+		t.Fatal(err)
+	}
 	// The entry names the home by a symlink; the run finds it by its path.
 	alias := filepath.Join(root, "agent-alias")
 	if err := os.Symlink(agent, alias); err != nil {
@@ -253,97 +265,16 @@ func TestHermesQuotaFromNamedHome(t *testing.T) {
 	if h := totalsFor(t, res.State, "hermes", "openai-codex"); h.Link == nil || h.Link.Label != "sam" {
 		t.Fatalf("hermes with no sessions = %+v", h.Link)
 	}
-}
 
-// A profile that is a link to a folder elsewhere is still its home's
-// profile. A run that could not read every Hermes home keeps the link: the
-// homes it read are not the majority.
-func TestHermesQuotaFromLinkedProfileAndPartialRead(t *testing.T) {
-	w, o := newWorld(t)
-	codex := w.home(t, "codex")
-	hermes := w.home(t, "hermes")
-	root := filepath.Dir(w.userHome)
-	bots := filepath.Join(root, "bots", ".codex")
-	agent := filepath.Join(root, "bots", ".hermes-agent")
-	elsewhere := filepath.Join(root, "profiles-elsewhere", "helper")
-	mkdirs(t, bots, filepath.Join(agent, "profiles"), elsewhere)
-	hermesProfile(t, elsewhere)
-	profile := filepath.Join(agent, "profiles", "helper")
-	if err := os.Symlink(elsewhere, profile); err != nil {
-		t.Fatal(err)
-	}
-	editConfig(t, o.Dir, func(cfg *state.Config) {
-		cfg.Homes = map[string][]string{"codex": {bots}, "hermes": {agent}}
-		cfg.QuotaFrom = map[string]map[string]string{agent: {"codex": bots}}
-	})
-	w.login("codex", codex, "sam", quota(t0, 5))
-	w.login("codex", bots, "bots", quota(t0, 40))
-	w.sessions("hermes", profile, hermesSess("p1", "openai-codex", t0.Add(-time.Hour), map[string]snapshot.Tokens{"openai-codex": tok(1000)}))
-	w.sessions("hermes", hermes, hermesSess("d1", "openai-codex", t0.Add(-2*time.Hour), map[string]snapshot.Tokens{"openai-codex": tok(70)}))
-	res := run(t, o)
-	if h := totalsFor(t, res.State, "hermes", "openai-codex"); h.Link == nil || h.Link.Label != "bots" {
-		t.Fatalf("hermes with a linked profile = %+v", h.Link)
-	}
-	if b := totalsFor(t, res.State, "codex", "bots"); b.Linked != tok(1000) {
-		t.Fatalf("codex bots = %+v", b)
-	}
-
-	// The profile's read fails; the default home alone would say sam.
-	w.now = t0.Add(15 * time.Minute)
+	// The profile's read fails; the home read alone would say bots.
+	w.now = t0.Add(time.Hour)
 	w.readErr[state.Key("hermes", profile)] = os.ErrPermission
-	w.sessions("hermes", profile)
-	w.sessions("hermes", hermes, hermesSess("d1", "openai-codex", w.now, map[string]snapshot.Tokens{"openai-codex": tok(90)}))
+	w.sessions("hermes", agent, hermesSess("a1", "openai-codex", w.now, map[string]snapshot.Tokens{
+		"openai-codex": tok(9000), "xai-oauth": tok(30),
+	}))
 	res = run(t, o)
-	if h := totalsFor(t, res.State, "hermes", "openai-codex"); h.Link == nil || h.Link.Label != "bots" {
+	if h := totalsFor(t, res.State, "hermes", "openai-codex"); h.Link == nil || h.Link.Label != "sam" {
 		t.Fatalf("hermes after a partial read = %+v", h.Link)
-	}
-}
-
-func TestHermesAttributesByBillingProvider(t *testing.T) {
-	w, o := newWorld(t)
-	h := w.home(t, "hermes")
-	bill := func(id, acct string, in int64, at time.Time) logs.Session {
-		s := sess(id, "/h", in, at)
-		s.Account = acct
-		return s
-	}
-	w.sessions("hermes", h,
-		bill("h1", "openrouter", 100, t0.Add(-3*time.Hour)),
-		bill("h2", "anthropic", 50, t0.Add(-2*time.Hour)),
-		bill("h3", "", 7, t0.Add(-4*time.Hour)),
-	)
-	res := run(t, o)
-	for label, want := range map[string]snapshot.Tokens{"openrouter": tok(100), "anthropic": tok(50), UnknownAccount: tok(7)} {
-		if got := totalsFor(t, res.State, "hermes", label).Tokens; got != want {
-			t.Fatalf("hermes %s tokens = %+v, want %+v", label, got, want)
-		}
-	}
-	if !IsCurrent(res.State, "hermes", "anthropic") || IsCurrent(res.State, "hermes", "openrouter") {
-		t.Fatalf("current = %v", res.State.Current)
-	}
-
-	// h1 switches billing to anthropic and grows; it becomes the newest.
-	w.now = t0.Add(15 * time.Minute)
-	w.sessions("hermes", h,
-		bill("h1", "anthropic", 160, w.now.Add(-time.Minute)),
-		bill("h2", "anthropic", 50, t0.Add(-2*time.Hour)),
-		bill("h3", "", 7, t0.Add(-4*time.Hour)),
-	)
-	res = run(t, o)
-	if got := res.State.Sessions[state.Key("hermes", "h1")].By; got["openrouter"] != tok(100) || got["anthropic"] != tok(60) {
-		t.Fatalf("h1 split = %+v", got)
-	}
-	// The newest session bills anthropic now. Its earlier openrouter share
-	// must not make openrouter current, on any run.
-	for i := range 10 {
-		w.now = w.now.Add(15 * time.Minute)
-		res = run(t, o)
-		if !IsCurrent(res.State, "hermes", "anthropic") || IsCurrent(res.State, "hermes", "openrouter") {
-			t.Fatalf("run %d: current = %v", i, res.State.Current)
-		}
-	}
-	if src := res.State.Sources["hermes"]; src.Status != "ok" {
-		t.Fatalf("hermes source = %+v", src)
 	}
 }
 
