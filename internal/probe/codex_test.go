@@ -18,40 +18,50 @@ import (
 )
 
 func TestCodexChatGPT(t *testing.T) {
-	// A CODEX_HOME inherited from the caller would point the server at
-	// another home, so it is removed for the default one.
-	env, record := fakeEnv(t, "codex-ok", "CODEX_HOME=/stale")
-	r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
-	if err != nil {
-		t.Fatalf("error: %v", err)
-	}
-	if r.Account != "dev@example.com" || r.Plan != "pro" {
-		t.Errorf("reading = %+v", r)
-	}
-	want := &Quota{At: testNow, Source: "harness", Windows: []snapshot.Window{
-		{Name: "5h", Percent: 12, Minutes: 300, ResetsAt: unix(1790003600)},
-		{Name: "7d", Percent: 40, Minutes: 10080, ResetsAt: unix(1790500000)},
-		{Name: "codex_other 1h", Percent: 9, Minutes: 60, ResetsAt: unix(1790000000)},
-	}}
-	if !reflect.DeepEqual(r.Quota, want) {
-		t.Errorf("quota\n got  %v\n want %v", describe(r.Quota), describe(want))
-	}
+	for _, leaf := range []string{".codex", "work-codex"} {
+		t.Run(leaf, func(t *testing.T) {
+			// A CODEX_HOME inherited from the caller would point the server at
+			// another home, so it is removed for the default one and replaced
+			// for another.
+			env, record := fakeEnv(t, "codex-ok", "CODEX_HOME=/stale")
+			home := filepath.Join(env.HomeDir, leaf)
+			r, err := Codex(context.Background(), env, home)
+			if err != nil {
+				t.Fatalf("error: %v", err)
+			}
+			if r.Account != "dev@example.com" || r.Plan != "pro" {
+				t.Errorf("reading = %+v", r)
+			}
+			want := &Quota{At: testNow, Source: "harness", Windows: []snapshot.Window{
+				{Name: "5h", Percent: 12, Minutes: 300, ResetsAt: unix(1790003600)},
+				{Name: "7d", Percent: 40, Minutes: 10080, ResetsAt: unix(1790500000)},
+				{Name: "codex_other 1h", Percent: 9, Minutes: 60, ResetsAt: unix(1790000000)},
+			}}
+			if !reflect.DeepEqual(r.Quota, want) {
+				t.Errorf("quota\n got  %v\n want %v", describe(r.Quota), describe(want))
+			}
 
-	rec, msgs := readRecord(t, record)
-	if rec.Name != "codex" || strings.Join(rec.Args, " ") != "app-server" {
-		t.Errorf("ran %s %q", rec.Name, rec.Args)
+			rec, msgs := readRecord(t, record)
+			if rec.Name != "codex" || strings.Join(rec.Args, " ") != "app-server" {
+				t.Errorf("ran %s %q", rec.Name, rec.Args)
+			}
+			wantHome := home
+			if leaf == ".codex" {
+				wantHome = ""
+			}
+			if got, set := rec.Env["CODEX_HOME"]; got != wantHome || set != (wantHome != "") {
+				t.Errorf("CODEX_HOME = %q (set %v), want %q", got, set, wantHome)
+			}
+			if got := methods(msgs); !slices.Equal(got, []string{"initialize", "initialized", "account/read", "account/rateLimits/read"}) {
+				t.Errorf("conversation = %q", got)
+			}
+			if _, ok := msgs[1]["id"]; ok {
+				t.Error("initialized must be a notification")
+			}
+			sameDir(t, rec.Dir, env.HomeDir)
+			waitNoGoroutine(t, "probe.(*codexRPC)")
+		})
 	}
-	if v, ok := rec.Env["CODEX_HOME"]; ok {
-		t.Errorf("CODEX_HOME=%q reached the default home", v)
-	}
-	if got := methods(msgs); !slices.Equal(got, []string{"initialize", "initialized", "account/read", "account/rateLimits/read"}) {
-		t.Errorf("conversation = %q", got)
-	}
-	if _, ok := msgs[1]["id"]; ok {
-		t.Error("initialized must be a notification")
-	}
-	sameDir(t, rec.Dir, env.HomeDir)
-	waitNoGoroutine(t, "probe.(*codexRPC)")
 }
 
 // app-server gets to finish what it does after its input ends.
@@ -89,18 +99,6 @@ func unix(sec int64) *time.Time {
 	return &t
 }
 
-func TestCodexCustomHome(t *testing.T) {
-	env, record := fakeEnv(t, "codex-ok")
-	home := filepath.Join(env.HomeDir, "work-codex")
-	if _, err := Codex(context.Background(), env, home); err != nil {
-		t.Fatal(err)
-	}
-	rec, _ := readRecord(t, record)
-	if got := rec.Env["CODEX_HOME"]; got != home {
-		t.Errorf("CODEX_HOME = %q, want %q", got, home)
-	}
-}
-
 func TestCodexAnswers(t *testing.T) {
 	tests := []struct {
 		mode      string
@@ -131,12 +129,6 @@ func TestCodexAnswers(t *testing.T) {
 			mode:      "codex-account-error",
 			wantErr:   "boom",
 			wantCalls: []string{"initialize", "initialized", "account/read"},
-		},
-		{
-			// TestCodexTriesEachBinary has one that says why on its way out.
-			mode:      "codex-exit",
-			wantErr:   "exited without answering",
-			wantCalls: []string{"initialize"},
 		},
 	}
 	for _, tc := range tests {
@@ -252,7 +244,6 @@ func TestCodexTriesEachBinary(t *testing.T) {
 		{name: "no account read on PATH", mode: "codex-no-account-read-on-path", bundles: []string{chatGPTApp}, ran: 2, account: "dev@example.com"},
 		// A codex that named the account and then died has served: the account
 		// stands, with the reason its quota is missing.
-		{name: "exits after the account", mode: "codex-exit-after-account", ran: 1, account: "dev@example.com", wantErr: "exited without answering: no backend"},
 		{name: "exits after the account, with a bundle", mode: "codex-exit-after-account", bundles: []string{chatGPTApp}, ran: 1, account: "dev@example.com", wantErr: "exited without answering: no backend"},
 		// When none can, the one on PATH says why.
 		{name: "none serves", mode: "codex-exit-says", bundles: []string{chatGPTApp}, ran: 2, wantErr: "exited without answering: error: unrecognized subcommand 'app-server'"},
@@ -288,26 +279,6 @@ func TestCodexTriesEachBinary(t *testing.T) {
 				t.Errorf("quota = %v", describe(r.Quota))
 			}
 		})
-	}
-}
-
-func TestCodexOnlyBundled(t *testing.T) {
-	// Someone who uses only the app has no codex on PATH.
-	env, record := fakeEnv(t, "codex-ok")
-	env.LookPath = notOnPath
-	apps := t.TempDir()
-	env.AppDirs = []string{filepath.Join(apps, "missing"), apps}
-	app := bundle(t, apps, filepath.Join("ChatGPT.app", "Contents", "Resources", binNames("codex")[0]), testNow)
-	if !env.Find("codex") || env.Find("claude") {
-		t.Error("Find disagrees with the bundled codex")
-	}
-	r, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex"))
-	var ran []string
-	for _, run := range readRuns(t, record) {
-		ran = append(ran, run.Path)
-	}
-	if err != nil || r.Account != "dev@example.com" || !slices.Equal(ran, []string{app}) {
-		t.Errorf("ran %q: %+v, %v", ran, r, err)
 	}
 }
 

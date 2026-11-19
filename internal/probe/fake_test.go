@@ -398,9 +398,6 @@ func fakeCodex(mode string, rec *os.File) int {
 		fail := func(msg string) { write(fmt.Sprintf(`{"id":%d,"error":{"code":-32600,"message":%q}}`, *m.ID, msg)) }
 		switch m.Method {
 		case "initialize":
-			if mode == "codex-exit" {
-				return 3
-			}
 			if mode == "codex-exit-says" {
 				// As clap prints it: the error, then usage and a hint.
 				fmt.Fprint(os.Stderr, "starting\n\x1b[31merror:\x1b[0m unrecognized subcommand 'app-server'\n\n"+

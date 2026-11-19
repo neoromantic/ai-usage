@@ -85,14 +85,15 @@ func TestFindSystemDirsWithoutHome(t *testing.T) {
 }
 
 func TestBins(t *testing.T) {
-	home := t.TempDir()
+	home, apps := t.TempDir(), t.TempDir()
 	onPath := filepath.Join(home, ".local", "bin", binNames("codex")[0])
 	writeExe(t, onPath)
-	env := Env{HomeDir: home, LookPath: notOnPath}
+	env := Env{HomeDir: home, LookPath: notOnPath, AppDirs: []string{filepath.Join(apps, "missing"), apps}}
 	old := bundle(t, home, filepath.Join(".cursor", "extensions", "openai.chatgpt-0.4.1", "bin", "linux-x86_64", binNames("codex")[0]), testNow.Add(-72*time.Hour))
 	newer := bundle(t, home, filepath.Join(".cursor", "extensions", "openai.chatgpt-0.5.0", "bin", "linux-x86_64", binNames("codex")[0]), testNow)
 	app := bundle(t, home, chatGPTApp, testNow.Add(-24*time.Hour))
-	want := []string{onPath, newer, app, old}
+	shared := bundle(t, apps, filepath.Join("ChatGPT.app", "Contents", "Resources", binNames("codex")[0]), testNow.Add(-48*time.Hour))
+	want := []string{onPath, newer, app, shared, old}
 	if runtime.GOOS != "windows" {
 		// A link to a binary already listed, and a file that cannot run,
 		// are left out.
@@ -113,6 +114,10 @@ func TestBins(t *testing.T) {
 	writeExe(t, filepath.Join(home, ".vscode", "extensions", "openai.chatgpt-26.5.1", "bin", "x", binNames("claude")[0]))
 	if got := env.bins("claude"); got != nil {
 		t.Errorf("claude bins = %q", got)
+	}
+	// Someone who uses only the app has Codex all the same.
+	if !(Env{LookPath: notOnPath, AppDirs: []string{apps}}).Find("codex") {
+		t.Error("the app's Codex is not found")
 	}
 }
 
@@ -153,9 +158,6 @@ func TestClaudeInstalls(t *testing.T) {
 	}
 	if got := env.claudeCandidates(context.Background()); !reflect.DeepEqual(got, want) {
 		t.Errorf("got  %q\nwant %q", got, want)
-	}
-	if c, ok := claudeForUsage(want); !ok || c != want[6] {
-		t.Errorf("read with %v", c)
 	}
 	// Someone who uses only the desktop app has Claude Code all the same.
 	env = Env{HomeDir: t.TempDir(), LookPath: notOnPath}

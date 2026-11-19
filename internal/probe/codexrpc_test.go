@@ -105,12 +105,14 @@ func TestCodexRPCLastLineWithoutNewline(t *testing.T) {
 	waitNoGoroutine(t, "probe.(*codexRPC)")
 }
 
-// close releases a reader that holds a line nobody asked for.
+// close releases a reader that holds a line nobody asked for. A write to the
+// pipe returns once the reader has taken the line.
 func TestCodexRPCCloseReleasesReader(t *testing.T) {
 	sr, sw := io.Pipe()
 	rpc := newCodexRPC(io.Discard, sr)
-	go func() { _, _ = io.WriteString(sw, `{"method":"unasked"}`+"\n") }()
-	time.Sleep(20 * time.Millisecond)
+	if _, err := io.WriteString(sw, `{"method":"unasked"}`+"\n"); err != nil {
+		t.Fatal(err)
+	}
 	rpc.close()
 	rpc.close()
 	waitNoGoroutine(t, "probe.(*codexRPC).read")

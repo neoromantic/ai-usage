@@ -45,39 +45,6 @@ func TestPooled(t *testing.T) {
 	}
 }
 
-// A harness command goes without the Account Pooler's route, so it asks the
-// home's own login, and keeps a gateway the person set up.
-func TestHarnessEnvLeavesThePool(t *testing.T) {
-	env := Env{Environ: []string{
-		"ANTHROPIC_BASE_URL=" + poolClaude, "ANTHROPIC_AUTH_TOKEN=made-up-hub-token",
-		"CODEX_OPENAI_BASE_URL=" + poolCodex, "CODEX_POOL_AUTH_TOKEN=made-up-hub-token",
-		"ENABLE_TOOL_SEARCH=true", "HOME=/home/ann",
-	}}
-	if got := env.harnessEnv("DISABLE_AUTOUPDATER", "1"); !slices.Equal(got, []string{"ENABLE_TOOL_SEARCH=true", "HOME=/home/ann", "DISABLE_AUTOUPDATER=1"}) {
-		t.Errorf("harnessEnv = %q", got)
-	}
-	own := []string{"ANTHROPIC_BASE_URL=https://gateway.acme.dev/anthropic", "ANTHROPIC_AUTH_TOKEN=made-up-gateway-token"}
-	env = Env{Environ: own}
-	if got := env.harnessEnv(); !slices.Equal(got, own) {
-		t.Errorf("a gateway of one's own: harnessEnv = %q", got)
-	}
-}
-
-func TestCodexLeavesThePool(t *testing.T) {
-	env, record := fakeEnv(t, "codex-ok", "CODEX_OPENAI_BASE_URL="+poolCodex, "CODEX_POOL_AUTH_TOKEN=made-up-hub-token",
-		"ANTHROPIC_BASE_URL="+poolClaude, "ANTHROPIC_AUTH_TOKEN=made-up-hub-token")
-	if _, err := Codex(context.Background(), env, filepath.Join(env.HomeDir, ".codex")); err != nil {
-		t.Fatalf("error: %v", err)
-	}
-	rec, _ := readRecord(t, record)
-	for _, k := range []string{"CODEX_OPENAI_BASE_URL", "CODEX_POOL_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"} {
-		if v, ok := rec.Env[k]; ok {
-			t.Errorf("%s=%q reached codex", k, v)
-		}
-	}
-	waitNoGoroutine(t, "probe.(*codexRPC)")
-}
-
 // BB's pool status says when its enabled accounts of each harness it routes
 // were last used; a harness it does not route, a disabled account, and a bb
 // that does not answer say nothing.

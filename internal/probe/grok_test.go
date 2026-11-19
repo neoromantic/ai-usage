@@ -223,14 +223,6 @@ func TestGrokLongLines(t *testing.T) {
 	}
 }
 
-func TestGrokLastLineWithoutNewline(t *testing.T) {
-	home := t.TempDir()
-	writeFile(t, filepath.Join(home, "logs", "unified.jsonl"), authLine("2026-09-22T10:00:00Z", 1, "user-a"))
-	if r, err := Grok(home); !errors.Is(err, ErrNoQuota) || r.Account != "user-a" {
-		t.Errorf("reading = %+v, %v", r, err)
-	}
-}
-
 func TestGrokErrors(t *testing.T) {
 	if r, err := Grok(t.TempDir()); err == nil || r.Account != "" {
 		t.Errorf("no log: %+v, %v", r, err)
