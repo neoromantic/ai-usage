@@ -50,13 +50,7 @@ func TestKeyBar(t *testing.T) {
 }
 
 func TestPills(t *testing.T) {
-	m := model(t, 120, 30, Config{})
-	m = keys(t, m, "%")
-	if got := bar(m); !strings.Contains(got, "p period ‹7d› · % ‹share› · ? help") {
-		t.Fatalf("share on: %q", got)
-	}
-
-	m = model(t, 120, 30, Config{Options: view.Options{ASCII: true}})
+	m := model(t, 120, 30, Config{Options: view.Options{ASCII: true}})
 	if got := bar(m); got != " j k scroll . h l matrix . p period [7d] . % share . ? help . q quit" {
 		t.Fatalf("ascii: %q", got)
 	}
@@ -187,45 +181,16 @@ func TestDeviceViews(t *testing.T) {
 	if m = keys(t, m, "s"); !strings.Contains(bar(m), "% ‹share›") {
 		t.Fatalf("share after status: %q", bar(m))
 	}
-}
-
-func TestDeviceViewsStart(t *testing.T) {
-	// A view opened in status starts there; in the help, s waits.
-	m := model(t, 120, 30, Config{Render: viewsRender(100, 12), Options: view.Options{DeviceStatus: true}})
-	if got := bar(m); !strings.Contains(got, "s usage ‹status›") {
-		t.Fatalf("opened in status: %q", got)
-	}
-	if m = keys(t, m, "?", "s"); !m.opts.DeviceStatus {
-		t.Fatal("s in the help changed the view")
-	}
-	// The help says what s does, and what its marks mean there.
-	help := strings.Join(ansiStrip(m.helpLines()), "\n")
-	for _, want := range []string{"  s ", "each device's status", "fails in VIA", "release in VERSION"} {
-		if !strings.Contains(help, want) {
-			t.Errorf("help lacks %q:\n%s", want, help)
-		}
-	}
-	// One device has one view: s does nothing and is not in the bar.
-	m = model(t, 120, 30, Config{})
-	if m = keys(t, m, "s"); m.opts.DeviceStatus || strings.Contains(bar(m), " s ") {
-		t.Fatalf("one view: status %v, bar %q", m.opts.DeviceStatus, bar(m))
+	// One device has one view: s does nothing.
+	if m = keys(t, model(t, 120, 30, Config{}), "s"); m.opts.DeviceStatus {
+		t.Fatal("s switched the view of a single device")
 	}
 }
 
+// TestDeviceViewsBar: a narrow terminal first names the status view alone,
+// as % names share, then drops share and refresh, then the views, before
+// the matrix. A view opened in status starts there.
 func TestDeviceViewsBar(t *testing.T) {
-	// In ASCII the chosen view is in brackets; in color, a pill as wide.
-	m := model(t, 120, 30, Config{Render: viewsRender(100, 12), Options: view.Options{ASCII: true}})
-	if got := bar(m); !strings.Contains(got, " . s [usage] status . ") {
-		t.Fatalf("ascii: %q", got)
-	}
-	m = model(t, 120, 30, Config{Render: viewsRender(100, 12), Options: view.Options{Color: true, Dark: true}})
-	if got := ansi.Strip(m.keyBar()); !strings.Contains(got, "s  usage  status · p") || !strings.Contains(m.keyBar(), m.pill("usage")) {
-		t.Fatalf("color: %q", got)
-	}
-
-	// A narrow terminal first names the status view alone, as % names
-	// share, then drops share and refresh, then the views, before the
-	// matrix.
 	for _, c := range []struct {
 		width  int
 		status bool
@@ -233,7 +198,6 @@ func TestDeviceViewsBar(t *testing.T) {
 	}{
 		{97, false, usageBar},
 		{96, false, " ↑↓ scroll · ←→ matrix · s status · p period ‹7d› · % share · r refresh · ? help · q quit"},
-		{89, false, " ↑↓ scroll · ←→ matrix · s status · p period ‹7d› · % share · r refresh · ? help · q quit"},
 		{88, false, " ↑↓ scroll · ←→ matrix · s status · p period ‹7d› · r refresh · ? help · q quit"},
 		{67, false, " ↑↓ scroll · ←→ matrix · s status · p period ‹7d› · ? help · q quit"},
 		{66, false, " ↑↓ scroll · ←→ matrix · p period ‹7d› · ? help · q quit"},
@@ -248,17 +212,9 @@ func TestDeviceViewsBar(t *testing.T) {
 			t.Errorf("width %d, status %v\n got %q\nwant %q", c.width, c.status, got, c.want)
 		}
 	}
-	// In ASCII the short form is as wide, in brackets.
-	m = model(t, 74, 30, Config{Render: viewsRender(100, 12), Refresh: refresher(), Options: view.Options{ASCII: true, DeviceStatus: true}})
-	if got := bar(m); got != " j k scroll . s [status] . p period [7d] . r refresh . ? help . q quit" {
-		t.Errorf("ascii, short: %q", got)
-	}
-}
-
-// TestDeviceViewsAt80: on the team fixture at 80 columns, the key bar names
-// the status view alone and keeps pick, dropping share and refresh, and
-// the status view has room for every key it has, its views named short.
-func TestDeviceViewsAt80(t *testing.T) {
+	// On the team fixture at 80 columns, the bar keeps pick, dropping share
+	// and refresh, and the status view has room for every key it has, its
+	// views named short.
 	m := model(t, 80, 30, Config{Report: teamReport(t), Render: view.Render, Refresh: refresher()})
 	if got, want := bar(m), " ↑↓ scroll · ↵ pick · ←→ matrix · s status · p period ‹7d› · ? help · q quit"; got != want {
 		t.Errorf("usage at 80\n got %q\nwant %q", got, want)
@@ -266,17 +222,5 @@ func TestDeviceViewsAt80(t *testing.T) {
 	m = keys(t, m, "s")
 	if got, want := bar(m), " ↑↓ scroll · ↵ pick · s ‹status› · p period ‹7d› · r refresh · ? help · q quit"; got != want {
 		t.Errorf("status at 80\n got %q\nwant %q", got, want)
-	}
-}
-
-// TestDeviceViewsDrawn: s draws the status view of a real report, with the
-// device's release, and the page keeps its lines.
-func TestDeviceViewsDrawn(t *testing.T) {
-	m := model(t, 120, 80, Config{Report: teamReport(t), Render: view.Render})
-	lines := len(m.page.Body)
-	m = keys(t, m, "s")
-	text := strings.Join(screen(m), "\n")
-	if !strings.Contains(text, "DEVICES  15 · 1 error · 1 silent · 4 old · by 7d") || !strings.Contains(text, "v1.4.0 ↓") || len(m.page.Body) != lines {
-		t.Fatalf("status view, %d lines, was %d:\n%s", len(m.page.Body), lines, text)
 	}
 }

@@ -17,29 +17,24 @@ import (
 	"github.com/neoromantic/ai-usage/internal/view"
 )
 
-// immediate are the messages cmd and the commands it batches give at once; a
-// timer, which waits an hour in these tests, gives none.
+// immediate are the messages cmd and the commands it batches give, but for
+// the timers': model's fire at once, and a test that means one to fire
+// sends its message itself.
 func immediate(cmd tea.Cmd) []tea.Msg {
 	if cmd == nil {
 		return nil
 	}
-	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
-	select {
-	case msg := <-done:
-		if b, ok := msg.(tea.BatchMsg); ok {
-			var msgs []tea.Msg
-			for _, c := range b {
-				msgs = append(msgs, immediate(c)...)
-			}
-			return msgs
+	switch msg := cmd().(type) {
+	case tea.BatchMsg:
+		var msgs []tea.Msg
+		for _, c := range msg {
+			msgs = append(msgs, immediate(c)...)
 		}
-		if msg == nil {
-			return nil
-		}
-		return []tea.Msg{msg}
-	case <-time.After(100 * time.Millisecond):
+		return msgs
+	case nil, pollMsg, spinMsg:
 		return nil
+	default:
+		return []tea.Msg{msg}
 	}
 }
 
@@ -124,7 +119,6 @@ func TestReload(t *testing.T) {
 	poll := func() Model {
 		t.Helper()
 		next, cmd := m.Update(pollMsg(now))
-		// The next poll waits; a load answers at once.
 		return update(t, next.(Model), immediate(cmd)...)
 	}
 
@@ -181,10 +175,10 @@ func TestJobs(t *testing.T) {
 }
 
 // TestRun runs the program on a pipe: it draws on the alternate screen,
-// leaves it on q, and stops a collection that still runs before returning.
+// leaves it on q, and stops a collection that still runs, says it waits for
+// it, and waits, before returning.
 func TestRun(t *testing.T) {
-	stopped := make(chan struct{})
-	var told atomic.Bool
+	started, told, stopped := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	in, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -196,9 +190,13 @@ func TestRun(t *testing.T) {
 		done <- Run(context.Background(), Config{
 			Report:   report("leebook"),
 			Render:   fakeRender(5, 0),
-			Stopping: func() { told.Store(true) },
+			Stopping: func() { close(told) },
 			Refresh: func(ctx context.Context) error {
+				close(started)
 				<-ctx.Done()
+				// It stops only once Run has said it waits for it, so that it
+				// still runs when Run looks.
+				<-told
 				close(stopped)
 				return ctx.Err()
 			},
@@ -207,7 +205,11 @@ func TestRun(t *testing.T) {
 	if _, err := w.WriteString("r"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(200 * time.Millisecond)
+	select {
+	case <-started:
+	case err := <-done:
+		t.Fatalf("Run returned before r started a collection: %v", err)
+	}
 	if _, err := w.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
@@ -217,15 +219,12 @@ func TestRun(t *testing.T) {
 			t.Fatalf("Run: %v", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("Run did not return after q")
+		t.Fatal("Run did not return after q: it did not stop the collection, or did not say it waits for it")
 	}
 	select {
 	case <-stopped:
 	default:
 		t.Fatal("Run returned before the collection stopped")
-	}
-	if !told.Load() {
-		t.Fatal("Run did not say it waits for the collection")
 	}
 	s := out.String()
 	if !strings.Contains(s, "\x1b[?1049h") || !strings.Contains(s, "\x1b[?1049l") {

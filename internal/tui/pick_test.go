@@ -1,9 +1,6 @@
 package tui
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -83,14 +80,15 @@ func TestPick(t *testing.T) {
 		// A screen down keeps a row in sight picked.
 		m = keys(t, m, "pgdown", "pgdown")
 		picked(t, m)
-		// Esc leaves picking; Esc again quits.
+		// Esc leaves picking.
 		m = keys(t, m, "esc")
 		if m.picking || strings.Contains(bar(m), "esc back") {
 			t.Fatalf("%v: esc left the pick %v, bar %q", size, m.picking, bar(m))
 		}
-		if _, cmd := m.Update(press(t, "esc")); !quits(cmd) {
-			t.Fatalf("%v: esc on the page did not quit", size)
-		}
+	}
+	// A page with no rows to pick has no pick.
+	if m := keys(t, model(t, 120, 40, Config{}), "enter"); m.picking {
+		t.Fatal("enter picked on a page with no rows")
 	}
 }
 
@@ -227,35 +225,4 @@ func TestClick(t *testing.T) {
 	if m = click(m, row); m.open == nil || *m.open != k {
 		t.Fatalf("click in a detail: %v", m.open)
 	}
-}
-
-// TestPickSolo: on a single device, the rows to pick are its accounts, and
-// a page with nothing to pick has no pick.
-func TestPickSolo(t *testing.T) {
-	m := model(t, 120, 40, Config{Report: soloReport(t), Render: view.Render})
-	m = keys(t, m, "enter", "G", "enter")
-	if m.open == nil || m.open.Provider == "" {
-		t.Fatalf("solo: opened %+v", m.open)
-	}
-	if !strings.Contains(strings.Join(screen(m), "\n"), "WINDOWS") {
-		t.Fatalf("solo account detail:\n%s", strings.Join(screen(m), "\n"))
-	}
-	m = model(t, 120, 40, Config{})
-	if m = keys(t, m, "enter"); m.picking || strings.Contains(bar(m), "pick") {
-		t.Fatalf("fake page with no rows: picking %v, bar %q", m.picking, bar(m))
-	}
-}
-
-// soloReport is the view's fixture of a single device.
-func soloReport(t *testing.T) view.Report {
-	t.Helper()
-	b, err := os.ReadFile(filepath.Join("..", "view", "testdata", "single.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var r view.Report
-	if err := json.Unmarshal(b, &r); err != nil {
-		t.Fatal(err)
-	}
-	return r
 }

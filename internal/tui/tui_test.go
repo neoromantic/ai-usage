@@ -44,7 +44,7 @@ func report(label string) view.Report {
 }
 
 // model is a view of a 100-line page with a 12-column matrix, sized w×h,
-// whose timers never fire in a test.
+// whose timers fire at once, for immediate to leave out.
 func model(t *testing.T, w, h int, c Config) Model {
 	t.Helper()
 	if c.Render == nil {
@@ -54,7 +54,7 @@ func model(t *testing.T, w, h int, c Config) Model {
 		c.Report = report("leebook")
 	}
 	m := New(c)
-	m.pollEvery, m.spinEvery = time.Hour, time.Hour
+	m.pollEvery, m.spinEvery = 0, 0
 	return update(t, m, tea.WindowSizeMsg{Width: w, Height: h})
 }
 
@@ -131,6 +131,8 @@ func quits(cmd tea.Cmd) bool {
 
 func refresher() func(context.Context) error { return func(context.Context) error { return nil } }
 
+// TestFrame: the screen is the terminal's size: the header, the page, the
+// rule, and the key bar, on the alternate screen with the mouse.
 func TestFrame(t *testing.T) {
 	m := model(t, 100, 20, Config{Refresh: refresher()})
 	v := m.View()
@@ -163,6 +165,24 @@ func TestFrame(t *testing.T) {
 	if !strings.Contains(screen(m)[0], "width=120") {
 		t.Fatalf("fixed width header %q", screen(m)[0])
 	}
+
+	// A page wider than the terminal is cut to it, and a terminal of one to
+	// three rows keeps the key bar.
+	wide := func(view.Report, view.Options) view.Page {
+		return view.Page{Header: strings.Repeat("h", 90), Body: []string{"\x1b[1m" + strings.Repeat("x", 90) + "\x1b[0m"}}
+	}
+	m = model(t, 40, 10, Config{Render: wide})
+	for i, row := range strings.Split(m.View().Content, "\n") {
+		if w := ansi.StringWidth(row); w > 40 {
+			t.Fatalf("row %d is %d wide", i, w)
+		}
+	}
+	for h := 1; h <= 3; h++ {
+		rows := screen(model(t, 40, h, Config{Render: wide}))
+		if len(rows) != h || !strings.HasSuffix(rows[h-1], "q quit") {
+			t.Fatalf("height %d: %q", h, rows)
+		}
+	}
 }
 
 // teamReport is the view's team fixture: 13 devices on 8 subscriptions.
@@ -177,24 +197,6 @@ func teamReport(t *testing.T) view.Report {
 		t.Fatal(err)
 	}
 	return r
-}
-
-func TestNarrowAndShortTerminals(t *testing.T) {
-	wide := func(view.Report, view.Options) view.Page {
-		return view.Page{Header: strings.Repeat("h", 90), Body: []string{"\x1b[1m" + strings.Repeat("x", 90) + "\x1b[0m"}}
-	}
-	m := model(t, 40, 10, Config{Render: wide})
-	for i, row := range strings.Split(m.View().Content, "\n") {
-		if w := ansi.StringWidth(row); w > 40 {
-			t.Fatalf("row %d is %d wide", i, w)
-		}
-	}
-	for h := 1; h <= 3; h++ {
-		rows := screen(model(t, 40, h, Config{Render: wide}))
-		if len(rows) != h || !strings.HasSuffix(rows[h-1], "q quit") {
-			t.Fatalf("height %d: %q", h, rows)
-		}
-	}
 }
 
 func ansiStrip(ls []string) []string {

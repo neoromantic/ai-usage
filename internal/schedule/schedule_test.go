@@ -2,6 +2,7 @@ package schedule
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,12 +20,17 @@ func TestExecRunner(t *testing.T) {
 
 	t.Setenv("AIU_SCHEDULE_HELPER", "no-crontab")
 	_, err = execRunner(ctx, os.Args[0], helperArgs, nil)
-	// The error is the first line of stderr.
+	// The error is the first line of stderr, and keeps the exit code, which
+	// tells a missing Windows task.
 	if err == nil || !strings.Contains(err.Error(), "no crontab for tester") || strings.Contains(err.Error(), "second line") {
 		t.Fatalf("stderr is not the error: %v", err)
 	}
 	if !noCrontab(err.Error()) {
 		t.Fatal("no crontab is not recognized through the runner")
+	}
+	var exit interface{ ExitCode() int }
+	if !errors.As(err, &exit) || exit.ExitCode() != 1 {
+		t.Fatalf("runner discarded the exit code: %v", err)
 	}
 }
 

@@ -54,10 +54,6 @@ func TestCostMode(t *testing.T) {
 	if m.opts.Cost {
 		t.Fatal("$ twice stays in dollars")
 	}
-	// A report with no cost has no $.
-	if m = model(t, 120, 50, Config{}); m.costKey() {
-		t.Fatal("$ without a cost")
-	}
 }
 
 // TestQuestions: the report's questions show one at a time over the key

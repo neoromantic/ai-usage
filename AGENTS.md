@@ -169,7 +169,7 @@ After a change in `bb/` or to `scripts/demo/*.ts`, run `bun run format` and then
 
 After a change to a workflow, CI's hygiene job runs actionlint and zizmor on it; run `actionlint` and `uvx zizmor@1.31.1 --offline .` first. Pin each action to a full commit with its version in a comment, as in `actions/checkout@<sha> # v7.0.1`, and give a checkout `persist-credentials: false`.
 
-`go test ./internal/view -update` rewrites the golden files. Do it only on purpose, and read the diff. `TestRun` in `internal/tui` depends on timing and fails now and then on a busy machine; run it once more before taking a failure as real.
+`go test ./internal/view -update` rewrites the golden files. Do it only on purpose, and read the diff.
 
 ### Docs are part of every change
 

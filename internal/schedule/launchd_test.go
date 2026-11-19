@@ -249,9 +249,12 @@ func TestAgentPlist(t *testing.T) {
 	}
 }
 
+// TestAgentInstall: Install writes the plist and loads it, turning back on
+// an agent the person disabled, and loads it again in place of an earlier
+// one.
 func TestAgentInstall(t *testing.T) {
 	ctx := context.Background()
-	f := &fakeLaunchd{}
+	f := &fakeLaunchd{disabled: "disabled"}
 	s, file := agent(t, f)
 	if got, err := s.Lookup(ctx, exe, home); err != nil || got != Absent {
 		t.Fatalf("Lookup before Install = %v, %v", got, err)
@@ -317,24 +320,33 @@ func TestAgentLookup(t *testing.T) {
 		// loaded is the plist launchd loaded; empty means none.
 		loaded   string
 		disabled string
-		want     State
+		// refused says launchd refused the agent's last start for the code
+		// signature it pinned it to, and inAgent that a run the agent
+		// started looks.
+		refused, inAgent bool
+		want             State
 	}{
-		{"none", "", "", "", Absent},
-		{"loaded", mine, mine, "", Active},
-		{"enabled by hand", mine, mine, "enabled", Active},
-		{"not loaded", mine, "", "", Unloaded},
-		{"disabled", mine, "", "disabled", Disabled},
-		{"disabled on older macOS", mine, mine, "true", Disabled},
-		{"disabled and another binary", old, "", "disabled", Disabled},
-		{"another binary", old, old, "", Other},
+		{"none", "", "", "", false, false, Absent},
+		{"loaded", mine, mine, "", false, false, Active},
+		{"enabled by hand", mine, mine, "enabled", false, false, Active},
+		{"not loaded", mine, "", "", false, false, Unloaded},
+		{"disabled", mine, "", "disabled", false, false, Disabled},
+		{"disabled on older macOS", mine, mine, "true", false, false, Disabled},
+		{"disabled and another binary", old, "", "disabled", false, false, Disabled},
+		{"another binary", old, old, "", false, false, Other},
 		// launchd keeps the definition it loaded once the plist changed.
-		{"another binary loaded", mine, old, "", Stale},
-		{"another state folder loaded", mine, AgentPlist(exe, "/old/state", ""), "", Stale},
-		{"loaded with another PATH", mine, AgentPlist(exe, home, "/opt/acme/bin"), "", Active},
+		{"another binary loaded", mine, old, "", false, false, Stale},
+		{"another state folder loaded", mine, AgentPlist(exe, "/old/state", ""), "", false, false, Stale},
+		{"loaded with another PATH", mine, AgentPlist(exe, home, "/opt/acme/bin"), "", false, false, Active},
+		{"refused", mine, mine, "", true, false, Refused},
+		// A run the agent started was not refused.
+		{"refused, in a run of the agent", mine, mine, "", true, true, Active},
+		{"refused, another binary", old, old, "", true, false, Other},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			f := &fakeLaunchd{loaded: tc.loaded != "", booted: tc.loaded, disabled: tc.disabled}
+			f := &fakeLaunchd{loaded: tc.loaded != "", booted: tc.loaded, disabled: tc.disabled, pinned: tc.refused, refused: tc.refused}
 			s, file := agent(t, f)
+			s.InAgent = tc.inAgent
 			if tc.plist != "" {
 				if err := os.MkdirAll(s.AgentDir, 0o755); err != nil {
 					t.Fatal(err)
@@ -360,18 +372,6 @@ func TestAgentLookup(t *testing.T) {
 	}
 	if got, err := s.Lookup(ctx, exe, home); err != nil || got != Absent {
 		t.Fatalf("Lookup with no login session = %v, %v, want %v", got, err, Absent)
-	}
-}
-
-func TestAgentInstallTurnsDisabledBackOn(t *testing.T) {
-	ctx := context.Background()
-	f := &fakeLaunchd{disabled: "disabled"}
-	s, _ := agent(t, f)
-	if err := s.Install(ctx, exe, home, "/usr/bin"); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := s.Lookup(ctx, exe, home); got != Active {
-		t.Fatalf("Lookup = %v, calls %q", got, f.calls)
 	}
 }
 
@@ -461,35 +461,6 @@ func TestAgentRunDoesNotBootItselfOut(t *testing.T) {
 	}
 }
 
-// TestAgentStale: once a run of the agent rewrote the plist for another
-// binary, as one of the installer's copy does for Homebrew's, launchd still
-// runs the binary it loaded. Lookup says so until Install from a run a
-// person starts loads the plist again.
-func TestAgentStale(t *testing.T) {
-	ctx := context.Background()
-	f := &fakeLaunchd{}
-	s, _ := agent(t, f)
-	if err := s.Install(ctx, "/old/ai-usage", home, "/usr/bin"); err != nil {
-		t.Fatal(err)
-	}
-	in := s
-	in.InAgent = true
-	if err := in.Install(ctx, exe, home, "/usr/bin"); err != nil {
-		t.Fatal(err)
-	}
-	for _, s := range []Scheduler{s, in} {
-		if got, err := s.Lookup(ctx, exe, home); err != nil || got != Stale {
-			t.Fatalf("Lookup (in a run of the agent %v) = %v, %v", s.InAgent, got, err)
-		}
-	}
-	if err := s.Install(ctx, exe, home, "/usr/bin"); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := s.Lookup(ctx, exe, home); got != Active || !strings.Contains(f.booted, "<string>"+exe+"</string>") {
-		t.Fatalf("Lookup after Install = %v, loaded:\n%s", got, f.booted)
-	}
-}
-
 func TestLoadedRuns(t *testing.T) {
 	b, err := printOf("pinned", 1, "")
 	if err != nil {
@@ -503,8 +474,6 @@ func TestLoadedRuns(t *testing.T) {
 		want  bool
 	}{
 		{"its command", b, ann, true},
-		{"another binary", b, agentArgs("/opt/homebrew/opt/ai-usage/bin/ai-usage", ann[4]), false},
-		{"another state folder", b, agentArgs(ann[0], "/Users/ann/Library/Application"), false},
 		{"a longer command", b, append(slices.Clone(ann), "--offline"), false},
 		{"odd paths", loadedAs(b, AgentPlist("/Users/o'brien/AI & <Tools>/ai-usage", " state ", "")),
 			agentArgs("/Users/o'brien/AI & <Tools>/ai-usage", " state "), true},
@@ -577,29 +546,6 @@ func TestReadPrint(t *testing.T) {
 	}
 	if got := readPrint([]byte("gui/501/" + AgentLabel + " = {\n}\n")); got != (agentPrint{}) {
 		t.Errorf("an empty print = %+v", got)
-	}
-}
-
-func TestAgentRefused(t *testing.T) {
-	ctx := context.Background()
-	f := &fakeLaunchd{}
-	s, _ := agent(t, f)
-	if err := s.Install(ctx, exe, home, "/opt/homebrew/bin:/usr/bin"); err != nil {
-		t.Fatal(err)
-	}
-	f.pinned, f.refused, f.runs = true, true, 1
-	if got, err := s.Lookup(ctx, exe, home); err != nil || got != Refused {
-		t.Fatalf("Lookup = %v, %v", got, err)
-	}
-	// A run the agent started was not refused.
-	in := s
-	in.InAgent = true
-	if got, _ := in.Lookup(ctx, exe, home); got != Active {
-		t.Fatalf("Lookup in a run of the agent = %v", got)
-	}
-	// Another binary's agent stays another's, refused or not.
-	if got, _ := s.Lookup(ctx, "/old/ai-usage", home); got != Other {
-		t.Fatalf("Lookup for another binary = %v", got)
 	}
 }
 

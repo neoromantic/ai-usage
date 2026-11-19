@@ -155,8 +155,6 @@ installed AI Usage.app or their tmux. `rm -rf .verify` clears the evidence.
 
 ## Gotchas
 
-- `TestRun` in `internal/tui` depends on timing; `scripts/verify.sh` runs
-  that package once more before calling it a failure.
 - The shell may run commands through a filter (rtk) that shortens `go test`
   and `git diff` output, down to "N passed" or "Files are identical". Read
   `.verify/latest/go-test.txt`, or call go and git by their full paths

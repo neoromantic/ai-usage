@@ -47,6 +47,5 @@ row picked, a device's detail, and the page as it was after `esc`.
 
 ## Gotchas
 
-`TestRun` depends on timing and fails now and then on a busy machine;
-`scripts/verify.sh` reruns it once. The view needs a terminal: without
-one, `ai-usage` prints the page instead, which is not a bug.
+The view needs a terminal: without one, `ai-usage` prints the page
+instead, which is not a bug.
