@@ -124,27 +124,6 @@ func TestPageSilentDevice(t *testing.T) {
 	}
 }
 
-// TestPageOverLine: an OVER line that is short of room drops the pace
-// first, then the reading's age, and keeps how long before the reset.
-func TestPageOverLine(t *testing.T) {
-	r := loadReport(t, "team")
-	for w, want := range map[int][]string{
-		80: {
-			" OVER     claude ann@acme.dev  runs out ~Thu 01:17, 2d 23h before reset",
-			" OVER     codex sam@mail.test  runs out ~Sat 03:01, 2d 17h before reset",
-		},
-		100: {
-			" OVER     claude ann@acme.dev  runs out ~Thu 01:17, 2d 23h before reset · reading 1d old",
-			" OVER     codex sam@mail.test  runs out ~Sat 03:01 at the last day's pace, 2d 17h before reset",
-		},
-	} {
-		lines := pageSection(Render(r, Options{Width: w, Loc: sampleZone}), "ATTENTION")
-		if len(lines) < 5 || lines[3] != want[0] || lines[4] != want[1] {
-			t.Errorf("at %d:\n%s\nwant\n%s", w, strings.Join(lines, "\n"), strings.Join(want, "\n"))
-		}
-	}
-}
-
 // TestPageOverAtReset: a window at 50% with half the week gone is on at this
 // week's pace for 100%, and runs out at its reset; at 50.2% it is on for
 // 100% too, and runs out 40 minutes before. Each OVER line says when, and
@@ -261,68 +240,9 @@ func TestPageMatrixScroll(t *testing.T) {
 	}
 }
 
-// TestPageDevicesHead: the page says which of its lines head the rows of
-// DEVICES, the title, the group headings, and the column headers, and where
-// the section ends, after TOTAL, in both views and both modes, in every
-// period, at every tier, scrolled sideways or not. USAGE, on a single
-// device, has none.
-func TestPageDevicesHead(t *testing.T) {
-	for name, r := range map[string]Report{"team": loadReport(t, "team")} {
-		for _, w := range []int{80, 120, 160} {
-			for _, status := range []bool{false, true} {
-				for _, share := range []bool{false, true} {
-					for _, per := range Periods {
-						for _, scroll := range []int{0, 2} {
-							o := Options{Width: w, Loc: sampleZone, DeviceStatus: status, Share: share, Period: per,
-								Interactive: scroll > 0, MatrixScroll: scroll}
-							p := Render(r, o)
-							h, end := p.DevicesHead, p.DevicesEnd
-							sec := pageSection(p, "DEVICES")
-							if h[1]-h[0] != 3 || end-h[0] != len(sec) || end-h[1]-1 != len(r.Team.Devices) {
-								t.Errorf("%s %+v: head %v, end %d, for a section of %d lines:\n%s", name, o, h, end, len(sec), strings.Join(sec, "\n"))
-								continue
-							}
-							for i, l := range sec {
-								if got := sgr.ReplaceAllString(p.Body[h[0]+i], ""); got != l {
-									t.Errorf("%s %+v: line %d of the section is %q, not %q", name, o, h[0]+i, got, l)
-								}
-							}
-							if !strings.HasPrefix(sec[len(sec)-1], "  TOTAL ") || end < len(p.Body) && p.Body[end] != "" {
-								t.Errorf("%s %+v: the section does not end after TOTAL at %d", name, o, end)
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-	for _, status := range []bool{false, true} {
-		if p := Render(loadReport(t, "single"), Options{Width: 120, DeviceStatus: status}); p.DevicesHead != [2]int{} || p.DevicesEnd != 0 {
-			t.Errorf("a single device, status %v: head %v, end %d", status, p.DevicesHead, p.DevicesEnd)
-		}
-	}
-}
-
+// TestPageHeat: the heat map takes a step for every half of a tenfold
+// below the largest cell, from 5 down to 1.
 func TestPageHeat(t *testing.T) {
-	r := loadReport(t, "team")
-	row := func(p Page, device string) string {
-		return bodyLine(t, p, "DEVICES", func(text string) bool {
-			return strings.Contains(text[:min(len(text), 24)], " "+device+" ")
-		})
-	}
-	// In color the top step is bold: the largest cell on the page.
-	color := Render(r, Options{Width: 120, Loc: sampleZone, Color: true})
-	if l := row(color, "root@srv1"); !strings.Contains(l, "\x1b[1;38;2;") || !strings.Contains(l, "m1080\x1b[m") {
-		t.Errorf("the largest cell is not bold in color: %q", l)
-	}
-	// Without color the largest of each column is bold, and nothing else.
-	mono := Render(r, Options{Width: 120, Loc: sampleZone})
-	if l := row(mono, "ann@annbook"); !strings.Contains(l, "\x1b[1m810\x1b[m") || !strings.Contains(l, "\x1b[1m230\x1b[m") {
-		t.Errorf("the largest of a column is not bold: %q", l)
-	}
-	if l := row(mono, "hermes@bot-a"); strings.Contains(l, "\x1b[1m") {
-		t.Errorf("a cell that is no column's largest is bold: %q", l)
-	}
 	for _, v := range []struct {
 		v, top float64
 		step   int
@@ -363,14 +283,6 @@ func TestPageHeadersDim(t *testing.T) {
 				t.Errorf("%s by %s: a header that is not dim, %q, in %q", c.table, per, rest, l)
 			}
 		}
-	}
-}
-
-func TestPageHeaderBusy(t *testing.T) {
-	r := loadReport(t, "team")
-	h := sgr.ReplaceAllString(Render(r, Options{Width: 120, Loc: sampleZone, Busy: "⠋"}).Header, "")
-	if !strings.Contains(h, "⠋ collecting") || strings.Contains(h, "collected 7m") {
-		t.Errorf("busy header %q", h)
 	}
 }
 

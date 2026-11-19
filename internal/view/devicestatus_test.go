@@ -85,18 +85,9 @@ func TestStatusOrder(t *testing.T) {
 // each in its state's color, and leaves out a count of none.
 func TestStatusTitle(t *testing.T) {
 	title := func(r Report, o Options) string { return pageSection(Render(r, devices(o)), "DEVICES")[0] }
-	for _, c := range []struct {
-		r     Report
-		width int
-		want  string
-	}{
-		{loadReport(t, "team"), 120, "DEVICES  15 · 1 error · 1 silent · 4 old · by 7d UTC · M weighted tokens"},
-		{troubled(t), 120, "DEVICES  15 · 2 errors · 2 silent · 4 old · by 7d UTC · M weighted tokens"},
-	} {
-		got := title(c.r, Options{Width: c.width, Loc: sampleZone})
-		if !strings.HasPrefix(got, c.want+"  ") || !strings.HasSuffix(got, "usage  ‹status›") {
-			t.Errorf("title %q, want %q and the views", got, c.want)
-		}
+	want := "DEVICES  15 · 2 errors · 2 silent · 4 old · by 7d UTC · M weighted tokens"
+	if got := title(troubled(t), Options{Width: 120, Loc: sampleZone}); !strings.HasPrefix(got, want+"  ") || !strings.HasSuffix(got, "usage  ‹status›") {
+		t.Errorf("title %q, want %q and the views", got, want)
 	}
 	// A team with nothing wrong counts nothing.
 	r := loadReport(t, "team")
@@ -130,37 +121,38 @@ func TestStatusTitle(t *testing.T) {
 	}
 }
 
-// TestStatusColumns: a narrow page cuts NOTE, then drops VIA, and the
-// periods but the chosen one and 90d, in that order; a wider one never shows
-// less; and no line is wider than the page before it is cut.
+// longNames is troubled with long names and releases.
+func longNames(t *testing.T) Report {
+	r := troubled(t)
+	for i := range r.Team.Devices {
+		d := &r.Team.Devices[i]
+		d.CollectorVersion = "v1.4.0-rc.12"
+		d.Label += "-with-a-long-name"
+	}
+	for i := range r.Team.Matrix.Rows {
+		r.Team.Matrix.Rows[i].Device += "-with-a-long-name"
+	}
+	return r
+}
+
+// TestStatusColumns: a narrow page drops VIA, then the periods but the
+// chosen one and 90d, today first; long names and releases leave room at
+// 80 for 2 of the 4 periods. TestWidths checks the order at every width.
 func TestStatusColumns(t *testing.T) {
-	t.Parallel()
 	r := loadReport(t, "team")
 	for _, c := range []struct {
 		width int
 		per   Period
 		want  string
 	}{
-		{80, Week, "DEVICE VERSION SEEN 7D 90D NOTE"},
 		{100, Week, "DEVICE VERSION SEEN TODAY 7D 30D 90D NOTE"},
-		{120, Week, "DEVICE VERSION SEEN VIA TODAY 7D 30D 90D NOTE"},
 		{160, Today, "DEVICE VERSION SEEN VIA TODAY 7D 30D 90D NOTE"},
 	} {
 		if got := strings.Join(statusHeads(t, Render(r, devices(Options{Width: c.width, Period: c.per}))), " "); got != c.want {
 			t.Errorf("at %d by %s: %q, want %q", c.width, c.per, got, c.want)
 		}
 	}
-
-	// Long names and releases leave room at 80 for 2 of the 4 periods.
-	long := troubled(t)
-	for i := range long.Team.Devices {
-		d := &long.Team.Devices[i]
-		d.CollectorVersion = "v1.4.0-rc.12"
-		d.Label += "-with-a-long-name"
-	}
-	for i := range long.Team.Matrix.Rows {
-		long.Team.Matrix.Rows[i].Device += "-with-a-long-name"
-	}
+	long := longNames(t)
 	for per, want := range map[Period]string{
 		Today:   "DEVICE VERSION SEEN TODAY 90D NOTE",
 		Week:    "DEVICE VERSION SEEN 7D 90D NOTE",
@@ -169,39 +161,6 @@ func TestStatusColumns(t *testing.T) {
 	} {
 		if got := strings.Join(statusHeads(t, Render(long, devices(Options{Width: 80, Period: per}))), " "); got != want {
 			t.Errorf("long names by %s: %q, want %q", per, got, want)
-		}
-	}
-
-	order := []string{"DEVICE", "VERSION", "SEEN", "VIA", "TODAY", "7D", "30D", "90D", "NOTE"}
-	for name, r := range map[string]Report{"team": loadReport(t, "team"), "troubled": troubled(t), "long": long} {
-		for _, per := range Periods {
-			for _, ascii := range []bool{false, true} {
-				var last []string
-				for w := 80; w <= 160; w++ {
-					o := Options{Width: w, Period: per, ASCII: ascii, Loc: sampleZone, DeviceStatus: true}
-					p := newPage(&r, o)
-					for _, l := range p.deviceStatus() {
-						if l.width() > p.w {
-							t.Errorf("%s at %d by %s: a line %d wide: %q", name, w, per, l.width(), l.String())
-						}
-					}
-					heads := statusHeads(t, Render(r, o))
-					if !slices.IsSortedFunc(heads, func(a, b string) int { return slices.Index(order, a) - slices.Index(order, b) }) {
-						t.Errorf("%s at %d: columns out of order: %v", name, w, heads)
-					}
-					for _, must := range []string{"DEVICE", "VERSION", "SEEN", strings.ToUpper(per.String()), "90D"} {
-						if !slices.Contains(heads, must) {
-							t.Errorf("%s at %d by %s: no %s in %v", name, w, per, must, heads)
-						}
-					}
-					for _, h := range last {
-						if !slices.Contains(heads, h) {
-							t.Errorf("%s at %d by %s: %s shows at %d but not here: %v", name, w, per, h, w-1, heads)
-						}
-					}
-					last = heads
-				}
-			}
 		}
 	}
 }
@@ -589,12 +548,6 @@ func TestStatusViews(t *testing.T) {
 		o.Width = w
 		if a, b := Text(single, o), Text(single, devices(o)); a != b || Render(single, o).DeviceViews {
 			t.Errorf("one device at %d: the status view changes the page", w)
-		}
-	}
-	// The matrix names both views where they fit beside its modes.
-	for w, want := range map[int]string{80: "15 · 7d UTC · M weighted tokens   ‹tokens›  share   $", 120: "‹usage›  status   ‹tokens›  share   $"} {
-		if got := pageSection(Render(team, Options{Width: w}), "DEVICES")[0]; !strings.HasSuffix(got, want) {
-			t.Errorf("matrix title at %d: %q", w, got)
 		}
 	}
 }

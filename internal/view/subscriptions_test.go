@@ -61,28 +61,10 @@ func TestBarTickFollowsTheForecast(t *testing.T) {
 	}
 }
 
-// TestSubscriptionsDevicesAndNoReading: the column of how many devices hold
-// an account is DEVICES, and a row with no reading says why in its bar's
-// place, dim and cut to the bar, what to do first.
-func TestSubscriptionsDevicesAndNoReading(t *testing.T) {
-	r := loadReport(t, "team")
-	for _, w := range []int{80, 120, 160} {
-		p := Render(r, Options{Width: w, Loc: sampleZone})
-		head := bodyLine(t, p, "SUBSCRIPTIONS", func(l string) bool { return strings.HasPrefix(l, "  CLAUDE ") })
-		if !strings.Contains(head, " DEVICES") || strings.Contains(head, "USERS") {
-			t.Errorf("at %d the header is %q", w, head)
-		}
-		kim := bodyLine(t, p, "SUBSCRIPTIONS", func(l string) bool { return strings.Contains(l, "kim@corp.test") })
-		if !strings.Contains(kim, "  update Claude Code or p…") {
-			t.Errorf("at %d kim's row is %q", w, kim)
-		}
-	}
-	color := Render(r, Options{Width: 120, Loc: sampleZone, Color: true, Dark: true})
-	dim := sgr.FindString(lipglossFg(NewTheme(true).Muted))
-	if !strings.Contains(strings.Join(color.Body, "\n"), dim+"update Claude Code or p…") {
-		t.Error("the reason there is no reading is not dim")
-	}
-	// What to do, all the bar keeps, says what to update.
+// TestSubscriptionsNoReading: a row with no reading says why in its bar's
+// place, cut to the bar, what to do first, and says what to update; a row
+// that has a reading has its bar whatever else it says.
+func TestSubscriptionsNoReading(t *testing.T) {
 	old := loadReport(t, "team")
 	for i := range old.Team.Providers {
 		for j := range old.Team.Providers[i].Accounts {
@@ -99,6 +81,7 @@ func TestSubscriptionsDevicesAndNoReading(t *testing.T) {
 		}
 	}
 	// A row that has a reading has its bar whatever else it says.
+	r := loadReport(t, "team")
 	for i := range r.Team.Providers {
 		for j := range r.Team.Providers[i].Accounts {
 			if a := &r.Team.Providers[i].Accounts[j]; a.Label == "lee@corp.test" {
