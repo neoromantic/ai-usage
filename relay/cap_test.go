@@ -70,42 +70,30 @@ func TestTeamReadListsNoMoreThanTheCap(t *testing.T) {
 	}
 }
 
+// A first write that raced past the cap gives way: it is turned away and not
+// stored. One that cannot tell whether it gave way fails, and is not stored
+// or is turned away at its next write.
 func TestFirstWritePastTheCapGivesWay(t *testing.T) {
-	e := newRelay(t)
-	e.srv.Limits.DevicesPerTeam = 2
-	k := newKey(t)
-	c := e.client(k)
-	ctx := context.Background()
-	e.join(t, c, k, "device-a", "device-b")
-	e.srv.Store = &testStore{Store: e.mem, hideFirstList: true}
-	e.clock.Add(time.Minute)
-	err := e.publish(t, c, k, "device-z")
-	if statusOf(err) != http.StatusForbidden {
-		t.Fatalf("write past the cap: %v", err)
-	}
-	if rec, _ := e.mem.Get(ctx, k.Fingerprint(), "device-z"); rec != nil {
-		t.Fatal("the device past the cap is still stored")
-	}
-	// The devices already in the team keep writing.
-	e.join(t, c, k, "device-a")
-}
-
-// A first write past the cap that cannot tell whether it gave way is not
-// stored, or is turned away at its next write.
-func TestFirstWritePastTheCapFailsClosed(t *testing.T) {
-	for _, broken := range []string{"list", "delete"} {
-		t.Run(broken, func(t *testing.T) {
+	for _, tc := range []struct {
+		name, broken string
+		code         int
+	}{
+		{"store up", "", http.StatusForbidden},
+		{"list fails", "list", http.StatusServiceUnavailable},
+		{"delete fails", "delete", http.StatusServiceUnavailable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			e := newRelay(t)
 			e.srv.Limits.DevicesPerTeam = 2
 			k := newKey(t)
 			c := e.client(k)
 			ctx := context.Background()
 			e.join(t, c, k, "device-a", "device-b")
-			e.srv.Store = &testStore{Store: e.mem, hideFirstList: true, fail: map[string]bool{broken: true}}
+			e.srv.Store = &testStore{Store: e.mem, hideFirstList: true, fail: map[string]bool{tc.broken: true}}
 			e.clock.Add(time.Minute)
 			err := e.publish(t, c, k, "device-z")
-			if statusOf(err) != http.StatusServiceUnavailable {
-				t.Fatalf("write past the cap: %v", err)
+			if statusOf(err) != tc.code {
+				t.Fatalf("write past the cap: %v, want %d", err, tc.code)
 			}
 			e.srv.Store = e.mem
 			e.clock.Add(time.Minute)
@@ -159,6 +147,7 @@ func TestFullTeamReadFitsVercel(t *testing.T) {
 			Device: fmt.Sprintf("%064d", i),
 			Body:   encode(make([]byte, snapshot.MaxBytes)),
 			Sig:    encode(make([]byte, ed25519.SignatureSize)),
+			Since:  t0,
 		})
 	}
 	var b bytes.Buffer

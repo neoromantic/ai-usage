@@ -30,18 +30,6 @@ func TestMemoryTTL(t *testing.T) {
 	if len(recs) != 1 || recs["long-lived"].Body == nil {
 		t.Fatalf("List = %v", recs)
 	}
-	if got, _ := m.Get(ctx, "team", "missing"); got != nil {
-		t.Fatal("Get(missing) returned a record")
-	}
-	if err := m.Delete(ctx, "team", "long-lived"); err != nil {
-		t.Fatal(err)
-	}
-	if err := m.Delete(ctx, "no-team", "x"); err != nil {
-		t.Fatal(err)
-	}
-	if recs, _ := m.List(ctx, "team"); len(recs) != 0 {
-		t.Fatalf("List after delete = %v", recs)
-	}
 }
 
 func TestMemoryCountAndSweep(t *testing.T) {

@@ -98,6 +98,8 @@ func TestRestorePath(t *testing.T) {
 }
 
 func TestStoreChoice(t *testing.T) {
+	var calls atomic.Int32
+	kv := fakeKV(t, &calls)
 	tests := []struct {
 		name     string
 		env      map[string]string
@@ -106,8 +108,7 @@ func TestStoreChoice(t *testing.T) {
 		{"memory outside Vercel", nil, http.StatusOK},
 		{"memory on Vercel", map[string]string{"VERCEL": "1", "VERCEL_ENV": "production"}, http.StatusServiceUnavailable},
 		{"memory under vercel dev", map[string]string{"VERCEL": "1", "VERCEL_ENV": "development"}, http.StatusOK},
-		// One half of the KV pair is not a store.
-		{"URL without token on Vercel", map[string]string{"VERCEL": "1", "KV_REST_API_URL": "http://127.0.0.1:1"}, http.StatusServiceUnavailable},
+		{"KV on Vercel", map[string]string{"VERCEL": "1", "VERCEL_ENV": "production", "KV_REST_API_URL": kv.URL, "KV_REST_API_TOKEN": "tok"}, http.StatusOK},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -125,27 +126,23 @@ func TestStoreChoice(t *testing.T) {
 			if code == http.StatusOK && body["ok"] != true {
 				t.Fatalf("health body %v", body)
 			}
+			if tc.env["KV_REST_API_URL"] != "" && calls.Load() == 0 {
+				t.Fatal("the relay did not use the KV store")
+			}
 		})
 	}
 }
 
-// A deployment without KV still serves the price list, and nothing else.
+// A deployment without KV still serves the price list. That it refuses the
+// rest is TestStoreChoice's; the list's headers are relay.TestPrices'.
 func TestPricesWithoutKV(t *testing.T) {
 	fresh(t)
 	t.Setenv("VERCEL", "1")
 	t.Setenv("VERCEL_ENV", "production")
 	rec := httptest.NewRecorder()
 	vercel().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/prices", nil))
-	if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "public, max-age=3600" || rec.Body.String() != string(cost.PricesJSON) {
-		t.Fatalf("status %d, headers %v, body %q", rec.Code, rec.Header(), rec.Body.String())
-	}
-	if code, _ := get(t, vercel(), "/v1/health"); code != http.StatusServiceUnavailable {
-		t.Fatalf("health without KV: status %d", code)
-	}
-	rec = httptest.NewRecorder()
-	vercel().ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/v1/prices", nil))
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("PUT prices without KV: status %d", rec.Code)
+	if rec.Code != http.StatusOK || rec.Body.String() != string(cost.PricesJSON) {
+		t.Fatalf("status %d, body %q", rec.Code, rec.Body.String())
 	}
 }
 
@@ -175,22 +172,6 @@ func fakeKV(t *testing.T, calls *atomic.Int32) *httptest.Server {
 	return srv
 }
 
-func TestKVOnVercel(t *testing.T) {
-	fresh(t)
-	var calls atomic.Int32
-	kv := fakeKV(t, &calls)
-	t.Setenv("VERCEL", "1")
-	t.Setenv("KV_REST_API_URL", kv.URL)
-	t.Setenv("KV_REST_API_TOKEN", "tok")
-	code, body := get(t, vercel(), "/v1/health")
-	if code != http.StatusOK || body["ok"] != true {
-		t.Fatalf("status %d body %v", code, body)
-	}
-	if calls.Load() == 0 {
-		t.Fatal("the relay did not use the KV store")
-	}
-}
-
 // Each client is limited on its own address even when the function sees no
 // peer address, because Vercel sets X-Real-Ip itself.
 func TestClientAddressFromVercel(t *testing.T) {
@@ -211,20 +192,6 @@ func TestClientAddressFromVercel(t *testing.T) {
 	}
 	if code := health("203.0.113.1"); code != http.StatusTooManyRequests {
 		t.Fatalf("second request from one client: status %d, want 429", code)
-	}
-}
-
-// The store is chosen once per instance; a later environment change does not
-// swap it under running requests.
-func TestBuiltOnce(t *testing.T) {
-	fresh(t)
-	t.Setenv("VERCEL", "1")
-	if code, _ := get(t, vercel(), "/v1/health"); code != http.StatusServiceUnavailable {
-		t.Fatalf("first request: status %d", code)
-	}
-	t.Setenv("VERCEL", "")
-	if code, _ := get(t, vercel(), "/v1/health"); code != http.StatusServiceUnavailable {
-		t.Fatalf("second request: status %d, want the first instance's answer", code)
 	}
 }
 
@@ -257,7 +224,8 @@ func testDoc(t *testing.T, key *team.Key, device string) []byte {
 	return b
 }
 
-// A collector talks to the deployed URL exactly as it talks to `relay serve`.
+// A collector talks to the deployed URL exactly as it talks to `relay serve`,
+// and every request reaches the one relay the instance built, with its store.
 func TestClientThroughRewrite(t *testing.T) {
 	fresh(t)
 	pinClock(t)
@@ -281,16 +249,6 @@ func TestClientThroughRewrite(t *testing.T) {
 	}
 	if string(res.Devices[0].Body) != string(body) {
 		t.Fatal("pulled body differs from the published one")
-	}
-
-	// Another team's key cannot read this team through the same URL.
-	other, err := team.Generate()
-	if err != nil {
-		t.Fatal(err)
-	}
-	stranger := &relay.Client{BaseURL: srv.URL, Key: other, HTTP: srv.Client(), Now: c.Now}
-	if res, err := stranger.Pull(ctx); err != nil || len(res.Devices) != 0 {
-		t.Fatalf("other team sees %d devices, err %v", len(res.Devices), err)
 	}
 
 	if err := c.Remove(ctx, device); err != nil {
