@@ -20,6 +20,15 @@ func TestHarnessEnv(t *testing.T) {
 		{"remove for default home", []string{"CLAUDE_CONFIG_DIR=/old", "PATH=/bin", "CLAUDE_CONFIG_DIR=/older"}, "", []string{"PATH=/bin"}},
 		{"similar names kept", []string{"CLAUDE_CONFIG_DIRS=a", "XCLAUDE_CONFIG_DIR=b", "CLAUDE_CONFIG_DIR"}, "", []string{"CLAUDE_CONFIG_DIRS=a", "XCLAUDE_CONFIG_DIR=b", "CLAUDE_CONFIG_DIR"}},
 		{"empty environ stays empty", []string{}, "", []string{}},
+		// A harness command goes without the Account Pooler's route, so it
+		// asks the home's own login, and keeps a gateway the person set up.
+		{"pool routes removed", []string{
+			"ANTHROPIC_BASE_URL=" + poolClaude, "ANTHROPIC_AUTH_TOKEN=made-up-hub-token",
+			"CODEX_OPENAI_BASE_URL=" + poolCodex, "CODEX_POOL_AUTH_TOKEN=made-up-hub-token",
+			"ENABLE_TOOL_SEARCH=true",
+		}, "/h", []string{"ENABLE_TOOL_SEARCH=true", "CLAUDE_CONFIG_DIR=/h"}},
+		{"own gateway kept", []string{"ANTHROPIC_BASE_URL=https://gateway.acme.dev/anthropic", "ANTHROPIC_AUTH_TOKEN=made-up-gateway-token"}, "",
+			[]string{"ANTHROPIC_BASE_URL=https://gateway.acme.dev/anthropic", "ANTHROPIC_AUTH_TOKEN=made-up-gateway-token"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -33,15 +42,8 @@ func TestHarnessEnv(t *testing.T) {
 
 func TestHarnessEnvNilInheritsProcess(t *testing.T) {
 	t.Setenv("PROBE_MARKER", "yes")
-	t.Setenv("CODEX_HOME", "/stale")
-	got := Env{}.harnessEnv("CODEX_HOME", "")
-	if !slices.Contains(got, "PROBE_MARKER=yes") {
+	if got := (Env{}).harnessEnv(); !slices.Contains(got, "PROBE_MARKER=yes") {
 		t.Errorf("nil Environ should inherit the process environment, got %d entries", len(got))
-	}
-	for _, kv := range got {
-		if strings.HasPrefix(kv, "CODEX_HOME=") {
-			t.Errorf("CODEX_HOME kept: %q", kv)
-		}
 	}
 }
 

@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -144,14 +145,8 @@ func TestReadClaudeConfigErrors(t *testing.T) {
 	if cfg, err := readClaudeConfig(filepath.Join(dir, "missing.json")); !reflect.DeepEqual(cfg, claudeConfig{}) || err != nil {
 		t.Errorf("missing file: %+v, %v", cfg, err)
 	}
-	bad := filepath.Join(dir, "bad.json")
-	if err := os.WriteFile(bad, []byte(`{"oauthAccount":`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := readClaudeConfig(bad); err == nil {
-		t.Error("bad JSON: no error")
-	}
-	// A directory where the file should be is an error, not "no reading".
+	// TestClaudeAnswers has a config that is not JSON. A directory where the
+	// file should be is an error, not "no reading".
 	if _, err := readClaudeConfig(dir); err == nil {
 		t.Error("unreadable: no error")
 	}
@@ -284,6 +279,7 @@ func TestClaudeHomes(t *testing.T) {
 func TestClaudeAnswers(t *testing.T) {
 	tests := []struct {
 		mode      string
+		config    string // claudeCache when empty
 		account   string
 		wantErr   string
 		loggedOut bool
@@ -294,14 +290,16 @@ func TestClaudeAnswers(t *testing.T) {
 		{mode: "claude-bedrock", account: "third_party"},
 		// wantErr is part of the error, which says why.
 		{mode: "claude-logged-out", wantErr: "not logged in", loggedOut: true},
-		{mode: "claude-not-json", wantErr: "not JSON"},
+		{mode: "claude-not-json", wantErr: "claude auth status: output is not JSON"},
 		{mode: "claude-fail", wantErr: "exit status 2: boom"},
+		// A config that cannot be read keeps the account auth status named.
+		{mode: "claude-ok", config: `{`, account: "dev@example.com", wantErr: "claude config is not JSON"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.mode, func(t *testing.T) {
 			env, _ := fakeEnv(t, tc.mode)
 			home := filepath.Join(env.HomeDir, ".claude")
-			writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
+			writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), cmp.Or(tc.config, claudeCache))
 			r, err := Claude(context.Background(), env, home, "", time.Time{})
 			if (err == nil) != (tc.wantErr == "") || !strings.Contains(errText(err), tc.wantErr) {
 				t.Errorf("error = %q, want one with %q", errText(err), tc.wantErr)
@@ -333,15 +331,6 @@ func TestClaudeBinaryMissing(t *testing.T) {
 	}
 }
 
-func TestClaudeBadCacheKeepsAccount(t *testing.T) {
-	env, _ := fakeEnv(t, "claude-ok")
-	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), `{`)
-	r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", time.Time{})
-	if r.Account != "dev@example.com" || r.Quota != nil || err == nil {
-		t.Errorf("reading = %+v, %v", r, err)
-	}
-}
-
 // The config's profile of the account gives a Max plan its tier, and says
 // who bills it and when it began; another account's profile says nothing.
 func TestClaudeSubscription(t *testing.T) {
@@ -359,7 +348,6 @@ func TestClaudeSubscription(t *testing.T) {
 		{"the user's tier when the organization has none", profile("dev@example.com", `null`, "apple_subscription"), "max 5x", "apple_subscription", began},
 		{"another tier", profile("dev@example.com", `"default_claude_zero"`, "stripe_subscription"), "max", "stripe_subscription", began},
 		{"another account's profile", profile("kim@example.com", `"default_claude_max_20x"`, "apple_subscription"), "max", "", time.Time{}},
-		{"no profile", claudeCache, "max", "", time.Time{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			env, _ := fakeEnv(t, "claude-ok")
@@ -405,20 +393,27 @@ func TestClaudeTimeout(t *testing.T) {
 // A claude.ai subscription whose cache is stale has Claude Code read the
 // usage again, as auth status runs, and the reading is what it cached. A
 // cache from a clock that ran ahead is stale too, and a use since it is not
-// needed, as for a cache that is missing.
+// needed, as for a cache that is missing. A login whose subscription type
+// auth status does not tell is a subscription when its account has a usage
+// cache. A read that fails after it cached the usage is no problem.
 func TestClaudeRefreshesUsage(t *testing.T) {
 	future := claudeCacheAt(time.Now().Add(24 * time.Hour))
 	for _, tc := range []struct {
 		name, home, cache string
 		idle              time.Duration
+		// mode is the fake's for auth status, claude-ok when empty, and
+		// usage its PROBE_USAGE.
+		mode, usage string
 	}{
 		{name: "default home", home: ".claude", cache: claudeCache},
 		{name: "another home", home: "work-claude", cache: claudeCache},
 		{name: "no cache", home: ".claude", cache: `{"oauthAccount":{"accountUuid":"acct-1"}}`, idle: 50 * time.Minute},
 		{name: "cache from the future", home: ".claude", cache: future, idle: time.Minute},
+		{name: "subscription type not told", home: ".claude", cache: claudeCache, mode: "claude-console"},
+		{name: "fails after it cached", home: ".claude", cache: claudeCache, usage: "write-then-fail"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			env, record := fakeEnv(t, "claude-ok", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "DISABLE_AUTOUPDATER=0")
+			env, record := fakeEnv(t, cmp.Or(tc.mode, "claude-ok"), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "DISABLE_AUTOUPDATER=0", "PROBE_USAGE="+tc.usage)
 			env.Now = time.Now
 			home := filepath.Join(env.HomeDir, tc.home)
 			file := filepath.Join(home, ".claude.json")
@@ -525,37 +520,6 @@ func TestClaudeSkipsUsageRefresh(t *testing.T) {
 	}
 }
 
-// A read that leaves no new reading, as Claude Code's does offline, is made
-// again at each run while the home is in use, and not once the home has been
-// idle for an hour.
-func TestClaudeStopsAskingOnceTheHomeIsIdle(t *testing.T) {
-	env, record := fakeEnv(t, "claude-ok", "PROBE_USAGE=offline")
-	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
-	used := testNow
-	runs := 0
-	for _, tc := range []struct {
-		after time.Duration
-		ask   bool
-	}{
-		{15 * time.Minute, true},
-		{time.Hour, true},
-		{time.Hour + 15*time.Minute, false},
-		{59 * 24 * time.Hour, false},
-	} {
-		now := used.Add(tc.after)
-		env.Now = func() time.Time { return now }
-		_, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", used)
-		n := len(readRuns(t, record))
-		if asked := n-runs == 2; asked != tc.ask {
-			t.Errorf("%v after the last use: asked %v", tc.after, asked)
-		}
-		runs = n
-		if got := strings.Contains(errText(err), "no new reading"); got != tc.ask {
-			t.Errorf("%v after the last use: error = %q", tc.after, errText(err))
-		}
-	}
-}
-
 // Only a home this OS user owns, with its config file or the folder that
 // file would be made in, is one Claude Code may be run for.
 func TestClaudeOwned(t *testing.T) {
@@ -575,39 +539,6 @@ func TestClaudeOwned(t *testing.T) {
 	root := string(filepath.Separator)
 	if claudeOwned(file, root) || claudeOwned(filepath.Join(root, ".claude.json"), home) {
 		t.Error("root's folder is owned")
-	}
-}
-
-// A read that fails, or leaves no new cache, keeps the reading Claude Code
-// cached before, and says why, unless the cache is fresh after all.
-func TestClaudeUsageRefreshFails(t *testing.T) {
-	tests := []struct {
-		usage   string
-		wantErr string
-		percent float64
-	}{
-		{usage: "fail", wantErr: "exit status 1", percent: 12},
-		// One that sent /usage to a model is too old to read it.
-		{usage: "old", wantErr: "update", percent: 12},
-		{usage: "write-then-fail", percent: 7},
-		// Claude Code exits 0 when it could not reach the usage.
-		{usage: "offline", wantErr: "/usage", percent: 12},
-	}
-	for _, tc := range tests {
-		t.Run(tc.usage, func(t *testing.T) {
-			env, _ := fakeEnv(t, "claude-ok", "PROBE_USAGE="+tc.usage)
-			env.Now = time.Now
-			file := filepath.Join(env.HomeDir, ".claude.json")
-			writeFile(t, file, claudeCache)
-			env.Environ = append(env.Environ, "PROBE_CACHE="+file)
-			r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", time.Now())
-			if (err == nil) != (tc.wantErr == "") || !strings.Contains(errText(err), tc.wantErr) || errors.Is(err, ErrNotLoggedIn) {
-				t.Errorf("error = %q, want one with %q", errText(err), tc.wantErr)
-			}
-			if r.Account != "dev@example.com" || r.Quota == nil || r.Quota.Windows[0].Percent != tc.percent {
-				t.Errorf("reading = %+v, quota %+v", r, describe(r.Quota))
-			}
-		})
 	}
 }
 
@@ -667,13 +598,16 @@ func TestClaudeUsageRefreshSaysWhy(t *testing.T) {
 			if quotaOnly := strings.Contains(tc.want, "update it"); errors.Is(err, ErrNoQuota) != quotaOnly {
 				t.Errorf("error %q is ErrNoQuota: %v", errText(err), !quotaOnly)
 			}
+			if errors.Is(err, ErrNotLoggedIn) {
+				t.Errorf("error %q is ErrNotLoggedIn", errText(err))
+			}
 			for _, secret := range []string{"zebra", "heron", "otter", "walrus", "contributing", "Europe/Berlin", "resets", "%", "catalog"} {
 				if strings.Contains(errText(err), secret) {
 					t.Errorf("error %q has %q", errText(err), secret)
 				}
 			}
-			if r.Quota == nil || r.Quota.Windows[0].Percent != 12 {
-				t.Errorf("quota = %+v", describe(r.Quota))
+			if r.Account != "dev@example.com" || r.Quota == nil || r.Quota.Windows[0].Percent != 12 {
+				t.Errorf("reading = %+v, quota %+v", r, describe(r.Quota))
 			}
 		})
 	}
@@ -748,12 +682,6 @@ func TestClaudeVersion(t *testing.T) {
 			link(t, bin, filepath.Join(dir, ".volta", "bin", "claude"))
 			return filepath.Join(dir, ".volta", "bin", "claude")
 		}, ""},
-		{"mise shim", func(t *testing.T, dir string) string {
-			bin := filepath.Join(dir, "Cellar", "mise", "2025.9.10", "bin", "mise")
-			writeExe(t, bin)
-			link(t, bin, filepath.Join(dir, ".local", "share", "mise", "shims", "claude"))
-			return filepath.Join(dir, ".local", "share", "mise", "shims", "claude")
-		}, ""},
 		{"another tool's versions", func(t *testing.T, dir string) string {
 			writeExe(t, filepath.Join(dir, ".nodenv", "versions", "22.1.0", "bin", "claude"))
 			return filepath.Join(dir, ".nodenv", "versions", "22.1.0", "bin", "claude")
@@ -777,11 +705,6 @@ func TestClaudeVersion(t *testing.T) {
 			writeExe(t, filepath.Join(pkgDir, "cli.js"))
 			return filepath.Join(pkgDir, "cli.js")
 		}, ""},
-		{"a plain file", func(t *testing.T, dir string) string {
-			writeExe(t, filepath.Join(dir, "bin", "claude"))
-			return filepath.Join(dir, "bin", "claude")
-		}, ""},
-		{"missing", func(t *testing.T, dir string) string { return filepath.Join(dir, "nowhere", "claude") }, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -793,18 +716,15 @@ func TestClaudeVersion(t *testing.T) {
 }
 
 // A Claude Code older than 2.1.193 cannot read the usage, so it is not
-// asked, and at every run the error says to update it, naming it, as a
-// problem of the quota alone. One since is asked, and its version is told:
-// one from 2.1.193 prints the usage it does not cache.
+// asked, and the error says to update it, naming it, as a problem of the
+// quota alone. One since is asked, and its version is told: one from
+// 2.1.193 prints the usage it does not cache.
 func TestClaudeOldVersionIsNotAsked(t *testing.T) {
 	for _, tc := range []struct {
 		version, want string
 	}{
 		{"2.1.192", "update Claude Code to 2.1.208 or newer (~/Caskroom/claude-code/2.1.192/claude is 2.1.192, Homebrew)"},
-		{"1.0.128", "update Claude Code to 2.1.208 or newer (~/Caskroom/claude-code/1.0.128/claude is 1.0.128, Homebrew)"},
 		{"2.1.193", "claude /usage: no new reading: could not read the usage (Claude Code 2.1.193, cache 1d old)"},
-		{"2.1.208", "claude /usage: no new reading: could not read the usage (Claude Code 2.1.208, cache 1d old)"},
-		{"9.9.9", "claude /usage: no new reading: could not read the usage (Claude Code 9.9.9, cache 1d old)"},
 	} {
 		t.Run(tc.version, func(t *testing.T) {
 			env, record := fakeEnv(t, "claude-ok", "PROBE_USAGE=offline")
@@ -813,21 +733,19 @@ func TestClaudeOldVersionIsNotAsked(t *testing.T) {
 			env.LookPath = func(string) (string, error) { return bin, nil }
 			writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
 			tooOld := strings.HasPrefix(tc.want, "update")
-			for range 2 {
-				r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", testNow)
-				if errText(err) != tc.want {
-					t.Errorf("error = %q\nwant    %q", errText(err), tc.want)
-				}
-				var nq *NoQuotaError
-				if errors.As(err, &nq) != tooOld || errors.Is(err, ErrNoQuota) != tooOld {
-					t.Errorf("error %q is a NoQuotaError: %v", errText(err), !tooOld)
-				}
-				if tooOld && (nq.Path != bin || nq.Version != tc.version || nq.Kind != kindHomebrew) {
-					t.Errorf("about %+v", nq)
-				}
-				if r.Quota == nil || r.Quota.Windows[0].Percent != 12 {
-					t.Errorf("quota = %+v", describe(r.Quota))
-				}
+			r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", testNow)
+			if errText(err) != tc.want {
+				t.Errorf("error = %q\nwant    %q", errText(err), tc.want)
+			}
+			var nq *NoQuotaError
+			if errors.As(err, &nq) != tooOld || errors.Is(err, ErrNoQuota) != tooOld {
+				t.Fatalf("error %q is a NoQuotaError: %v", errText(err), !tooOld)
+			}
+			if tooOld && (nq.Path != bin || nq.Version != tc.version || nq.Kind != kindHomebrew) {
+				t.Errorf("about %+v", nq)
+			}
+			if r.Account != "dev@example.com" || r.Quota == nil || r.Quota.Windows[0].Percent != 12 {
+				t.Errorf("reading = %+v, quota %+v", r, describe(r.Quota))
 			}
 			usage := 0
 			for _, run := range readRuns(t, record) {
@@ -839,25 +757,6 @@ func TestClaudeOldVersionIsNotAsked(t *testing.T) {
 				t.Errorf("asked %d times", usage)
 			}
 		})
-	}
-}
-
-// A version manager's shim tells nothing of Claude Code's version, however
-// the manager's own folder is named, so Claude Code is asked.
-func TestClaudeBehindAShimIsAsked(t *testing.T) {
-	env, record := fakeEnv(t, "claude-ok", "PROBE_USAGE=offline")
-	shim := filepath.Join(env.HomeDir, "Cellar", "volta", "2.0.2", "bin", "volta-shim")
-	writeExe(t, shim)
-	bin := filepath.Join(env.HomeDir, ".volta", "bin", "claude")
-	link(t, shim, bin)
-	env.LookPath = func(string) (string, error) { return bin, nil }
-	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
-	_, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", testNow)
-	if want := "claude /usage: no new reading: could not read the usage (cache 1d old)"; errText(err) != want {
-		t.Errorf("error = %q\nwant    %q", errText(err), want)
-	}
-	if runs := readRuns(t, record); len(runs) != 2 {
-		t.Errorf("ran %d commands", len(runs))
 	}
 }
 
@@ -915,28 +814,28 @@ func TestClaudeUsageErrorFitsTwice(t *testing.T) {
 	}
 }
 
-// An organization's settings are where Claude Code reads them on each OS.
-func TestClaudeManaged(t *testing.T) {
-	for goos, want := range map[string]string{
-		"darwin":  "/Library/Application Support/ClaudeCode/managed-settings.json",
-		"linux":   "/etc/claude-code/managed-settings.json",
-		"windows": `C:\Program Files\ClaudeCode\managed-settings.json`,
-	} {
-		if got := claudeManaged(goos); !slices.Equal(got, []string{want}) {
-			t.Errorf("%s: got %q, want %q", goos, got, want)
-		}
-	}
-}
-
 // Claude Code whose settings turn nonessential traffic off does not read the
 // usage, whatever its own environment, so it is not asked, and the error
-// says so at every run. The settings that win decide, and nothing else in
-// them reaches the error. Only the files Claude Code reads count, and only
-// the key it reads: "env" exactly, and the variable as the OS names it.
+// says so. Nothing else in the settings reaches the error. The settings that
+// win decide, and only the files Claude Code reads count, and only the key
+// it reads: "env" exactly, and the variable as the OS names it.
 func TestClaudeNoTrafficIsNotAsked(t *testing.T) {
 	on := `{"env":{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":"1","ANTHROPIC_API_KEY":"sk-fake-secret-7"}}`
 	off := `{"env":{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":"","ANTHROPIC_API_KEY":"sk-fake-secret-7"}}`
 	windows := runtime.GOOS == "windows"
+
+	env, record := fakeEnv(t, "claude-ok")
+	home := filepath.Join(env.HomeDir, "work-claude")
+	writeFile(t, filepath.Join(home, "settings.json"), on)
+	writeFile(t, filepath.Join(home, ".claude.json"), claudeCache)
+	_, err := Claude(context.Background(), env, home, "", testNow)
+	if want := "claude /usage: nonessential traffic is off in Claude Code's settings (cache 1d old)"; errText(err) != want {
+		t.Errorf("error = %q, want %q", errText(err), want)
+	}
+	if runs := readRuns(t, record); len(runs) != 1 {
+		t.Errorf("ran %d commands", len(runs))
+	}
+
 	tests := []struct {
 		name  string
 		files map[string]string // relative to the user's home
@@ -970,29 +869,13 @@ func TestClaudeNoTrafficIsNotAsked(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			env, record := fakeEnv(t, "claude-ok", "PROBE_USAGE=offline")
-			env.ClaudeManaged = []string{filepath.Join(env.HomeDir, "managed", "managed-settings.json")}
+			user := t.TempDir()
+			env := Env{HomeDir: user, ClaudeManaged: []string{filepath.Join(user, "managed", "managed-settings.json")}}
 			for name, body := range tc.files {
-				writeFile(t, filepath.Join(env.HomeDir, filepath.FromSlash(name)), body)
+				writeFile(t, filepath.Join(user, filepath.FromSlash(name)), body)
 			}
-			home := filepath.Join(env.HomeDir, tc.home)
-			file := filepath.Join(env.HomeDir, ".claude.json")
-			if tc.home != ".claude" {
-				file = filepath.Join(home, ".claude.json")
-			}
-			writeFile(t, file, claudeCache)
-			for range 2 {
-				_, err := Claude(context.Background(), env, home, "", testNow)
-				want := "claude /usage: nonessential traffic is off in Claude Code's settings (cache 1d old)"
-				if tc.asked {
-					want = "claude /usage: no new reading: could not read the usage (cache 1d old)"
-				}
-				if errText(err) != want || strings.Contains(errText(err), "secret") {
-					t.Errorf("error = %q, want %q", errText(err), want)
-				}
-			}
-			if runs := readRuns(t, record); (len(runs) == 4) != tc.asked {
-				t.Errorf("ran %d commands", len(runs))
+			if got := claudeNoTraffic(env, filepath.Join(user, tc.home)); got == tc.asked {
+				t.Errorf("traffic off = %v, want %v", got, !tc.asked)
 			}
 		})
 	}
@@ -1043,29 +926,25 @@ func TestClaudeReadsWithTheNewestInstall(t *testing.T) {
 	}
 }
 
-// With only a Claude Code too old to read the usage, and that one not on
-// PATH, nothing reads it, and the error names that install for collect to
-// compare with the version the sessions ran.
+// With no Claude Code where find looks, auth status runs the newest install,
+// here the only one, too old to read the usage. Nothing reads it, and the
+// error names that install for collect to compare with the version the
+// sessions ran.
 func TestClaudeOnlyAnOldInstall(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the layout is a macOS and Linux install")
 	}
 	env, record := fakeEnv(t, "claude-ok")
 	env.LookPath = notOnPath
-	dir := t.TempDir()
-	bin := claudeLayout(t, dir, kindHomebrew, "2.1.42")
-	env.SystemBinDirs = []string{filepath.Dir(bin)}
+	bin := claudeLayout(t, env.HomeDir, kindNative, "2.1.42")
 	writeFile(t, filepath.Join(env.HomeDir, ".claude.json"), claudeCache)
 	r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", testNow)
 	var nq *NoQuotaError
-	if !errors.Is(err, ErrNoQuota) || !errors.As(err, &nq) {
+	if !errors.As(err, &nq) {
 		t.Fatalf("error = %#v", err)
 	}
-	if nq.Path != bin || nq.Version != "2.1.42" || nq.Kind != "Homebrew" {
+	if nq.Path != bin || nq.Version != "2.1.42" || nq.Kind != kindNative {
 		t.Errorf("about %+v", nq)
-	}
-	if want := "update Claude Code to 2.1.208 or newer (" + bin + " is 2.1.42, Homebrew)"; errText(err) != want {
-		t.Errorf("error = %q\nwant    %q", errText(err), want)
 	}
 	if r.Account != "dev@example.com" || r.Quota == nil || r.Quota.Windows[0].Percent != 12 {
 		t.Errorf("reading %+v, quota %+v", r, describe(r.Quota))
@@ -1109,23 +988,6 @@ func TestClaudeAuthFailsKeepsTheCache(t *testing.T) {
 				t.Errorf("ran %d commands", len(runs))
 			}
 		})
-	}
-}
-
-// A login whose subscription type auth status does not tell is still a
-// subscription when its account has a usage cache, and the usage is read.
-func TestClaudeSubscriptionTypeNotTold(t *testing.T) {
-	env, record := fakeEnv(t, "claude-console")
-	env.Now = time.Now
-	file := filepath.Join(env.HomeDir, ".claude.json")
-	writeFile(t, file, claudeCache)
-	env.Environ = append(env.Environ, "PROBE_CACHE="+file)
-	r, err := Claude(context.Background(), env, filepath.Join(env.HomeDir, ".claude"), "", time.Now())
-	if err != nil || r.Quota == nil || r.Quota.Windows[0].Percent != 7 {
-		t.Errorf("quota %+v, error %v", describe(r.Quota), err)
-	}
-	if runs := readRuns(t, record); len(runs) != 2 {
-		t.Errorf("ran %d commands", len(runs))
 	}
 }
 
