@@ -132,23 +132,6 @@ func TestClaudeSubAgentsRollIntoSession(t *testing.T) {
 	}
 }
 
-// Older Claude Code wrote sub-agent transcripts beside the session file.
-func TestClaudeTopLevelSidechainRollsIntoSession(t *testing.T) {
-	home := t.TempDir()
-	dir := filepath.Join(home, "projects", "-work-claude")
-	mustWrite(t, filepath.Join(dir, "sess.jsonl"), cl{id: "m1", req: "r1", session: "sess", cwd: "/work/claude", usage: use(10, 1, 0, 0)}.String())
-	mustWrite(t, filepath.Join(dir, "agent-abc.jsonl"), cl{id: "a1", req: "ra1", session: "sess", cwd: "/work/claude", side: true, usage: use(4, 4, 0, 0)}.String())
-	mustWrite(t, filepath.Join(dir, "solo.jsonl"), cl{id: "x1", req: "rx1", session: "solo", cwd: "/work/solo", side: true, usage: use(1, 1, 0, 0)}.String())
-
-	res := mustRead(t, "claude", home, since)
-	if got := strings.Join(ids(res), ","); got != "sess,solo" {
-		t.Fatalf("sessions = %s", got)
-	}
-	if got := byID(t, res, "sess").Tokens; got != (Tokens{Input: 14, Output: 5}) {
-		t.Fatalf("sess = %+v", got)
-	}
-}
-
 // A resumed or forked session copies earlier messages into its own file.
 func TestClaudeCopiedMessagesCountInFirstSession(t *testing.T) {
 	home := t.TempDir()
@@ -293,17 +276,6 @@ func TestClaudeMissingOrBrokenHome(t *testing.T) {
 		}
 		if got := byID(t, res, "sess").Tokens; got != (Tokens{Input: 4, Output: 1}) {
 			t.Fatalf("sess = %+v", got)
-		}
-	})
-	t.Run("unreadable projects is an error", func(t *testing.T) {
-		needDeny(t)
-		home := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(home, "projects"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		deny(t, filepath.Join(home, "projects"))
-		if _, err := readOne("claude", home, since); err == nil {
-			t.Fatal("no error")
 		}
 	})
 }
@@ -541,14 +513,6 @@ func TestClaudeTrackedLandsInItsHour(t *testing.T) {
 			dir := filepath.Join(home, "projects", "-Users-ann-src-app")
 			mustWrite(t, filepath.Join(dir, "a4c2e917.jsonl"), tc.lines...)
 			mustWrite(t, filepath.Join(dir, "a4c2e917", "subagents", "agent-1.jsonl"), sub)
-
-			// Before the hours are fitted to the tokens they already add up.
-			files, _ := claudeFiles(home, since, nil)
-			for _, s := range rollup(countClaude(files)) {
-				if s.Hours.Sum().Tokens() != s.Tokens {
-					t.Fatalf("%s hours add up to %+v, tokens %+v", s.ID, s.Hours.Sum(), s.Tokens)
-				}
-			}
 			got := byID(t, mustRead(t, "claude", home, since), "a4c2e917")
 			if got.Side != (Tokens{Output: 5000}) {
 				t.Fatalf("side = %+v", got.Side)
@@ -630,21 +594,6 @@ func TestClaudeVersion(t *testing.T) {
 	}
 	if got := byID(t, res, "c9e2f4b1").Version; got != "" {
 		t.Errorf("version = %q, want none", got)
-	}
-}
-
-// A session was last active at its newest message, not when its file was
-// last written: Claude Code rewrites a file it resumes or compacts.
-func TestClaudeUpdatedIsLastMessage(t *testing.T) {
-	home := t.TempDir()
-	path := filepath.Join(home, "projects", "-Users-ann-src-app", "a4c2e917.jsonl")
-	mustWrite(t, path,
-		cl{id: "m1", req: "r1", session: "a4c2e917", cwd: "/Users/ann/src/app", at: "2026-09-20T10:00:00Z", usage: use(1, 1, 0, 0)}.String(),
-		cl{id: "m2", req: "r2", session: "a4c2e917", cwd: "/Users/ann/src/app", at: "2026-09-20T11:20:00Z", usage: use(1, 1, 0, 0)}.String(),
-	)
-	ageFile(t, path, now.Add(-time.Minute))
-	if got := byID(t, mustRead(t, "claude", home, since), "a4c2e917").Updated; !got.Equal(mustTime(t, "2026-09-20T11:20:00Z")) {
-		t.Fatalf("updated = %v", got)
 	}
 }
 

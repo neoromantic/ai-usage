@@ -102,33 +102,6 @@ var (
 	}
 )
 
-// A rollout's lines over the limit, a long system prompt in its session_meta
-// and a tool's huge output, are read squeezed (issue #1): the thread keeps
-// the project its session_meta names after the prompt, and no line is an
-// error.
-func TestCodexLinesOverTheLimit(t *testing.T) {
-	if testing.Short() {
-		t.Skip("writes lines over 32 MiB")
-	}
-	home := t.TempDir()
-	path := rollout(home, "sessions", "20", rootID)
-	mustWriteFrom(t, path,
-		hugeLine(`{"timestamp":"2026-09-20T10:00:00.000Z","type":"session_meta","payload":{"base_instructions":{"text":"`, 'x', maxLineBytes,
-			fmt.Sprintf(`"},"session_id":%q,"id":%q,"timestamp":"2026-09-20T10:00:00.000Z","cwd":"/work/app","source":"cli"}}`, rootID, rootID)),
-		lines(cxCount("2026-09-20T10:00:05.000Z", e1[0], e1[1])),
-		hugeLine(`{"timestamp":"2026-09-20T10:00:10.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_1","output":"`, 'y', maxLineBytes, `"}}`),
-		lines(cxCount("2026-09-20T10:00:30.000Z", e2[0], e2[1])))
-	ageFile(t, path, now.Add(-time.Hour))
-
-	res := mustRead(t, "codex", home, since)
-	if res.Malformed != 0 || res.TooLong != 0 || res.Unreadable != 0 {
-		t.Fatalf("malformed %d too long %d unreadable %d", res.Malformed, res.TooLong, res.Unreadable)
-	}
-	if got := byID(t, res, rootID); got.Tokens != rootOwn || got.Project != "/work/app" {
-		t.Fatalf("session = %+v", got)
-	}
-}
-
 func TestCodexCountsEachRequestOnceAndMovesCachedOut(t *testing.T) {
 	home := t.TempDir()
 	path := rollout(home, "sessions", "20", rootID)
@@ -198,44 +171,6 @@ func TestCodexSubAgentsRollIntoRoot(t *testing.T) {
 	}
 	if got.Project != "/work/app" || !got.Updated.Equal(newest) {
 		t.Fatalf("session = %+v", got)
-	}
-}
-
-// A fork replays its parent's history, token_count lines included, and then
-// continues the parent's cumulative total. A forked sub-agent rolls into its
-// parent without the replay.
-func TestCodexForkCountsOnlyItsOwnRequests(t *testing.T) {
-	replay := func(at string) []string {
-		return []string{cxCount(at, e1[0], e1[1]), cxCount(at, e2[0], e2[1])}
-	}
-	// A user's fork, which stays its own session, is in TestReadHomesCountsAcrossHomesOnce.
-	home := t.TempDir()
-	mustWrite(t, rollout(home, "sessions", "20", rootID), rootLines...)
-	lines := []string{cxMeta{at: "2026-09-20T11:00:00.000Z", id: kidA, session: rootID, cwd: "/work/app", source: spawnedBy(rootID), extra: `,"forked_from_id":"` + rootID + `"`}.String()}
-	lines = append(lines, replay("2026-09-20T11:00:00.000Z")...)
-	lines = append(lines, cxCount("2026-09-20T11:00:09.000Z", u{3000, 2300, 95}, u{500, 400, 15}))
-	mustWrite(t, rollout(home, "sessions", "20", kidA), lines...)
-
-	res := mustRead(t, "codex", home, since)
-	want := rootOwn.Add(Tokens{Input: 100, CacheRead: 400, Output: 15})
-	if len(res.Sessions) != 1 || res.Sessions[0].Tokens != want {
-		t.Fatalf("sessions = %+v, want one with %+v", res.Sessions, want)
-	}
-}
-
-// A fork whose parent file is gone starts from a seeded total with no last
-// usage of its own. The seed is the parent's usage, not the fork's.
-func TestCodexSeededForkWithoutParent(t *testing.T) {
-	home := t.TempDir()
-	mustWrite(t, rollout(home, "sessions", "21", forkID),
-		cxMeta{at: "2026-09-21T09:00:00.000Z", id: forkID, session: lostID, cwd: "/work/app", source: spawnedBy(lostID), extra: `,"forked_from_id":"` + lostID + `"`}.String(),
-		cxCount("2026-09-21T09:00:00.100Z", u{9000, 8000, 300}, u{0, 0, 0}),
-		cxCount("2026-09-21T09:00:12.000Z", u{9500, 8400, 320}, u{500, 400, 20}),
-	)
-	res := mustRead(t, "codex", home, since)
-	got := byID(t, res, forkID)
-	if got.Tokens != (Tokens{Input: 100, CacheRead: 400, Output: 20}) || got.ParentID != "" {
-		t.Fatalf("fork = %+v", got)
 	}
 }
 

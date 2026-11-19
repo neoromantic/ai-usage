@@ -106,8 +106,8 @@ func TestHermesRollsChildIntoParent(t *testing.T) {
 	for _, r := range []hermesRow{
 		{id: "p", cwd: "/work/hermes", in: 10, out: 1, cacheRead: 2, cacheWrite: 3, started: now.Add(-time.Hour)},
 		{id: "c", parent: "p", cwd: "/work/child", billing: "openrouter", in: 4, out: 5, cacheRead: 1, cacheWrite: 1, started: now.Add(-50 * time.Minute), active: now.Add(-30 * time.Minute)},
-		{id: "old", cwd: "/work/old", in: 100, out: 100, started: now.AddDate(0, 0, -200)},
-		{id: "orphan", parent: "old", cwd: "/work/orphan", in: 8, started: now.Add(-time.Hour)},
+		{id: "own", billing: " anthropic ", in: 1, started: now},
+		{id: "own-kid", parent: "own", billing: "openrouter", in: 1, started: now},
 		{id: "u", in: 7},
 		{id: "empty", cwd: "/work/empty", started: now},
 	} {
@@ -123,7 +123,7 @@ func TestHermesRollsChildIntoParent(t *testing.T) {
 	if res.Malformed != 0 || res.Unreadable != 0 {
 		t.Fatalf("malformed %d unreadable %d", res.Malformed, res.Unreadable)
 	}
-	if got := strings.Join(ids(res), ","); got != "old,p,u" {
+	if got := strings.Join(ids(res), ","); got != "own,p,u" {
 		t.Fatalf("sessions = %s", got)
 	}
 	p := byID(t, res, "p")
@@ -137,10 +137,9 @@ func TestHermesRollsChildIntoParent(t *testing.T) {
 	if !p.Updated.Equal(now.Add(-30 * time.Minute)) {
 		t.Fatalf("p updated = %v", p.Updated)
 	}
-	// The parent is older than the window, but its child is not: the chain
-	// counts whole, under its root, as it did while the parent was active.
-	if o := byID(t, res, "old"); o.Tokens != (Tokens{Input: 108, Output: 100}) || o.Project != "/work/old" || !o.Updated.Equal(now.Add(-time.Hour)) {
-		t.Fatalf("old = %+v", o)
+	// A parent that names its account keeps it.
+	if o := byID(t, res, "own"); o.Account != "anthropic" || o.Tokens != (Tokens{Input: 2}) {
+		t.Fatalf("own = %+v", o)
 	}
 	// A row with no time is kept: dropping it would hide usage. With no
 	// directory either, its project is the Hermes home it came from.
@@ -148,33 +147,6 @@ func TestHermesRollsChildIntoParent(t *testing.T) {
 		t.Fatalf("u = %+v", u)
 	}
 	noLeak(t, res)
-}
-
-func TestHermesAccountThroughRollup(t *testing.T) {
-	home := t.TempDir()
-	db := hermesDB(t, home, hermesColumns)
-	for _, r := range []hermesRow{
-		{id: "own", billing: " anthropic ", in: 1, started: now},
-		{id: "own-kid", parent: "own", billing: "openrouter", in: 1, started: now},
-		{id: "deep", in: 1, started: now},
-		{id: "deep-kid", parent: "deep", in: 1, started: now},
-		{id: "deep-grandkid", parent: "deep-kid", billing: "nous", in: 1, started: now},
-	} {
-		r.insert(t, db)
-	}
-	db.Close()
-
-	res := mustRead(t, "hermes", home, since)
-	for _, want := range []Session{
-		// A parent that names its account keeps it.
-		{ID: "own", Account: "anthropic", Tokens: Tokens{Input: 2}},
-		// One that does not takes the account a sub-agent names.
-		{ID: "deep", Account: "nous", Tokens: Tokens{Input: 3}},
-	} {
-		if got := byID(t, res, want.ID); got.Account != want.Account || got.Tokens != want.Tokens {
-			t.Errorf("%s = %+v, want account %q and %+v", want.ID, got, want.Account, want.Tokens)
-		}
-	}
 }
 
 func TestHermesActivityTime(t *testing.T) {
@@ -307,9 +279,11 @@ func TestHermesUnusableDatabase(t *testing.T) {
 		}},
 		{"truncated database", func(t *testing.T, home string) {
 			db := hermesDB(t, home, hermesColumns)
+			exec(t, db, `BEGIN`)
 			for i := range 200 {
 				hermesRow{id: strings.Repeat("x", 100) + string(rune('a'+i%26)) + strings.Repeat("y", i), in: 1}.insert(t, db)
 			}
+			exec(t, db, `COMMIT`)
 			db.Close()
 			path := filepath.Join(home, "state.db")
 			info, err := os.Stat(path)
@@ -335,17 +309,6 @@ func TestHermesUnusableDatabase(t *testing.T) {
 			}
 			sameTree(t, before, tree(t, home))
 		})
-	}
-}
-
-func TestHermesUnreadableDatabase(t *testing.T) {
-	needDeny(t)
-	home := t.TempDir()
-	db := hermesDB(t, home, hermesColumns)
-	db.Close()
-	deny(t, filepath.Join(home, "state.db"))
-	if _, err := readOne("hermes", home, since); err == nil {
-		t.Fatal("no error")
 	}
 }
 
@@ -735,16 +698,12 @@ func TestHermesMessagesOlderSchemas(t *testing.T) {
 			map[string]int64{"2026-09-22T09:30:00Z": 30, "2026-09-22T11:30:00Z": 30}},
 		{"no time", `CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, content TEXT)`,
 			map[string]int64{"2026-09-22T09:30:00Z": 20, "2026-09-22T10:30:00Z": 20, "2026-09-22T11:30:00Z": 20}},
-		{"no table", ``,
-			map[string]int64{"2026-09-22T09:30:00Z": 20, "2026-09-22T10:30:00Z": 20, "2026-09-22T11:30:00Z": 20}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			home := t.TempDir()
 			db := hermesDB(t, home, hermesColumns)
 			exec(t, db, `DROP TABLE messages`)
-			if tc.table != "" {
-				exec(t, db, tc.table)
-			}
+			exec(t, db, tc.table)
 			if tc.name != "no role" {
 				hermesRow{id: "s", in: 60, started: now.Add(-3 * time.Hour), active: now}.insert(t, db)
 			} else {

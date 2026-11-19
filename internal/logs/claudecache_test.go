@@ -278,8 +278,8 @@ func TestClaudeCacheDamaged(t *testing.T) {
 	}
 }
 
-// The cache keeps only the logs the last read saw, and a home read under two
-// names parses each log once.
+// The cache keeps only the logs the last read saw. TestSharedClaudeLogsAreReadOnce
+// has a home read under two names.
 func TestClaudeCacheKeepsSeenLogs(t *testing.T) {
 	c := newClaudeCorpus(t)
 	dir := t.TempDir()
@@ -292,19 +292,6 @@ func TestClaudeCacheKeepsSeenLogs(t *testing.T) {
 	files := cachedFiles(t, dir)
 	if parsed != 0 || len(files) != 2 {
 		t.Fatalf("parsed %d bytes, cache holds %d logs", parsed, len(files))
-	}
-	if runtime.GOOS == "windows" {
-		return
-	}
-	alias := filepath.Join(t.TempDir(), "alias")
-	if err := os.Symlink(c.home, alias); err != nil {
-		t.Fatal(err)
-	}
-	appendLines(t, c.main, corpusMsg("m3", "2026-09-21T08:02:00Z", use(20, 30, 0, 0), `"end_turn"`))
-	res, _ = readCached(dir, c.home, alias)
-	sameRead(t, res, c.home, alias)
-	if _, parsed := readCached(dir, c.home, alias); parsed != 0 {
-		t.Fatalf("parsed %d bytes", parsed)
 	}
 }
 

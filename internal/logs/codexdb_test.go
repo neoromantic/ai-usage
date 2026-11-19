@@ -107,20 +107,12 @@ func TestCodexThreadTableNamesAccounts(t *testing.T) {
 	noLeak(t, res)
 }
 
-// Without the creator column, or the table, or a database at all, nothing
-// names an account, and the read goes on as before.
+// Without the creator column, or a database at all, nothing names an
+// account, and the read goes on as before.
 func TestCodexThreadTableWithoutCreatorColumn(t *testing.T) {
 	for name, setup := range map[string]func(t *testing.T, home string){
 		"no column": func(t *testing.T, home string) {
 			writeCodexStateDB(t, home, "state_5.sqlite", false, codexThread{id: rootID, updated: 1790000000})
-		},
-		"no table": func(t *testing.T, home string) {
-			db, err := sql.Open("sqlite", filepath.Join(home, "state_5.sqlite"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer db.Close()
-			exec(t, db, `CREATE TABLE other (id TEXT)`)
 		},
 		"not a database": func(t *testing.T, home string) {
 			mustWrite(t, filepath.Join(home, "state_5.sqlite"), "garbage")

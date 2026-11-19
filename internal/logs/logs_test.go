@@ -146,11 +146,11 @@ func withoutHome(in []Session) []Session {
 
 // Two homes can share their logs through a symlink. Each reads the same
 // session ids with the same tokens, and read together they count once.
+// TestSharedClaudeLogsAreReadOnce has Claude's.
 func TestHomesSharingLogsReadAlike(t *testing.T) {
 	root := t.TempDir()
 	homes := fullHomes(t, root)
 	for _, tc := range []struct{ provider, dir string }{
-		{"claude", "projects"},
 		{"codex", "sessions"},
 		{"codex", "archived_sessions"},
 		{"grok", "sessions"},
@@ -163,7 +163,7 @@ func TestHomesSharingLogsReadAlike(t *testing.T) {
 			t.Skipf("symlinks unavailable: %v", err)
 		}
 	}
-	for _, p := range []string{"claude", "codex", "grok"} {
+	for _, p := range []string{"codex", "grok"} {
 		alias := filepath.Join(root, "alias-"+p)
 		a := mustRead(t, p, homes[p], since)
 		b := mustRead(t, p, alias, since)
@@ -321,45 +321,65 @@ func TestReadHomesCountsAcrossHomesOnce(t *testing.T) {
 	})
 }
 
-// A valid line over the limit, such as a prompt with a huge paste, is read
-// squeezed (issue #1). It is no error, and the usage on such a line counts.
 // A line too long to read even squeezed is skipped and counted as too long,
-// not as malformed. The lines around them count, and a cached read says the
-// same.
+// not as malformed, and the lines after it count (issue #1): in each log read
+// by lines, and in a Claude log read again from the cache. What a squeeze
+// keeps of a line over the limit is TestForEachReaderSqueezes's.
 func TestLineOverTheLimit(t *testing.T) {
 	if testing.Short() {
 		t.Skip("writes lines over 32 MiB")
 	}
-	home := t.TempDir()
-	mustWriteFrom(t, filepath.Join(home, "projects", "p", "sess.jsonl"),
-		hugeLine(`{"parentUuid":null,"isSidechain":false,"userType":"external","cwd":"/work","sessionId":"sess","type":"user","message":{"role":"user","content":"`,
-			'x', maxLineBytes, `"},"uuid":"u1","timestamp":"2026-09-22T09:00:00Z"}`),
-		lines(cl{id: "m1", req: "r1", session: "sess", cwd: "/work", at: "2026-09-22T09:01:00Z", usage: use(4, 1, 0, 0)}.String()),
-		// The usage comes after the tool's output, at the end of the line.
-		hugeLine(`{"cwd":"/work","sessionId":"sess","type":"assistant","message":{"id":"m2","role":"assistant","content":[{"type":"text","text":"`,
-			'y', maxLineBytes, `"}],"usage":{"input_tokens":6,"output_tokens":2}},"requestId":"r2","uuid":"u2","timestamp":"2026-09-22T09:02:00Z"}`),
-		hugeLine(`{"sessionId":"sess","type":"assistant","n":`, '7', maxLineBytes, `}`),
-		lines(cl{id: "m3", req: "r3", session: "sess", cwd: "/work", at: "2026-09-22T09:03:00Z", usage: use(1, 1, 0, 0)}.String()))
-	want := Tokens{Input: 11, Output: 4}
-	check := func(res Result) {
-		t.Helper()
-		hr := res.Homes[home]
-		if hr.Malformed != 0 || hr.TooLong != 1 || hr.Unreadable != 0 {
-			t.Fatalf("malformed %d too long %d unreadable %d", hr.Malformed, hr.TooLong, hr.Unreadable)
-		}
-		s := byID(t, res, "sess")
-		if s.Tokens != want || s.Project != "/work" {
-			t.Fatalf("session = %+v", s)
-		}
-	}
-	check(mustRead(t, "claude", home, since).Result)
-	dir := t.TempDir()
-	for range 2 {
-		res, _ := readCached(dir, home)
-		check(res)
-	}
-	if _, parsed := readCached(dir, home); parsed != 0 {
-		t.Fatalf("an unchanged read parsed %d bytes", parsed)
+	for _, tc := range []struct {
+		// log is the log's path in the home.
+		provider, log string
+		head, after   []string
+		want          Tokens
+	}{
+		{
+			provider: "claude",
+			log:      filepath.Join("projects", "-work", "sess.jsonl"),
+			head:     []string{cl{id: "m1", req: "r1", session: "sess", cwd: "/work", at: "2026-09-22T09:01:00Z", usage: use(4, 1, 0, 0)}.String()},
+			after:    []string{cl{id: "m3", req: "r3", session: "sess", cwd: "/work", at: "2026-09-22T09:03:00Z", usage: use(1, 1, 0, 0)}.String()},
+			want:     Tokens{Input: 5, Output: 2},
+		},
+		{
+			provider: "codex",
+			log:      rollout("", "sessions", "20", rootID),
+			head:     []string{cxMeta{at: "2026-09-20T10:00:00.000Z", id: rootID, cwd: "/work/app"}.String(), cxCount("2026-09-20T10:00:05.000Z", e1[0], e1[1])},
+			after:    []string{cxCount("2026-09-20T10:00:30.000Z", e2[0], e2[1])},
+			want:     rootOwn,
+		},
+		{
+			provider: "grok",
+			log:      filepath.Join("sessions", "%2Fwork%2Fapp", "sid", "updates.jsonl"),
+			head:     []string{turn("p1", [4]int64{10, 1, 2, 3})},
+			after:    []string{turn("p2", [4]int64{3, 1, 0, 0})},
+			want:     Tokens{Input: 11, Output: 2, CacheRead: 2, CacheWrite: 3},
+		},
+	} {
+		t.Run(tc.provider, func(t *testing.T) {
+			home := t.TempDir()
+			mustWriteFrom(t, filepath.Join(home, tc.log), lines(tc.head...), hugeLine(`{"type":"assistant","n":`, '7', maxLineBytes, `}`), lines(tc.after...))
+			check := func(res Result) {
+				t.Helper()
+				hr := res.Homes[home]
+				if hr.Err != nil || hr.Malformed != 0 || hr.TooLong != 1 || hr.Unreadable != 0 || total(res) != tc.want {
+					t.Fatalf("read %+v, tokens %+v, want one line too long and %+v", hr, total(res), tc.want)
+				}
+			}
+			if tc.provider != "claude" {
+				check(ReadHomes(tc.provider, []string{home}, since))
+				return
+			}
+			dir := t.TempDir()
+			res, _ := readCached(dir, home)
+			check(res)
+			res, parsed := readCached(dir, home)
+			check(res)
+			if parsed != 0 {
+				t.Fatalf("an unchanged read parsed %d bytes", parsed)
+			}
+		})
 	}
 }
 
@@ -536,9 +556,10 @@ func TestDeniedFile(t *testing.T) {
 }
 
 func TestForEachReader(t *testing.T) {
+	const limit = 1 << 20
 	read := func(in string) (string, int, error) {
 		var got []string
-		long, err := forEachReader(strings.NewReader(in), maxLineBytes, func(line []byte) {
+		long, err := forEachReader(strings.NewReader(in), limit, func(line []byte) {
 			got = append(got, string(line))
 		})
 		return strings.Join(got, "|"), long, err
@@ -551,30 +572,36 @@ func TestForEachReader(t *testing.T) {
 	if got, long, err := read("a\n" + wide + "\nb"); got != "a|"+wide+"|b" || long != 0 || err != nil {
 		t.Fatalf("wide line: long %d err %v", long, err)
 	}
-	if testing.Short() {
-		return
-	}
 	// A line too long to keep is counted even when it ends the input.
-	if got, long, err := read("a\n" + strings.Repeat("x", maxLineBytes+1)); got != "a" || long != 1 || err != nil {
+	if got, long, err := read("a\n" + strings.Repeat("x", limit+1)); got != "a" || long != 1 || err != nil {
 		t.Fatalf("lines %q long %d err %v", got, long, err)
 	}
 }
 
-// A line over the limit is read squeezed, in pieces as it comes. One still
-// over the limit squeezed is counted, and the lines after it are read.
+// A line over the limit, such as a prompt with a huge paste, is read
+// squeezed, in pieces as it comes, and in about the limit's memory however
+// long it is (issue #1). One still over the limit squeezed is counted, and
+// the lines after it are read.
 func TestForEachReaderSqueezes(t *testing.T) {
 	const limit = 1 << 20
 	in := io.MultiReader(
 		lines("first"),
-		hugeLine(`{"type":"user","message":{"content":"`, 'x', 3*limit, `"},"cwd":"/work"}`),
+		hugeLine(`{"type":"user","message":{"content":"`, 'x', 16*limit, `"},"cwd":"/work"}`),
 		hugeLine(`{"type":"user","content":[`, '1', 3*limit, `],"cwd":"/work"}`),
 		hugeLine(`{"type":"user","n":`, '1', limit, `}`),
 		lines("last"))
 	var got []string
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
 	long, err := forEachReader(in, limit, func(line []byte) { got = append(got, string(line)) })
+	runtime.ReadMemStats(&after)
 	want := []string{"first", `{"type":"user","message":{"content":""},"cwd":"/work"}`, `{"type":"user","content":[],"cwd":"/work"}`, "last"}
 	if !slices.Equal(got, want) || long != 1 || err != nil {
 		t.Fatalf("lines %q long %d err %v", got, long, err)
+	}
+	if alloc := after.TotalAlloc - before.TotalAlloc; alloc > 8*limit {
+		t.Fatalf("allocated %d bytes for lines of up to %d", alloc, 16*limit)
 	}
 }
 
